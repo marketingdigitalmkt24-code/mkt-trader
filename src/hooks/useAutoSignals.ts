@@ -619,34 +619,49 @@ export function useAutoSignals() {
     setIsSearching(false);
   }, [waitingMessage]);
 
-  // Análise inicial - carregar sinais salvos e analisar imediatamente
+  // Análise inicial - apenas carregar sinais salvos, NÃO gerar novos
   useEffect(() => {
     const storedSignals = loadStoredSignals();
+    const storedRisk = loadRiskControl();
+    
+    // Restaurar estado do risk control
+    riskControl.current = storedRisk;
+    
     if (storedSignals.length > 0) {
+      setSignals(storedSignals);
       setWaitingMessage(null);
+      setLastUpdate(new Date(storedSignals[0].timestamp));
     }
+    
+    // Verificar se atingiu limite
+    if (storedRisk.dailySignalsCount >= MAX_DAILY_SIGNALS) {
+      setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
+    }
+    
     setIsLoading(false);
     setIsSearching(false);
+  }, []);
 
-    // Analisar imediatamente ao montar (após 2s para estabilizar)
-    const initialAnalysis = setTimeout(() => {
+  // Análise automática a cada 3 minutos (apenas se não atingiu limite)
+  useEffect(() => {
+    // Primeira análise após 30 segundos de página carregada
+    const initialTimeout = setTimeout(() => {
       if (riskControl.current.dailySignalsCount < MAX_DAILY_SIGNALS && !riskControl.current.isPaused) {
         analyzeMarket();
       }
-    }, 2000);
+    }, 30000);
 
-    return () => clearTimeout(initialAnalysis);
-  }, [analyzeMarket]);
-
-  // Análise a cada 5 minutos (apenas se não atingiu limite)
-  useEffect(() => {
+    // Depois a cada 3 minutos
     const interval = setInterval(() => {
       if (riskControl.current.dailySignalsCount < MAX_DAILY_SIGNALS && !riskControl.current.isPaused) {
         analyzeMarket();
       }
-    }, 300000); // 5 minutos
+    }, 180000); // 3 minutos
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
   }, [analyzeMarket]);
 
   // Atualizar status do mercado a cada minuto

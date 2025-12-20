@@ -4,6 +4,7 @@ import { TradingSignal } from '@/types/trading';
 import { useToast } from '@/hooks/use-toast';
 
 const STORAGE_KEY = 'autotrading_config';
+const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
 
 interface AutoTradingConfig {
   enabled: boolean;
@@ -13,9 +14,17 @@ interface AutoTradingConfig {
   todayTrades: number;
 }
 
+interface TradeResult {
+  signal: TradingSignal;
+  success: boolean;
+  tradeId?: string;
+  error?: string;
+}
+
 export function useAutoTrading() {
   const { toast } = useToast();
   const processedSignals = useRef<Set<string>>(new Set());
+  const tradingInProgress = useRef<Set<string>>(new Set());
   
   const [config, setConfig] = useState<AutoTradingConfig>(() => {
     try {
@@ -45,6 +54,7 @@ export function useAutoTrading() {
 
   const [isPlacingTrade, setIsPlacingTrade] = useState(false);
   const [lastTradeResult, setLastTradeResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [activeTradesCount, setActiveTradesCount] = useState(0);
 
   // Persist config
   useEffect(() => {
@@ -55,19 +65,18 @@ export function useAutoTrading() {
     setConfig(prev => ({ ...prev, ...updates }));
   }, []);
 
-  const placeTrade = useCallback(async (signal: TradingSignal) => {
-    if (isPlacingTrade) {
-      console.log('Already placing a trade, skipping...');
-      return { success: false, error: 'Trade in progress' };
-    }
-
-    setIsPlacingTrade(true);
+  // Place a single trade with timeout
+  const placeSingleTrade = useCallback(async (signal: TradingSignal): Promise<TradeResult> => {
+    const startTime = Date.now();
     
     try {
-      // Determine expiration based on timeframe
       const expiration = signal.timeframe === 'M1' ? 1 : 5;
       
-      console.log(`🎯 Placing trade: ${signal.asset} ${signal.type} $${config.amount}`);
+      console.log(`🎯 [${signal.asset}] Placing trade: ${signal.type} $${config.amount}`);
+      
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), MAX_TRADE_DELAY_MS);
       
       const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
         body: {
@@ -78,83 +87,152 @@ export function useAutoTrading() {
           signalId: signal.id,
         },
       });
+      
+      clearTimeout(timeoutId);
+      
+      const elapsed = Date.now() - startTime;
+      console.log(`⏱️ [${signal.asset}] Trade completed in ${elapsed}ms`);
 
       if (error) {
-        console.error('Trade error:', error);
-        setLastTradeResult({ success: false, message: error.message });
-        toast({
-          title: '❌ Erro na entrada',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return { success: false, error: error.message };
+        console.error(`❌ [${signal.asset}] Trade error:`, error);
+        return { signal, success: false, error: error.message };
       }
 
       if (data?.success) {
-        setLastTradeResult({ success: true, message: `Trade executado: ${signal.asset} ${signal.type}` });
-        
-        // Update today's trade count
-        setConfig(prev => ({
-          ...prev,
-          todayTrades: prev.todayTrades + 1,
-        }));
-        
-        toast({
-          title: '✅ Entrada executada!',
-          description: `${signal.type} em ${signal.asset} - R$${config.amount}`,
-        });
-        
-        return { success: true, tradeId: data.tradeId };
+        console.log(`✅ [${signal.asset}] Trade executed successfully`);
+        return { signal, success: true, tradeId: data.tradeId };
       } else {
-        setLastTradeResult({ success: false, message: data?.error || 'Trade failed' });
-        toast({
-          title: '❌ Entrada falhou',
-          description: data?.error || 'Erro desconhecido',
-          variant: 'destructive',
-        });
-        return { success: false, error: data?.error };
+        console.error(`❌ [${signal.asset}] Trade failed:`, data?.error);
+        return { signal, success: false, error: data?.error || 'Trade failed' };
       }
     } catch (err) {
-      console.error('Failed to place trade:', err);
-      const errorMsg = String(err);
-      setLastTradeResult({ success: false, message: errorMsg });
-      return { success: false, error: errorMsg };
+      const elapsed = Date.now() - startTime;
+      console.error(`❌ [${signal.asset}] Trade error after ${elapsed}ms:`, err);
+      return { signal, success: false, error: String(err) };
+    }
+  }, [config.amount]);
+
+  // Place trades on multiple signals simultaneously
+  const placeTradesSimultaneously = useCallback(async (signals: TradingSignal[]): Promise<TradeResult[]> => {
+    if (signals.length === 0) return [];
+    
+    setIsPlacingTrade(true);
+    setActiveTradesCount(signals.length);
+    
+    console.log(`🚀 Placing ${signals.length} trades simultaneously...`);
+    const startTime = Date.now();
+    
+    // Mark all signals as being traded
+    signals.forEach(signal => tradingInProgress.current.add(signal.id));
+    
+    try {
+      // Execute all trades in parallel
+      const results = await Promise.all(
+        signals.map(signal => placeSingleTrade(signal))
+      );
+      
+      const elapsed = Date.now() - startTime;
+      console.log(`⏱️ All ${signals.length} trades completed in ${elapsed}ms`);
+      
+      // Process results
+      const successfulTrades = results.filter(r => r.success);
+      const failedTrades = results.filter(r => !r.success);
+      
+      // Update trade count
+      if (successfulTrades.length > 0) {
+        setConfig(prev => ({
+          ...prev,
+          todayTrades: prev.todayTrades + successfulTrades.length,
+        }));
+        
+        // Show success toast
+        const successAssets = successfulTrades.map(r => r.signal.asset).join(', ');
+        toast({
+          title: `✅ ${successfulTrades.length} entrada(s) executada(s)!`,
+          description: successAssets,
+        });
+        
+        setLastTradeResult({ 
+          success: true, 
+          message: `${successfulTrades.length} trades executados: ${successAssets}` 
+        });
+      }
+      
+      // Show error toast for failed trades
+      if (failedTrades.length > 0) {
+        const failedAssets = failedTrades.map(r => r.signal.asset).join(', ');
+        toast({
+          title: `❌ ${failedTrades.length} entrada(s) falhou`,
+          description: failedAssets,
+          variant: 'destructive',
+        });
+        
+        if (successfulTrades.length === 0) {
+          setLastTradeResult({ 
+            success: false, 
+            message: `Falhou: ${failedAssets}` 
+          });
+        }
+      }
+      
+      // Mark all as processed
+      signals.forEach(signal => {
+        processedSignals.current.add(signal.id);
+        tradingInProgress.current.delete(signal.id);
+      });
+      
+      return results;
     } finally {
       setIsPlacingTrade(false);
+      setActiveTradesCount(0);
     }
-  }, [config.amount, isPlacingTrade, toast]);
+  }, [placeSingleTrade, toast]);
+
+  // Legacy single trade function (for manual trades)
+  const placeTrade = useCallback(async (signal: TradingSignal) => {
+    const results = await placeTradesSimultaneously([signal]);
+    const result = results[0];
+    if (result) {
+      return { success: result.success, tradeId: result.tradeId, error: result.error };
+    }
+    return { success: false, error: 'No result' };
+  }, [placeTradesSimultaneously]);
 
   const checkAndAutoTrade = useCallback(async (signals: TradingSignal[]) => {
     if (!config.enabled) return;
     
     // Check daily limit
-    if (config.todayTrades >= config.maxDailyTrades) {
+    const remainingTrades = config.maxDailyTrades - config.todayTrades;
+    if (remainingTrades <= 0) {
       console.log('Daily trade limit reached');
       return;
     }
 
-    // Find high confluence signals that haven't been traded yet
+    // Find high confluence signals that haven't been traded yet and aren't being traded
     const eligibleSignals = signals.filter(signal => 
       signal.indicators.confluenceScore >= config.minConfluence &&
-      !processedSignals.current.has(signal.id)
+      !processedSignals.current.has(signal.id) &&
+      !tradingInProgress.current.has(signal.id)
     );
 
     if (eligibleSignals.length === 0) return;
 
-    // Take the first eligible signal
-    const signal = eligibleSignals[0];
+    // Take up to remaining daily limit
+    const signalsToTrade = eligibleSignals.slice(0, remainingTrades);
     
-    // Mark as processed to avoid duplicate trades
-    processedSignals.current.add(signal.id);
+    console.log(`🤖 Auto-trading ${signalsToTrade.length} signals detected:`);
+    signalsToTrade.forEach(s => {
+      console.log(`   - ${s.asset} ${s.type} (${s.indicators.confluenceScore}%)`);
+    });
     
-    console.log(`🤖 Auto-trading signal detected: ${signal.asset} ${signal.type} (${signal.indicators.confluenceScore}%)`);
-    
-    await placeTrade(signal);
-  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, placeTrade]);
+    // Execute all trades simultaneously
+    await placeTradesSimultaneously(signalsToTrade);
+  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, placeTradesSimultaneously]);
 
   const resetDailyTrades = useCallback(() => {
     setConfig(prev => ({ ...prev, todayTrades: 0 }));
     processedSignals.current.clear();
+    tradingInProgress.current.clear();
   }, []);
 
   return {
@@ -162,6 +240,7 @@ export function useAutoTrading() {
     updateConfig,
     isPlacingTrade,
     lastTradeResult,
+    activeTradesCount,
     placeTrade,
     checkAndAutoTrade,
     resetDailyTrades,

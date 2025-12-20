@@ -21,7 +21,6 @@ const Index = () => {
   const { 
     signals, 
     lastUpdate, 
-    nextUpdate, 
     isLoading, 
     isSearching, 
     refreshSignals, 
@@ -29,7 +28,7 @@ const Index = () => {
     waitingMessage,
     dailySignalsCount,
     maxDailySignals
-  } = useAutoSignals(45000); // 45 segundos entre análises
+  } = useAutoSignals();
 
   // Filter signals by timeframe and market type
   const filteredSignals = signals.filter((s) => {
@@ -43,7 +42,6 @@ const Index = () => {
       <Header 
         isConnected={true} 
         lastUpdate={lastUpdate}
-        nextUpdate={nextUpdate}
         isLoading={isLoading}
         isSearching={isSearching}
         onRefresh={refreshSignals}

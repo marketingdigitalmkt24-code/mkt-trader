@@ -619,10 +619,14 @@ export function useAutoSignals() {
     setIsSearching(false);
   }, [waitingMessage]);
 
-  // Análise inicial
+  // Análise inicial - apenas carregar sinais salvos, não gerar novos
   useEffect(() => {
-    setIsLoading(true);
-    analyzeMarket().finally(() => setIsLoading(false));
+    const storedSignals = loadStoredSignals();
+    if (storedSignals.length > 0) {
+      setWaitingMessage(null);
+    }
+    setIsLoading(false);
+    setIsSearching(false);
   }, []);
 
   // Análise a cada 5 minutos (apenas se não atingiu limite)

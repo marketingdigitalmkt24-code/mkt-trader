@@ -12,15 +12,11 @@ interface IQOptionCredentials {
   account_type: string;
 }
 
-interface Position {
+interface PositionResult {
   id: string;
-  instrument_id: string;
-  invest: number;
-  open_time: number;
-  close_time: number;
+  win: string;
   profit: number;
-  win: string; // 'win', 'loose', 'equal'
-  option_type: string;
+  close_quote?: number;
 }
 
 // IQ Option API endpoints
@@ -59,22 +55,22 @@ async function loginToIQOption(email: string, password: string): Promise<{ ssid:
   }
 }
 
-async function getRecentPositions(ssid: string): Promise<Position[]> {
-  return new Promise((resolve, reject) => {
-    const positions: Position[] = [];
-    let isAuthenticated = false;
+async function getClosedPositions(ssid: string, accountType: string): Promise<PositionResult[]> {
+  return new Promise((resolve) => {
+    const positions: PositionResult[] = [];
+    let balanceId = 0;
     
-    console.log('Connecting to IQ Option WebSocket...');
+    console.log('Connecting to IQ Option WebSocket for results...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
     
     const timeout = setTimeout(() => {
-      console.log('WebSocket timeout, closing connection');
+      console.log('WebSocket timeout, returning positions found:', positions.length);
       ws.close();
       resolve(positions);
-    }, 30000); // 30 second timeout
+    }, 25000);
 
     ws.onopen = () => {
-      console.log('WebSocket connected, sending SSID authentication...');
+      console.log('WebSocket connected, authenticating...');
       ws.send(JSON.stringify({
         name: 'ssid',
         msg: ssid,
@@ -84,88 +80,106 @@ async function getRecentPositions(ssid: string): Promise<Position[]> {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('Received message type:', data.name);
+        
+        // Skip timeSync messages
+        if (data.name !== 'timeSync') {
+          console.log('Received:', data.name);
+        }
         
         if (data.name === 'profile') {
-          isAuthenticated = true;
-          console.log('Authenticated! Requesting positions history...');
+          console.log('Authenticated! Getting balance and history...');
           
-          // Request closed positions (binary options history)
-          ws.send(JSON.stringify({
-            name: 'sendMessage',
-            msg: {
-              name: 'get-positions-state',
-              version: '1.0',
-            },
-          }));
+          // Get correct balance ID
+          const balances = data.msg.balances || [];
+          for (const balance of balances) {
+            if (accountType === 'PRACTICE' && balance.type === 4) {
+              balanceId = balance.id;
+              break;
+            } else if (accountType === 'REAL' && balance.type === 1) {
+              balanceId = balance.id;
+              break;
+            }
+          }
           
-          // Also request binary options history
-          ws.send(JSON.stringify({
-            name: 'sendMessage',
-            msg: {
-              name: 'portfolio.get-positions',
-              version: '4.0',
-              body: {
-                instrument_type: 'binary-option',
-                limit: 50,
-                offset: 0,
-              },
-            },
-          }));
+          if (!balanceId && balances.length > 0) {
+            balanceId = balances[0].id;
+          }
           
-          // Get closed positions
+          console.log('Using balance ID:', balanceId);
+          
+          // Request closed binary options history
           ws.send(JSON.stringify({
             name: 'sendMessage',
             msg: {
               name: 'portfolio.get-history-positions',
-              version: '1.0',
+              version: '2.0',
               body: {
-                instrument_type: 'binary-option',
-                limit: 50,
+                user_balance_id: balanceId,
+                instrument_types: ['binary-option', 'turbo-option'],
+                limit: 100,
                 offset: 0,
               },
             },
           }));
         }
         
-        if (data.name === 'positions-state' || data.name === 'portfolio.get-positions' || data.name === 'portfolio.get-history-positions') {
-          console.log('Received positions data');
+        // Handle history positions response
+        if (data.name === 'portfolio.get-history-positions') {
+          console.log('Received history positions');
           
-          if (data.msg && Array.isArray(data.msg.positions)) {
-            for (const pos of data.msg.positions) {
-              positions.push({
-                id: pos.id || pos.external_id,
-                instrument_id: pos.instrument_id || pos.active_id,
-                invest: pos.invest || pos.amount,
-                open_time: pos.open_time || pos.created,
-                close_time: pos.close_time || pos.expired,
-                profit: pos.profit || pos.win_amount - pos.invest,
-                win: pos.win || (pos.profit > 0 ? 'win' : pos.profit < 0 ? 'loose' : 'equal'),
-                option_type: pos.option_type || pos.direction,
-              });
+          const positionsList = data.msg?.positions || [];
+          console.log('Found', positionsList.length, 'closed positions');
+          
+          for (const pos of positionsList) {
+            // Determine win/loss status
+            let win = 'pending';
+            if (pos.close_profit !== undefined) {
+              if (pos.close_profit > 0) win = 'win';
+              else if (pos.close_profit < 0) win = 'loose';
+              else win = 'equal';
+            } else if (pos.win !== undefined) {
+              win = pos.win;
+            } else if (pos.pnl !== undefined) {
+              if (pos.pnl > 0) win = 'win';
+              else if (pos.pnl < 0) win = 'loose';
+              else win = 'equal';
             }
+            
+            positions.push({
+              id: String(pos.id || pos.external_id || pos.option_id),
+              win,
+              profit: pos.close_profit || pos.pnl || pos.profit || 0,
+              close_quote: pos.close_quote || pos.close_rate,
+            });
           }
           
-          // Close connection after getting data
+          // Close after receiving data
           setTimeout(() => {
             clearTimeout(timeout);
             ws.close();
             resolve(positions);
-          }, 2000);
+          }, 1000);
         }
         
-        if (data.name === 'option-closed') {
-          console.log('Option closed event:', data.msg);
-          if (data.msg) {
+        // Handle option-closed event (real-time)
+        if (data.name === 'option-closed' || data.name === 'binary-options.option-closed') {
+          console.log('Option closed event received');
+          const msg = data.msg;
+          if (msg && msg.id) {
+            let win = 'pending';
+            if (msg.profit !== undefined) {
+              if (msg.profit > 0) win = 'win';
+              else if (msg.profit < 0) win = 'loose';
+              else win = 'equal';
+            } else if (msg.win) {
+              win = msg.win;
+            }
+            
             positions.push({
-              id: data.msg.id,
-              instrument_id: data.msg.active_id,
-              invest: data.msg.amount,
-              open_time: data.msg.created,
-              close_time: data.msg.expired,
-              profit: data.msg.profit,
-              win: data.msg.win,
-              option_type: data.msg.direction,
+              id: String(msg.id),
+              win,
+              profit: msg.profit || 0,
+              close_quote: msg.close_quote,
             });
           }
         }
@@ -178,13 +192,12 @@ async function getRecentPositions(ssid: string): Promise<Position[]> {
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
       clearTimeout(timeout);
-      reject(error);
+      resolve(positions);
     };
 
     ws.onclose = () => {
-      console.log('WebSocket closed');
+      console.log('WebSocket closed, found', positions.length, 'positions');
       clearTimeout(timeout);
-      resolve(positions);
     };
   });
 }
@@ -239,50 +252,64 @@ serve(async (req) => {
       .update({ last_connected_at: new Date().toISOString() })
       .eq('email', credentials.email);
 
-    // Get recent positions
-    const positions = await getRecentPositions(ssid);
-    console.log(`Found ${positions.length} positions`);
+    // Get pending operations from our database
+    const { data: pendingOperations, error: pendingError } = await supabase
+      .from('operation_results')
+      .select('id, iq_option_id, signal_id')
+      .eq('result', 'pending');
 
-    // Save results to database
-    const results = [];
-    for (const pos of positions) {
-      const result = pos.win === 'win' ? 'win' : pos.win === 'loose' ? 'loss' : 'tie';
-      
-      // Check if already exists
-      const { data: existing } = await supabase
-        .from('operation_results')
-        .select('id')
-        .eq('iq_option_id', String(pos.id))
-        .maybeSingle();
+    if (pendingError) {
+      console.error('Error fetching pending operations:', pendingError);
+    }
 
-      if (!existing) {
-        const { error: insertError } = await supabase
-          .from('operation_results')
-          .insert({
-            signal_id: `iq_${pos.id}`,
-            asset: String(pos.instrument_id),
-            direction: pos.option_type === 'call' ? 'CALL' : 'PUT',
-            entry_price: pos.invest,
-            profit: pos.profit,
-            result,
-            iq_option_id: String(pos.id),
-            expiration_time: pos.close_time ? new Date(pos.close_time * 1000).toISOString() : null,
-          });
+    console.log('Found', pendingOperations?.length || 0, 'pending operations to check');
 
-        if (!insertError) {
-          results.push(pos);
+    // Get closed positions from IQ Option
+    const closedPositions = await getClosedPositions(ssid, credentials.account_type);
+    console.log(`Found ${closedPositions.length} closed positions from IQ Option`);
+
+    // Update pending operations with results
+    let updatedCount = 0;
+    if (pendingOperations && closedPositions.length > 0) {
+      for (const pending of pendingOperations) {
+        // Find matching closed position
+        const closed = closedPositions.find(p => 
+          p.id === pending.iq_option_id || 
+          p.id === pending.signal_id
+        );
+        
+        if (closed && closed.win !== 'pending') {
+          const result = closed.win === 'win' ? 'win' : 
+                         closed.win === 'loose' ? 'loss' : 'tie';
+          
+          console.log(`Updating ${pending.id}: ${result} (profit: ${closed.profit})`);
+          
+          const { error: updateError } = await supabase
+            .from('operation_results')
+            .update({
+              result,
+              profit: closed.profit,
+              exit_price: closed.close_quote || null,
+            })
+            .eq('id', pending.id);
+
+          if (!updateError) {
+            updatedCount++;
+          } else {
+            console.error('Error updating result:', updateError);
+          }
         }
       }
     }
 
-    console.log(`Saved ${results.length} new results to database`);
+    console.log(`Updated ${updatedCount} operation results`);
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        totalPositions: positions.length,
-        newResultsSaved: results.length,
-        positions: positions.slice(0, 10), // Return last 10
+        pendingChecked: pendingOperations?.length || 0,
+        closedPositions: closedPositions.length,
+        updatedResults: updatedCount,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

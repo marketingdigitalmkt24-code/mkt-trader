@@ -4,13 +4,12 @@ import { cn } from '@/lib/utils';
 interface HeaderProps {
   isConnected: boolean;
   lastUpdate: Date | null;
-  nextUpdate: number;
   isLoading: boolean;
   isSearching?: boolean;
   onRefresh: () => void;
 }
 
-export function Header({ isConnected, lastUpdate, nextUpdate, isLoading, isSearching, onRefresh }: HeaderProps) {
+export function Header({ isConnected, lastUpdate, isLoading, isSearching, onRefresh }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 glass-card border-b border-border/50 mb-6">
       <div className="container py-4">
@@ -52,13 +51,6 @@ export function Header({ isConnected, lastUpdate, nextUpdate, isLoading, isSearc
               <span className="hidden sm:inline">Atualizar</span>
             </button>
 
-            {/* Auto Update Timer */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/50 rounded-lg">
-              <Clock className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs font-mono text-muted-foreground">
-                {nextUpdate}s
-              </span>
-            </div>
 
             {/* Connection Status */}
             <div

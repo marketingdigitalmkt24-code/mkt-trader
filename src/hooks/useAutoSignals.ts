@@ -447,13 +447,12 @@ async function sendWhatsAppNotification(signal: TradingSignal): Promise<boolean>
   }
 }
 
-export function useAutoSignals(refreshInterval: number = 45000) {
+export function useAutoSignals() {
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [nextUpdate, setNextUpdate] = useState<number>(refreshInterval / 1000);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(true);
-  const [waitingMessage, setWaitingMessage] = useState<string | null>('Iniciando análise de mercado...');
+  const [waitingMessage, setWaitingMessage] = useState<string | null>('Aguardando oportunidade de ALTA QUALIDADE');
   const [marketStatus, setMarketStatus] = useState<MarketStatus>({
     otcOpen: isOTCMarketOpen(),
     forexOpen: isForexMarketOpen(),
@@ -482,6 +481,8 @@ export function useAutoSignals(refreshInterval: number = 45000) {
           pauseReason: null,
         };
         notifiedAssets.current.clear();
+        setSignals([]);
+        setWaitingMessage('Aguardando oportunidade de ALTA QUALIDADE');
       }
     };
 
@@ -500,8 +501,18 @@ export function useAutoSignals(refreshInterval: number = 45000) {
     }
   }, []);
 
-  const refreshSignals = useCallback(async () => {
-    setIsLoading(true);
+  // Análise de mercado em intervalos longos (5 minutos)
+  const analyzeMarket = useCallback(async () => {
+    // Não analisar se já atingiu limite diário
+    if (riskControl.current.dailySignalsCount >= MAX_DAILY_SIGNALS) {
+      setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
+      return;
+    }
+
+    if (riskControl.current.isPaused) {
+      return;
+    }
+
     setIsSearching(true);
     
     setMarketStatus({
@@ -510,12 +521,10 @@ export function useAutoSignals(refreshInterval: number = 45000) {
       cryptoOpen: true,
     });
     
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    
     const { signals: newSignals, message } = generateSignals(riskControl.current);
     
     if (newSignals.length > 0) {
-      setSignals(newSignals);
+      setSignals(prev => [...prev, ...newSignals].slice(-MAX_DAILY_SIGNALS));
       setLastUpdate(new Date());
       setWaitingMessage(null);
       
@@ -536,38 +545,36 @@ export function useAutoSignals(refreshInterval: number = 45000) {
           }
         }
       }
-    } else {
+
+      // Se atingiu limite, mostrar mensagem
+      if (riskControl.current.dailySignalsCount >= MAX_DAILY_SIGNALS) {
+        setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
+      }
+    } else if (!waitingMessage?.includes('Limite')) {
       setWaitingMessage(message);
     }
     
-    setNextUpdate(refreshInterval / 1000);
-    setIsLoading(false);
     setIsSearching(false);
-  }, [refreshInterval]);
+  }, [waitingMessage]);
 
-  // Initial load
+  // Análise inicial
   useEffect(() => {
-    refreshSignals();
+    setIsLoading(true);
+    analyzeMarket().finally(() => setIsLoading(false));
   }, []);
 
+  // Análise a cada 5 minutos (apenas se não atingiu limite)
   useEffect(() => {
-    const countdown = setInterval(() => {
-      setNextUpdate((prev) => {
-        if (prev <= 1) {
-          return refreshInterval / 1000;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const interval = setInterval(() => {
+      if (riskControl.current.dailySignalsCount < MAX_DAILY_SIGNALS && !riskControl.current.isPaused) {
+        analyzeMarket();
+      }
+    }, 300000); // 5 minutos
 
-    return () => clearInterval(countdown);
-  }, [refreshInterval]);
-
-  useEffect(() => {
-    const interval = setInterval(refreshSignals, refreshInterval);
     return () => clearInterval(interval);
-  }, [refreshSignals, refreshInterval]);
+  }, [analyzeMarket]);
 
+  // Atualizar status do mercado a cada minuto
   useEffect(() => {
     const statusInterval = setInterval(() => {
       setMarketStatus({
@@ -583,10 +590,9 @@ export function useAutoSignals(refreshInterval: number = 45000) {
   return {
     signals,
     lastUpdate,
-    nextUpdate,
     isLoading,
     isSearching,
-    refreshSignals,
+    refreshSignals: analyzeMarket,
     marketStatus,
     waitingMessage,
     registerLoss,

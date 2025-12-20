@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   TradingSignal, 
   Timeframe, 
@@ -13,6 +13,7 @@ import {
   SupportResistance
 } from '@/types/trading';
 import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/marketHours';
+import { supabase } from '@/integrations/supabase/client';
 
 function generateRandomPrice(symbol: string): number {
   if (symbol.includes('JPY')) {
@@ -297,6 +298,42 @@ export interface MarketStatus {
   cryptoOpen: boolean;
 }
 
+const WHATSAPP_CONFLUENCE_THRESHOLD = 86;
+const NOTIFICATION_COOLDOWN = 120000; // 2 minute cooldown per asset
+
+async function sendWhatsAppNotification(signal: TradingSignal): Promise<boolean> {
+  try {
+    const entryTime = new Date().toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const { error } = await supabase.functions.invoke('send-whatsapp', {
+      body: {
+        signal: {
+          asset: signal.asset,
+          type: signal.type,
+          confluenceScore: signal.indicators.confluenceScore,
+          timeframe: signal.timeframe,
+          entryTime,
+          confirmations: signal.confirmations,
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Error sending WhatsApp notification:', error);
+      return false;
+    }
+
+    console.log(`📱 WhatsApp notification sent for ${signal.asset} (${signal.indicators.confluenceScore}%)`);
+    return true;
+  } catch (err) {
+    console.error('Failed to send WhatsApp notification:', err);
+    return false;
+  }
+}
+
 export function useAutoSignals(refreshInterval: number = 30000) {
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -308,8 +345,10 @@ export function useAutoSignals(refreshInterval: number = 30000) {
     forexOpen: isForexMarketOpen(),
     cryptoOpen: true,
   });
+  
+  const notifiedAssets = useRef<Map<string, number>>(new Map());
 
-  const refreshSignals = useCallback(() => {
+  const refreshSignals = useCallback(async () => {
     setIsLoading(true);
     setIsSearching(true);
     
@@ -319,19 +358,34 @@ export function useAutoSignals(refreshInterval: number = 30000) {
       cryptoOpen: true,
     });
     
-    setTimeout(() => {
-      const newSignals = generateSignals();
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const newSignals = generateSignals();
+    
+    // Only update if we found high-quality signals
+    if (newSignals.length > 0) {
+      setSignals(newSignals);
+      setLastUpdate(new Date());
       
-      // Only update if we found high-quality signals
-      if (newSignals.length > 0) {
-        setSignals(newSignals);
-        setLastUpdate(new Date());
+      // Check for signals with 86%+ confluence and send WhatsApp notifications
+      for (const signal of newSignals) {
+        if (signal.indicators.confluenceScore >= WHATSAPP_CONFLUENCE_THRESHOLD) {
+          const lastNotified = notifiedAssets.current.get(signal.asset);
+          const now = Date.now();
+          
+          if (!lastNotified || (now - lastNotified) > NOTIFICATION_COOLDOWN) {
+            const sent = await sendWhatsAppNotification(signal);
+            if (sent) {
+              notifiedAssets.current.set(signal.asset, now);
+            }
+          }
+        }
       }
-      
-      setNextUpdate(refreshInterval / 1000);
-      setIsLoading(false);
-      setIsSearching(false);
-    }, 800);
+    }
+    
+    setNextUpdate(refreshInterval / 1000);
+    setIsLoading(false);
+    setIsSearching(false);
   }, [refreshInterval]);
 
   // Initial load

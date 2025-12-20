@@ -14,6 +14,7 @@ export const mockSignals: TradingSignal[] = [
     price: 1.0876,
     timestamp: new Date(),
     isHot: true,
+    marketType: 'forex',
   },
   {
     id: '2',
@@ -28,6 +29,7 @@ export const mockSignals: TradingSignal[] = [
     price: 67432.50,
     timestamp: new Date(Date.now() - 60000),
     isHot: true,
+    marketType: 'crypto',
   },
   {
     id: '3',
@@ -42,6 +44,7 @@ export const mockSignals: TradingSignal[] = [
     price: 192.45,
     timestamp: new Date(Date.now() - 120000),
     isHot: false,
+    marketType: 'forex',
   },
   {
     id: '4',
@@ -56,6 +59,7 @@ export const mockSignals: TradingSignal[] = [
     price: 3521.80,
     timestamp: new Date(Date.now() - 180000),
     isHot: true,
+    marketType: 'crypto',
   },
   {
     id: '5',
@@ -70,6 +74,7 @@ export const mockSignals: TradingSignal[] = [
     price: 154.32,
     timestamp: new Date(Date.now() - 300000),
     isHot: false,
+    marketType: 'forex',
   },
 ];
 

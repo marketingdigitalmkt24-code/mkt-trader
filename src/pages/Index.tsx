@@ -7,19 +7,25 @@ import { AllSignalsSection } from '@/components/AllSignalsSection';
 import { AssetRanking } from '@/components/AssetRanking';
 import { BankManagementCard } from '@/components/BankManagementCard';
 import { SafetyFiltersCard } from '@/components/SafetyFiltersCard';
+import { MarketStatusCard } from '@/components/MarketStatusCard';
 import { mockAssetPerformance, mockBankManagement, safetyFilters } from '@/data/mockData';
-import { Timeframe } from '@/types/trading';
+import { Timeframe, MarketType } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
 import { Loader2 } from 'lucide-react';
 
+type MarketFilter = 'ALL' | MarketType;
+
 const Index = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe | 'ALL'>('ALL');
-  const { signals, lastUpdate, nextUpdate, isLoading, refreshSignals } = useAutoSignals(30000);
+  const [selectedMarket, setSelectedMarket] = useState<MarketFilter>('ALL');
+  const { signals, lastUpdate, nextUpdate, isLoading, refreshSignals, marketStatus } = useAutoSignals(30000);
 
-  // Filter signals by timeframe
-  const filteredSignals = selectedTimeframe === 'ALL'
-    ? signals
-    : signals.filter((s) => s.timeframe === selectedTimeframe);
+  // Filter signals by timeframe and market type
+  const filteredSignals = signals.filter((s) => {
+    const tfMatch = selectedTimeframe === 'ALL' || s.timeframe === selectedTimeframe;
+    const marketMatch = selectedMarket === 'ALL' || s.marketType === selectedMarket;
+    return tfMatch && marketMatch;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -44,10 +50,35 @@ const Index = () => {
 
         <QuickStats signals={filteredSignals} />
         
-        <TimeframeFilter
-          selected={selectedTimeframe}
-          onChange={setSelectedTimeframe}
-        />
+        {/* Filters Row */}
+        <div className="flex flex-wrap items-center gap-4 mb-6">
+          <TimeframeFilter
+            selected={selectedTimeframe}
+            onChange={setSelectedTimeframe}
+          />
+          
+          {/* Market Type Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Mercado:</span>
+            <div className="flex bg-secondary/50 rounded-lg p-1">
+              {(['ALL', 'forex', 'crypto', 'otc'] as MarketFilter[]).map((market) => (
+                <button
+                  key={market}
+                  onClick={() => setSelectedMarket(market)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    selectedMarket === market
+                      ? market === 'otc' 
+                        ? 'bg-blue-500/20 text-blue-400 shadow-lg'
+                        : 'bg-primary text-primary-foreground shadow-lg'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {market === 'ALL' ? 'Todos' : market.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Main Content - Signals */}
@@ -58,6 +89,10 @@ const Index = () => {
 
           {/* Sidebar - Stats & Management */}
           <div className="space-y-6">
+            <MarketStatusCard 
+              otcOpen={marketStatus.otcOpen} 
+              forexOpen={marketStatus.forexOpen} 
+            />
             <BankManagementCard bank={mockBankManagement} />
             <AssetRanking assets={mockAssetPerformance} />
             <SafetyFiltersCard filters={safetyFilters} />

@@ -1,16 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TradingSignal, Timeframe } from '@/types/trading';
-
-const ASSETS = [
-  { symbol: 'EUR/USD', icon: '🇪🇺' },
-  { symbol: 'GBP/USD', icon: '🇬🇧' },
-  { symbol: 'USD/JPY', icon: '🇺🇸' },
-  { symbol: 'GBP/JPY', icon: '🇬🇧' },
-  { symbol: 'EUR/JPY', icon: '🇪🇺' },
-  { symbol: 'AUD/USD', icon: '🇦🇺' },
-  { symbol: 'BTC/USD', icon: '₿' },
-  { symbol: 'ETH/USD', icon: 'Ξ' },
-];
+import { TradingSignal, Timeframe, MarketType, TradingAsset } from '@/types/trading';
+import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/marketHours';
 
 const CONFIRMATIONS_CALL = [
   'RSI < 30',
@@ -35,17 +25,18 @@ const CONFIRMATIONS_PUT = [
 ];
 
 function generateRandomPrice(symbol: string): number {
-  const basePrices: Record<string, number> = {
-    'EUR/USD': 1.0850 + (Math.random() - 0.5) * 0.01,
-    'GBP/USD': 1.2650 + (Math.random() - 0.5) * 0.01,
-    'USD/JPY': 154.50 + (Math.random() - 0.5) * 1,
-    'GBP/JPY': 195.20 + (Math.random() - 0.5) * 1,
-    'EUR/JPY': 167.80 + (Math.random() - 0.5) * 1,
-    'AUD/USD': 0.6520 + (Math.random() - 0.5) * 0.005,
-    'BTC/USD': 67000 + (Math.random() - 0.5) * 2000,
-    'ETH/USD': 3500 + (Math.random() - 0.5) * 200,
-  };
-  return basePrices[symbol] || 1.0;
+  // Base prices for different pairs
+  if (symbol.includes('JPY')) {
+    return 150 + (Math.random() - 0.5) * 5;
+  }
+  if (symbol.includes('BTC')) {
+    return 67000 + (Math.random() - 0.5) * 2000;
+  }
+  if (symbol.includes('ETH')) {
+    return 3500 + (Math.random() - 0.5) * 200;
+  }
+  // Most forex pairs
+  return 1.0 + Math.random() * 0.5;
 }
 
 function generateRSIValue(type: 'CALL' | 'PUT'): string {
@@ -58,12 +49,10 @@ function generateRSIValue(type: 'CALL' | 'PUT'): string {
   }
 }
 
-function generateSignal(forceHighProbability: boolean = false): TradingSignal {
-  const asset = ASSETS[Math.floor(Math.random() * ASSETS.length)];
+function generateSignal(asset: TradingAsset, forceHighProbability: boolean = false): TradingSignal {
   const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
   const timeframe: Timeframe = Math.random() > 0.5 ? 'M1' : 'M5';
   
-  // For high probability signals, always 4 confirmations
   const numConfirmations = forceHighProbability ? 4 : (2 + Math.floor(Math.random() * 2));
   const strength = Math.min(4, numConfirmations) as 2 | 3 | 4;
   
@@ -92,43 +81,38 @@ function generateSignal(forceHighProbability: boolean = false): TradingSignal {
     price: generateRandomPrice(asset.symbol),
     timestamp: new Date(),
     isHot: isHighProb,
+    marketType: asset.type,
   };
 }
 
 function generateSignals(): TradingSignal[] {
-  // Generate only 1-2 high probability HOT signals
-  const hotCount = 1 + Math.floor(Math.random() * 2); // 1 or 2
+  const availableAssets = getAvailableAssets();
+  
+  if (availableAssets.length === 0) {
+    return [];
+  }
+
+  const hotCount = 1 + Math.floor(Math.random() * 2); // 1-2 hot signals
   const signals: TradingSignal[] = [];
   const usedAssets = new Set<string>();
 
-  // First, generate high probability HOT signals (1-2 only)
-  for (let i = 0; i < hotCount; i++) {
-    let signal = generateSignal(true); // Force high probability
-    let attempts = 0;
-    
-    while (usedAssets.has(signal.asset) && attempts < 10) {
-      signal = generateSignal(true);
-      attempts++;
-    }
-    
-    usedAssets.add(signal.asset);
-    signals.push(signal);
+  // Shuffle available assets to get random selection
+  const shuffledAssets = [...availableAssets].sort(() => Math.random() - 0.5);
+
+  // Generate high probability HOT signals
+  for (let i = 0; i < hotCount && i < shuffledAssets.length; i++) {
+    const asset = shuffledAssets[i];
+    signals.push(generateSignal(asset, true));
+    usedAssets.add(asset.symbol);
   }
 
-  // Then add a few moderate signals (optional, for "outros sinais" section)
+  // Add moderate signals from remaining assets
   const moderateCount = 2 + Math.floor(Math.random() * 2);
-  for (let i = 0; i < moderateCount; i++) {
-    let signal = generateSignal(false);
-    let attempts = 0;
-    
-    while (usedAssets.has(signal.asset) && attempts < 10) {
-      signal = generateSignal(false);
-      attempts++;
-    }
-    
-    if (!usedAssets.has(signal.asset)) {
-      usedAssets.add(signal.asset);
-      signals.push(signal);
+  for (let i = hotCount; i < hotCount + moderateCount && i < shuffledAssets.length; i++) {
+    const asset = shuffledAssets[i];
+    if (!usedAssets.has(asset.symbol)) {
+      signals.push(generateSignal(asset, false));
+      usedAssets.add(asset.symbol);
     }
   }
 
@@ -139,16 +123,33 @@ function generateSignals(): TradingSignal[] {
   });
 }
 
+export interface MarketStatus {
+  otcOpen: boolean;
+  forexOpen: boolean;
+  cryptoOpen: boolean; // Always true
+}
+
 export function useAutoSignals(refreshInterval: number = 30000) {
   const [signals, setSignals] = useState<TradingSignal[]>(() => generateSignals());
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [nextUpdate, setNextUpdate] = useState<number>(refreshInterval / 1000);
   const [isLoading, setIsLoading] = useState(false);
+  const [marketStatus, setMarketStatus] = useState<MarketStatus>({
+    otcOpen: isOTCMarketOpen(),
+    forexOpen: isForexMarketOpen(),
+    cryptoOpen: true,
+  });
 
   const refreshSignals = useCallback(() => {
     setIsLoading(true);
     
-    // Simulate network delay
+    // Update market status
+    setMarketStatus({
+      otcOpen: isOTCMarketOpen(),
+      forexOpen: isForexMarketOpen(),
+      cryptoOpen: true,
+    });
+    
     setTimeout(() => {
       setSignals(generateSignals());
       setLastUpdate(new Date());
@@ -177,11 +178,25 @@ export function useAutoSignals(refreshInterval: number = 30000) {
     return () => clearInterval(interval);
   }, [refreshSignals, refreshInterval]);
 
+  // Update market status every minute
+  useEffect(() => {
+    const statusInterval = setInterval(() => {
+      setMarketStatus({
+        otcOpen: isOTCMarketOpen(),
+        forexOpen: isForexMarketOpen(),
+        cryptoOpen: true,
+      });
+    }, 60000);
+
+    return () => clearInterval(statusInterval);
+  }, []);
+
   return {
     signals,
     lastUpdate,
     nextUpdate,
     isLoading,
     refreshSignals,
+    marketStatus,
   };
 }

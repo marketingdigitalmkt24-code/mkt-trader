@@ -1,11 +1,17 @@
 import { TradingSignal } from '@/types/trading';
-import { Star, Clock, TrendingUp, TrendingDown, Zap, CheckCircle2 } from 'lucide-react';
+import { Star, Clock, TrendingUp, TrendingDown, Zap, CheckCircle2, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SignalCardProps {
   signal: TradingSignal;
   isHighlighted?: boolean;
 }
+
+const marketTypeLabels = {
+  forex: 'FOREX',
+  crypto: 'CRYPTO',
+  otc: 'OTC',
+};
 
 export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
   const isCall = signal.type === 'CALL';
@@ -62,6 +68,14 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Clock className="w-3 h-3" />
               {formatTime(signal.timestamp)}
+              <span className={cn(
+                'text-xs px-1.5 py-0.5 rounded',
+                signal.marketType === 'otc' ? 'bg-blue-500/20 text-blue-400' :
+                signal.marketType === 'crypto' ? 'bg-orange-500/20 text-orange-400' :
+                'bg-green-500/20 text-green-400'
+              )}>
+                {marketTypeLabels[signal.marketType]}
+              </span>
             </div>
           </div>
         </div>

@@ -75,6 +75,51 @@ export function useSignalResults() {
     };
   });
 
+  // Calcular stats baseado no histórico
+  const recalculateStats = useCallback((historyData: SignalHistory[]): TradingStats => {
+    const completed = historyData.filter(h => h.result !== 'pending');
+    const wins = completed.filter(h => h.result === 'win').length;
+    const losses = completed.filter(h => h.result === 'loss').length;
+    const ties = completed.filter(h => h.result === 'tie').length;
+    const pending = historyData.filter(h => h.result === 'pending').length;
+    
+    const winRate = completed.length > 0 
+      ? (wins / (wins + losses)) * 100 
+      : 0;
+    
+    const totalProfit = historyData.reduce((sum, h) => sum + h.profit, 0);
+    
+    // Calcular streak
+    let streak = 0;
+    let streakType: 'win' | 'loss' | 'none' = 'none';
+    
+    for (let i = completed.length - 1; i >= 0; i--) {
+      const result = completed[i].result;
+      if (result === 'tie') continue;
+      
+      if (streakType === 'none') {
+        streakType = result as 'win' | 'loss';
+        streak = 1;
+      } else if (result === streakType) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    return {
+      totalSignals: historyData.length,
+      wins,
+      losses,
+      ties,
+      pending,
+      winRate: Math.round(winRate * 10) / 10,
+      totalProfit: Math.round(totalProfit * 100) / 100,
+      streak,
+      streakType,
+    };
+  }, []);
+
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
@@ -84,19 +129,106 @@ export function useSignalResults() {
     localStorage.setItem(STATS_KEY, JSON.stringify(stats));
   }, [stats]);
 
+  // Fetch existing results from database on mount
+  useEffect(() => {
+    const fetchExistingResults = async () => {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const { data, error } = await supabase
+          .from('operation_results')
+          .select('*')
+          .gte('created_at', today.toISOString())
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching results:', error);
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          console.log(`📊 Loaded ${data.length} results from database`);
+          
+          const dbHistory: SignalHistory[] = data.map(result => ({
+            id: result.id,
+            signal: {
+              id: result.signal_id,
+              asset: result.asset,
+              assetIcon: '📊',
+              type: result.direction as 'CALL' | 'PUT',
+              price: result.entry_price || 0,
+              timestamp: new Date(result.created_at),
+              timeframe: 'M5',
+              expiration: '5 min',
+              strength: 3,
+              status: 'high_probability',
+              isHot: false,
+              marketType: 'otc',
+              indicators: {
+                rsi: { value: 50, signal: 'neutral' },
+                macd: { value: 0, signal: 0, histogram: 0, trend: 'neutral' },
+                bollinger: { upper: 0, middle: 0, lower: 0, position: 'middle' },
+                stochastic: { k: 50, d: 50, signal: 'neutral' },
+                movingAverages: { ema9: 0, ema21: 0, sma50: 0, trend: 'neutral' },
+                atr: { value: 0, volatility: 'medium' },
+                supportResistance: { nearestSupport: 0, nearestResistance: 0, pricePosition: 'middle' },
+                confluenceCount: 0,
+                confluenceScore: 0,
+              },
+              confirmations: ['IQ Option Real'],
+              result: result.result as SignalResult,
+              resultPrice: result.exit_price || 0,
+              profit: result.profit,
+              resultTime: new Date(result.created_at),
+            },
+            result: result.result as SignalResult,
+            entryPrice: result.entry_price || 0,
+            exitPrice: result.exit_price || 0,
+            profit: result.profit,
+            timestamp: new Date(result.created_at),
+            resultTimestamp: new Date(result.created_at),
+          }));
+          
+          setHistory(prev => {
+            // Merge DB results with local history, avoiding duplicates
+            const existingIds = new Set(prev.map(h => h.id));
+            const newResults = dbHistory.filter(h => !existingIds.has(h.id));
+            
+            if (newResults.length > 0) {
+              const merged = [...newResults, ...prev].sort((a, b) => 
+                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+              );
+              const newStats = recalculateStats(merged);
+              setStats(newStats);
+              return merged;
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch existing results:', err);
+      }
+    };
+    
+    fetchExistingResults();
+  }, [recalculateStats]);
+
   // Listen for real-time updates from IQ Option results
   useEffect(() => {
+    console.log('🔔 Setting up realtime subscription for operation_results');
+    
     const channel = supabase
-      .channel('operation-results')
+      .channel('operation-results-realtime')
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*', // Listen to all events (INSERT, UPDATE)
           schema: 'public',
           table: 'operation_results',
         },
         (payload) => {
-          console.log('📊 New IQ Option result:', payload.new);
+          console.log('📊 Realtime update:', payload.eventType, payload.new);
           
           const result = payload.new as {
             id: string;
@@ -152,68 +284,35 @@ export function useSignalResults() {
           };
 
           setHistory(prev => {
-            // Check if already exists
-            if (prev.some(h => h.id === result.id)) {
-              return prev;
+            // Check if exists - update or add
+            const existingIndex = prev.findIndex(h => h.id === result.id);
+            
+            if (existingIndex >= 0) {
+              // Update existing entry
+              const updated = [...prev];
+              updated[existingIndex] = historyEntry;
+              const newStats = recalculateStats(updated);
+              setStats(newStats);
+              return updated;
+            } else {
+              // Add new entry
+              const newHistory = [historyEntry, ...prev];
+              const newStats = recalculateStats(newHistory);
+              setStats(newStats);
+              return newHistory;
             }
-            const newHistory = [historyEntry, ...prev];
-            const newStats = recalculateStats(newHistory);
-            setStats(newStats);
-            return newHistory;
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Realtime subscription status:', status);
+      });
 
     return () => {
+      console.log('🔕 Removing realtime subscription');
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  // Calcular stats baseado no histórico
-  const recalculateStats = useCallback((historyData: SignalHistory[]): TradingStats => {
-    const completed = historyData.filter(h => h.result !== 'pending');
-    const wins = completed.filter(h => h.result === 'win').length;
-    const losses = completed.filter(h => h.result === 'loss').length;
-    const ties = completed.filter(h => h.result === 'tie').length;
-    const pending = historyData.filter(h => h.result === 'pending').length;
-    
-    const winRate = completed.length > 0 
-      ? (wins / (wins + losses)) * 100 
-      : 0;
-    
-    const totalProfit = historyData.reduce((sum, h) => sum + h.profit, 0);
-    
-    // Calcular streak
-    let streak = 0;
-    let streakType: 'win' | 'loss' | 'none' = 'none';
-    
-    for (let i = completed.length - 1; i >= 0; i--) {
-      const result = completed[i].result;
-      if (result === 'tie') continue;
-      
-      if (streakType === 'none') {
-        streakType = result as 'win' | 'loss';
-        streak = 1;
-      } else if (result === streakType) {
-        streak++;
-      } else {
-        break;
-      }
-    }
-
-    return {
-      totalSignals: historyData.length,
-      wins,
-      losses,
-      ties,
-      pending,
-      winRate: Math.round(winRate * 10) / 10,
-      totalProfit: Math.round(totalProfit * 100) / 100,
-      streak,
-      streakType,
-    };
-  }, []);
+  }, [recalculateStats]);
 
   // Adicionar sinal ao histórico e simular resultado automaticamente
   const addSignalWithSimulation = useCallback((signal: TradingSignal) => {

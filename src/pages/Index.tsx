@@ -179,7 +179,7 @@ const Index = () => {
               otcOpen={marketStatus.otcOpen} 
               forexOpen={marketStatus.forexOpen} 
             />
-            <BankManagementCard bank={mockBankManagement} />
+            <BankManagementCard />
             <AssetRanking assets={mockAssetPerformance} />
             <SafetyFiltersCard filters={safetyFilters} />
           </div>

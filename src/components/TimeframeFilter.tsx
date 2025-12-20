@@ -10,8 +10,8 @@ export function TimeframeFilter({ selected, onChange }: TimeframeFilterProps) {
   const options: (Timeframe | 'ALL')[] = ['ALL', 'M1', 'M5'];
 
   return (
-    <div className="flex items-center gap-2 mb-6">
-      <span className="text-sm text-muted-foreground mr-2">Timeframe:</span>
+    <div className="flex items-center gap-2">
+      <span className="text-sm text-muted-foreground">Timeframe:</span>
       <div className="flex bg-secondary/50 rounded-lg p-1">
         {options.map((tf) => (
           <button

@@ -2,6 +2,14 @@ export type SignalType = 'CALL' | 'PUT';
 export type Timeframe = 'M1' | 'M5';
 export type SignalStrength = 2 | 3 | 4;
 export type SignalStatus = 'high_probability' | 'moderate';
+export type MarketType = 'forex' | 'crypto' | 'otc';
+
+export interface TradingAsset {
+  symbol: string;
+  icon: string;
+  type: MarketType;
+  isOTC?: boolean;
+}
 
 export interface TradingSignal {
   id: string;
@@ -16,6 +24,7 @@ export interface TradingSignal {
   price: number;
   timestamp: Date;
   isHot: boolean;
+  marketType: MarketType;
 }
 
 export interface AssetPerformance {

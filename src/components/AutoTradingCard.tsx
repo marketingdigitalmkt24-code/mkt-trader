@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Switch } from './ui/switch';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
-import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square } from 'lucide-react';
+import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X } from 'lucide-react';
 import { Badge } from './ui/badge';
 
 interface AutoTradingConfig {
@@ -25,6 +25,30 @@ interface AutoTradingCardProps {
 
 export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTradeResult }: AutoTradingCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [localConfig, setLocalConfig] = useState(config);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Sync local config when parent config changes
+  useEffect(() => {
+    if (!hasChanges) {
+      setLocalConfig(config);
+    }
+  }, [config, hasChanges]);
+
+  const handleLocalChange = (updates: Partial<AutoTradingConfig>) => {
+    setLocalConfig(prev => ({ ...prev, ...updates }));
+    setHasChanges(true);
+  };
+
+  const handleSave = () => {
+    updateConfig(localConfig);
+    setHasChanges(false);
+  };
+
+  const handleCancel = () => {
+    setLocalConfig(config);
+    setHasChanges(false);
+  };
 
   if (!isOpen) {
     return (
@@ -67,18 +91,18 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
         {/* Enable/Disable Toggle */}
         <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
           <div className="flex items-center gap-2">
-            {config.enabled ? (
+            {localConfig.enabled ? (
               <Play className="w-4 h-4 text-green-500" />
             ) : (
               <Square className="w-4 h-4 text-muted-foreground" />
             )}
             <span className="font-medium">
-              {config.enabled ? 'Auto Trading Ativo' : 'Auto Trading Desativado'}
+              {localConfig.enabled ? 'Auto Trading Ativo' : 'Auto Trading Desativado'}
             </span>
           </div>
           <Switch
-            checked={config.enabled}
-            onCheckedChange={(enabled) => updateConfig({ enabled })}
+            checked={localConfig.enabled}
+            onCheckedChange={(enabled) => handleLocalChange({ enabled })}
           />
         </div>
 
@@ -94,8 +118,8 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
               type="number"
               min={1}
               max={1000}
-              value={config.amount}
-              onChange={(e) => updateConfig({ amount: Number(e.target.value) })}
+              value={localConfig.amount}
+              onChange={(e) => handleLocalChange({ amount: Number(e.target.value) })}
               className="w-24"
             />
           </div>
@@ -105,18 +129,18 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
             <Target className="w-4 h-4" />
-            Confluência mínima: {config.minConfluence}%
+            Confluência mínima: {localConfig.minConfluence}%
           </Label>
           <Slider
-            value={[config.minConfluence]}
-            onValueChange={([value]) => updateConfig({ minConfluence: value })}
+            value={[localConfig.minConfluence]}
+            onValueChange={([value]) => handleLocalChange({ minConfluence: value })}
             min={60}
             max={100}
             step={1}
             className="w-full"
           />
           <p className="text-xs text-muted-foreground">
-            Só executa entradas com confluência acima de {config.minConfluence}%
+            Só executa entradas com confluência acima de {localConfig.minConfluence}%
           </p>
         </div>
 
@@ -131,15 +155,29 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
               type="number"
               min={1}
               max={50}
-              value={config.maxDailyTrades}
-              onChange={(e) => updateConfig({ maxDailyTrades: Number(e.target.value) })}
+              value={localConfig.maxDailyTrades}
+              onChange={(e) => handleLocalChange({ maxDailyTrades: Number(e.target.value) })}
               className="w-20"
             />
             <span className="text-sm text-muted-foreground">
-              ({config.todayTrades} de {config.maxDailyTrades} hoje)
+              ({config.todayTrades} de {localConfig.maxDailyTrades} hoje)
             </span>
           </div>
         </div>
+
+        {/* Save/Cancel Buttons */}
+        {hasChanges && (
+          <div className="flex gap-2 pt-2">
+            <Button onClick={handleSave} className="flex-1 gap-2">
+              <Save className="w-4 h-4" />
+              Salvar
+            </Button>
+            <Button variant="outline" onClick={handleCancel} className="gap-2">
+              <X className="w-4 h-4" />
+              Cancelar
+            </Button>
+          </div>
+        )}
 
         {/* Status */}
         {lastTradeResult && (

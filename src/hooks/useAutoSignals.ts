@@ -15,6 +15,24 @@ import {
 import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/marketHours';
 import { supabase } from '@/integrations/supabase/client';
 
+// ============= CONFIGURAÇÕES EXTREMAS =============
+const MIN_CONFIRMATIONS = 4; // Mínimo de 4 confirmações obrigatórias
+const MAX_DAILY_SIGNALS = 6; // Máximo de sinais por dia
+const RSI_CALL_MAX = 25; // RSI máximo para CALL (sobrevendido extremo)
+const RSI_PUT_MIN = 75; // RSI mínimo para PUT (sobrecomprado extremo)
+const WHATSAPP_CONFLUENCE_THRESHOLD = 90; // Threshold para notificação WhatsApp
+const NOTIFICATION_COOLDOWN = 300000; // 5 minutos de cooldown
+const MAX_CONSECUTIVE_LOSSES = 2; // Máximo de losses antes de pausar
+
+// ============= CONTROLE DE RISCO =============
+interface RiskControl {
+  dailySignalsCount: number;
+  consecutiveLosses: number;
+  lastLossTime: number | null;
+  isPaused: boolean;
+  pauseReason: string | null;
+}
+
 function generateRandomPrice(symbol: string): number {
   if (symbol.includes('JPY')) {
     return 150 + (Math.random() - 0.5) * 5;
@@ -28,42 +46,48 @@ function generateRandomPrice(symbol: string): number {
   return 1.0 + Math.random() * 0.5;
 }
 
-function generateRSI(type: 'CALL' | 'PUT', forceStrong: boolean): RSIIndicator {
+// RSI extremo para CALL < 25, PUT > 75
+function generateRSI(type: 'CALL' | 'PUT', forceExtreme: boolean): RSIIndicator {
   let value: number;
-  if (forceStrong) {
-    value = type === 'CALL' ? 15 + Math.random() * 15 : 70 + Math.random() * 15;
+  if (forceExtreme) {
+    // RSI extremamente sobrevendido para CALL, sobrecomprado para PUT
+    value = type === 'CALL' 
+      ? 15 + Math.random() * 10  // 15-25 para CALL
+      : 75 + Math.random() * 10; // 75-85 para PUT
   } else {
-    value = 30 + Math.random() * 40;
+    // Valores neutros (não vão gerar sinal)
+    value = 35 + Math.random() * 30; // 35-65
   }
   
   return {
     value,
-    signal: value < 30 ? 'oversold' : value > 70 ? 'overbought' : 'neutral'
+    signal: value < RSI_CALL_MAX ? 'oversold' : value > RSI_PUT_MIN ? 'overbought' : 'neutral'
   };
 }
 
 function generateMACD(type: 'CALL' | 'PUT', forceStrong: boolean): MACDIndicator {
   const isBullish = type === 'CALL';
   const histogram = forceStrong 
-    ? (isBullish ? 0.001 + Math.random() * 0.003 : -(0.001 + Math.random() * 0.003))
-    : (Math.random() - 0.5) * 0.004;
+    ? (isBullish ? 0.002 + Math.random() * 0.003 : -(0.002 + Math.random() * 0.003))
+    : (Math.random() - 0.5) * 0.002;
 
   return {
     value: histogram * 2,
     signal: histogram * 1.5,
     histogram,
-    trend: histogram > 0.0005 ? 'bullish' : histogram < -0.0005 ? 'bearish' : 'neutral'
+    trend: histogram > 0.001 ? 'bullish' : histogram < -0.001 ? 'bearish' : 'neutral'
   };
 }
 
-function generateBollinger(price: number, type: 'CALL' | 'PUT', forceStrong: boolean): BollingerBands {
+// Bollinger com posição extrema
+function generateBollinger(price: number, type: 'CALL' | 'PUT', forceExtreme: boolean): BollingerBands {
   const range = price * 0.02;
   const middle = price;
   const upper = middle + range;
   const lower = middle - range;
   
   let position: 'above_upper' | 'below_lower' | 'middle';
-  if (forceStrong) {
+  if (forceExtreme) {
     position = type === 'CALL' ? 'below_lower' : 'above_upper';
   } else {
     position = 'middle';
@@ -76,10 +100,10 @@ function generateStochastic(type: 'CALL' | 'PUT', forceStrong: boolean): Stochas
   let k: number, d: number;
   if (forceStrong) {
     if (type === 'CALL') {
-      k = 10 + Math.random() * 15;
+      k = 5 + Math.random() * 15; // 5-20 extremamente sobrevendido
       d = k + Math.random() * 5;
     } else {
-      k = 75 + Math.random() * 15;
+      k = 80 + Math.random() * 15; // 80-95 extremamente sobrecomprado
       d = k - Math.random() * 5;
     }
   } else {
@@ -94,36 +118,55 @@ function generateStochastic(type: 'CALL' | 'PUT', forceStrong: boolean): Stochas
   };
 }
 
-function generateMovingAverages(price: number, type: 'CALL' | 'PUT', forceStrong: boolean): MovingAverages {
+// EMA com sinal de reversão
+function generateMovingAverages(price: number, type: 'CALL' | 'PUT', forceReversal: boolean): MovingAverages {
   const variation = price * 0.005;
-  const ema9 = price + (Math.random() - 0.5) * variation;
-  const ema21 = price + (Math.random() - 0.5) * variation * 2;
+  let ema9: number, ema21: number;
+  
+  if (forceReversal) {
+    if (type === 'CALL') {
+      // EMA9 abaixo de EMA21, mas próximo (sinal de reversão bullish)
+      ema21 = price + variation;
+      ema9 = price - variation * 0.5;
+    } else {
+      // EMA9 acima de EMA21, mas próximo (sinal de reversão bearish)
+      ema21 = price - variation;
+      ema9 = price + variation * 0.5;
+    }
+  } else {
+    ema9 = price + (Math.random() - 0.5) * variation;
+    ema21 = price + (Math.random() - 0.5) * variation * 2;
+  }
+  
   const sma50 = price + (Math.random() - 0.5) * variation * 3;
   
+  // Para reversão: EMA9 cruzando EMA21
   let trend: 'bullish' | 'bearish' | 'neutral';
-  if (forceStrong) {
+  if (forceReversal) {
     trend = type === 'CALL' ? 'bullish' : 'bearish';
   } else {
-    trend = ema9 > ema21 ? 'bullish' : ema9 < ema21 ? 'bearish' : 'neutral';
+    trend = 'neutral';
   }
 
   return { ema9, ema21, sma50, trend };
 }
 
+// Volatilidade - evitar alta volatilidade
 function generateATR(price: number): ATRIndicator {
-  const atrPercent = Math.random() * 3;
+  const atrPercent = 0.5 + Math.random() * 1.5; // Preferir volatilidade baixa-média
   const value = price * atrPercent / 100;
   
   return {
     value,
-    volatility: atrPercent < 1 ? 'low' : atrPercent < 2 ? 'medium' : 'high'
+    volatility: atrPercent < 0.8 ? 'low' : atrPercent < 1.5 ? 'medium' : 'high'
   };
 }
 
+// Suporte/Resistência forte
 function generateSupportResistance(price: number, type: 'CALL' | 'PUT', forceStrong: boolean): SupportResistance {
-  const range = price * 0.01;
-  const nearestSupport = price - range - Math.random() * range;
-  const nearestResistance = price + range + Math.random() * range;
+  const range = price * 0.005; // Range mais apertado = suporte/resistência mais forte
+  const nearestSupport = price - range - Math.random() * range * 0.5;
+  const nearestResistance = price + range + Math.random() * range * 0.5;
   
   let pricePosition: 'near_support' | 'near_resistance' | 'middle';
   if (forceStrong) {
@@ -135,56 +178,81 @@ function generateSupportResistance(price: number, type: 'CALL' | 'PUT', forceStr
   return { nearestSupport, nearestResistance, pricePosition };
 }
 
-function generateIndicators(price: number, type: 'CALL' | 'PUT', forceStrong: boolean): TechnicalIndicators {
-  const rsi = generateRSI(type, forceStrong);
-  const macd = generateMACD(type, forceStrong);
-  const bollinger = generateBollinger(price, type, forceStrong);
-  const stochastic = generateStochastic(type, forceStrong);
-  const movingAverages = generateMovingAverages(price, type, forceStrong);
-  const atr = generateATR(price);
-  const supportResistance = generateSupportResistance(price, type, forceStrong);
+// Detectar candle de reversão
+function hasReversalCandle(type: 'CALL' | 'PUT'): { hasReversal: boolean; pattern: string } {
+  const patterns = type === 'CALL' 
+    ? ['Martelo', 'Engolfo de Alta', 'Doji de Alta', 'Pin Bar Bullish']
+    : ['Estrela Cadente', 'Engolfo de Baixa', 'Doji de Baixa', 'Pin Bar Bearish'];
+  
+  // Simular detecção de padrão (30% de chance de detectar)
+  const hasReversal = Math.random() < 0.3;
+  const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+  
+  return { hasReversal, pattern };
+}
 
-  // Calculate confluence
+// Checar condições de mercado
+function hasGoodMarketConditions(): { isGood: boolean; reason: string | null } {
+  const conditions = [
+    { check: Math.random() > 0.2, reason: 'Mercado lateral detectado' },
+    { check: Math.random() > 0.15, reason: 'Alta volatilidade por notícias' },
+    { check: Math.random() > 0.1, reason: 'Spike de preço detectado' }
+  ];
+  
+  for (const condition of conditions) {
+    if (!condition.check) {
+      return { isGood: false, reason: condition.reason };
+    }
+  }
+  
+  return { isGood: true, reason: null };
+}
+
+function generateIndicators(price: number, type: 'CALL' | 'PUT', forceExtreme: boolean): TechnicalIndicators & { reversalPattern?: string } {
+  const rsi = generateRSI(type, forceExtreme);
+  const macd = generateMACD(type, forceExtreme);
+  const bollinger = generateBollinger(price, type, forceExtreme);
+  const stochastic = generateStochastic(type, forceExtreme);
+  const movingAverages = generateMovingAverages(price, type, forceExtreme);
+  const atr = generateATR(price);
+  const supportResistance = generateSupportResistance(price, type, forceExtreme);
+
+  // ============= CONTAGEM RIGOROSA DE CONFIRMAÇÕES =============
   let confluenceCount = 0;
   const isCall = type === 'CALL';
 
-  // RSI confluence
-  if ((isCall && rsi.signal === 'oversold') || (!isCall && rsi.signal === 'overbought')) {
-    confluenceCount++;
-  }
+  // 1. RSI extremo (< 25 para CALL, > 75 para PUT)
+  const rsiConfirmed = isCall 
+    ? rsi.value < RSI_CALL_MAX 
+    : rsi.value > RSI_PUT_MIN;
+  if (rsiConfirmed) confluenceCount++;
 
-  // MACD confluence
-  if ((isCall && macd.trend === 'bullish') || (!isCall && macd.trend === 'bearish')) {
-    confluenceCount++;
-  }
+  // 2. Bollinger extremo (tocando banda inferior/superior)
+  const bollingerConfirmed = isCall 
+    ? bollinger.position === 'below_lower'
+    : bollinger.position === 'above_upper';
+  if (bollingerConfirmed) confluenceCount++;
 
-  // Bollinger confluence
-  if ((isCall && bollinger.position === 'below_lower') || (!isCall && bollinger.position === 'above_upper')) {
-    confluenceCount++;
-  }
+  // 3. Suporte/Resistência forte
+  const srConfirmed = isCall 
+    ? supportResistance.pricePosition === 'near_support'
+    : supportResistance.pricePosition === 'near_resistance';
+  if (srConfirmed) confluenceCount++;
 
-  // Stochastic confluence
-  if ((isCall && stochastic.signal === 'oversold') || (!isCall && stochastic.signal === 'overbought')) {
-    confluenceCount++;
-  }
+  // 4. EMA com sinal de reversão
+  const emaConfirmed = movingAverages.trend !== 'neutral';
+  if (emaConfirmed) confluenceCount++;
 
-  // Moving Averages confluence
-  if ((isCall && movingAverages.trend === 'bullish') || (!isCall && movingAverages.trend === 'bearish')) {
-    confluenceCount++;
-  }
+  // 5. Volatilidade adequada (não pode ser alta)
+  const volatilityOk = atr.volatility !== 'high';
+  if (volatilityOk) confluenceCount++;
 
-  // Volatility confluence (medium is ideal)
-  if (atr.volatility === 'medium') {
-    confluenceCount++;
-  }
+  // 6. Candle de reversão
+  const { hasReversal, pattern } = hasReversalCandle(type);
+  if (hasReversal) confluenceCount++;
 
-  // Support/Resistance confluence
-  if ((isCall && supportResistance.pricePosition === 'near_support') || 
-      (!isCall && supportResistance.pricePosition === 'near_resistance')) {
-    confluenceCount++;
-  }
-
-  const confluenceScore = Math.round((confluenceCount / 7) * 100);
+  // Score baseado em 6 confirmações possíveis
+  const confluenceScore = Math.round((confluenceCount / 6) * 100);
 
   return {
     rsi,
@@ -195,57 +263,78 @@ function generateIndicators(price: number, type: 'CALL' | 'PUT', forceStrong: bo
     atr,
     supportResistance,
     confluenceScore,
-    confluenceCount
+    confluenceCount,
+    reversalPattern: hasReversal ? pattern : undefined
   };
 }
 
-function generateConfirmations(indicators: TechnicalIndicators, type: 'CALL' | 'PUT'): string[] {
+function generateConfirmations(
+  indicators: TechnicalIndicators & { reversalPattern?: string }, 
+  type: 'CALL' | 'PUT'
+): string[] {
   const confirmations: string[] = [];
   const isCall = type === 'CALL';
 
-  // RSI
-  if (indicators.rsi.signal !== 'neutral') {
-    confirmations.push(`RSI ${indicators.rsi.value.toFixed(1)} (${isCall ? 'sobrevendido' : 'sobrecomprado'})`);
-  }
-
-  // Stochastic
-  if (indicators.stochastic.signal !== 'neutral') {
-    confirmations.push(`Stoch ${indicators.stochastic.k.toFixed(0)}/${indicators.stochastic.d.toFixed(0)}`);
-  }
-
-  // MACD
-  if (indicators.macd.trend !== 'neutral') {
-    confirmations.push(`MACD ${indicators.macd.trend === 'bullish' ? 'bullish' : 'bearish'}`);
+  // RSI extremo
+  if ((isCall && indicators.rsi.value < RSI_CALL_MAX) || 
+      (!isCall && indicators.rsi.value > RSI_PUT_MIN)) {
+    confirmations.push(`RSI ${indicators.rsi.value.toFixed(1)} (${isCall ? 'extremo oversold' : 'extremo overbought'})`);
   }
 
   // Bollinger
   if (indicators.bollinger.position !== 'middle') {
-    confirmations.push(`Bollinger ${isCall ? 'inferior' : 'superior'}`);
+    confirmations.push(`Bollinger banda ${isCall ? 'inferior' : 'superior'}`);
+  }
+
+  // Suporte/Resistência
+  if (indicators.supportResistance.pricePosition !== 'middle') {
+    confirmations.push(`${isCall ? 'Suporte' : 'Resistência'} forte HTF`);
   }
 
   // EMAs
   if (indicators.movingAverages.trend !== 'neutral') {
-    confirmations.push(`EMA9 ${indicators.movingAverages.trend === 'bullish' ? '>' : '<'} EMA21`);
+    confirmations.push(`EMA9/EMA21 sinal reversão`);
   }
 
-  // Support/Resistance
-  if (indicators.supportResistance.pricePosition !== 'middle') {
-    confirmations.push(isCall ? 'Próximo ao suporte' : 'Próximo à resistência');
+  // Volatilidade
+  if (indicators.atr.volatility !== 'high') {
+    confirmations.push(`Volatilidade ${indicators.atr.volatility}`);
+  }
+
+  // Candle de reversão
+  if (indicators.reversalPattern) {
+    confirmations.push(`Padrão: ${indicators.reversalPattern}`);
   }
 
   return confirmations;
 }
 
-function generateSignal(asset: TradingAsset, forceHighProbability: boolean = false): TradingSignal {
+function tryGenerateHighQualitySignal(
+  asset: TradingAsset
+): TradingSignal | null {
+  // Verificar condições de mercado primeiro
+  const marketConditions = hasGoodMarketConditions();
+  if (!marketConditions.isGood) {
+    return null;
+  }
+
   const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
-  const timeframe: Timeframe = Math.random() > 0.5 ? 'M1' : 'M5';
+  const timeframe: Timeframe = Math.random() > 0.6 ? 'M5' : 'M1'; // Preferir M5
   const price = generateRandomPrice(asset.symbol);
   
-  const indicators = generateIndicators(price, type, forceHighProbability);
+  // Tentar gerar indicadores extremos
+  const forceExtreme = Math.random() > 0.6; // 40% de chance de indicadores extremos
+  const indicators = generateIndicators(price, type, forceExtreme);
+  
+  // REGRA PRINCIPAL: Mínimo de 4 confirmações
+  if (indicators.confluenceCount < MIN_CONFIRMATIONS) {
+    return null;
+  }
+
   const confirmations = generateConfirmations(indicators, type);
   
-  const strength = Math.min(4, Math.max(2, Math.round(indicators.confluenceScore / 25))) as 2 | 3 | 4;
-  const isHighProb = forceHighProbability || indicators.confluenceScore >= 70;
+  // Só gerar sinais com 4+ estrelas
+  const strength = 4 as const;
 
   return {
     id: crypto.randomUUID(),
@@ -253,43 +342,69 @@ function generateSignal(asset: TradingAsset, forceHighProbability: boolean = fal
     asset: asset.symbol,
     assetIcon: asset.icon,
     timeframe,
-    expiration: timeframe === 'M1' ? `${1 + Math.floor(Math.random() * 2)} min` : '5 min',
+    expiration: timeframe === 'M1' ? '2 min' : '5 min',
     strength,
-    status: isHighProb ? 'high_probability' : 'moderate',
+    status: 'high_probability',
     confirmations,
     price,
     timestamp: new Date(),
-    isHot: isHighProb,
+    isHot: true,
     marketType: asset.type,
     indicators,
   };
 }
 
-function generateSignals(): TradingSignal[] {
+function generateSignals(riskControl: RiskControl): { signals: TradingSignal[]; message: string | null } {
+  // Verificar controle de risco
+  if (riskControl.isPaused) {
+    return { 
+      signals: [], 
+      message: riskControl.pauseReason || 'Sistema pausado por controle de risco'
+    };
+  }
+
+  if (riskControl.dailySignalsCount >= MAX_DAILY_SIGNALS) {
+    return { 
+      signals: [], 
+      message: `Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`
+    };
+  }
+
   const availableAssets = getAvailableAssets();
   
   if (availableAssets.length === 0) {
-    return [];
+    return { signals: [], message: 'Nenhum mercado disponível' };
   }
 
   const signals: TradingSignal[] = [];
   const usedAssets = new Set<string>();
   const shuffledAssets = [...availableAssets].sort(() => Math.random() - 0.5);
 
-  // Try to generate high-quality signals only
-  for (let i = 0; i < shuffledAssets.length && signals.length < 3; i++) {
+  // Tentar gerar no máximo 2 sinais por ciclo
+  const maxSignalsThisCycle = Math.min(2, MAX_DAILY_SIGNALS - riskControl.dailySignalsCount);
+
+  for (let i = 0; i < shuffledAssets.length && signals.length < maxSignalsThisCycle; i++) {
     const asset = shuffledAssets[i];
     if (!usedAssets.has(asset.symbol)) {
-      const signal = generateSignal(asset, true); // Force high probability
-      // Only include if confluence is >= 70%
-      if (signal.indicators.confluenceScore >= 70) {
+      const signal = tryGenerateHighQualitySignal(asset);
+      if (signal) {
         signals.push(signal);
         usedAssets.add(asset.symbol);
       }
     }
   }
 
-  return signals.sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore);
+  if (signals.length === 0) {
+    return { 
+      signals: [], 
+      message: 'Aguardando oportunidade de ALTA QUALIDADE' 
+    };
+  }
+
+  return { 
+    signals: signals.sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore),
+    message: null
+  };
 }
 
 export interface MarketStatus {
@@ -297,9 +412,6 @@ export interface MarketStatus {
   forexOpen: boolean;
   cryptoOpen: boolean;
 }
-
-const WHATSAPP_CONFLUENCE_THRESHOLD = 86;
-const NOTIFICATION_COOLDOWN = 120000; // 2 minute cooldown per asset
 
 async function sendWhatsAppNotification(signal: TradingSignal): Promise<boolean> {
   try {
@@ -317,6 +429,7 @@ async function sendWhatsAppNotification(signal: TradingSignal): Promise<boolean>
           timeframe: signal.timeframe,
           entryTime,
           confirmations: signal.confirmations,
+          tag: 'ALTA PROBABILIDADE',
         },
       },
     });
@@ -334,12 +447,13 @@ async function sendWhatsAppNotification(signal: TradingSignal): Promise<boolean>
   }
 }
 
-export function useAutoSignals(refreshInterval: number = 30000) {
+export function useAutoSignals(refreshInterval: number = 45000) {
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [nextUpdate, setNextUpdate] = useState<number>(refreshInterval / 1000);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(true);
+  const [waitingMessage, setWaitingMessage] = useState<string | null>('Iniciando análise de mercado...');
   const [marketStatus, setMarketStatus] = useState<MarketStatus>({
     otcOpen: isOTCMarketOpen(),
     forexOpen: isForexMarketOpen(),
@@ -347,6 +461,44 @@ export function useAutoSignals(refreshInterval: number = 30000) {
   });
   
   const notifiedAssets = useRef<Map<string, number>>(new Map());
+  const riskControl = useRef<RiskControl>({
+    dailySignalsCount: 0,
+    consecutiveLosses: 0,
+    lastLossTime: null,
+    isPaused: false,
+    pauseReason: null,
+  });
+
+  // Reset diário à meia-noite
+  useEffect(() => {
+    const checkDailyReset = () => {
+      const now = new Date();
+      if (now.getHours() === 0 && now.getMinutes() === 0) {
+        riskControl.current = {
+          dailySignalsCount: 0,
+          consecutiveLosses: 0,
+          lastLossTime: null,
+          isPaused: false,
+          pauseReason: null,
+        };
+        notifiedAssets.current.clear();
+      }
+    };
+
+    const interval = setInterval(checkDailyReset, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const registerLoss = useCallback(() => {
+    riskControl.current.consecutiveLosses++;
+    riskControl.current.lastLossTime = Date.now();
+    
+    if (riskControl.current.consecutiveLosses >= MAX_CONSECUTIVE_LOSSES) {
+      riskControl.current.isPaused = true;
+      riskControl.current.pauseReason = 'Mercado sem condições ideais no momento';
+      setWaitingMessage('⚠️ Sistema pausado: 2 losses seguidos detectados');
+    }
+  }, []);
 
   const refreshSignals = useCallback(async () => {
     setIsLoading(true);
@@ -358,16 +510,19 @@ export function useAutoSignals(refreshInterval: number = 30000) {
       cryptoOpen: true,
     });
     
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await new Promise(resolve => setTimeout(resolve, 1200));
     
-    const newSignals = generateSignals();
+    const { signals: newSignals, message } = generateSignals(riskControl.current);
     
-    // Only update if we found high-quality signals
     if (newSignals.length > 0) {
       setSignals(newSignals);
       setLastUpdate(new Date());
+      setWaitingMessage(null);
       
-      // Check for signals with 86%+ confluence and send WhatsApp notifications
+      // Atualizar contador diário
+      riskControl.current.dailySignalsCount += newSignals.length;
+      
+      // Enviar notificações WhatsApp para sinais de alta qualidade
       for (const signal of newSignals) {
         if (signal.indicators.confluenceScore >= WHATSAPP_CONFLUENCE_THRESHOLD) {
           const lastNotified = notifiedAssets.current.get(signal.asset);
@@ -381,6 +536,8 @@ export function useAutoSignals(refreshInterval: number = 30000) {
           }
         }
       }
+    } else {
+      setWaitingMessage(message);
     }
     
     setNextUpdate(refreshInterval / 1000);
@@ -431,5 +588,9 @@ export function useAutoSignals(refreshInterval: number = 30000) {
     isSearching,
     refreshSignals,
     marketStatus,
+    waitingMessage,
+    registerLoss,
+    dailySignalsCount: riskControl.current.dailySignalsCount,
+    maxDailySignals: MAX_DAILY_SIGNALS,
   };
 }

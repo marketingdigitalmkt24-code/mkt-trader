@@ -18,7 +18,7 @@ type MarketFilter = 'ALL' | MarketType;
 const Index = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe | 'ALL'>('ALL');
   const [selectedMarket, setSelectedMarket] = useState<MarketFilter>('ALL');
-  const { signals, lastUpdate, nextUpdate, isLoading, refreshSignals, marketStatus } = useAutoSignals(30000);
+  const { signals, lastUpdate, nextUpdate, isLoading, isSearching, refreshSignals, marketStatus } = useAutoSignals(30000);
 
   // Filter signals by timeframe and market type
   const filteredSignals = signals.filter((s) => {
@@ -34,6 +34,7 @@ const Index = () => {
         lastUpdate={lastUpdate}
         nextUpdate={nextUpdate}
         isLoading={isLoading}
+        isSearching={isSearching}
         onRefresh={refreshSignals}
       />
       

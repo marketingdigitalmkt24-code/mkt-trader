@@ -1,15 +1,16 @@
-import { Activity, Wifi, RefreshCw, Clock } from 'lucide-react';
+import { Activity, Wifi, RefreshCw, Clock, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface HeaderProps {
   isConnected: boolean;
-  lastUpdate: Date;
+  lastUpdate: Date | null;
   nextUpdate: number;
   isLoading: boolean;
+  isSearching?: boolean;
   onRefresh: () => void;
 }
 
-export function Header({ isConnected, lastUpdate, nextUpdate, isLoading, onRefresh }: HeaderProps) {
+export function Header({ isConnected, lastUpdate, nextUpdate, isLoading, isSearching, onRefresh }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 glass-card border-b border-border/50 mb-6">
       <div className="container py-4">
@@ -29,6 +30,14 @@ export function Header({ isConnected, lastUpdate, nextUpdate, isLoading, onRefre
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Searching Status */}
+            {isSearching && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gold/20 text-gold rounded-lg text-xs font-medium animate-pulse">
+                <Search className="w-3 h-3" />
+                <span className="hidden sm:inline">Buscando sinais...</span>
+              </div>
+            )}
+
             {/* Refresh Button */}
             <button
               onClick={onRefresh}
@@ -65,16 +74,18 @@ export function Header({ isConnected, lastUpdate, nextUpdate, isLoading, onRefre
             </div>
             
             {/* Last Update */}
-            <div className="text-right hidden md:block">
-              <div className="text-xs text-muted-foreground">Atualizado</div>
-              <div className="text-sm font-mono text-foreground">
-                {lastUpdate.toLocaleTimeString('pt-BR', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })}
+            {lastUpdate && (
+              <div className="text-right hidden md:block">
+                <div className="text-xs text-muted-foreground">Atualizado</div>
+                <div className="text-sm font-mono text-foreground">
+                  {lastUpdate.toLocaleTimeString('pt-BR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

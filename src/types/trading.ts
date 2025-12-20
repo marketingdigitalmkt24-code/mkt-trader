@@ -3,6 +3,7 @@ export type Timeframe = 'M1' | 'M5';
 export type SignalStrength = 2 | 3 | 4;
 export type SignalStatus = 'high_probability' | 'moderate';
 export type MarketType = 'forex' | 'crypto' | 'otc';
+export type SignalResult = 'win' | 'loss' | 'pending' | 'tie';
 
 export interface TradingAsset {
   symbol: string;
@@ -82,6 +83,33 @@ export interface TradingSignal {
   isHot: boolean;
   marketType: MarketType;
   indicators: TechnicalIndicators;
+  result?: SignalResult;
+  resultPrice?: number;
+  profit?: number;
+  resultTime?: Date;
+}
+
+export interface SignalHistory {
+  id: string;
+  signal: TradingSignal;
+  result: SignalResult;
+  entryPrice: number;
+  exitPrice?: number;
+  profit: number;
+  timestamp: Date;
+  resultTimestamp?: Date;
+}
+
+export interface TradingStats {
+  totalSignals: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  pending: number;
+  winRate: number;
+  totalProfit: number;
+  streak: number;
+  streakType: 'win' | 'loss' | 'none';
 }
 
 export interface AssetPerformance {

@@ -107,7 +107,7 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
           
           console.log('Using balance ID:', balanceId);
           
-          // Request closed binary options history
+          // Request closed binary options history - try multiple formats
           ws.send(JSON.stringify({
             name: 'sendMessage',
             msg: {
@@ -115,7 +115,22 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
               version: '2.0',
               body: {
                 user_balance_id: balanceId,
-                instrument_types: ['binary-option', 'turbo-option'],
+                instrument_types: ['binary-option', 'turbo-option', 'digital-option'],
+                limit: 100,
+                offset: 0,
+              },
+            },
+          }));
+          
+          // Also try alternative history request format
+          ws.send(JSON.stringify({
+            name: 'sendMessage',
+            msg: {
+              name: 'get-history-positions',
+              version: '1.0',
+              body: {
+                user_balance_id: balanceId,
+                instrument_types: ['turbo'],
                 limit: 100,
                 offset: 0,
               },
@@ -123,35 +138,59 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
           }));
         }
         
-        // Handle history positions response
-        if (data.name === 'portfolio.get-history-positions') {
-          console.log('Received history positions');
+        // Handle history positions response - check multiple event names
+        if (data.name === 'portfolio.get-history-positions' || 
+            data.name === 'history-positions' || 
+            (data.name === 'portfolio.order-changed' && data.msg)) {
+          console.log('Received history positions, processing...');
           
-          const positionsList = data.msg?.positions || [];
-          console.log('Found', positionsList.length, 'closed positions');
+          // Handle different response structures
+          let positionsList = [];
+          if (data.msg?.positions) {
+            positionsList = data.msg.positions;
+          } else if (Array.isArray(data.msg)) {
+            positionsList = data.msg;
+          } else if (data.msg?.history) {
+            positionsList = data.msg.history;
+          }
+          
+          console.log('Found', positionsList.length, 'positions in response');
           
           for (const pos of positionsList) {
-            // Determine win/loss status
+            // Determine win/loss status based on different API response formats
             let win = 'pending';
-            if (pos.close_profit !== undefined) {
-              if (pos.close_profit > 0) win = 'win';
-              else if (pos.close_profit < 0) win = 'loose';
-              else win = 'equal';
-            } else if (pos.win !== undefined) {
-              win = pos.win;
-            } else if (pos.pnl !== undefined) {
-              if (pos.pnl > 0) win = 'win';
-              else if (pos.pnl < 0) win = 'loose';
-              else win = 'equal';
+            const profit = pos.close_profit ?? pos.pnl ?? pos.profit ?? pos.win_amount ?? 0;
+            
+            // Check various fields for win status
+            if (pos.status === 'closed' || pos.close_time || pos.close_at) {
+              if (typeof pos.win === 'string') {
+                win = pos.win; // 'win', 'loose', 'equal'
+              } else if (profit > 0) {
+                win = 'win';
+              } else if (profit < 0) {
+                win = 'loose';
+              } else {
+                win = 'equal';
+              }
+            } else if (pos.result) {
+              win = pos.result;
             }
             
-            positions.push({
-              id: String(pos.id || pos.external_id || pos.option_id),
-              win,
-              profit: pos.close_profit || pos.pnl || pos.profit || 0,
-              close_quote: pos.close_quote || pos.close_rate,
-            });
+            // Get the correct ID
+            const posId = String(pos.id || pos.option_id || pos.external_id || pos.position_id || '');
+            
+            if (posId) {
+              console.log(`Position ${posId}: win=${win}, profit=${profit}`);
+              positions.push({
+                id: posId,
+                win,
+                profit,
+                close_quote: pos.close_quote || pos.close_rate || pos.close_price,
+              });
+            }
           }
+          
+          console.log('Processed', positions.length, 'closed positions total');
           
           // Close after receiving data
           setTimeout(() => {

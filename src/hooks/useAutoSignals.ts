@@ -20,7 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 // ============= CONFIGURAÇÕES EXTREMAS =============
 const MIN_CONFIRMATIONS = 4; // Mínimo de 4 confirmações obrigatórias
-const MAX_DAILY_SIGNALS = 6; // Máximo de sinais por dia
+const MAX_DAILY_SIGNALS = Infinity; // Sem limite de sinais por dia
 const RSI_CALL_MAX = 25; // RSI máximo para CALL (sobrevendido extremo)
 const RSI_PUT_MIN = 75; // RSI mínimo para PUT (sobrecomprado extremo)
 const WHATSAPP_CONFLUENCE_THRESHOLD = 90; // Threshold para notificação WhatsApp

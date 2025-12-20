@@ -89,6 +89,66 @@ export type Database = {
         }
         Relationships: []
       }
+      trading_signals: {
+        Row: {
+          asset: string
+          asset_icon: string
+          confirmations: Json
+          confluence_count: number
+          confluence_score: number
+          created_at: string
+          expiration: string
+          id: string
+          indicators: Json
+          is_hot: boolean
+          market_type: string
+          price: number
+          signal_id: string
+          status: string
+          strength: number
+          timeframe: string
+          type: string
+        }
+        Insert: {
+          asset: string
+          asset_icon?: string
+          confirmations?: Json
+          confluence_count?: number
+          confluence_score?: number
+          created_at?: string
+          expiration: string
+          id?: string
+          indicators?: Json
+          is_hot?: boolean
+          market_type: string
+          price: number
+          signal_id: string
+          status?: string
+          strength?: number
+          timeframe: string
+          type: string
+        }
+        Update: {
+          asset?: string
+          asset_icon?: string
+          confirmations?: Json
+          confluence_count?: number
+          confluence_score?: number
+          created_at?: string
+          expiration?: string
+          id?: string
+          indicators?: Json
+          is_hot?: boolean
+          market_type?: string
+          price?: number
+          signal_id?: string
+          status?: string
+          strength?: number
+          timeframe?: string
+          type?: string
+        }
+        Relationships: []
+      }
       whatsapp_numbers: {
         Row: {
           created_at: string

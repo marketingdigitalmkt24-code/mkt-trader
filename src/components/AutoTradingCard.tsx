@@ -6,11 +6,24 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
 import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square } from 'lucide-react';
-import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { Badge } from './ui/badge';
 
-export function AutoTradingCard() {
-  const { config, updateConfig, isPlacingTrade, lastTradeResult } = useAutoTrading();
+interface AutoTradingConfig {
+  enabled: boolean;
+  amount: number;
+  minConfluence: number;
+  maxDailyTrades: number;
+  todayTrades: number;
+}
+
+interface AutoTradingCardProps {
+  config: AutoTradingConfig;
+  updateConfig: (updates: Partial<AutoTradingConfig>) => void;
+  isPlacingTrade: boolean;
+  lastTradeResult: { success: boolean; message: string } | null;
+}
+
+export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTradeResult }: AutoTradingCardProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   if (!isOpen) {

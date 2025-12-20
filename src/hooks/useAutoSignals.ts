@@ -679,22 +679,35 @@ export function useAutoSignals() {
       
       // Carregar sinais do Supabase
       const dbSignals = await loadSignalsFromDB();
+      
+      // O contador é SEMPRE baseado nos sinais reais do banco
+      const actualDailyCount = dbSignals.length;
+      
+      // Carregar apenas consecutiveLosses e isPaused do localStorage
       const storedRisk = loadRiskControl();
       
-      // Restaurar estado do risk control
-      riskControl.current = storedRisk;
+      // Restaurar estado do risk control mantendo apenas dados de losses
+      riskControl.current = {
+        dailySignalsCount: actualDailyCount, // SEMPRE do banco
+        consecutiveLosses: storedRisk.consecutiveLosses,
+        lastLossTime: storedRisk.lastLossTime,
+        isPaused: storedRisk.isPaused,
+        pauseReason: storedRisk.pauseReason,
+      };
       
-      // Atualizar contador com base nos sinais do banco
-      riskControl.current.dailySignalsCount = dbSignals.length;
+      console.log(`📊 Loaded ${actualDailyCount} signals from database, limit: ${MAX_DAILY_SIGNALS}`);
       
       if (dbSignals.length > 0) {
         setSignals(dbSignals);
         setWaitingMessage(null);
         setLastUpdate(new Date(dbSignals[0].timestamp));
+      } else {
+        // Se não há sinais, garantir que está buscando
+        setWaitingMessage('Aguardando oportunidade de ALTA QUALIDADE');
       }
       
       // Verificar se atingiu limite
-      if (riskControl.current.dailySignalsCount >= MAX_DAILY_SIGNALS) {
+      if (actualDailyCount >= MAX_DAILY_SIGNALS) {
         setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
       }
       

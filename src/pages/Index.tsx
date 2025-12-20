@@ -151,6 +151,7 @@ const Index = () => {
               waitingMessage={waitingMessage}
               dailySignalsCount={dailySignalsCount}
               maxDailySignals={maxDailySignals}
+              activeOperations={history.filter(h => h.result === 'pending')}
             />
             
             {/* Histórico de Resultados */}

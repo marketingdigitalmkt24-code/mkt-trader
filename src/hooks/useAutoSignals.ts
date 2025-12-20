@@ -322,8 +322,8 @@ function tryGenerateHighQualitySignal(
   const timeframe: Timeframe = Math.random() > 0.6 ? 'M5' : 'M1'; // Preferir M5
   const price = generateRandomPrice(asset.symbol);
   
-  // Tentar gerar indicadores extremos
-  const forceExtreme = Math.random() > 0.6; // 40% de chance de indicadores extremos
+  // Tentar gerar indicadores extremos com probabilidade maior
+  const forceExtreme = Math.random() > 0.45; // 55% de chance de indicadores extremos
   const indicators = generateIndicators(price, type, forceExtreme);
   
   // REGRA PRINCIPAL: Mínimo de 4 confirmações
@@ -619,7 +619,7 @@ export function useAutoSignals() {
     setIsSearching(false);
   }, [waitingMessage]);
 
-  // Análise inicial - apenas carregar sinais salvos, não gerar novos
+  // Análise inicial - carregar sinais salvos e analisar imediatamente
   useEffect(() => {
     const storedSignals = loadStoredSignals();
     if (storedSignals.length > 0) {
@@ -627,7 +627,16 @@ export function useAutoSignals() {
     }
     setIsLoading(false);
     setIsSearching(false);
-  }, []);
+
+    // Analisar imediatamente ao montar (após 2s para estabilizar)
+    const initialAnalysis = setTimeout(() => {
+      if (riskControl.current.dailySignalsCount < MAX_DAILY_SIGNALS && !riskControl.current.isPaused) {
+        analyzeMarket();
+      }
+    }, 2000);
+
+    return () => clearTimeout(initialAnalysis);
+  }, [analyzeMarket]);
 
   // Análise a cada 5 minutos (apenas se não atingiu limite)
   useEffect(() => {

@@ -271,33 +271,24 @@ function generateSignals(): TradingSignal[] {
     return [];
   }
 
-  const hotCount = 1 + Math.floor(Math.random() * 2);
   const signals: TradingSignal[] = [];
   const usedAssets = new Set<string>();
-
   const shuffledAssets = [...availableAssets].sort(() => Math.random() - 0.5);
 
-  // Generate high probability HOT signals with strong indicator confluence
-  for (let i = 0; i < hotCount && i < shuffledAssets.length; i++) {
-    const asset = shuffledAssets[i];
-    signals.push(generateSignal(asset, true));
-    usedAssets.add(asset.symbol);
-  }
-
-  // Add moderate signals
-  const moderateCount = 2 + Math.floor(Math.random() * 2);
-  for (let i = hotCount; i < hotCount + moderateCount && i < shuffledAssets.length; i++) {
+  // Try to generate high-quality signals only
+  for (let i = 0; i < shuffledAssets.length && signals.length < 3; i++) {
     const asset = shuffledAssets[i];
     if (!usedAssets.has(asset.symbol)) {
-      signals.push(generateSignal(asset, false));
-      usedAssets.add(asset.symbol);
+      const signal = generateSignal(asset, true); // Force high probability
+      // Only include if confluence is >= 70%
+      if (signal.indicators.confluenceScore >= 70) {
+        signals.push(signal);
+        usedAssets.add(asset.symbol);
+      }
     }
   }
 
-  return signals.sort((a, b) => {
-    if (a.isHot !== b.isHot) return b.isHot ? 1 : -1;
-    return b.indicators.confluenceScore - a.indicators.confluenceScore;
-  });
+  return signals.sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore);
 }
 
 export interface MarketStatus {
@@ -307,10 +298,11 @@ export interface MarketStatus {
 }
 
 export function useAutoSignals(refreshInterval: number = 30000) {
-  const [signals, setSignals] = useState<TradingSignal[]>(() => generateSignals());
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [signals, setSignals] = useState<TradingSignal[]>([]);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [nextUpdate, setNextUpdate] = useState<number>(refreshInterval / 1000);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(true);
   const [marketStatus, setMarketStatus] = useState<MarketStatus>({
     otcOpen: isOTCMarketOpen(),
     forexOpen: isForexMarketOpen(),
@@ -319,6 +311,7 @@ export function useAutoSignals(refreshInterval: number = 30000) {
 
   const refreshSignals = useCallback(() => {
     setIsLoading(true);
+    setIsSearching(true);
     
     setMarketStatus({
       otcOpen: isOTCMarketOpen(),
@@ -327,12 +320,24 @@ export function useAutoSignals(refreshInterval: number = 30000) {
     });
     
     setTimeout(() => {
-      setSignals(generateSignals());
-      setLastUpdate(new Date());
+      const newSignals = generateSignals();
+      
+      // Only update if we found high-quality signals
+      if (newSignals.length > 0) {
+        setSignals(newSignals);
+        setLastUpdate(new Date());
+      }
+      
       setNextUpdate(refreshInterval / 1000);
       setIsLoading(false);
-    }, 500);
+      setIsSearching(false);
+    }, 800);
   }, [refreshInterval]);
+
+  // Initial load
+  useEffect(() => {
+    refreshSignals();
+  }, []);
 
   useEffect(() => {
     const countdown = setInterval(() => {
@@ -369,6 +374,7 @@ export function useAutoSignals(refreshInterval: number = 30000) {
     lastUpdate,
     nextUpdate,
     isLoading,
+    isSearching,
     refreshSignals,
     marketStatus,
   };

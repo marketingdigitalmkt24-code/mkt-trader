@@ -150,45 +150,56 @@ export function useSignalResults() {
         if (data && data.length > 0) {
           console.log(`📊 Loaded ${data.length} results from database`);
           
-          const dbHistory: SignalHistory[] = data.map(result => ({
-            id: result.id,
-            signal: {
-              id: result.signal_id,
-              asset: result.asset,
-              assetIcon: '📊',
-              type: result.direction as 'CALL' | 'PUT',
-              price: result.entry_price || 0,
-              timestamp: new Date(result.created_at),
-              timeframe: 'M5',
-              expiration: '5 min',
-              strength: 3,
-              status: 'high_probability',
-              isHot: false,
-              marketType: 'otc',
-              indicators: {
-                rsi: { value: 50, signal: 'neutral' },
-                macd: { value: 0, signal: 0, histogram: 0, trend: 'neutral' },
-                bollinger: { upper: 0, middle: 0, lower: 0, position: 'middle' },
-                stochastic: { k: 50, d: 50, signal: 'neutral' },
-                movingAverages: { ema9: 0, ema21: 0, sma50: 0, trend: 'neutral' },
-                atr: { value: 0, volatility: 'medium' },
-                supportResistance: { nearestSupport: 0, nearestResistance: 0, pricePosition: 'middle' },
-                confluenceCount: 0,
-                confluenceScore: 0,
+          // Map IQ Option result names to our format
+          const mapResult = (iqResult: string): SignalResult => {
+            if (iqResult === 'win') return 'win';
+            if (iqResult === 'loose' || iqResult === 'loss') return 'loss';
+            if (iqResult === 'equal' || iqResult === 'tie') return 'tie';
+            return 'pending';
+          };
+          
+          const dbHistory: SignalHistory[] = data.map(result => {
+            const mappedResult = mapResult(result.result);
+            return {
+              id: result.id,
+              signal: {
+                id: result.signal_id,
+                asset: result.asset,
+                assetIcon: '📊',
+                type: result.direction as 'CALL' | 'PUT',
+                price: result.entry_price || 0,
+                timestamp: new Date(result.created_at),
+                timeframe: 'M1', // Will be overwritten if we have signal data
+                expiration: '1 min',
+                strength: 3,
+                status: 'high_probability',
+                isHot: false,
+                marketType: 'otc',
+                indicators: {
+                  rsi: { value: 50, signal: 'neutral' },
+                  macd: { value: 0, signal: 0, histogram: 0, trend: 'neutral' },
+                  bollinger: { upper: 0, middle: 0, lower: 0, position: 'middle' },
+                  stochastic: { k: 50, d: 50, signal: 'neutral' },
+                  movingAverages: { ema9: 0, ema21: 0, sma50: 0, trend: 'neutral' },
+                  atr: { value: 0, volatility: 'medium' },
+                  supportResistance: { nearestSupport: 0, nearestResistance: 0, pricePosition: 'middle' },
+                  confluenceCount: 0,
+                  confluenceScore: 0,
+                },
+                confirmations: ['IQ Option'],
+                result: mappedResult,
+                resultPrice: result.exit_price || 0,
+                profit: result.profit,
+                resultTime: new Date(result.created_at),
               },
-              confirmations: ['IQ Option Real'],
-              result: result.result as SignalResult,
-              resultPrice: result.exit_price || 0,
+              result: mappedResult,
+              entryPrice: result.entry_price || 0,
+              exitPrice: result.exit_price || 0,
               profit: result.profit,
-              resultTime: new Date(result.created_at),
-            },
-            result: result.result as SignalResult,
-            entryPrice: result.entry_price || 0,
-            exitPrice: result.exit_price || 0,
-            profit: result.profit,
-            timestamp: new Date(result.created_at),
-            resultTimestamp: new Date(result.created_at),
-          }));
+              timestamp: new Date(result.created_at),
+              resultTimestamp: mappedResult !== 'pending' ? new Date(result.created_at) : undefined,
+            };
+          });
           
           setHistory(prev => {
             // Merge DB results with local history, avoiding duplicates
@@ -242,6 +253,16 @@ export function useSignalResults() {
             created_at: string;
           };
           
+          // Map IQ Option result names to our format
+          const mapResult = (iqResult: string): SignalResult => {
+            if (iqResult === 'win') return 'win';
+            if (iqResult === 'loose' || iqResult === 'loss') return 'loss';
+            if (iqResult === 'equal' || iqResult === 'tie') return 'tie';
+            return 'pending';
+          };
+          
+          const mappedResult = mapResult(result.result);
+          
           // Add to history
           const historyEntry: SignalHistory = {
             id: result.id,
@@ -252,8 +273,8 @@ export function useSignalResults() {
               type: result.direction as 'CALL' | 'PUT',
               price: result.entry_price || 0,
               timestamp: new Date(result.created_at),
-              timeframe: 'M5',
-              expiration: '5 min',
+              timeframe: 'M1',
+              expiration: '1 min',
               strength: 3,
               status: 'high_probability',
               isHot: false,
@@ -269,18 +290,18 @@ export function useSignalResults() {
                 confluenceCount: 0,
                 confluenceScore: 0,
               },
-              confirmations: ['IQ Option Real'],
-              result: result.result as SignalResult,
+              confirmations: ['IQ Option'],
+              result: mappedResult,
               resultPrice: result.exit_price || 0,
               profit: result.profit,
               resultTime: new Date(result.created_at),
             },
-            result: result.result as SignalResult,
+            result: mappedResult,
             entryPrice: result.entry_price || 0,
             exitPrice: result.exit_price || 0,
             profit: result.profit,
             timestamp: new Date(result.created_at),
-            resultTimestamp: new Date(result.created_at),
+            resultTimestamp: mappedResult !== 'pending' ? new Date(result.created_at) : undefined,
           };
 
           setHistory(prev => {

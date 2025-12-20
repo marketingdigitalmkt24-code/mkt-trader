@@ -322,7 +322,7 @@ function tryGenerateHighQualitySignal(
   }
 
   const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
-  const timeframe: Timeframe = Math.random() > 0.6 ? 'M5' : 'M1'; // Preferir M5
+  const timeframe: Timeframe = Math.random() > 0.5 ? 'M5' : 'M1'; // 50% M1, 50% M5
   const price = generateRandomPrice(asset.symbol);
   
   // Tentar gerar indicadores extremos com probabilidade maior

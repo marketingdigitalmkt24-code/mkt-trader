@@ -58,12 +58,14 @@ function generateRSIValue(type: 'CALL' | 'PUT'): string {
   }
 }
 
-function generateSignal(): TradingSignal {
+function generateSignal(forceHighProbability: boolean = false): TradingSignal {
   const asset = ASSETS[Math.floor(Math.random() * ASSETS.length)];
   const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
   const timeframe: Timeframe = Math.random() > 0.5 ? 'M1' : 'M5';
-  const numConfirmations = 3 + Math.floor(Math.random() * 2);
-  const strength = numConfirmations as 2 | 3 | 4;
+  
+  // For high probability signals, always 4 confirmations
+  const numConfirmations = forceHighProbability ? 4 : (2 + Math.floor(Math.random() * 2));
+  const strength = Math.min(4, numConfirmations) as 2 | 3 | 4;
   
   const confirmationPool = type === 'CALL' ? CONFIRMATIONS_CALL : CONFIRMATIONS_PUT;
   const confirmations = [generateRSIValue(type)];
@@ -75,6 +77,8 @@ function generateSignal(): TradingSignal {
     }
   }
 
+  const isHighProb = forceHighProbability || strength >= 4;
+
   return {
     id: crypto.randomUUID(),
     type,
@@ -83,25 +87,27 @@ function generateSignal(): TradingSignal {
     timeframe,
     expiration: timeframe === 'M1' ? `${1 + Math.floor(Math.random() * 2)} min` : '5 min',
     strength,
-    status: strength >= 3 ? 'high_probability' : 'moderate',
+    status: isHighProb ? 'high_probability' : 'moderate',
     confirmations,
     price: generateRandomPrice(asset.symbol),
     timestamp: new Date(),
-    isHot: strength >= 3 && Math.random() > 0.3,
+    isHot: isHighProb,
   };
 }
 
 function generateSignals(): TradingSignal[] {
-  const count = 3 + Math.floor(Math.random() * 4);
+  // Generate only 1-2 high probability HOT signals
+  const hotCount = 1 + Math.floor(Math.random() * 2); // 1 or 2
   const signals: TradingSignal[] = [];
   const usedAssets = new Set<string>();
 
-  for (let i = 0; i < count; i++) {
-    let signal = generateSignal();
+  // First, generate high probability HOT signals (1-2 only)
+  for (let i = 0; i < hotCount; i++) {
+    let signal = generateSignal(true); // Force high probability
     let attempts = 0;
     
     while (usedAssets.has(signal.asset) && attempts < 10) {
-      signal = generateSignal();
+      signal = generateSignal(true);
       attempts++;
     }
     
@@ -109,7 +115,24 @@ function generateSignals(): TradingSignal[] {
     signals.push(signal);
   }
 
-  // Sort by strength and hot status
+  // Then add a few moderate signals (optional, for "outros sinais" section)
+  const moderateCount = 2 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < moderateCount; i++) {
+    let signal = generateSignal(false);
+    let attempts = 0;
+    
+    while (usedAssets.has(signal.asset) && attempts < 10) {
+      signal = generateSignal(false);
+      attempts++;
+    }
+    
+    if (!usedAssets.has(signal.asset)) {
+      usedAssets.add(signal.asset);
+      signals.push(signal);
+    }
+  }
+
+  // Sort: HOT first, then by strength
   return signals.sort((a, b) => {
     if (a.isHot !== b.isHot) return b.isHot ? 1 : -1;
     return b.strength - a.strength;

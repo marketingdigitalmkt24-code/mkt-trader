@@ -133,6 +133,8 @@ async function placeTrade(
       try {
         const data = JSON.parse(event.data);
         
+        console.log('Received message:', data.name);
+        
         if (data.name === 'profile') {
           isAuthenticated = true;
           console.log('Authenticated! Getting balance info...');
@@ -202,19 +204,43 @@ async function placeTrade(
           }));
         }
         
-        if (data.name === 'binary-options.option-opened') {
-          console.log('Trade opened successfully!', data.msg);
-          tradeId = data.msg?.id || data.msg?.option_id;
-          clearTimeout(timeout);
-          ws.close();
-          resolve({ 
-            success: true, 
-            tradeId: String(tradeId),
-          });
+        // Handle successful trade responses
+        if (data.name === 'binary-options.option-opened' || 
+            data.name === 'option-opened' ||
+            data.name === 'option') {
+          console.log('Trade response received:', JSON.stringify(data.msg));
+          const id = data.msg?.id || data.msg?.option_id;
+          if (id) {
+            tradeId = String(id);
+            console.log('Trade opened successfully! ID:', tradeId);
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ 
+              success: true, 
+              tradeId: tradeId,
+            });
+          }
         }
         
+        // Handle message wrapper response
+        if (data.name === 'message' && data.msg?.name === 'binary-options.option-opened') {
+          console.log('Wrapped trade response:', JSON.stringify(data.msg));
+          const id = data.msg?.msg?.id || data.msg?.msg?.option_id;
+          if (id) {
+            tradeId = String(id);
+            console.log('Trade opened (wrapped)! ID:', tradeId);
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ 
+              success: true, 
+              tradeId: tradeId,
+            });
+          }
+        }
+        
+        // Handle error responses
         if (data.name === 'binary-options.open-option' && data.msg?.result === 'error') {
-          console.error('Trade error:', data.msg);
+          console.error('Trade error:', JSON.stringify(data.msg));
           clearTimeout(timeout);
           ws.close();
           resolve({ 
@@ -223,9 +249,15 @@ async function placeTrade(
           });
         }
         
-        if (data.name === 'option' && data.msg?.id) {
-          console.log('Option created:', data.msg);
-          tradeId = data.msg.id;
+        // Handle other error formats
+        if (data.name === 'error' || (data.msg && data.msg.result === 'error')) {
+          console.error('Error received:', JSON.stringify(data));
+          clearTimeout(timeout);
+          ws.close();
+          resolve({ 
+            success: false, 
+            error: data.msg?.message || data.msg || 'Unknown error',
+          });
         }
         
       } catch (e) {

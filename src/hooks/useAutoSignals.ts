@@ -18,14 +18,16 @@ import {
 import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/marketHours';
 import { supabase } from '@/integrations/supabase/client';
 
-// ============= CONFIGURAÇÕES EXTREMAS =============
-const MIN_CONFIRMATIONS = 4; // Mínimo de 4 confirmações obrigatórias
+// ============= CONFIGURAÇÕES PARA 10 SINAIS/HORA COM ALTA ASSERTIVIDADE =============
+const MIN_CONFIRMATIONS = 5; // Mínimo de 5 confirmações para maior assertividade
 const MAX_DAILY_SIGNALS = Infinity; // Sem limite de sinais por dia
-const RSI_CALL_MAX = 25; // RSI máximo para CALL (sobrevendido extremo)
-const RSI_PUT_MIN = 75; // RSI mínimo para PUT (sobrecomprado extremo)
-const WHATSAPP_CONFLUENCE_THRESHOLD = 90; // Threshold para notificação WhatsApp
+const RSI_CALL_MAX = 20; // RSI máximo para CALL (sobrevendido extremo)
+const RSI_PUT_MIN = 80; // RSI mínimo para PUT (sobrecomprado extremo)
+const WHATSAPP_CONFLUENCE_THRESHOLD = 92; // Threshold mais alto para notificação WhatsApp
 const NOTIFICATION_COOLDOWN = 300000; // 5 minutos de cooldown
 const MAX_CONSECUTIVE_LOSSES = 2; // Máximo de losses antes de pausar
+const SIGNAL_INTERVAL_MS = 360000; // 6 minutos = 10 sinais por hora
+const INITIAL_DELAY_MS = 15000; // 15 segundos para primeira análise
 
 // ============= CONTROLE DE RISCO =============
 interface RiskControl {
@@ -776,21 +778,21 @@ export function useAutoSignals() {
     };
   }, []);
 
-  // Análise automática a cada 3 minutos (apenas se não atingiu limite)
+  // Análise automática a cada 6 minutos (10 sinais por hora)
   useEffect(() => {
-    // Primeira análise após 30 segundos de página carregada
+    // Primeira análise após 15 segundos de página carregada
     const initialTimeout = setTimeout(() => {
       if (riskControl.current.dailySignalsCount < MAX_DAILY_SIGNALS && !riskControl.current.isPaused) {
         analyzeMarket();
       }
-    }, 30000);
+    }, INITIAL_DELAY_MS);
 
-    // Depois a cada 3 minutos
+    // Depois a cada 6 minutos para gerar ~10 sinais por hora
     const interval = setInterval(() => {
       if (riskControl.current.dailySignalsCount < MAX_DAILY_SIGNALS && !riskControl.current.isPaused) {
         analyzeMarket();
       }
-    }, 180000); // 3 minutos
+    }, SIGNAL_INTERVAL_MS);
 
     return () => {
       clearTimeout(initialTimeout);

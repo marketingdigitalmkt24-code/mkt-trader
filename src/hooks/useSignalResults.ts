@@ -314,6 +314,47 @@ export function useSignalResults() {
     };
   }, [recalculateStats]);
 
+  // Fetch results from IQ Option periodically
+  const fetchIQOptionResults = useCallback(async () => {
+    try {
+      console.log('🔄 Checking IQ Option for results...');
+      const { data, error } = await supabase.functions.invoke('iqoption-check-results');
+      
+      if (error) {
+        console.error('Error fetching IQ Option results:', error);
+        return { success: false, error: error.message };
+      }
+      
+      console.log('📊 IQ Option results:', data);
+      return data;
+    } catch (err) {
+      console.error('Failed to fetch IQ Option results:', err);
+      return { success: false, error: String(err) };
+    }
+  }, []);
+
+  // Poll for results every 60 seconds when there are pending operations
+  useEffect(() => {
+    const checkForPendingResults = async () => {
+      const hasPending = history.some(h => h.result === 'pending');
+      if (hasPending) {
+        console.log('📡 Checking for pending results...');
+        await fetchIQOptionResults();
+      }
+    };
+
+    // Initial check after 30 seconds
+    const initialTimeout = setTimeout(checkForPendingResults, 30000);
+    
+    // Then check every 60 seconds
+    const interval = setInterval(checkForPendingResults, 60000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, [history, fetchIQOptionResults]);
+
   // Adicionar sinal ao histórico e simular resultado automaticamente
   const addSignalWithSimulation = useCallback((signal: TradingSignal) => {
     const result = simulateResult(signal.indicators.confluenceScore);
@@ -396,22 +437,6 @@ export function useSignalResults() {
     });
   }, [recalculateStats]);
 
-  // Buscar resultados da IQ Option
-  const fetchIQOptionResults = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('iqoption-check-results');
-      
-      if (error) {
-        console.error('Error fetching IQ Option results:', error);
-        return { success: false, error: error.message };
-      }
-      
-      return data;
-    } catch (err) {
-      console.error('Failed to fetch IQ Option results:', err);
-      return { success: false, error: String(err) };
-    }
-  }, []);
 
   // Limpar histórico
   const clearHistory = useCallback(() => {

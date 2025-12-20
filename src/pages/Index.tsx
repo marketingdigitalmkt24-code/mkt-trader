@@ -47,7 +47,12 @@ const Index = () => {
   } = useSignalResults();
 
   const {
+    config: autoTradingConfig,
+    updateConfig: updateAutoTradingConfig,
     checkAndAutoTrade,
+    isPlacingTrade,
+    lastTradeResult,
+    resetDailyTrades,
   } = useAutoTrading();
 
   // Auto trading: executar entrada quando sinal de alta probabilidade aparecer
@@ -163,7 +168,12 @@ const Index = () => {
           {/* Sidebar - Stats & Management */}
           <div className="space-y-6">
             <div className="space-y-2">
-              <AutoTradingCard />
+              <AutoTradingCard 
+                config={autoTradingConfig}
+                updateConfig={updateAutoTradingConfig}
+                isPlacingTrade={isPlacingTrade}
+                lastTradeResult={lastTradeResult}
+              />
               <WhatsAppSettingsCard />
               <IQOptionSettingsCard />
             </div>

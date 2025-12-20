@@ -65,12 +65,24 @@ export function useAutoTrading() {
     setConfig(prev => ({ ...prev, ...updates }));
   }, []);
 
+  // Map timeframe to expiration in minutes
+  const getExpirationFromTimeframe = (timeframe: string): number => {
+    switch (timeframe) {
+      case 'M1': return 1;
+      case 'M5': return 5;
+      case 'M15': return 15;
+      case 'M30': return 30;
+      case 'H1': return 60;
+      default: return 5; // Default to 5 minutes
+    }
+  };
+
   // Place a single trade with timeout
   const placeSingleTrade = useCallback(async (signal: TradingSignal): Promise<TradeResult> => {
     const startTime = Date.now();
     
     try {
-      const expiration = signal.timeframe === 'M1' ? 1 : 5;
+      const expiration = getExpirationFromTimeframe(signal.timeframe);
       
       console.log(`🎯 [${signal.asset}] Placing trade: ${signal.type} $${config.amount}`);
       

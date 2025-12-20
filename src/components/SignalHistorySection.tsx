@@ -37,10 +37,6 @@ export function SignalHistorySection({
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
 
-  if (history.length === 0) {
-    return null;
-  }
-
   return (
     <section className="mb-8">
       <div className="flex items-center justify-between mb-4">
@@ -56,15 +52,17 @@ export function SignalHistorySection({
           </div>
         </div>
         
-        <Button 
-          variant="ghost" 
-          size="sm"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={onClearHistory}
-        >
-          <Trash2 className="w-4 h-4 mr-1" />
-          Limpar
-        </Button>
+        {history.length > 0 && (
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={onClearHistory}
+          >
+            <Trash2 className="w-4 h-4 mr-1" />
+            Limpar
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -74,16 +72,26 @@ export function SignalHistorySection({
       </div>
 
       {/* History List */}
-      <div className="space-y-2">
-        {paginatedHistory.map((entry) => (
-          <SignalResultCard
-            key={entry.id}
-            signal={entry.signal}
-            onRegisterResult={onRegisterResult}
-            showManualButtons={!entry.result || entry.result === 'pending'}
-          />
-        ))}
-      </div>
+      {history.length === 0 ? (
+        <div className="glass-card p-8 text-center">
+          <History className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
+          <p className="text-muted-foreground">Nenhum resultado registrado ainda</p>
+          <p className="text-sm text-muted-foreground/70 mt-1">
+            Os resultados aparecerão automaticamente após os sinais expirarem
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {paginatedHistory.map((entry) => (
+            <SignalResultCard
+              key={entry.id}
+              signal={entry.signal}
+              onRegisterResult={onRegisterResult}
+              showManualButtons={!entry.result || entry.result === 'pending'}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (

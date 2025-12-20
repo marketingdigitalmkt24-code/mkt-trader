@@ -11,10 +11,12 @@ import { MarketStatusCard } from '@/components/MarketStatusCard';
 import { SignalHistorySection } from '@/components/SignalHistorySection';
 import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
+import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { mockAssetPerformance, mockBankManagement, safetyFilters } from '@/data/mockData';
 import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
 import { useSignalResults } from '@/hooks/useSignalResults';
+import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { Loader2 } from 'lucide-react';
 
 type MarketFilter = 'ALL' | MarketType;
@@ -43,6 +45,17 @@ const Index = () => {
     registerManualResult,
     clearHistory,
   } = useSignalResults();
+
+  const {
+    checkAndAutoTrade,
+  } = useAutoTrading();
+
+  // Auto trading: executar entrada quando sinal de alta probabilidade aparecer
+  useEffect(() => {
+    if (signals.length > 0) {
+      checkAndAutoTrade(signals);
+    }
+  }, [signals, checkAndAutoTrade]);
 
   // Simular resultado automaticamente quando um novo sinal aparece
   useEffect(() => {
@@ -150,6 +163,7 @@ const Index = () => {
           {/* Sidebar - Stats & Management */}
           <div className="space-y-6">
             <div className="space-y-2">
+              <AutoTradingCard />
               <WhatsAppSettingsCard />
               <IQOptionSettingsCard />
             </div>

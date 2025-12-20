@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { TradingSignal, SignalResult, TradingStats, SignalHistory } from '@/types/trading';
 
@@ -463,16 +463,18 @@ export function useSignalResults() {
     return history.filter(h => new Date(h.timestamp) >= today);
   }, [history]);
 
-  // Stats de hoje
-  const getTodayStats = useCallback((): TradingStats => {
-    const todayHistory = getTodayHistory();
+  // Stats de hoje - memoized to prevent render-time function calls
+  const todayStats = useMemo((): TradingStats => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayHistory = history.filter(h => new Date(h.timestamp) >= today);
     return recalculateStats(todayHistory);
-  }, [getTodayHistory, recalculateStats]);
+  }, [history, recalculateStats]);
 
   return {
     history,
     stats,
-    todayStats: getTodayStats(),
+    todayStats,
     addSignalWithSimulation,
     registerManualResult,
     clearHistory,

@@ -14,7 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      whatsapp_numbers: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string | null
+          phone_number: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string | null
+          phone_number: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string | null
+          phone_number?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      zapi_config: {
+        Row: {
+          client_token: string
+          created_at: string
+          id: string
+          instance_id: string
+          is_active: boolean
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          client_token: string
+          created_at?: string
+          id?: string
+          instance_id: string
+          is_active?: boolean
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          client_token?: string
+          created_at?: string
+          id?: string
+          instance_id?: string
+          is_active?: boolean
+          token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

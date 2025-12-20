@@ -9,6 +9,7 @@ import { BankManagementCard } from '@/components/BankManagementCard';
 import { SafetyFiltersCard } from '@/components/SafetyFiltersCard';
 import { MarketStatusCard } from '@/components/MarketStatusCard';
 import { SignalHistorySection } from '@/components/SignalHistorySection';
+import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { mockAssetPerformance, mockBankManagement, safetyFilters } from '@/data/mockData';
 import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
@@ -147,6 +148,7 @@ const Index = () => {
 
           {/* Sidebar - Stats & Management */}
           <div className="space-y-6">
+            <WhatsAppSettingsCard />
             <MarketStatusCard 
               otcOpen={marketStatus.otcOpen} 
               forexOpen={marketStatus.forexOpen} 

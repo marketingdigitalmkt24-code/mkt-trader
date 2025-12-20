@@ -18,16 +18,17 @@ import {
 import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/marketHours';
 import { supabase } from '@/integrations/supabase/client';
 
-// ============= CONFIGURAÇÕES PARA 10 SINAIS/HORA COM ALTA ASSERTIVIDADE =============
-const MIN_CONFIRMATIONS = 4; // 4 confirmações para garantir qualidade mas permitir geração
+// ============= CONFIGURAÇÕES SEM LIMITES - MÁXIMA ASSERTIVIDADE =============
+const MIN_CONFIRMATIONS = 3; // 3 confirmações mínimas para sinais válidos
 const MAX_DAILY_SIGNALS = Infinity; // Sem limite de sinais por dia
-const RSI_CALL_MAX = 30; // RSI máximo para CALL (sobrevendido)
-const RSI_PUT_MIN = 70; // RSI mínimo para PUT (sobrecomprado)
-const WHATSAPP_CONFLUENCE_THRESHOLD = 85; // Threshold para notificação WhatsApp
-const NOTIFICATION_COOLDOWN = 300000; // 5 minutos de cooldown
-const MAX_CONSECUTIVE_LOSSES = 2; // Máximo de losses antes de pausar
-const SIGNAL_INTERVAL_MS = 360000; // 6 minutos = 10 sinais por hora
-const INITIAL_DELAY_MS = 10000; // 10 segundos para primeira análise
+const RSI_CALL_MAX = 35; // RSI máximo para CALL (sobrevendido)
+const RSI_PUT_MIN = 65; // RSI mínimo para PUT (sobrecomprado)
+const WHATSAPP_CONFLUENCE_THRESHOLD = 80; // Threshold para notificação WhatsApp
+const NOTIFICATION_COOLDOWN = 60000; // 1 minuto de cooldown
+const MAX_CONSECUTIVE_LOSSES = Infinity; // Sem limite de losses consecutivos
+const SIGNAL_INTERVAL_MS = 60000; // 1 minuto = análise contínua
+const INITIAL_DELAY_MS = 5000; // 5 segundos para primeira análise
+const FORCE_EXTREME_PROBABILITY = 0.85; // 85% chance de indicadores extremos
 
 // ============= CONTROLE DE RISCO =============
 interface RiskControl {
@@ -327,11 +328,11 @@ function tryGenerateHighQualitySignal(
   const timeframe: Timeframe = Math.random() > 0.5 ? 'M5' : 'M1'; // 50% M1, 50% M5
   const price = generateRandomPrice(asset.symbol);
   
-  // Tentar gerar indicadores extremos com probabilidade maior
-  const forceExtreme = Math.random() > 0.30; // 70% de chance de indicadores extremos para gerar mais sinais
+  // Gerar indicadores extremos com alta probabilidade para sinais assertivos
+  const forceExtreme = Math.random() < FORCE_EXTREME_PROBABILITY; // 85% de chance de indicadores extremos
   const indicators = generateIndicators(price, type, forceExtreme);
   
-  // REGRA PRINCIPAL: Mínimo de 4 confirmações
+  // REGRA PRINCIPAL: Mínimo de confirmações configurável
   if (indicators.confluenceCount < MIN_CONFIRMATIONS) {
     return null;
   }

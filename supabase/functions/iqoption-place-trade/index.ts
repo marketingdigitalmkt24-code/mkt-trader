@@ -24,46 +24,6 @@ interface IQOptionCredentials {
 const IQ_OPTION_AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
 const IQ_OPTION_WS_URL = 'wss://iqoption.com/echo/websocket';
 
-// Asset ID mapping (common OTC assets)
-const ASSET_IDS: Record<string, number> = {
-  'EURUSD': 1,
-  'EURUSD-OTC': 76,
-  'EURGBP': 2,
-  'EURGBP-OTC': 77,
-  'GBPJPY': 6,
-  'GBPJPY-OTC': 86,
-  'USDJPY': 7,
-  'USDJPY-OTC': 87,
-  'AUDUSD': 8,
-  'AUDUSD-OTC': 88,
-  'GBPUSD': 5,
-  'GBPUSD-OTC': 85,
-  'USDCHF': 9,
-  'USDCHF-OTC': 89,
-  'NZDUSD': 10,
-  'NZDUSD-OTC': 90,
-  'USDCAD': 11,
-  'USDCAD-OTC': 91,
-  'EURJPY': 3,
-  'EURJPY-OTC': 83,
-  'AUDCAD': 12,
-  'AUDCAD-OTC': 92,
-  'AUDJPY': 13,
-  'AUDJPY-OTC': 93,
-  'CADJPY': 14,
-  'CADJPY-OTC': 94,
-  'CHFJPY': 15,
-  'CHFJPY-OTC': 95,
-  'EURAUD': 16,
-  'EURAUD-OTC': 96,
-  'EURCAD': 17,
-  'EURCAD-OTC': 97,
-  'GBPAUD': 18,
-  'GBPAUD-OTC': 98,
-  'GBPCAD': 19,
-  'GBPCAD-OTC': 99,
-};
-
 async function loginToIQOption(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
   try {
     console.log('Attempting to login to IQ Option for trading...');
@@ -96,12 +56,6 @@ async function loginToIQOption(email: string, password: string): Promise<{ ssid:
   }
 }
 
-function getAssetId(asset: string): number {
-  // Normalize asset name
-  const normalized = asset.toUpperCase().replace(/\//g, '');
-  return ASSET_IDS[normalized] || 0;
-}
-
 async function placeTrade(
   ssid: string, 
   accountType: string,
@@ -111,15 +65,18 @@ async function placeTrade(
     console.log('Connecting to IQ Option WebSocket for trading...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
     
-    let isAuthenticated = false;
     let balanceId = 0;
     let tradeId: string | null = null;
+    let activeAssets: Record<string, number> = {};
+    let tradePlaced = false;
     
     const timeout = setTimeout(() => {
-      console.log('Trade timeout, closing connection');
-      ws.close();
-      resolve({ success: false, error: 'Trade timeout' });
-    }, 15000); // 15 second timeout
+      if (!tradePlaced) {
+        console.log('Trade timeout, closing connection');
+        ws.close();
+        resolve({ success: false, error: 'Trade timeout - asset may be closed' });
+      }
+    }, 20000); // 20 second timeout
 
     ws.onopen = () => {
       console.log('WebSocket connected, authenticating...');
@@ -133,11 +90,13 @@ async function placeTrade(
       try {
         const data = JSON.parse(event.data);
         
-        console.log('Received message:', data.name);
+        // Skip timeSync messages from logging
+        if (data.name !== 'timeSync') {
+          console.log('Received message:', data.name);
+        }
         
         if (data.name === 'profile') {
-          isAuthenticated = true;
-          console.log('Authenticated! Getting balance info...');
+          console.log('Authenticated! Getting balance and assets...');
           
           // Get balance based on account type
           const balances = data.msg.balances || [];
@@ -154,12 +113,93 @@ async function placeTrade(
           }
           
           if (!balanceId && balances.length > 0) {
-            // Fallback to first available balance
             balanceId = balances[0].id;
             console.log('Using fallback balance:', balanceId);
           }
           
-          // Set balance
+          // Request available assets for binary options
+          ws.send(JSON.stringify({
+            name: 'sendMessage',
+            msg: {
+              name: 'get-initialization-data',
+              version: '3.0',
+              body: {}
+            }
+          }));
+        }
+        
+        // Handle initialization data with asset list
+        if (data.name === 'initialization-data') {
+          console.log('Received initialization data');
+          const binary = data.msg?.binary?.actives || {};
+          
+          // Build active assets map
+          for (const [id, info] of Object.entries(binary)) {
+            const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
+            if (assetInfo.enabled && !assetInfo.is_suspended) {
+              const name = assetInfo.name || '';
+              activeAssets[name.toUpperCase()] = parseInt(id);
+            }
+          }
+          
+          console.log('Available assets count:', Object.keys(activeAssets).length);
+          
+          // Now place the trade
+          placeTradeWithAssets();
+        }
+        
+        function placeTradeWithAssets() {
+          // Normalize asset name for lookup
+          const assetName = trade.asset.toUpperCase().replace(/\//g, '').replace(/-/g, '');
+          const assetNameWithDash = trade.asset.toUpperCase().replace(/\//g, '-');
+          const assetNameSlash = trade.asset.toUpperCase();
+          
+          let assetId = activeAssets[assetName] || 
+                        activeAssets[assetNameWithDash] || 
+                        activeAssets[assetNameSlash] ||
+                        activeAssets[trade.asset.toUpperCase()];
+          
+          // Try common OTC naming patterns
+          if (!assetId) {
+            const otcVariations = [
+              assetName,
+              assetName.replace('OTC', '-OTC'),
+              assetName.replace('-OTC', 'OTC'),
+              assetNameWithDash,
+              assetNameSlash.replace('/', ''),
+            ];
+            
+            for (const variation of otcVariations) {
+              if (activeAssets[variation]) {
+                assetId = activeAssets[variation];
+                console.log(`Found asset with variation: ${variation} -> ID: ${assetId}`);
+                break;
+              }
+            }
+          }
+          
+          // If still not found, try partial match
+          if (!assetId) {
+            const baseAsset = assetName.replace('OTC', '').replace('-', '');
+            for (const [name, id] of Object.entries(activeAssets)) {
+              if (name.includes(baseAsset) && name.includes('OTC')) {
+                assetId = id;
+                console.log(`Found asset with partial match: ${name} -> ID: ${assetId}`);
+                break;
+              }
+            }
+          }
+          
+          if (!assetId) {
+            console.error('Asset not found or not available:', trade.asset);
+            console.log('Looking for:', assetName, 'in assets:', Object.keys(activeAssets).slice(0, 20));
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ success: false, error: `Asset ${trade.asset} not available for trading` });
+            return;
+          }
+          
+          // Set balance first
           ws.send(JSON.stringify({
             name: 'sendMessage',
             msg: {
@@ -171,22 +211,17 @@ async function placeTrade(
             },
           }));
           
-          // Place the trade
-          const assetId = getAssetId(trade.asset);
-          if (!assetId) {
-            console.error('Unknown asset:', trade.asset);
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ success: false, error: `Unknown asset: ${trade.asset}` });
-            return;
-          }
-          
-          const expirationTime = Math.floor(Date.now() / 1000) + (trade.expiration * 60);
+          // Calculate expiration time (next minute boundary + expiration minutes)
+          const now = Math.floor(Date.now() / 1000);
+          const nextMinute = Math.ceil(now / 60) * 60;
+          const expirationTime = nextMinute + (trade.expiration * 60);
           
           console.log(`Placing ${trade.direction.toUpperCase()} trade on ${trade.asset} (ID: ${assetId})`);
-          console.log(`Amount: ${trade.amount}, Expiration: ${trade.expiration} min`);
+          console.log(`Amount: ${trade.amount}, Expiration: ${trade.expiration} min, ExpTime: ${expirationTime}`);
           
-          // Binary option buy message
+          tradePlaced = true;
+          
+          // Binary option buy message - using correct format
           ws.send(JSON.stringify({
             name: 'sendMessage',
             msg: {
@@ -195,62 +230,66 @@ async function placeTrade(
               body: {
                 user_balance_id: balanceId,
                 active_id: assetId,
-                option_type_id: 3, // turbo option
+                option_type_id: 3, // turbo/binary option
                 direction: trade.direction,
                 expired: expirationTime,
                 price: trade.amount,
+                profit_percent: 0, // Let server determine
               },
             },
           }));
         }
         
         // Handle successful trade responses
-        if (data.name === 'binary-options.option-opened' || 
-            data.name === 'option-opened' ||
-            data.name === 'option') {
-          console.log('Trade response received:', JSON.stringify(data.msg));
+        if (data.name === 'binary-options.option-opened') {
+          console.log('Trade opened successfully!', JSON.stringify(data.msg));
           const id = data.msg?.id || data.msg?.option_id;
           if (id) {
             tradeId = String(id);
-            console.log('Trade opened successfully! ID:', tradeId);
             clearTimeout(timeout);
             ws.close();
-            resolve({ 
-              success: true, 
-              tradeId: tradeId,
-            });
+            resolve({ success: true, tradeId: tradeId });
           }
         }
         
-        // Handle message wrapper response
-        if (data.name === 'message' && data.msg?.name === 'binary-options.option-opened') {
-          console.log('Wrapped trade response:', JSON.stringify(data.msg));
-          const id = data.msg?.msg?.id || data.msg?.msg?.option_id;
-          if (id) {
-            tradeId = String(id);
-            console.log('Trade opened (wrapped)! ID:', tradeId);
+        // Handle option message (alternative success response)
+        if (data.name === 'option' && data.msg?.id) {
+          console.log('Option received:', JSON.stringify(data.msg));
+          // Check if this is an error or success
+          if (data.msg.message && typeof data.msg.message === 'string' && data.msg.message.includes('not found')) {
+            console.error('Asset error:', data.msg.message);
             clearTimeout(timeout);
             ws.close();
-            resolve({ 
-              success: true, 
-              tradeId: tradeId,
-            });
+            resolve({ success: false, error: data.msg.message });
+          } else if (data.msg.id) {
+            tradeId = String(data.msg.id);
+            console.log('Trade confirmed with ID:', tradeId);
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ success: true, tradeId: tradeId });
           }
+        }
+        
+        // Handle listInfoData for getting actual tradeable assets
+        if (data.name === 'listInfoData' || data.name === 'activeSchedule') {
+          console.log('Received asset schedule data');
         }
         
         // Handle error responses
-        if (data.name === 'binary-options.open-option' && data.msg?.result === 'error') {
-          console.error('Trade error:', JSON.stringify(data.msg));
-          clearTimeout(timeout);
-          ws.close();
-          resolve({ 
-            success: false, 
-            error: data.msg?.message || 'Trade failed',
-          });
+        if (data.name === 'binary-options.open-option') {
+          if (data.msg?.result === 'error' || data.msg?.message) {
+            console.error('Trade error response:', JSON.stringify(data.msg));
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ 
+              success: false, 
+              error: data.msg?.message || data.msg?.reason || 'Trade failed',
+            });
+          }
         }
         
-        // Handle other error formats
-        if (data.name === 'error' || (data.msg && data.msg.result === 'error')) {
+        // Handle general errors
+        if (data.name === 'error') {
           console.error('Error received:', JSON.stringify(data));
           clearTimeout(timeout);
           ws.close();
@@ -274,14 +313,6 @@ async function placeTrade(
     ws.onclose = () => {
       console.log('WebSocket closed');
       clearTimeout(timeout);
-      if (!tradeId) {
-        // If we haven't resolved yet, wait a moment and check
-        setTimeout(() => {
-          if (tradeId) {
-            resolve({ success: true, tradeId: String(tradeId) });
-          }
-        }, 500);
-      }
     };
   });
 }

@@ -10,7 +10,10 @@ import {
   StochasticIndicator,
   MovingAverages,
   ATRIndicator,
-  SupportResistance
+  SupportResistance,
+  SignalStrength,
+  SignalStatus,
+  MarketType
 } from '@/types/trading';
 import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/marketHours';
 import { supabase } from '@/integrations/supabase/client';
@@ -447,27 +450,83 @@ async function sendWhatsAppNotification(signal: TradingSignal): Promise<boolean>
   }
 }
 
-const SIGNALS_STORAGE_KEY = 'trading_signals';
 const RISK_CONTROL_STORAGE_KEY = 'risk_control';
 
-function loadStoredSignals(): TradingSignal[] {
+// Load signals from Supabase
+async function loadSignalsFromDB(): Promise<TradingSignal[]> {
   try {
-    const stored = localStorage.getItem(SIGNALS_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Check if it's from today
-      const today = new Date().toDateString();
-      if (parsed.date === today) {
-        return parsed.signals.map((s: TradingSignal) => ({
-          ...s,
-          timestamp: new Date(s.timestamp)
-        }));
-      }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const { data, error } = await supabase
+      .from('trading_signals')
+      .select('*')
+      .gte('created_at', today.toISOString())
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error loading signals from DB:', error);
+      return [];
+    }
+    
+    if (data && data.length > 0) {
+      console.log(`📊 Loaded ${data.length} signals from database`);
+      return data.map((s) => ({
+        id: s.signal_id,
+        asset: s.asset,
+        assetIcon: s.asset_icon,
+        type: s.type as 'CALL' | 'PUT',
+        timeframe: s.timeframe as Timeframe,
+        expiration: s.expiration,
+        strength: (s.strength >= 2 && s.strength <= 4 ? s.strength : 4) as SignalStrength,
+        status: (s.status === 'high_probability' || s.status === 'moderate' ? s.status : 'high_probability') as SignalStatus,
+        price: Number(s.price),
+        timestamp: new Date(s.created_at),
+        isHot: s.is_hot,
+        marketType: s.market_type as MarketType,
+        confirmations: (s.confirmations || []) as string[],
+        indicators: s.indicators as unknown as TechnicalIndicators,
+      }));
     }
   } catch (e) {
-    console.error('Error loading stored signals:', e);
+    console.error('Failed to load signals from DB:', e);
   }
   return [];
+}
+
+// Save signal to Supabase
+async function saveSignalToDB(signal: TradingSignal): Promise<boolean> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('trading_signals') as any).insert({
+      signal_id: signal.id,
+      asset: signal.asset,
+      asset_icon: signal.assetIcon,
+      type: signal.type,
+      timeframe: signal.timeframe,
+      expiration: signal.expiration,
+      strength: signal.strength,
+      status: signal.status,
+      price: signal.price,
+      is_hot: signal.isHot,
+      market_type: signal.marketType,
+      confluence_score: signal.indicators.confluenceScore,
+      confluence_count: signal.indicators.confluenceCount,
+      confirmations: signal.confirmations,
+      indicators: signal.indicators,
+    });
+    
+    if (error) {
+      console.error('Error saving signal to DB:', error);
+      return false;
+    }
+    
+    console.log(`💾 Signal ${signal.id} saved to database`);
+    return true;
+  } catch (e) {
+    console.error('Failed to save signal to DB:', e);
+    return false;
+  }
 }
 
 function loadRiskControl(): RiskControl {
@@ -493,11 +552,8 @@ function loadRiskControl(): RiskControl {
 }
 
 export function useAutoSignals() {
-  const [signals, setSignals] = useState<TradingSignal[]>(() => loadStoredSignals());
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(() => {
-    const stored = loadStoredSignals();
-    return stored.length > 0 ? new Date(stored[stored.length - 1].timestamp) : null;
-  });
+  const [signals, setSignals] = useState<TradingSignal[]>([]);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(true);
   const [waitingMessage, setWaitingMessage] = useState<string | null>('Aguardando oportunidade de ALTA QUALIDADE');
@@ -510,14 +566,7 @@ export function useAutoSignals() {
   const notifiedAssets = useRef<Map<string, number>>(new Map());
   const riskControl = useRef<RiskControl>(loadRiskControl());
 
-  // Persist signals to localStorage
-  useEffect(() => {
-    const today = new Date().toDateString();
-    localStorage.setItem(SIGNALS_STORAGE_KEY, JSON.stringify({
-      date: today,
-      signals: signals
-    }));
-  }, [signals]);
+  // No longer persist to localStorage - we use Supabase now
 
   // Persist risk control to localStorage
   useEffect(() => {
@@ -543,7 +592,6 @@ export function useAutoSignals() {
         notifiedAssets.current.clear();
         setSignals([]);
         setWaitingMessage('Aguardando oportunidade de ALTA QUALIDADE');
-        localStorage.removeItem(SIGNALS_STORAGE_KEY);
         localStorage.removeItem(RISK_CONTROL_STORAGE_KEY);
       }
     };
@@ -586,6 +634,11 @@ export function useAutoSignals() {
     const { signals: newSignals, message } = generateSignals(riskControl.current);
     
     if (newSignals.length > 0) {
+      // Salvar sinais no banco de dados primeiro
+      for (const signal of newSignals) {
+        await saveSignalToDB(signal);
+      }
+      
       setSignals(prev => [...prev, ...newSignals].slice(-MAX_DAILY_SIGNALS));
       setLastUpdate(new Date());
       setWaitingMessage(null);
@@ -619,27 +672,95 @@ export function useAutoSignals() {
     setIsSearching(false);
   }, [waitingMessage]);
 
-  // Análise inicial - apenas carregar sinais salvos, NÃO gerar novos
+  // Análise inicial - carregar sinais do banco de dados
   useEffect(() => {
-    const storedSignals = loadStoredSignals();
-    const storedRisk = loadRiskControl();
+    const loadSignals = async () => {
+      setIsLoading(true);
+      
+      // Carregar sinais do Supabase
+      const dbSignals = await loadSignalsFromDB();
+      const storedRisk = loadRiskControl();
+      
+      // Restaurar estado do risk control
+      riskControl.current = storedRisk;
+      
+      // Atualizar contador com base nos sinais do banco
+      riskControl.current.dailySignalsCount = dbSignals.length;
+      
+      if (dbSignals.length > 0) {
+        setSignals(dbSignals);
+        setWaitingMessage(null);
+        setLastUpdate(new Date(dbSignals[0].timestamp));
+      }
+      
+      // Verificar se atingiu limite
+      if (riskControl.current.dailySignalsCount >= MAX_DAILY_SIGNALS) {
+        setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
+      }
+      
+      setIsLoading(false);
+      setIsSearching(false);
+    };
     
-    // Restaurar estado do risk control
-    riskControl.current = storedRisk;
+    loadSignals();
+  }, []);
+
+  // Realtime subscription para sinais - sincronizar entre navegadores
+  useEffect(() => {
+    console.log('📡 Setting up realtime subscription for trading_signals');
     
-    if (storedSignals.length > 0) {
-      setSignals(storedSignals);
-      setWaitingMessage(null);
-      setLastUpdate(new Date(storedSignals[0].timestamp));
-    }
-    
-    // Verificar se atingiu limite
-    if (storedRisk.dailySignalsCount >= MAX_DAILY_SIGNALS) {
-      setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
-    }
-    
-    setIsLoading(false);
-    setIsSearching(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const channel = supabase
+      .channel('trading-signals-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'trading_signals',
+        },
+        (payload) => {
+          console.log('📊 New signal received:', payload.new);
+          
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const s = payload.new as any;
+          
+          const newSignal: TradingSignal = {
+            id: s.signal_id,
+            asset: s.asset,
+            assetIcon: s.asset_icon,
+            type: s.type as 'CALL' | 'PUT',
+            timeframe: s.timeframe as Timeframe,
+            expiration: s.expiration,
+            strength: (s.strength >= 2 && s.strength <= 4 ? s.strength : 4) as SignalStrength,
+            status: (s.status === 'high_probability' || s.status === 'moderate' ? s.status : 'high_probability') as SignalStatus,
+            price: Number(s.price),
+            timestamp: new Date(s.created_at),
+            isHot: s.is_hot,
+            marketType: s.market_type as MarketType,
+            confirmations: (s.confirmations || []) as string[],
+            indicators: s.indicators as unknown as TechnicalIndicators,
+          };
+          
+          setSignals(prev => {
+            // Evitar duplicatas
+            if (prev.some(sig => sig.id === newSignal.id)) {
+              return prev;
+            }
+            return [newSignal, ...prev].slice(0, MAX_DAILY_SIGNALS);
+          });
+          setLastUpdate(new Date());
+          setWaitingMessage(null);
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Trading signals subscription status:', status);
+      });
+
+    return () => {
+      console.log('🔕 Removing trading signals subscription');
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Análise automática a cada 3 minutos (apenas se não atingiu limite)

@@ -1,4 +1,4 @@
-import { Activity, Wifi, RefreshCw, Clock, Search } from 'lucide-react';
+import { Activity, Wifi, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface HeaderProps {
@@ -6,10 +6,9 @@ interface HeaderProps {
   lastUpdate: Date | null;
   isLoading: boolean;
   isSearching?: boolean;
-  onRefresh: () => void;
 }
 
-export function Header({ isConnected, lastUpdate, isLoading, isSearching, onRefresh }: HeaderProps) {
+export function Header({ isConnected, lastUpdate, isLoading, isSearching }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 glass-card border-b border-border/50 mb-6">
       <div className="container py-4">
@@ -37,21 +36,6 @@ export function Header({ isConnected, lastUpdate, isLoading, isSearching, onRefr
               </div>
             )}
 
-            {/* Refresh Button */}
-            <button
-              onClick={onRefresh}
-              disabled={isLoading}
-              className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-                'bg-secondary hover:bg-secondary/80 text-foreground',
-                isLoading && 'opacity-50 cursor-not-allowed'
-              )}
-            >
-              <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
-              <span className="hidden sm:inline">Atualizar</span>
-            </button>
-
-
             {/* Connection Status */}
             <div
               className={cn(
@@ -68,7 +52,7 @@ export function Header({ isConnected, lastUpdate, isLoading, isSearching, onRefr
             {/* Last Update */}
             {lastUpdate && (
               <div className="text-right hidden md:block">
-                <div className="text-xs text-muted-foreground">Atualizado</div>
+                <div className="text-xs text-muted-foreground">Último sinal</div>
                 <div className="text-sm font-mono text-foreground">
                   {lastUpdate.toLocaleTimeString('pt-BR', {
                     hour: '2-digit',

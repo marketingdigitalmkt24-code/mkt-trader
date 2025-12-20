@@ -447,9 +447,57 @@ async function sendWhatsAppNotification(signal: TradingSignal): Promise<boolean>
   }
 }
 
+const SIGNALS_STORAGE_KEY = 'trading_signals';
+const RISK_CONTROL_STORAGE_KEY = 'risk_control';
+
+function loadStoredSignals(): TradingSignal[] {
+  try {
+    const stored = localStorage.getItem(SIGNALS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Check if it's from today
+      const today = new Date().toDateString();
+      if (parsed.date === today) {
+        return parsed.signals.map((s: TradingSignal) => ({
+          ...s,
+          timestamp: new Date(s.timestamp)
+        }));
+      }
+    }
+  } catch (e) {
+    console.error('Error loading stored signals:', e);
+  }
+  return [];
+}
+
+function loadRiskControl(): RiskControl {
+  try {
+    const stored = localStorage.getItem(RISK_CONTROL_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const today = new Date().toDateString();
+      if (parsed.date === today) {
+        return parsed.control;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading risk control:', e);
+  }
+  return {
+    dailySignalsCount: 0,
+    consecutiveLosses: 0,
+    lastLossTime: null,
+    isPaused: false,
+    pauseReason: null,
+  };
+}
+
 export function useAutoSignals() {
-  const [signals, setSignals] = useState<TradingSignal[]>([]);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [signals, setSignals] = useState<TradingSignal[]>(() => loadStoredSignals());
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(() => {
+    const stored = loadStoredSignals();
+    return stored.length > 0 ? new Date(stored[stored.length - 1].timestamp) : null;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(true);
   const [waitingMessage, setWaitingMessage] = useState<string | null>('Aguardando oportunidade de ALTA QUALIDADE');
@@ -460,12 +508,24 @@ export function useAutoSignals() {
   });
   
   const notifiedAssets = useRef<Map<string, number>>(new Map());
-  const riskControl = useRef<RiskControl>({
-    dailySignalsCount: 0,
-    consecutiveLosses: 0,
-    lastLossTime: null,
-    isPaused: false,
-    pauseReason: null,
+  const riskControl = useRef<RiskControl>(loadRiskControl());
+
+  // Persist signals to localStorage
+  useEffect(() => {
+    const today = new Date().toDateString();
+    localStorage.setItem(SIGNALS_STORAGE_KEY, JSON.stringify({
+      date: today,
+      signals: signals
+    }));
+  }, [signals]);
+
+  // Persist risk control to localStorage
+  useEffect(() => {
+    const today = new Date().toDateString();
+    localStorage.setItem(RISK_CONTROL_STORAGE_KEY, JSON.stringify({
+      date: today,
+      control: riskControl.current
+    }));
   });
 
   // Reset diário à meia-noite
@@ -483,6 +543,8 @@ export function useAutoSignals() {
         notifiedAssets.current.clear();
         setSignals([]);
         setWaitingMessage('Aguardando oportunidade de ALTA QUALIDADE');
+        localStorage.removeItem(SIGNALS_STORAGE_KEY);
+        localStorage.removeItem(RISK_CONTROL_STORAGE_KEY);
       }
     };
 

@@ -13,7 +13,8 @@ interface IQOptionCredentials {
 }
 
 interface PositionResult {
-  id: string;
+  matchIds: string[];
+  rawJson: string;
   win: string;
   profit: number;
   close_quote?: number;
@@ -155,6 +156,18 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
           }
           
           console.log('Found', positionsList.length, 'positions in response');
+
+          if (positionsList.length > 0) {
+            try {
+              console.log('Sample position keys:', Object.keys(positionsList[0] || {}));
+              console.log(
+                'Sample position snippet:',
+                JSON.stringify(positionsList[0]).slice(0, 800)
+              );
+            } catch (_e) {
+              // ignore
+            }
+          }
           
           for (const pos of positionsList) {
             // Determine win/loss status based on different API response formats
@@ -176,13 +189,23 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
               win = pos.result;
             }
             
-            // Get the correct ID
-            const posId = String(pos.id || pos.option_id || pos.external_id || pos.position_id || '');
-            
-            if (posId) {
-              console.log(`Position ${posId}: win=${win}, profit=${profit}`);
+            // Get the best IDs to match with our stored iq_option_id (usually numeric)
+            const candidateIds = [
+              pos.option_id,
+              pos.position_id,
+              pos.external_id,
+              pos.id,
+            ]
+              .filter((v) => v !== undefined && v !== null)
+              .map((v) => String(v));
+
+            const matchIds = Array.from(new Set(candidateIds)).filter(Boolean);
+
+            if (matchIds.length > 0) {
+              console.log(`Position ${matchIds[0]} (ids=${matchIds.join(',')}): win=${win}, profit=${profit}`);
               positions.push({
-                id: posId,
+                matchIds,
+                rawJson: JSON.stringify(pos),
                 win,
                 profit,
                 close_quote: pos.close_quote || pos.close_rate || pos.close_price,
@@ -204,7 +227,7 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
         if (data.name === 'option-closed' || data.name === 'binary-options.option-closed') {
           console.log('Option closed event received');
           const msg = data.msg;
-          if (msg && msg.id) {
+          if (msg && (msg.id || msg.option_id || msg.position_id || msg.external_id)) {
             let win = 'pending';
             if (msg.profit !== undefined) {
               if (msg.profit > 0) win = 'win';
@@ -213,9 +236,16 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
             } else if (msg.win) {
               win = msg.win;
             }
-            
+
+            const candidateIds = [msg.id, msg.option_id, msg.position_id, msg.external_id]
+              .filter((v) => v !== undefined && v !== null)
+              .map((v) => String(v));
+
+            const matchIds = Array.from(new Set(candidateIds)).filter(Boolean);
+
             positions.push({
-              id: String(msg.id),
+              matchIds,
+              rawJson: JSON.stringify(msg),
               win,
               profit: msg.profit || 0,
               close_quote: msg.close_quote,
@@ -311,10 +341,12 @@ serve(async (req) => {
     let updatedCount = 0;
     if (pendingOperations && closedPositions.length > 0) {
       for (const pending of pendingOperations) {
-        // Find matching closed position
-        const closed = closedPositions.find(p => 
-          p.id === pending.iq_option_id || 
-          p.id === pending.signal_id
+        const iqId = pending.iq_option_id ? String(pending.iq_option_id) : '';
+
+        const closed = closedPositions.find((p) =>
+          (iqId && (p.matchIds.includes(iqId) || p.rawJson.includes(iqId))) ||
+          p.matchIds.includes(String(pending.signal_id)) ||
+          p.rawJson.includes(String(pending.signal_id))
         );
         
         if (closed && closed.win !== 'pending') {

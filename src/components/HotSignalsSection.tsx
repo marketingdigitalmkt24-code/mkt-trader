@@ -1,44 +1,85 @@
 import { TradingSignal } from '@/types/trading';
 import { SignalCard } from './SignalCard';
-import { Flame, Target, Search } from 'lucide-react';
+import { Flame, Target, Search, Shield, Star, AlertTriangle } from 'lucide-react';
+import { Badge } from './ui/badge';
 
 interface HotSignalsSectionProps {
   signals: TradingSignal[];
+  waitingMessage?: string | null;
+  dailySignalsCount?: number;
+  maxDailySignals?: number;
 }
 
-export function HotSignalsSection({ signals }: HotSignalsSectionProps) {
-  // Only show high probability signals with 70%+ confluence (max 2)
+export function HotSignalsSection({ 
+  signals, 
+  waitingMessage,
+  dailySignalsCount = 0,
+  maxDailySignals = 6
+}: HotSignalsSectionProps) {
+  // Only show signals with 4+ confirmations (66%+ confluence)
   const hotSignals = signals
-    .filter((s) => s.isHot && s.status === 'high_probability' && s.indicators.confluenceScore >= 70)
+    .filter((s) => s.isHot && s.status === 'high_probability' && s.indicators.confluenceCount >= 4)
     .slice(0, 2);
 
   if (hotSignals.length === 0) {
+    const isWarning = waitingMessage?.includes('pausado') || waitingMessage?.includes('loss');
+    
     return (
       <section className="mb-8">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gold/20">
-            <Flame className="w-6 h-6 text-gold" />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gold/20">
+              <Flame className="w-6 h-6 text-gold" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gradient-gold">
+                SINAIS PREMIUM
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Apenas 4+ confirmações simultâneas
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-gradient-gold">
-              MELHORES ENTRADAS AGORA
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Aguardando oportunidades de alta assertividade...
-            </p>
-          </div>
+          
+          <Badge variant="outline" className="text-xs">
+            {dailySignalsCount}/{maxDailySignals} hoje
+          </Badge>
         </div>
         
-        <div className="glass-card p-8 text-center border-dashed border-2 border-border">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <Search className="w-6 h-6 text-gold animate-pulse" />
-            <Target className="w-6 h-6 text-muted-foreground opacity-50" />
+        <div className={`glass-card p-8 text-center border-2 ${isWarning ? 'border-destructive/50 bg-destructive/5' : 'border-dashed border-border'}`}>
+          <div className="flex items-center justify-center gap-3 mb-4">
+            {isWarning ? (
+              <AlertTriangle className="w-8 h-8 text-destructive animate-pulse" />
+            ) : (
+              <>
+                <Search className="w-6 h-6 text-gold animate-pulse" />
+                <Shield className="w-6 h-6 text-muted-foreground opacity-50" />
+                <Target className="w-6 h-6 text-muted-foreground opacity-50" />
+              </>
+            )}
           </div>
-          <p className="text-muted-foreground text-sm mb-2">
-            Analisando indicadores em busca de confluência...
+          
+          <p className={`font-medium mb-2 ${isWarning ? 'text-destructive' : 'text-foreground'}`}>
+            {waitingMessage || 'Aguardando oportunidade de ALTA QUALIDADE'}
           </p>
-          <p className="text-xs text-muted-foreground">
-            Apenas sinais com 70%+ de confluência aparecem aqui
+          
+          <div className="flex flex-wrap justify-center gap-2 mt-4">
+            <Badge variant="secondary" className="text-xs">
+              RSI extremo
+            </Badge>
+            <Badge variant="secondary" className="text-xs">
+              Bollinger
+            </Badge>
+            <Badge variant="secondary" className="text-xs">
+              Suporte/Resistência
+            </Badge>
+            <Badge variant="secondary" className="text-xs">
+              Candle reversão
+            </Badge>
+          </div>
+          
+          <p className="text-xs text-muted-foreground mt-4">
+            Mínimo 4 confirmações obrigatórias | Máx {maxDailySignals} sinais/dia
           </p>
         </div>
       </section>
@@ -54,23 +95,36 @@ export function HotSignalsSection({ signals }: HotSignalsSectionProps) {
           </div>
           <div>
             <h2 className="text-xl font-bold text-gradient-gold">
-              MELHORES ENTRADAS AGORA
+              🏆 ALTA PROBABILIDADE
             </h2>
             <p className="text-sm text-muted-foreground">
-              {hotSignals.length} {hotSignals.length === 1 ? 'sinal' : 'sinais'} de alta probabilidade
+              {hotSignals.length} {hotSignals.length === 1 ? 'sinal' : 'sinais'} com 4+ confirmações
             </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-1 bg-call/20 text-call px-3 py-1.5 rounded-full text-xs font-bold">
-          <span className="w-2 h-2 bg-call rounded-full animate-pulse" />
-          AO VIVO
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            {dailySignalsCount}/{maxDailySignals} hoje
+          </Badge>
+          <div className="flex items-center gap-1 bg-call/20 text-call px-3 py-1.5 rounded-full text-xs font-bold">
+            <span className="w-2 h-2 bg-call rounded-full animate-pulse" />
+            AO VIVO
+          </div>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {hotSignals.map((signal) => (
-          <SignalCard key={signal.id} signal={signal} isHighlighted />
+          <div key={signal.id} className="relative">
+            <div className="absolute -top-2 -right-2 z-10">
+              <Badge className="bg-gold text-gold-foreground font-bold text-xs shadow-lg">
+                <Star className="w-3 h-3 mr-1 fill-current" />
+                {signal.indicators.confluenceCount} CONFIRMAÇÕES
+              </Badge>
+            </div>
+            <SignalCard signal={signal} isHighlighted />
+          </div>
         ))}
       </div>
     </section>

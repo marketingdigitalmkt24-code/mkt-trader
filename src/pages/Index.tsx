@@ -18,7 +18,18 @@ type MarketFilter = 'ALL' | MarketType;
 const Index = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe | 'ALL'>('ALL');
   const [selectedMarket, setSelectedMarket] = useState<MarketFilter>('ALL');
-  const { signals, lastUpdate, nextUpdate, isLoading, isSearching, refreshSignals, marketStatus } = useAutoSignals(30000);
+  const { 
+    signals, 
+    lastUpdate, 
+    nextUpdate, 
+    isLoading, 
+    isSearching, 
+    refreshSignals, 
+    marketStatus,
+    waitingMessage,
+    dailySignalsCount,
+    maxDailySignals
+  } = useAutoSignals(45000); // 45 segundos entre análises
 
   // Filter signals by timeframe and market type
   const filteredSignals = signals.filter((s) => {
@@ -84,7 +95,12 @@ const Index = () => {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Main Content - Signals */}
           <div className="lg:col-span-2 space-y-6">
-            <HotSignalsSection signals={filteredSignals} />
+            <HotSignalsSection 
+              signals={filteredSignals} 
+              waitingMessage={waitingMessage}
+              dailySignalsCount={dailySignalsCount}
+              maxDailySignals={maxDailySignals}
+            />
             <AllSignalsSection signals={filteredSignals} />
           </div>
 

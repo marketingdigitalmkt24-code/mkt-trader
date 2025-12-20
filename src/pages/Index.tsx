@@ -31,7 +31,6 @@ const Index = () => {
     lastUpdate, 
     isLoading, 
     isSearching, 
-    refreshSignals, 
     marketStatus,
     waitingMessage,
     dailySignalsCount,
@@ -99,7 +98,6 @@ const Index = () => {
         lastUpdate={lastUpdate}
         isLoading={isLoading}
         isSearching={isSearching}
-        onRefresh={refreshSignals}
       />
       
       <main className="container pb-8">

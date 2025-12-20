@@ -19,15 +19,15 @@ import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/
 import { supabase } from '@/integrations/supabase/client';
 
 // ============= CONFIGURAÇÕES PARA 10 SINAIS/HORA COM ALTA ASSERTIVIDADE =============
-const MIN_CONFIRMATIONS = 5; // Mínimo de 5 confirmações para maior assertividade
+const MIN_CONFIRMATIONS = 4; // 4 confirmações para garantir qualidade mas permitir geração
 const MAX_DAILY_SIGNALS = Infinity; // Sem limite de sinais por dia
-const RSI_CALL_MAX = 20; // RSI máximo para CALL (sobrevendido extremo)
-const RSI_PUT_MIN = 80; // RSI mínimo para PUT (sobrecomprado extremo)
-const WHATSAPP_CONFLUENCE_THRESHOLD = 92; // Threshold mais alto para notificação WhatsApp
+const RSI_CALL_MAX = 30; // RSI máximo para CALL (sobrevendido)
+const RSI_PUT_MIN = 70; // RSI mínimo para PUT (sobrecomprado)
+const WHATSAPP_CONFLUENCE_THRESHOLD = 85; // Threshold para notificação WhatsApp
 const NOTIFICATION_COOLDOWN = 300000; // 5 minutos de cooldown
 const MAX_CONSECUTIVE_LOSSES = 2; // Máximo de losses antes de pausar
 const SIGNAL_INTERVAL_MS = 360000; // 6 minutos = 10 sinais por hora
-const INITIAL_DELAY_MS = 15000; // 15 segundos para primeira análise
+const INITIAL_DELAY_MS = 10000; // 10 segundos para primeira análise
 
 // ============= CONTROLE DE RISCO =============
 interface RiskControl {
@@ -328,7 +328,7 @@ function tryGenerateHighQualitySignal(
   const price = generateRandomPrice(asset.symbol);
   
   // Tentar gerar indicadores extremos com probabilidade maior
-  const forceExtreme = Math.random() > 0.45; // 55% de chance de indicadores extremos
+  const forceExtreme = Math.random() > 0.30; // 70% de chance de indicadores extremos para gerar mais sinais
   const indicators = generateIndicators(price, type, forceExtreme);
   
   // REGRA PRINCIPAL: Mínimo de 4 confirmações

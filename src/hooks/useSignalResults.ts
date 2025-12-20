@@ -169,7 +169,7 @@ export function useSignalResults() {
     };
 
     setHistory(prev => {
-      const newHistory = [historyEntry, ...prev].slice(0, 100); // Manter últimos 100
+      const newHistory = [historyEntry, ...prev];
       const newStats = recalculateStats(newHistory);
       setStats(newStats);
       return newHistory;

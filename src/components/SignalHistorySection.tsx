@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { SignalHistory, SignalResult } from '@/types/trading';
 import { SignalResultCard } from './SignalResultCard';
 import { TradingStatsCard } from './TradingStatsCard';
-import { History, Trash2 } from 'lucide-react';
+import { History, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { useSignalResults } from '@/hooks/useSignalResults';
 
@@ -11,18 +12,30 @@ interface SignalHistorySectionProps {
   onClearHistory: () => void;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 export function SignalHistorySection({ 
   history, 
   onRegisterResult,
   onClearHistory 
 }: SignalHistorySectionProps) {
   const { stats, todayStats } = useSignalResults();
+  const [currentPage, setCurrentPage] = useState(1);
   
   const todayHistory = history.filter(h => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return new Date(h.timestamp) >= today;
   });
+
+  const totalPages = Math.ceil(history.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedHistory = history.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
 
   if (history.length === 0) {
     return null;
@@ -61,8 +74,8 @@ export function SignalHistorySection({
       </div>
 
       {/* History List */}
-      <div className="space-y-2 max-h-96 overflow-y-auto">
-        {history.slice(0, 20).map((entry) => (
+      <div className="space-y-2">
+        {paginatedHistory.map((entry) => (
           <SignalResultCard
             key={entry.id}
             signal={entry.signal}
@@ -71,6 +84,60 @@ export function SignalHistorySection({
           />
         ))}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          
+          <div className="flex items-center gap-1">
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              return (
+                <Button
+                  key={pageNum}
+                  variant={currentPage === pageNum ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => goToPage(pageNum)}
+                  className="w-8 h-8 p-0"
+                >
+                  {pageNum}
+                </Button>
+              );
+            })}
+          </div>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+          
+          <span className="text-sm text-muted-foreground ml-2">
+            {startIndex + 1}-{Math.min(endIndex, history.length)} de {history.length}
+          </span>
+        </div>
+      )}
     </section>
   );
 }

@@ -11,6 +11,62 @@ export interface TradingAsset {
   isOTC?: boolean;
 }
 
+// Technical Indicators
+export interface RSIIndicator {
+  value: number;
+  signal: 'oversold' | 'overbought' | 'neutral';
+}
+
+export interface MACDIndicator {
+  value: number;
+  signal: number;
+  histogram: number;
+  trend: 'bullish' | 'bearish' | 'neutral';
+}
+
+export interface BollingerBands {
+  upper: number;
+  middle: number;
+  lower: number;
+  position: 'above_upper' | 'below_lower' | 'middle';
+}
+
+export interface StochasticIndicator {
+  k: number;
+  d: number;
+  signal: 'oversold' | 'overbought' | 'neutral';
+}
+
+export interface MovingAverages {
+  ema9: number;
+  ema21: number;
+  sma50: number;
+  trend: 'bullish' | 'bearish' | 'neutral';
+}
+
+export interface ATRIndicator {
+  value: number;
+  volatility: 'low' | 'medium' | 'high';
+}
+
+export interface SupportResistance {
+  nearestSupport: number;
+  nearestResistance: number;
+  pricePosition: 'near_support' | 'near_resistance' | 'middle';
+}
+
+export interface TechnicalIndicators {
+  rsi: RSIIndicator;
+  macd: MACDIndicator;
+  bollinger: BollingerBands;
+  stochastic: StochasticIndicator;
+  movingAverages: MovingAverages;
+  atr: ATRIndicator;
+  supportResistance: SupportResistance;
+  confluenceScore: number; // 0-100
+  confluenceCount: number; // Number of indicators agreeing
+}
+
 export interface TradingSignal {
   id: string;
   type: SignalType;
@@ -25,6 +81,7 @@ export interface TradingSignal {
   timestamp: Date;
   isHot: boolean;
   marketType: MarketType;
+  indicators: TechnicalIndicators;
 }
 
 export interface AssetPerformance {

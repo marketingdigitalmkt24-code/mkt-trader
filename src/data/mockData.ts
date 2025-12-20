@@ -1,4 +1,45 @@
-import { TradingSignal, AssetPerformance, BankManagement, SafetyFilter } from '@/types/trading';
+import { TradingSignal, AssetPerformance, BankManagement, SafetyFilter, TechnicalIndicators } from '@/types/trading';
+
+const createMockIndicators = (type: 'CALL' | 'PUT', confluenceScore: number): TechnicalIndicators => ({
+  rsi: {
+    value: type === 'CALL' ? 25 : 75,
+    signal: type === 'CALL' ? 'oversold' : 'overbought'
+  },
+  macd: {
+    value: type === 'CALL' ? 0.002 : -0.002,
+    signal: type === 'CALL' ? 0.001 : -0.001,
+    histogram: type === 'CALL' ? 0.001 : -0.001,
+    trend: type === 'CALL' ? 'bullish' : 'bearish'
+  },
+  bollinger: {
+    upper: 1.1,
+    middle: 1.0,
+    lower: 0.9,
+    position: type === 'CALL' ? 'below_lower' : 'above_upper'
+  },
+  stochastic: {
+    k: type === 'CALL' ? 15 : 85,
+    d: type === 'CALL' ? 20 : 80,
+    signal: type === 'CALL' ? 'oversold' : 'overbought'
+  },
+  movingAverages: {
+    ema9: 1.0,
+    ema21: type === 'CALL' ? 0.99 : 1.01,
+    sma50: 1.0,
+    trend: type === 'CALL' ? 'bullish' : 'bearish'
+  },
+  atr: {
+    value: 0.015,
+    volatility: 'medium'
+  },
+  supportResistance: {
+    nearestSupport: 0.98,
+    nearestResistance: 1.02,
+    pricePosition: type === 'CALL' ? 'near_support' : 'near_resistance'
+  },
+  confluenceScore,
+  confluenceCount: Math.round(confluenceScore / 15)
+});
 
 export const mockSignals: TradingSignal[] = [
   {
@@ -15,6 +56,7 @@ export const mockSignals: TradingSignal[] = [
     timestamp: new Date(),
     isHot: true,
     marketType: 'forex',
+    indicators: createMockIndicators('CALL', 85),
   },
   {
     id: '2',
@@ -30,6 +72,7 @@ export const mockSignals: TradingSignal[] = [
     timestamp: new Date(Date.now() - 60000),
     isHot: true,
     marketType: 'crypto',
+    indicators: createMockIndicators('PUT', 75),
   },
   {
     id: '3',
@@ -45,6 +88,7 @@ export const mockSignals: TradingSignal[] = [
     timestamp: new Date(Date.now() - 120000),
     isHot: false,
     marketType: 'forex',
+    indicators: createMockIndicators('CALL', 60),
   },
   {
     id: '4',
@@ -60,6 +104,7 @@ export const mockSignals: TradingSignal[] = [
     timestamp: new Date(Date.now() - 180000),
     isHot: true,
     marketType: 'crypto',
+    indicators: createMockIndicators('PUT', 90),
   },
   {
     id: '5',
@@ -75,6 +120,7 @@ export const mockSignals: TradingSignal[] = [
     timestamp: new Date(Date.now() - 300000),
     isHot: false,
     marketType: 'forex',
+    indicators: createMockIndicators('CALL', 45),
   },
 ];
 

@@ -1,31 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TradingSignal, Timeframe, MarketType, TradingAsset } from '@/types/trading';
+import { 
+  TradingSignal, 
+  Timeframe, 
+  TradingAsset,
+  TechnicalIndicators,
+  RSIIndicator,
+  MACDIndicator,
+  BollingerBands,
+  StochasticIndicator,
+  MovingAverages,
+  ATRIndicator,
+  SupportResistance
+} from '@/types/trading';
 import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/marketHours';
 
-const CONFIRMATIONS_CALL = [
-  'RSI < 30',
-  'Suporte tocado',
-  'Banda inferior tocada',
-  'Martelo confirmado',
-  'Engolfo de alta',
-  'Pin bar bullish',
-  'EMA 9 cruzando EMA 21',
-  'Divergência bullish',
-];
-
-const CONFIRMATIONS_PUT = [
-  'RSI > 70',
-  'Resistência tocada',
-  'Banda superior tocada',
-  'Estrela cadente',
-  'Engolfo de baixa',
-  'Pin bar bearish',
-  'EMA 9 abaixo EMA 21',
-  'Divergência bearish',
-];
-
 function generateRandomPrice(symbol: string): number {
-  // Base prices for different pairs
   if (symbol.includes('JPY')) {
     return 150 + (Math.random() - 0.5) * 5;
   }
@@ -35,38 +24,227 @@ function generateRandomPrice(symbol: string): number {
   if (symbol.includes('ETH')) {
     return 3500 + (Math.random() - 0.5) * 200;
   }
-  // Most forex pairs
   return 1.0 + Math.random() * 0.5;
 }
 
-function generateRSIValue(type: 'CALL' | 'PUT'): string {
-  if (type === 'CALL') {
-    const value = 20 + Math.random() * 12;
-    return `RSI < 30 (${value.toFixed(1)})`;
+function generateRSI(type: 'CALL' | 'PUT', forceStrong: boolean): RSIIndicator {
+  let value: number;
+  if (forceStrong) {
+    value = type === 'CALL' ? 15 + Math.random() * 15 : 70 + Math.random() * 15;
   } else {
-    const value = 70 + Math.random() * 12;
-    return `RSI > 70 (${value.toFixed(1)})`;
+    value = 30 + Math.random() * 40;
   }
+  
+  return {
+    value,
+    signal: value < 30 ? 'oversold' : value > 70 ? 'overbought' : 'neutral'
+  };
+}
+
+function generateMACD(type: 'CALL' | 'PUT', forceStrong: boolean): MACDIndicator {
+  const isBullish = type === 'CALL';
+  const histogram = forceStrong 
+    ? (isBullish ? 0.001 + Math.random() * 0.003 : -(0.001 + Math.random() * 0.003))
+    : (Math.random() - 0.5) * 0.004;
+
+  return {
+    value: histogram * 2,
+    signal: histogram * 1.5,
+    histogram,
+    trend: histogram > 0.0005 ? 'bullish' : histogram < -0.0005 ? 'bearish' : 'neutral'
+  };
+}
+
+function generateBollinger(price: number, type: 'CALL' | 'PUT', forceStrong: boolean): BollingerBands {
+  const range = price * 0.02;
+  const middle = price;
+  const upper = middle + range;
+  const lower = middle - range;
+  
+  let position: 'above_upper' | 'below_lower' | 'middle';
+  if (forceStrong) {
+    position = type === 'CALL' ? 'below_lower' : 'above_upper';
+  } else {
+    position = 'middle';
+  }
+
+  return { upper, middle, lower, position };
+}
+
+function generateStochastic(type: 'CALL' | 'PUT', forceStrong: boolean): StochasticIndicator {
+  let k: number, d: number;
+  if (forceStrong) {
+    if (type === 'CALL') {
+      k = 10 + Math.random() * 15;
+      d = k + Math.random() * 5;
+    } else {
+      k = 75 + Math.random() * 15;
+      d = k - Math.random() * 5;
+    }
+  } else {
+    k = 30 + Math.random() * 40;
+    d = k + (Math.random() - 0.5) * 10;
+  }
+
+  return {
+    k,
+    d,
+    signal: k < 20 ? 'oversold' : k > 80 ? 'overbought' : 'neutral'
+  };
+}
+
+function generateMovingAverages(price: number, type: 'CALL' | 'PUT', forceStrong: boolean): MovingAverages {
+  const variation = price * 0.005;
+  const ema9 = price + (Math.random() - 0.5) * variation;
+  const ema21 = price + (Math.random() - 0.5) * variation * 2;
+  const sma50 = price + (Math.random() - 0.5) * variation * 3;
+  
+  let trend: 'bullish' | 'bearish' | 'neutral';
+  if (forceStrong) {
+    trend = type === 'CALL' ? 'bullish' : 'bearish';
+  } else {
+    trend = ema9 > ema21 ? 'bullish' : ema9 < ema21 ? 'bearish' : 'neutral';
+  }
+
+  return { ema9, ema21, sma50, trend };
+}
+
+function generateATR(price: number): ATRIndicator {
+  const atrPercent = Math.random() * 3;
+  const value = price * atrPercent / 100;
+  
+  return {
+    value,
+    volatility: atrPercent < 1 ? 'low' : atrPercent < 2 ? 'medium' : 'high'
+  };
+}
+
+function generateSupportResistance(price: number, type: 'CALL' | 'PUT', forceStrong: boolean): SupportResistance {
+  const range = price * 0.01;
+  const nearestSupport = price - range - Math.random() * range;
+  const nearestResistance = price + range + Math.random() * range;
+  
+  let pricePosition: 'near_support' | 'near_resistance' | 'middle';
+  if (forceStrong) {
+    pricePosition = type === 'CALL' ? 'near_support' : 'near_resistance';
+  } else {
+    pricePosition = 'middle';
+  }
+
+  return { nearestSupport, nearestResistance, pricePosition };
+}
+
+function generateIndicators(price: number, type: 'CALL' | 'PUT', forceStrong: boolean): TechnicalIndicators {
+  const rsi = generateRSI(type, forceStrong);
+  const macd = generateMACD(type, forceStrong);
+  const bollinger = generateBollinger(price, type, forceStrong);
+  const stochastic = generateStochastic(type, forceStrong);
+  const movingAverages = generateMovingAverages(price, type, forceStrong);
+  const atr = generateATR(price);
+  const supportResistance = generateSupportResistance(price, type, forceStrong);
+
+  // Calculate confluence
+  let confluenceCount = 0;
+  const isCall = type === 'CALL';
+
+  // RSI confluence
+  if ((isCall && rsi.signal === 'oversold') || (!isCall && rsi.signal === 'overbought')) {
+    confluenceCount++;
+  }
+
+  // MACD confluence
+  if ((isCall && macd.trend === 'bullish') || (!isCall && macd.trend === 'bearish')) {
+    confluenceCount++;
+  }
+
+  // Bollinger confluence
+  if ((isCall && bollinger.position === 'below_lower') || (!isCall && bollinger.position === 'above_upper')) {
+    confluenceCount++;
+  }
+
+  // Stochastic confluence
+  if ((isCall && stochastic.signal === 'oversold') || (!isCall && stochastic.signal === 'overbought')) {
+    confluenceCount++;
+  }
+
+  // Moving Averages confluence
+  if ((isCall && movingAverages.trend === 'bullish') || (!isCall && movingAverages.trend === 'bearish')) {
+    confluenceCount++;
+  }
+
+  // Volatility confluence (medium is ideal)
+  if (atr.volatility === 'medium') {
+    confluenceCount++;
+  }
+
+  // Support/Resistance confluence
+  if ((isCall && supportResistance.pricePosition === 'near_support') || 
+      (!isCall && supportResistance.pricePosition === 'near_resistance')) {
+    confluenceCount++;
+  }
+
+  const confluenceScore = Math.round((confluenceCount / 7) * 100);
+
+  return {
+    rsi,
+    macd,
+    bollinger,
+    stochastic,
+    movingAverages,
+    atr,
+    supportResistance,
+    confluenceScore,
+    confluenceCount
+  };
+}
+
+function generateConfirmations(indicators: TechnicalIndicators, type: 'CALL' | 'PUT'): string[] {
+  const confirmations: string[] = [];
+  const isCall = type === 'CALL';
+
+  // RSI
+  if (indicators.rsi.signal !== 'neutral') {
+    confirmations.push(`RSI ${indicators.rsi.value.toFixed(1)} (${isCall ? 'sobrevendido' : 'sobrecomprado'})`);
+  }
+
+  // Stochastic
+  if (indicators.stochastic.signal !== 'neutral') {
+    confirmations.push(`Stoch ${indicators.stochastic.k.toFixed(0)}/${indicators.stochastic.d.toFixed(0)}`);
+  }
+
+  // MACD
+  if (indicators.macd.trend !== 'neutral') {
+    confirmations.push(`MACD ${indicators.macd.trend === 'bullish' ? 'bullish' : 'bearish'}`);
+  }
+
+  // Bollinger
+  if (indicators.bollinger.position !== 'middle') {
+    confirmations.push(`Bollinger ${isCall ? 'inferior' : 'superior'}`);
+  }
+
+  // EMAs
+  if (indicators.movingAverages.trend !== 'neutral') {
+    confirmations.push(`EMA9 ${indicators.movingAverages.trend === 'bullish' ? '>' : '<'} EMA21`);
+  }
+
+  // Support/Resistance
+  if (indicators.supportResistance.pricePosition !== 'middle') {
+    confirmations.push(isCall ? 'Próximo ao suporte' : 'Próximo à resistência');
+  }
+
+  return confirmations;
 }
 
 function generateSignal(asset: TradingAsset, forceHighProbability: boolean = false): TradingSignal {
   const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
   const timeframe: Timeframe = Math.random() > 0.5 ? 'M1' : 'M5';
+  const price = generateRandomPrice(asset.symbol);
   
-  const numConfirmations = forceHighProbability ? 4 : (2 + Math.floor(Math.random() * 2));
-  const strength = Math.min(4, numConfirmations) as 2 | 3 | 4;
+  const indicators = generateIndicators(price, type, forceHighProbability);
+  const confirmations = generateConfirmations(indicators, type);
   
-  const confirmationPool = type === 'CALL' ? CONFIRMATIONS_CALL : CONFIRMATIONS_PUT;
-  const confirmations = [generateRSIValue(type)];
-  
-  const shuffled = [...confirmationPool].sort(() => Math.random() - 0.5);
-  for (let i = 0; i < numConfirmations - 1 && i < shuffled.length; i++) {
-    if (!shuffled[i].includes('RSI')) {
-      confirmations.push(shuffled[i]);
-    }
-  }
-
-  const isHighProb = forceHighProbability || strength >= 4;
+  const strength = Math.min(4, Math.max(2, Math.round(indicators.confluenceScore / 25))) as 2 | 3 | 4;
+  const isHighProb = forceHighProbability || indicators.confluenceScore >= 70;
 
   return {
     id: crypto.randomUUID(),
@@ -78,10 +256,11 @@ function generateSignal(asset: TradingAsset, forceHighProbability: boolean = fal
     strength,
     status: isHighProb ? 'high_probability' : 'moderate',
     confirmations,
-    price: generateRandomPrice(asset.symbol),
+    price,
     timestamp: new Date(),
     isHot: isHighProb,
     marketType: asset.type,
+    indicators,
   };
 }
 
@@ -92,21 +271,20 @@ function generateSignals(): TradingSignal[] {
     return [];
   }
 
-  const hotCount = 1 + Math.floor(Math.random() * 2); // 1-2 hot signals
+  const hotCount = 1 + Math.floor(Math.random() * 2);
   const signals: TradingSignal[] = [];
   const usedAssets = new Set<string>();
 
-  // Shuffle available assets to get random selection
   const shuffledAssets = [...availableAssets].sort(() => Math.random() - 0.5);
 
-  // Generate high probability HOT signals
+  // Generate high probability HOT signals with strong indicator confluence
   for (let i = 0; i < hotCount && i < shuffledAssets.length; i++) {
     const asset = shuffledAssets[i];
     signals.push(generateSignal(asset, true));
     usedAssets.add(asset.symbol);
   }
 
-  // Add moderate signals from remaining assets
+  // Add moderate signals
   const moderateCount = 2 + Math.floor(Math.random() * 2);
   for (let i = hotCount; i < hotCount + moderateCount && i < shuffledAssets.length; i++) {
     const asset = shuffledAssets[i];
@@ -116,17 +294,16 @@ function generateSignals(): TradingSignal[] {
     }
   }
 
-  // Sort: HOT first, then by strength
   return signals.sort((a, b) => {
     if (a.isHot !== b.isHot) return b.isHot ? 1 : -1;
-    return b.strength - a.strength;
+    return b.indicators.confluenceScore - a.indicators.confluenceScore;
   });
 }
 
 export interface MarketStatus {
   otcOpen: boolean;
   forexOpen: boolean;
-  cryptoOpen: boolean; // Always true
+  cryptoOpen: boolean;
 }
 
 export function useAutoSignals(refreshInterval: number = 30000) {
@@ -143,7 +320,6 @@ export function useAutoSignals(refreshInterval: number = 30000) {
   const refreshSignals = useCallback(() => {
     setIsLoading(true);
     
-    // Update market status
     setMarketStatus({
       otcOpen: isOTCMarketOpen(),
       forexOpen: isForexMarketOpen(),
@@ -158,7 +334,6 @@ export function useAutoSignals(refreshInterval: number = 30000) {
     }, 500);
   }, [refreshInterval]);
 
-  // Countdown timer
   useEffect(() => {
     const countdown = setInterval(() => {
       setNextUpdate((prev) => {
@@ -172,13 +347,11 @@ export function useAutoSignals(refreshInterval: number = 30000) {
     return () => clearInterval(countdown);
   }, [refreshInterval]);
 
-  // Auto refresh
   useEffect(() => {
     const interval = setInterval(refreshSignals, refreshInterval);
     return () => clearInterval(interval);
   }, [refreshSignals, refreshInterval]);
 
-  // Update market status every minute
   useEffect(() => {
     const statusInterval = setInterval(() => {
       setMarketStatus({

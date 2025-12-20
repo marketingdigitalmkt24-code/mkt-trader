@@ -1,6 +1,8 @@
 import { TradingSignal } from '@/types/trading';
-import { Star, Clock, TrendingUp, TrendingDown, Zap, CheckCircle2, Globe } from 'lucide-react';
+import { Star, Clock, TrendingUp, TrendingDown, Zap, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { IndicatorsPanel } from './IndicatorsPanel';
+import { useState } from 'react';
 
 interface SignalCardProps {
   signal: TradingSignal;
@@ -14,6 +16,7 @@ const marketTypeLabels = {
 };
 
 export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
+  const [showIndicators, setShowIndicators] = useState(false);
   const isCall = signal.type === 'CALL';
   
   const renderStars = (count: number) => {
@@ -33,6 +36,12 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
     if (seconds < 60) return `${seconds}s atrás`;
     const minutes = Math.floor(seconds / 60);
     return `${minutes}m atrás`;
+  };
+
+  const getConfluenceColor = (score: number) => {
+    if (score >= 80) return 'text-call';
+    if (score >= 60) return 'text-gold';
+    return 'text-muted-foreground';
   };
 
   return (
@@ -96,7 +105,7 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
       </div>
 
       {/* Info Grid */}
-      <div className="grid grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-4 gap-2 mb-3">
         <div className="bg-secondary/50 rounded-lg p-2 text-center">
           <div className="text-xs text-muted-foreground mb-1">Timeframe</div>
           <div className="font-mono font-semibold">{signal.timeframe}</div>
@@ -108,6 +117,12 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
         <div className="bg-secondary/50 rounded-lg p-2 text-center">
           <div className="text-xs text-muted-foreground mb-1">Preço</div>
           <div className="font-mono font-semibold text-sm">{signal.price.toLocaleString('pt-BR')}</div>
+        </div>
+        <div className="bg-secondary/50 rounded-lg p-2 text-center">
+          <div className="text-xs text-muted-foreground mb-1">Confluência</div>
+          <div className={cn('font-mono font-bold', getConfluenceColor(signal.indicators.confluenceScore))}>
+            {signal.indicators.confluenceScore}%
+          </div>
         </div>
       </div>
 
@@ -130,7 +145,7 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
       </div>
 
       {/* Confirmations */}
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 mb-3">
         <div className="text-xs text-muted-foreground font-medium">Confirmações:</div>
         <div className="flex flex-wrap gap-2">
           {signal.confirmations.map((conf, idx) => (
@@ -144,6 +159,31 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
           ))}
         </div>
       </div>
+
+      {/* Indicators Toggle */}
+      <button
+        onClick={() => setShowIndicators(!showIndicators)}
+        className="w-full flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors border-t border-border/50 mt-2"
+      >
+        {showIndicators ? (
+          <>
+            <ChevronUp className="w-4 h-4" />
+            Ocultar Indicadores
+          </>
+        ) : (
+          <>
+            <ChevronDown className="w-4 h-4" />
+            Ver Indicadores ({signal.indicators.confluenceCount}/7)
+          </>
+        )}
+      </button>
+
+      {/* Indicators Panel */}
+      {showIndicators && (
+        <div className="mt-3 pt-3 border-t border-border/50">
+          <IndicatorsPanel indicators={signal.indicators} signalType={signal.type} />
+        </div>
+      )}
     </div>
   );
 }

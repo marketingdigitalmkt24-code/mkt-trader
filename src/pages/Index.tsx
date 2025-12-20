@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { QuickStats } from '@/components/QuickStats';
 import { TimeframeFilter } from '@/components/TimeframeFilter';
@@ -8,9 +8,11 @@ import { AssetRanking } from '@/components/AssetRanking';
 import { BankManagementCard } from '@/components/BankManagementCard';
 import { SafetyFiltersCard } from '@/components/SafetyFiltersCard';
 import { MarketStatusCard } from '@/components/MarketStatusCard';
+import { SignalHistorySection } from '@/components/SignalHistorySection';
 import { mockAssetPerformance, mockBankManagement, safetyFilters } from '@/data/mockData';
-import { Timeframe, MarketType } from '@/types/trading';
+import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
+import { useSignalResults } from '@/hooks/useSignalResults';
 import { Loader2 } from 'lucide-react';
 
 type MarketFilter = 'ALL' | MarketType;
@@ -18,6 +20,8 @@ type MarketFilter = 'ALL' | MarketType;
 const Index = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe | 'ALL'>('ALL');
   const [selectedMarket, setSelectedMarket] = useState<MarketFilter>('ALL');
+  const [processedSignalIds, setProcessedSignalIds] = useState<Set<string>>(new Set());
+  
   const { 
     signals, 
     lastUpdate, 
@@ -27,8 +31,39 @@ const Index = () => {
     marketStatus,
     waitingMessage,
     dailySignalsCount,
-    maxDailySignals
+    maxDailySignals,
+    registerLoss
   } = useAutoSignals();
+
+  const {
+    history,
+    addSignalWithSimulation,
+    registerManualResult,
+    clearHistory,
+  } = useSignalResults();
+
+  // Simular resultado automaticamente quando um novo sinal aparece
+  useEffect(() => {
+    signals.forEach((signal) => {
+      if (!processedSignalIds.has(signal.id) && signal.indicators.confluenceCount >= 4) {
+        // Aguardar tempo da expiração para simular resultado
+        const expirationMs = signal.timeframe === 'M1' ? 120000 : 300000; // 2 ou 5 minutos
+        
+        setTimeout(() => {
+          const { result, profit } = addSignalWithSimulation(signal);
+          
+          // Registrar loss no controle de risco se necessário
+          if (result === 'loss') {
+            registerLoss();
+          }
+          
+          console.log(`📊 Resultado simulado: ${signal.asset} ${signal.type} = ${result} (${profit > 0 ? '+' : ''}${profit.toFixed(2)})`);
+        }, expirationMs);
+        
+        setProcessedSignalIds(prev => new Set(prev).add(signal.id));
+      }
+    });
+  }, [signals, processedSignalIds, addSignalWithSimulation, registerLoss]);
 
   // Filter signals by timeframe and market type
   const filteredSignals = signals.filter((s) => {
@@ -99,6 +134,14 @@ const Index = () => {
               dailySignalsCount={dailySignalsCount}
               maxDailySignals={maxDailySignals}
             />
+            
+            {/* Histórico de Resultados */}
+            <SignalHistorySection 
+              history={history}
+              onRegisterResult={registerManualResult}
+              onClearHistory={clearHistory}
+            />
+            
             <AllSignalsSection signals={filteredSignals} />
           </div>
 

@@ -14,6 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      iqoption_config: {
+        Row: {
+          account_type: string
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          last_connected_at: string | null
+          password: string
+          updated_at: string
+        }
+        Insert: {
+          account_type?: string
+          created_at?: string
+          email: string
+          id?: string
+          is_active?: boolean
+          last_connected_at?: string | null
+          password: string
+          updated_at?: string
+        }
+        Update: {
+          account_type?: string
+          created_at?: string
+          email?: string
+          id?: string
+          is_active?: boolean
+          last_connected_at?: string | null
+          password?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      operation_results: {
+        Row: {
+          asset: string
+          created_at: string
+          direction: string
+          entry_price: number | null
+          exit_price: number | null
+          expiration_time: string | null
+          id: string
+          iq_option_id: string | null
+          profit: number
+          result: string
+          signal_id: string
+        }
+        Insert: {
+          asset: string
+          created_at?: string
+          direction: string
+          entry_price?: number | null
+          exit_price?: number | null
+          expiration_time?: string | null
+          id?: string
+          iq_option_id?: string | null
+          profit?: number
+          result: string
+          signal_id: string
+        }
+        Update: {
+          asset?: string
+          created_at?: string
+          direction?: string
+          entry_price?: number | null
+          exit_price?: number | null
+          expiration_time?: string | null
+          id?: string
+          iq_option_id?: string | null
+          profit?: number
+          result?: string
+          signal_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_numbers: {
         Row: {
           created_at: string

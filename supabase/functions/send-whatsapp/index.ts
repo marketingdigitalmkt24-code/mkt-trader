@@ -22,9 +22,10 @@ serve(async (req) => {
   try {
     const instanceId = Deno.env.get('ZAPI_INSTANCE_ID');
     const token = Deno.env.get('ZAPI_TOKEN');
+    const clientToken = Deno.env.get('ZAPI_CLIENT_TOKEN');
     const phoneNumber = Deno.env.get('ZAPI_PHONE_NUMBER');
 
-    if (!instanceId || !token || !phoneNumber) {
+    if (!instanceId || !token || !clientToken || !phoneNumber) {
       console.error('Missing Z-API credentials');
       return new Response(
         JSON.stringify({ error: 'Missing Z-API credentials' }),
@@ -61,6 +62,7 @@ ${signal.confirmations.map(c => `• ${c}`).join('\n')}
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Client-Token': clientToken,
       },
       body: JSON.stringify({
         phone: phoneNumber,

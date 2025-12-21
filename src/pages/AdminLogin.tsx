@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Activity, Eye, EyeOff, Lock, Mail, UserPlus, LogIn, ArrowLeft } from 'lucide-react';
+import { Activity, Eye, EyeOff, Lock, Mail, LogIn, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
@@ -17,13 +17,12 @@ const authSchema = z.object({
 
 const AdminLogin = () => {
   const navigate = useNavigate();
-  const { signIn, signUp, isLoading } = useAuth();
+  const { signIn, isLoading } = useAuth();
   const { toast } = useToast();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,30 +39,16 @@ const AdminLogin = () => {
     setIsSubmitting(true);
     
     try {
-      if (isSignUp) {
-        const { error } = await signUp(email, password);
-        if (error) {
-          if (error.message.includes('already registered')) {
-            toast({ title: 'Erro', description: 'Este email já está cadastrado', variant: 'destructive' });
-          } else {
-            toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-          }
+      const { error } = await signIn(email, password);
+      if (error) {
+        if (error.message.includes('Invalid login credentials')) {
+          toast({ title: 'Erro', description: 'Email ou senha incorretos', variant: 'destructive' });
         } else {
-          toast({ title: 'Sucesso', description: 'Conta criada! Você pode acessar o painel agora.' });
-          navigate('/admin');
+          toast({ title: 'Erro', description: error.message, variant: 'destructive' });
         }
       } else {
-        const { error } = await signIn(email, password);
-        if (error) {
-          if (error.message.includes('Invalid login credentials')) {
-            toast({ title: 'Erro', description: 'Email ou senha incorretos', variant: 'destructive' });
-          } else {
-            toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-          }
-        } else {
-          toast({ title: 'Bem-vindo!', description: 'Login realizado com sucesso' });
-          navigate('/admin');
-        }
+        toast({ title: 'Bem-vindo!', description: 'Login realizado com sucesso' });
+        navigate('/admin');
       }
     } catch (err) {
       toast({ title: 'Erro', description: 'Ocorreu um erro inesperado', variant: 'destructive' });
@@ -90,13 +75,10 @@ const AdminLogin = () => {
               <Activity className="w-8 h-8 text-background" />
             </div>
             <CardTitle className="text-2xl">
-              {isSignUp ? 'Criar Conta Admin' : 'Painel Administrativo'}
+              Painel Administrativo
             </CardTitle>
             <CardDescription>
-              {isSignUp 
-                ? 'Crie sua conta para acessar o painel de configurações'
-                : 'Entre com suas credenciais para acessar as configurações'
-              }
+              Entre com suas credenciais para acessar as configurações
             </CardDescription>
           </CardHeader>
 
@@ -155,33 +137,10 @@ const AdminLogin = () => {
                 className="w-full gap-2"
                 disabled={isSubmitting || isLoading}
               >
-                {isSignUp ? (
-                  <>
-                    <UserPlus className="w-4 h-4" />
-                    {isSubmitting ? 'Criando conta...' : 'Criar Conta'}
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    {isSubmitting ? 'Entrando...' : 'Entrar'}
-                  </>
-                )}
+                <LogIn className="w-4 h-4" />
+                {isSubmitting ? 'Entrando...' : 'Entrar'}
               </Button>
             </form>
-
-            {/* Toggle Sign Up / Sign In */}
-            <div className="mt-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'}
-              </p>
-              <Button
-                variant="link"
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-primary"
-              >
-                {isSignUp ? 'Fazer login' : 'Criar conta'}
-              </Button>
-            </div>
           </CardContent>
         </Card>
 

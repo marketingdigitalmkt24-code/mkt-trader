@@ -8,6 +8,8 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Admin from "./pages/Admin";
 import AdminLogin from "./pages/AdminLogin";
+import ClientLogin from "./pages/ClientLogin";
+import ClientDashboard from "./pages/ClientDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,11 +24,20 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/client/login" element={<ClientLogin />} />
             <Route 
               path="/admin" 
               element={
                 <ProtectedRoute>
                   <Admin />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/client" 
+              element={
+                <ProtectedRoute redirectTo="/client/login">
+                  <ClientDashboard />
                 </ProtectedRoute>
               } 
             />

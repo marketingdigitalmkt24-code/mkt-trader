@@ -10,6 +10,8 @@ export interface TradingAsset {
   icon: string;
   type: MarketType;
   isOTC?: boolean;
+  iqOptionId?: number;
+  payout?: number;
 }
 
 // Technical Indicators

@@ -1,8 +1,9 @@
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2 } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { useIQOptionBalance } from '@/hooks/useIQOptionBalance';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function BankManagementCard() {
   const {
@@ -16,6 +17,7 @@ export function BankManagementCard() {
     consecutiveLosses,
     isLoading,
     lastUpdate,
+    connectionStatus,
     refresh,
   } = useIQOptionBalance();
 
@@ -34,6 +36,22 @@ export function BankManagementCard() {
     return `$ ${value.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   };
 
+  const getConnectionStatusColor = () => {
+    switch (connectionStatus) {
+      case 'connected': return 'text-call';
+      case 'disconnected': return 'text-put';
+      case 'connecting': return 'text-gold';
+    }
+  };
+
+  const getConnectionStatusText = () => {
+    switch (connectionStatus) {
+      case 'connected': return 'Conectado à IQ Option';
+      case 'disconnected': return 'Desconectado - Usando dados em cache';
+      case 'connecting': return 'Conectando...';
+    }
+  };
+
   return (
     <section className="glass-card p-4">
       <div className="flex items-center justify-between mb-4">
@@ -42,6 +60,22 @@ export function BankManagementCard() {
           <h3 className="font-semibold text-foreground">Gestão de Banca</h3>
         </div>
         <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                {connectionStatus === 'connected' ? (
+                  <Wifi className={cn("w-4 h-4", getConnectionStatusColor())} />
+                ) : connectionStatus === 'connecting' ? (
+                  <Loader2 className={cn("w-4 h-4 animate-spin", getConnectionStatusColor())} />
+                ) : (
+                  <WifiOff className={cn("w-4 h-4", getConnectionStatusColor())} />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{getConnectionStatusText()}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <span className={cn(
             "text-xs px-2 py-0.5 rounded-full",
             accountType === 'PRACTICE' 

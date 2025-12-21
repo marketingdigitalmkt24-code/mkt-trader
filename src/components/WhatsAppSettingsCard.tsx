@@ -23,9 +23,13 @@ interface ZAPIConfig {
   is_active: boolean;
 }
 
-export function WhatsAppSettingsCard() {
+interface WhatsAppSettingsCardProps {
+  defaultOpen?: boolean;
+}
+
+export function WhatsAppSettingsCard({ defaultOpen = false }: WhatsAppSettingsCardProps) {
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [numbers, setNumbers] = useState<WhatsAppNumber[]>([]);
   const [zapiConfig, setZapiConfig] = useState<ZAPIConfig | null>(null);
   const [showTokens, setShowTokens] = useState(false);

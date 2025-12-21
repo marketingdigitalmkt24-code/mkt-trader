@@ -21,10 +21,11 @@ interface AutoTradingCardProps {
   updateConfig: (updates: Partial<AutoTradingConfig>) => void;
   isPlacingTrade: boolean;
   lastTradeResult: { success: boolean; message: string } | null;
+  defaultOpen?: boolean;
 }
 
-export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTradeResult }: AutoTradingCardProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTradeResult, defaultOpen = false }: AutoTradingCardProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [localConfig, setLocalConfig] = useState(config);
   const [hasChanges, setHasChanges] = useState(false);
 

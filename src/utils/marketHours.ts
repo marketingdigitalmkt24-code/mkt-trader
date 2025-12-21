@@ -39,23 +39,12 @@ export const OTC_ASSETS: TradingAsset[] = [
 
 /**
  * Check if OTC market is currently available
- * OTC is available from Friday 21:00 UTC to Sunday 21:00 UTC
+ * Na IQ Option, o mercado OTC está disponível 24/7
+ * OTC funciona sempre, especialmente quando Forex regular está fechado
  */
 export function isOTCMarketOpen(): boolean {
-  const now = new Date();
-  const utcDay = now.getUTCDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
-  const utcHour = now.getUTCHours();
-
-  // Saturday (all day)
-  if (utcDay === 6) return true;
-  
-  // Sunday (until 21:00 UTC)
-  if (utcDay === 0 && utcHour < 21) return true;
-  
-  // Friday (after 21:00 UTC)
-  if (utcDay === 5 && utcHour >= 21) return true;
-
-  return false;
+  // OTC está sempre disponível na IQ Option
+  return true;
 }
 
 /**

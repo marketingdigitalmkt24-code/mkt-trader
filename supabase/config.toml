@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.iqoption-get-balance]
 verify_jwt = false
+
+[functions.iqoption-get-assets]
+verify_jwt = false

@@ -15,8 +15,13 @@ import {
   SignalStatus,
   MarketType
 } from '@/types/trading';
-import { getAvailableAssets, isOTCMarketOpen, isForexMarketOpen } from '@/utils/marketHours';
+import { getAvailableAssets as getLocalAssets, isOTCMarketOpen, isForexMarketOpen, OTC_ASSETS } from '@/utils/marketHours';
 import { supabase } from '@/integrations/supabase/client';
+
+// Cache para ativos da IQ Option
+let cachedIQAssets: TradingAsset[] = [];
+let lastIQAssetsFetch: number = 0;
+const IQ_ASSETS_CACHE_DURATION = 120000; // 2 minutes
 
 // ============= CONFIGURAÇÕES SEM LIMITES - MÁXIMA ASSERTIVIDADE =============
 const MIN_CONFIRMATIONS = 3; // 3 confirmações mínimas para sinais válidos
@@ -360,7 +365,59 @@ function tryGenerateHighQualitySignal(
   };
 }
 
-function generateSignals(riskControl: RiskControl): { signals: TradingSignal[]; message: string | null } {
+async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
+  const now = Date.now();
+  
+  // Return cached if still valid
+  if (cachedIQAssets.length > 0 && now - lastIQAssetsFetch < IQ_ASSETS_CACHE_DURATION) {
+    console.log('📦 Using cached IQ Option assets:', cachedIQAssets.length);
+    return cachedIQAssets;
+  }
+
+  try {
+    console.log('🔄 Fetching available assets from IQ Option...');
+    
+    const { data, error } = await supabase.functions.invoke('iqoption-get-assets');
+    
+    if (error) {
+      console.error('Error fetching assets:', error);
+      // Fall back to local assets
+      return getLocalAssets();
+    }
+
+    if (data?.success && data?.assets && data.assets.length > 0) {
+      const iqAssets: TradingAsset[] = data.assets.map((asset: any) => ({
+        symbol: asset.name,
+        icon: asset.isOTC ? '🔵' : 
+              asset.name.includes('BTC') ? '₿' : 
+              asset.name.includes('ETH') ? 'Ξ' : 
+              asset.name.includes('EUR') ? '🇪🇺' :
+              asset.name.includes('GBP') ? '🇬🇧' :
+              asset.name.includes('USD') ? '🇺🇸' : '📊',
+        type: asset.isOTC ? 'otc' : asset.type,
+        isOTC: asset.isOTC,
+        iqOptionId: asset.id,
+        payout: asset.payout,
+      }));
+
+      console.log(`✅ Fetched ${iqAssets.length} assets from IQ Option`);
+      
+      // Update cache
+      cachedIQAssets = iqAssets;
+      lastIQAssetsFetch = now;
+      
+      return iqAssets;
+    }
+  } catch (err) {
+    console.error('Error fetching IQ assets:', err);
+  }
+
+  // Fallback to local OTC assets if IQ Option fetch fails
+  console.log('⚠️ Using fallback OTC assets');
+  return OTC_ASSETS;
+}
+
+function generateSignals(riskControl: RiskControl, availableAssets: TradingAsset[]): { signals: TradingSignal[]; message: string | null } {
   // Verificar controle de risco
   if (riskControl.isPaused) {
     return { 
@@ -375,11 +432,9 @@ function generateSignals(riskControl: RiskControl): { signals: TradingSignal[]; 
       message: `Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`
     };
   }
-
-  const availableAssets = getAvailableAssets();
   
   if (availableAssets.length === 0) {
-    return { signals: [], message: 'Nenhum mercado disponível' };
+    return { signals: [], message: 'Nenhum ativo disponível - verificando IQ Option...' };
   }
 
   const signals: TradingSignal[] = [];
@@ -634,7 +689,11 @@ export function useAutoSignals() {
       cryptoOpen: true,
     });
     
-    const { signals: newSignals, message } = generateSignals(riskControl.current);
+    // Fetch available assets from IQ Option
+    const availableAssets = await fetchIQOptionAssets();
+    console.log(`📊 Using ${availableAssets.length} available assets for signal generation`);
+    
+    const { signals: newSignals, message } = generateSignals(riskControl.current, availableAssets);
     
     if (newSignals.length > 0) {
       // Salvar sinais no banco de dados primeiro

@@ -1,8 +1,9 @@
-import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut } from 'lucide-react';
+import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
+import { UserManagementCard } from '@/components/UserManagementCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionBalance } from '@/hooks/useIQOptionBalance';
 import { useAuth } from '@/contexts/AuthContext';
@@ -205,7 +206,7 @@ const Admin = () => {
           </section>
 
           {/* WhatsApp Section */}
-          <section className="lg:col-span-2">
+          <section>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
                 <MessageCircle className="w-4 h-4 text-green-500" />
@@ -217,6 +218,17 @@ const Admin = () => {
                 <WhatsAppSettingsCard defaultOpen={true} />
               </CardContent>
             </Card>
+          </section>
+
+          {/* User Management Section */}
+          <section>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-gold/20 flex items-center justify-center">
+                <Users className="w-4 h-4 text-gold" />
+              </div>
+              <h2 className="text-xl font-bold text-foreground">Usuários</h2>
+            </div>
+            <UserManagementCard />
           </section>
         </div>
 

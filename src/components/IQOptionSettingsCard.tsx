@@ -18,9 +18,13 @@ interface IQOptionConfig {
   last_connected_at: string | null;
 }
 
-export function IQOptionSettingsCard() {
+interface IQOptionSettingsCardProps {
+  defaultOpen?: boolean;
+}
+
+export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCardProps) {
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [config, setConfig] = useState<IQOptionConfig | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

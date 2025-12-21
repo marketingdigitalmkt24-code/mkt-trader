@@ -1,14 +1,19 @@
-import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionBalance } from '@/hooks/useIQOptionBalance';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuth } from '@/contexts/AuthContext';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 const Admin = () => {
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+  
   const {
     config: autoTradingConfig,
     updateConfig: updateAutoTradingConfig,
@@ -17,7 +22,12 @@ const Admin = () => {
     resetDailyTrades,
   } = useAutoTrading();
 
-  const { balance, currency, dailyProfit, todayTrades, wins, losses, isLoading: isLoadingBalance, lastUpdate, refresh } = useIQOptionBalance();
+  const { balance, dailyProfit, todayTrades, wins, losses, isLoading: isLoadingBalance, refresh } = useIQOptionBalance();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/admin/login');
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -48,20 +58,42 @@ const Admin = () => {
               </div>
             </div>
             
-            {/* Balance Display */}
-            {balance > 0 && (
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <div className="text-xs text-muted-foreground">Saldo IQ Option</div>
-                  <div className="text-lg font-bold text-call">
-                    ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            {/* User Info & Logout */}
+            <div className="flex items-center gap-4">
+              {/* Balance Display */}
+              {balance > 0 && (
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Saldo IQ Option</div>
+                    <div className="text-lg font-bold text-call">
+                      ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <Badge variant={dailyProfit >= 0 ? "default" : "destructive"}>
+                    {dailyProfit >= 0 ? '+' : ''}{dailyProfit.toFixed(2)}
+                  </Badge>
+                </div>
+              )}
+              
+              {/* User & Logout */}
+              <div className="flex items-center gap-2 border-l border-border/50 pl-4">
+                <div className="text-right hidden sm:block">
+                  <div className="text-xs text-muted-foreground">Logado como</div>
+                  <div className="text-sm font-medium truncate max-w-32">
+                    {user?.email}
                   </div>
                 </div>
-                <Badge variant={dailyProfit >= 0 ? "default" : "destructive"}>
-                  {dailyProfit >= 0 ? '+' : ''}{dailyProfit.toFixed(2)}
-                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="gap-2 text-destructive hover:text-destructive"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Sair</span>
+                </Button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </header>

@@ -1,5 +1,4 @@
-import { Activity, Wifi, Search, Settings } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Activity, Wifi, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface HeaderProps {
@@ -36,15 +35,6 @@ export function Header({ isConnected, lastUpdate, isLoading, isSearching }: Head
                 <span className="hidden sm:inline">Buscando sinais...</span>
               </div>
             )}
-
-            {/* Admin Link */}
-            <Link
-              to="/admin"
-              className="flex items-center gap-2 px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg text-xs font-medium transition-colors"
-            >
-              <Settings className="w-3 h-3" />
-              <span className="hidden sm:inline">Admin</span>
-            </Link>
 
             {/* Connection Status */}
             <div

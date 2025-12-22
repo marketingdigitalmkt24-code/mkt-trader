@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { iqOptionClient } from '@/services/IQOptionClient';
+import { iqOptionClient, AssetInfo, AssetCandle } from '@/services/IQOptionClient';
 import { toast } from 'sonner';
 
 interface BalanceInfo {
@@ -33,6 +33,7 @@ export function useIQOptionConnection() {
   });
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [availableAssets, setAvailableAssets] = useState<AssetInfo[]>([]);
   const hasConnected = useRef(false);
 
   // Fetch daily stats from database
@@ -211,6 +212,14 @@ export function useIQOptionConnection() {
           setBalance(balanceInfo);
           setLastUpdate(new Date());
         }
+      },
+      (asset, candles) => {
+        // Handle candle updates (used by AISignalsPanel)
+        console.log(`📊 Candle update for ${asset}: ${candles.length} candles`);
+      },
+      (assets) => {
+        setAvailableAssets(assets);
+        console.log(`📈 Assets updated: ${assets.length} available`);
       }
     );
 
@@ -240,6 +249,7 @@ export function useIQOptionConnection() {
     dailyStats,
     lastUpdate,
     isLoading,
+    availableAssets,
     connect,
     disconnect,
     placeTrade,

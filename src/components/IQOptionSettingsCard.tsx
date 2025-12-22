@@ -4,11 +4,12 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { TrendingUp, Eye, EyeOff, Save, RefreshCw, CheckCircle, XCircle, Wifi } from 'lucide-react';
+import { TrendingUp, Eye, EyeOff, Save, RefreshCw, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
+import { iqOptionClient } from '@/services/IQOptionClient';
 
 interface IQOptionConfig {
   id: string;
@@ -141,25 +142,42 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
   };
 
   const testConnection = async () => {
+    if (!email.trim() || !password.trim()) {
+      toast({ title: 'Erro', description: 'Preencha email e senha primeiro', variant: 'destructive' });
+      return;
+    }
+
     setIsTesting(true);
     setTestResult(null);
     
     try {
-      const { data, error } = await supabase.functions.invoke('iqoption-check-results');
+      // Use client-side connection to avoid server IP blocking
+      const result = await iqOptionClient.login({
+        email: email.trim(),
+        password: password.trim(),
+        accountType: accountType,
+      });
       
-      if (error) throw error;
-      
-      if (data?.success) {
+      if (result.success) {
         setTestResult('success');
+        
+        // Update last_connected_at in database
+        if (config) {
+          await supabase
+            .from('iqoption_config')
+            .update({ last_connected_at: new Date().toISOString() })
+            .eq('id', config.id);
+        }
+        
         toast({ 
           title: '✅ Conexão bem sucedida!', 
-          description: `Encontradas ${data.totalPositions} operações. ${data.newResultsSaved} novos resultados salvos.`
+          description: 'Conectado à IQ Option via navegador'
         });
       } else {
         setTestResult('error');
         toast({ 
           title: 'Erro na conexão', 
-          description: data?.error || 'Falha ao conectar com IQ Option',
+          description: result.error || 'Falha ao conectar com IQ Option',
           variant: 'destructive'
         });
       }
@@ -168,12 +186,18 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
       setTestResult('error');
       toast({ 
         title: 'Erro', 
-        description: 'Falha ao testar conexão',
+        description: String(error) || 'Falha ao testar conexão',
         variant: 'destructive'
       });
     } finally {
       setIsTesting(false);
     }
+  };
+
+  const disconnectFromIQ = () => {
+    iqOptionClient.disconnect();
+    setTestResult(null);
+    toast({ title: 'Desconectado', description: 'Conexão com IQ Option encerrada' });
   };
 
   if (!isOpen) {
@@ -279,7 +303,7 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
             variant="outline" 
             onClick={testConnection} 
             className="gap-2"
-            disabled={isTesting || !config}
+            disabled={isTesting}
           >
             {isTesting ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -292,6 +316,17 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
             )}
             Testar
           </Button>
+          
+          {iqOptionClient.isConnected() && (
+            <Button 
+              variant="ghost" 
+              onClick={disconnectFromIQ} 
+              className="gap-2"
+              size="icon"
+            >
+              <WifiOff className="w-4 h-4 text-red-500" />
+            </Button>
+          )}
         </div>
 
         {config?.last_connected_at && (

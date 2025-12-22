@@ -38,31 +38,59 @@ export const OTC_ASSETS: TradingAsset[] = [
 ];
 
 /**
+ * IQ Option Market Hours (based on official schedule):
+ * 
+ * FOREX (Binárias regulares):
+ * - Segunda 00:00 UTC até Sexta 21:00 UTC
+ * - Fechado: Sexta 21:00 UTC até Segunda 00:00 UTC
+ * 
+ * OTC (Over-the-Counter):
+ * - Disponível 24/7 na IQ Option
+ * - Especialmente útil quando Forex está fechado
+ * 
+ * CRYPTO:
+ * - Disponível 24/7
+ * 
+ * BLITZ (Turbo/Rápido):
+ * - Mesmo horário do Forex regular
+ * - 5s, 15s, 30s, 60s de expiração
+ */
+
+/**
  * Check if OTC market is currently available
  * Na IQ Option, o mercado OTC está disponível 24/7
- * OTC funciona sempre, especialmente quando Forex regular está fechado
  */
 export function isOTCMarketOpen(): boolean {
-  // OTC está sempre disponível na IQ Option
   return true;
 }
 
 /**
- * Check if regular Forex market is open
- * Forex is available Monday 00:00 UTC to Friday 21:00 UTC
+ * Check if regular Forex/Binary market is open
+ * Forex/Binárias: Segunda 00:00 UTC até Sexta 21:00 UTC
  */
 export function isForexMarketOpen(): boolean {
   const now = new Date();
-  const utcDay = now.getUTCDay();
+  const utcDay = now.getUTCDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
   const utcHour = now.getUTCHours();
+  const utcMinute = now.getUTCMinutes();
 
-  // Saturday and Sunday - closed
-  if (utcDay === 0 || utcDay === 6) return false;
+  // Sunday - closed all day
+  if (utcDay === 0) return false;
   
-  // Friday after 21:00 - closed
+  // Saturday - closed all day  
+  if (utcDay === 6) return false;
+  
+  // Friday after 21:00 UTC - closed
   if (utcDay === 5 && utcHour >= 21) return false;
 
   return true;
+}
+
+/**
+ * Check if Blitz/Turbo market is open (same as Forex)
+ */
+export function isBlitzMarketOpen(): boolean {
+  return isForexMarketOpen();
 }
 
 /**
@@ -83,7 +111,146 @@ export function getAvailableAssets(): TradingAsset[] {
 }
 
 /**
- * Get time until OTC market opens/closes
+ * Get detailed market status for display
+ */
+export interface MarketInfo {
+  name: string;
+  isOpen: boolean;
+  schedule: string;
+  scheduleDetail: string;
+  timeInfo: string;
+  nextChange: Date | null;
+  type: 'forex' | 'otc' | 'crypto' | 'blitz';
+}
+
+/**
+ * Calculate time until next market state change
+ */
+function formatTimeUntil(targetDate: Date): string {
+  const now = new Date();
+  const diff = targetDate.getTime() - now.getTime();
+  
+  if (diff <= 0) return 'Agora';
+  
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  } else if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  } else {
+    return `${minutes}m`;
+  }
+}
+
+/**
+ * Get next Forex market open time
+ */
+function getNextForexOpen(): Date {
+  const now = new Date();
+  const utcDay = now.getUTCDay();
+  const utcHour = now.getUTCHours();
+  
+  const nextOpen = new Date(now);
+  
+  if (utcDay === 0) {
+    // Sunday - opens Monday 00:00 UTC
+    nextOpen.setUTCDate(now.getUTCDate() + 1);
+  } else if (utcDay === 6) {
+    // Saturday - opens Monday 00:00 UTC
+    nextOpen.setUTCDate(now.getUTCDate() + 2);
+  } else if (utcDay === 5 && utcHour >= 21) {
+    // Friday after close - opens Monday 00:00 UTC
+    nextOpen.setUTCDate(now.getUTCDate() + 3);
+  } else {
+    // Already open
+    return now;
+  }
+  
+  nextOpen.setUTCHours(0, 0, 0, 0);
+  return nextOpen;
+}
+
+/**
+ * Get next Forex market close time
+ */
+function getNextForexClose(): Date {
+  const now = new Date();
+  const utcDay = now.getUTCDay();
+  
+  const nextClose = new Date(now);
+  
+  // Find next Friday
+  const daysUntilFriday = (5 - utcDay + 7) % 7;
+  if (daysUntilFriday === 0 && now.getUTCHours() >= 21) {
+    // Already past this Friday's close
+    nextClose.setUTCDate(now.getUTCDate() + 7);
+  } else {
+    nextClose.setUTCDate(now.getUTCDate() + daysUntilFriday);
+  }
+  
+  nextClose.setUTCHours(21, 0, 0, 0);
+  return nextClose;
+}
+
+/**
+ * Get all markets status info for IQ Option
+ */
+export function getAllMarketsStatus(): MarketInfo[] {
+  const forexOpen = isForexMarketOpen();
+  const otcOpen = isOTCMarketOpen();
+  const blitzOpen = isBlitzMarketOpen();
+  
+  const nextForexChange = forexOpen ? getNextForexClose() : getNextForexOpen();
+  
+  return [
+    {
+      name: 'Forex / Binárias',
+      isOpen: forexOpen,
+      schedule: 'Seg 00:00 - Sex 21:00 UTC',
+      scheduleDetail: 'Segunda-feira 00:00 UTC até Sexta-feira 21:00 UTC',
+      timeInfo: forexOpen 
+        ? `Fecha em ${formatTimeUntil(nextForexChange)}`
+        : `Abre em ${formatTimeUntil(nextForexChange)}`,
+      nextChange: nextForexChange,
+      type: 'forex',
+    },
+    {
+      name: 'OTC (Fim de Semana)',
+      isOpen: otcOpen,
+      schedule: '24/7 disponível',
+      scheduleDetail: 'Disponível 24 horas por dia, 7 dias por semana',
+      timeInfo: 'Sempre disponível',
+      nextChange: null,
+      type: 'otc',
+    },
+    {
+      name: 'Blitz / Turbo',
+      isOpen: blitzOpen,
+      schedule: 'Seg 00:00 - Sex 21:00 UTC',
+      scheduleDetail: 'Mesmo horário do Forex (5s a 60s de expiração)',
+      timeInfo: blitzOpen 
+        ? `Fecha em ${formatTimeUntil(nextForexChange)}`
+        : `Abre em ${formatTimeUntil(nextForexChange)}`,
+      nextChange: nextForexChange,
+      type: 'blitz',
+    },
+    {
+      name: 'Criptomoedas',
+      isOpen: true,
+      schedule: '24/7 disponível',
+      scheduleDetail: 'Bitcoin, Ethereum e outras - sempre disponível',
+      timeInfo: 'Sempre disponível',
+      nextChange: null,
+      type: 'crypto',
+    },
+  ];
+}
+
+/**
+ * Get OTC market status (legacy function)
  */
 export function getOTCMarketStatus(): {
   isOpen: boolean;
@@ -91,46 +258,11 @@ export function getOTCMarketStatus(): {
   timeUntilChange: string;
 } {
   const now = new Date();
-  const utcDay = now.getUTCDay();
-  const utcHour = now.getUTCHours();
-  const isOpen = isOTCMarketOpen();
-
-  let nextChange = new Date(now);
-
-  if (isOpen) {
-    // Find when it closes (Sunday 21:00 UTC)
-    const daysUntilSunday = (7 - utcDay) % 7;
-    nextChange.setUTCDate(now.getUTCDate() + daysUntilSunday);
-    nextChange.setUTCHours(21, 0, 0, 0);
-    
-    if (utcDay === 0 && utcHour >= 21) {
-      // Already past Sunday 21:00, next is next Sunday
-      nextChange.setUTCDate(nextChange.getUTCDate() + 7);
-    }
-  } else {
-    // Find when it opens (Friday 21:00 UTC)
-    let daysUntilFriday = (5 - utcDay + 7) % 7;
-    if (daysUntilFriday === 0 && utcHour >= 21) {
-      // Already past this Friday, wait for next
-      daysUntilFriday = 7;
-    }
-    nextChange.setUTCDate(now.getUTCDate() + daysUntilFriday);
-    nextChange.setUTCHours(21, 0, 0, 0);
-  }
-
-  const diff = nextChange.getTime() - now.getTime();
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-  let timeUntilChange = '';
-  if (hours > 24) {
-    const days = Math.floor(hours / 24);
-    timeUntilChange = `${days}d ${hours % 24}h`;
-  } else if (hours > 0) {
-    timeUntilChange = `${hours}h ${minutes}m`;
-  } else {
-    timeUntilChange = `${minutes}m`;
-  }
-
-  return { isOpen, nextChange, timeUntilChange };
+  
+  // OTC is always open
+  return {
+    isOpen: true,
+    nextChange: now,
+    timeUntilChange: 'Sempre aberto',
+  };
 }

@@ -1,54 +1,42 @@
-import { Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Zap, Globe, Bitcoin, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getOTCMarketStatus, isForexMarketOpen } from '@/utils/marketHours';
+import { getAllMarketsStatus, MarketInfo } from '@/utils/marketHours';
 import { useEffect, useState } from 'react';
 
 interface MarketStatusCardProps {
-  otcOpen: boolean;
-  forexOpen: boolean;
+  otcOpen?: boolean;
+  forexOpen?: boolean;
 }
 
+const marketIcons: Record<string, React.ReactNode> = {
+  forex: <TrendingUp className="w-4 h-4" />,
+  otc: <Globe className="w-4 h-4" />,
+  blitz: <Zap className="w-4 h-4" />,
+  crypto: <Bitcoin className="w-4 h-4" />,
+};
+
 export function MarketStatusCard({ otcOpen, forexOpen }: MarketStatusCardProps) {
-  const [otcStatus, setOtcStatus] = useState(getOTCMarketStatus());
+  const [markets, setMarkets] = useState<MarketInfo[]>(getAllMarketsStatus());
 
   useEffect(() => {
+    // Update market status every minute
     const interval = setInterval(() => {
-      setOtcStatus(getOTCMarketStatus());
+      setMarkets(getAllMarketsStatus());
     }, 60000);
+    
     return () => clearInterval(interval);
   }, []);
 
-  const markets = [
-    {
-      name: 'OTC (IQ Option)',
-      isOpen: otcOpen,
-      schedule: 'Sex 21:00 - Dom 21:00 UTC',
-      timeInfo: otcOpen 
-        ? `Fecha em ${otcStatus.timeUntilChange}` 
-        : `Abre em ${otcStatus.timeUntilChange}`,
-      highlight: true,
-    },
-    {
-      name: 'Forex',
-      isOpen: forexOpen,
-      schedule: 'Seg 00:00 - Sex 21:00 UTC',
-      timeInfo: forexOpen ? 'Disponível agora' : 'Fechado',
-      highlight: false,
-    },
-    {
-      name: 'Cripto',
-      isOpen: true,
-      schedule: '24/7',
-      timeInfo: 'Sempre disponível',
-      highlight: false,
-    },
-  ];
+  // Refresh on mount
+  useEffect(() => {
+    setMarkets(getAllMarketsStatus());
+  }, []);
 
   return (
     <div className="glass-card p-4">
       <div className="flex items-center gap-2 mb-4">
         <Clock className="w-5 h-5 text-gold" />
-        <h3 className="font-semibold text-foreground">Status dos Mercados</h3>
+        <h3 className="font-semibold text-foreground">Status dos Mercados IQ Option</h3>
       </div>
 
       <div className="space-y-3">
@@ -58,24 +46,30 @@ export function MarketStatusCard({ otcOpen, forexOpen }: MarketStatusCardProps) 
             className={cn(
               'flex items-center justify-between p-3 rounded-lg transition-colors',
               market.isOpen 
-                ? market.highlight 
-                  ? 'bg-call/15 border border-call/30' 
-                  : 'bg-call/10 border border-call/20'
-                : 'bg-secondary/50 border border-border'
+                ? 'bg-call/10 border border-call/20 hover:bg-call/15' 
+                : 'bg-secondary/50 border border-border hover:bg-secondary/70'
             )}
           >
             <div className="flex items-center gap-3">
-              {market.isOpen ? (
-                <CheckCircle className="w-5 h-5 text-call" />
-              ) : (
-                <XCircle className="w-5 h-5 text-muted-foreground" />
-              )}
+              <div className={cn(
+                'p-1.5 rounded-full',
+                market.isOpen ? 'bg-call/20 text-call' : 'bg-muted text-muted-foreground'
+              )}>
+                {marketIcons[market.type]}
+              </div>
               <div>
-                <div className={cn(
-                  'font-medium text-sm',
-                  market.isOpen ? 'text-foreground' : 'text-muted-foreground'
-                )}>
-                  {market.name}
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    'font-medium text-sm',
+                    market.isOpen ? 'text-foreground' : 'text-muted-foreground'
+                  )}>
+                    {market.name}
+                  </span>
+                  {market.isOpen ? (
+                    <CheckCircle className="w-3.5 h-3.5 text-call" />
+                  ) : (
+                    <XCircle className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {market.schedule}
@@ -85,12 +79,14 @@ export function MarketStatusCard({ otcOpen, forexOpen }: MarketStatusCardProps) 
 
             <div className="text-right">
               <div className={cn(
-                'text-xs font-medium',
-                market.isOpen ? 'text-call' : 'text-muted-foreground'
+                'text-xs font-semibold px-2 py-0.5 rounded',
+                market.isOpen 
+                  ? 'bg-call/20 text-call' 
+                  : 'bg-muted text-muted-foreground'
               )}>
                 {market.isOpen ? 'ABERTO' : 'FECHADO'}
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-muted-foreground mt-1">
                 {market.timeInfo}
               </div>
             </div>
@@ -98,13 +94,28 @@ export function MarketStatusCard({ otcOpen, forexOpen }: MarketStatusCardProps) 
         ))}
       </div>
 
-      {otcOpen && (
-        <div className="mt-3 p-2 bg-gold/10 border border-gold/20 rounded-lg">
-          <p className="text-xs text-gold text-center">
-            🔥 Mercado OTC disponível! Sinais OTC ativos.
-          </p>
+      {/* Current server time */}
+      <div className="mt-4 pt-3 border-t border-border">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Horário UTC:</span>
+          <CurrentUTCTime />
         </div>
-      )}
+      </div>
     </div>
   );
+}
+
+function CurrentUTCTime() {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const utcString = time.toUTCString().replace('GMT', 'UTC');
+  
+  return <span className="font-mono">{utcString}</span>;
 }

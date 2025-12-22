@@ -57,6 +57,33 @@ export const OTC_ASSETS: TradingAsset[] = [
  */
 
 /**
+ * Check if it's currently weekend (Saturday or Sunday)
+ */
+export function isWeekend(): boolean {
+  const now = new Date();
+  const utcDay = now.getUTCDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+  const utcHour = now.getUTCHours();
+  
+  // Sunday all day
+  if (utcDay === 0) return true;
+  
+  // Saturday all day
+  if (utcDay === 6) return true;
+  
+  // Friday after 21:00 UTC (market closed)
+  if (utcDay === 5 && utcHour >= 21) return true;
+  
+  return false;
+}
+
+/**
+ * Check if an asset is OTC based on its name
+ */
+export function isOTCAsset(asset: string): boolean {
+  return asset.includes('OTC') || asset.includes('-OTC') || asset.toLowerCase().includes('otc');
+}
+
+/**
  * Check if OTC market is currently available
  * Na IQ Option, o mercado OTC está disponível 24/7
  */

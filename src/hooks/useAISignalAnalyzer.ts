@@ -132,10 +132,20 @@ export function useAISignalAnalyzer() {
       });
 
       if (fnError) {
+        // Handle AI credits exhausted gracefully
+        if (fnError.message?.includes('credits') || fnError.message?.includes('402')) {
+          console.warn('⚠️ AI credits exhausted, using fallback analysis');
+          throw new Error('AI credits exhausted');
+        }
         throw new Error(fnError.message);
       }
 
       if (!data?.success) {
+        // Also check for credits error in response
+        if (data?.error?.includes('credits')) {
+          console.warn('⚠️ AI credits exhausted, using fallback analysis');
+          throw new Error('AI credits exhausted');
+        }
         throw new Error(data?.error || 'AI analysis failed');
       }
 

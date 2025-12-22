@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { TradingSignal } from '@/types/trading';
 import { useToast } from '@/hooks/use-toast';
 import { useAISignalAnalyzer } from '@/hooks/useAISignalAnalyzer';
+import { iqOptionClient } from '@/services/IQOptionClient';
 
 const STORAGE_KEY = 'autotrading_config';
 const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
@@ -96,45 +97,52 @@ export function useAutoTrading() {
     }
   };
 
-  // Place a single trade with timeout
+  // Place a single trade with timeout - uses client-side connection
   const placeSingleTrade = useCallback(async (signal: TradingSignal): Promise<TradeResult> => {
     const startTime = Date.now();
     
     try {
       const expiration = getExpirationFromTimeframe(signal.timeframe);
       
-      console.log(`🎯 [${signal.asset}] Placing trade: ${signal.type} $${config.amount}`);
+      console.log(`🎯 [${signal.asset}] Placing trade via client: ${signal.type} $${config.amount}`);
       
-      // Create abort controller for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), MAX_TRADE_DELAY_MS);
+      // Check if client is connected
+      if (!iqOptionClient.isConnected()) {
+        console.error(`❌ [${signal.asset}] IQ Option client not connected`);
+        return { signal, success: false, error: 'IQ Option not connected' };
+      }
       
-      const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
-        body: {
-          asset: signal.asset,
-          direction: signal.type.toLowerCase(),
-          amount: config.amount,
-          expiration,
-          signalId: signal.id,
-        },
-      });
-      
-      clearTimeout(timeoutId);
+      // Place trade via client-side WebSocket
+      const result = await iqOptionClient.placeTrade(
+        signal.asset,
+        signal.type.toLowerCase() as 'call' | 'put',
+        config.amount,
+        expiration
+      );
       
       const elapsed = Date.now() - startTime;
       console.log(`⏱️ [${signal.asset}] Trade completed in ${elapsed}ms`);
 
-      if (error) {
-        console.error(`❌ [${signal.asset}] Trade error:`, error);
-        return { signal, success: false, error: error.message };
-      }
-
-      if (data?.success) {
+      if (result.success) {
         console.log(`✅ [${signal.asset}] Trade executed successfully`);
-        return { signal, success: true, tradeId: data.tradeId };
+        
+        // Log trade to database
+        await supabase
+          .from('operation_results')
+          .insert({
+            signal_id: signal.id,
+            asset: signal.asset,
+            direction: signal.type.toUpperCase(),
+            entry_price: config.amount,
+            result: 'pending',
+            profit: 0,
+            iq_option_id: result.tradeId,
+          });
+        
+        return { signal, success: true, tradeId: result.tradeId };
       } else {
-        console.error(`❌ [${signal.asset}] Trade failed:`, data?.error);
-        return { signal, success: false, error: data?.error || 'Trade failed' };
+        console.error(`❌ [${signal.asset}] Trade failed:`, result.error);
+        return { signal, success: false, error: result.error || 'Trade failed' };
       }
     } catch (err) {
       const elapsed = Date.now() - startTime;

@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useIQOptionAuth } from '@/contexts/IQOptionAuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Activity, Eye, EyeOff, Lock, Mail, LogIn, ArrowLeft } from 'lucide-react';
+import { Activity, Eye, EyeOff, Lock, Mail, LogIn, ArrowLeft, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
@@ -17,7 +17,7 @@ const authSchema = z.object({
 
 const AdminLogin = () => {
   const navigate = useNavigate();
-  const { signIn, isLoading } = useAuth();
+  const { signIn, isLoading, connectionStatus } = useIQOptionAuth();
   const { toast } = useToast();
   
   const [email, setEmail] = useState('');
@@ -41,19 +41,30 @@ const AdminLogin = () => {
     try {
       const { error } = await signIn(email, password);
       if (error) {
-        if (error.message.includes('Invalid login credentials')) {
-          toast({ title: 'Erro', description: 'Email ou senha incorretos', variant: 'destructive' });
-        } else {
-          toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-        }
+        toast({ 
+          title: 'Erro de Login', 
+          description: error, 
+          variant: 'destructive' 
+        });
       } else {
-        toast({ title: 'Bem-vindo!', description: 'Login realizado com sucesso' });
+        toast({ title: 'Bem-vindo!', description: 'Conectado à IQ Option com sucesso' });
         navigate('/admin');
       }
     } catch (err) {
       toast({ title: 'Erro', description: 'Ocorreu um erro inesperado', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const getStatusMessage = () => {
+    switch (connectionStatus) {
+      case 'connecting':
+        return 'Conectando à IQ Option...';
+      case 'error':
+        return 'Erro na conexão';
+      default:
+        return null;
     }
   };
 
@@ -78,7 +89,7 @@ const AdminLogin = () => {
               Painel Administrativo
             </CardTitle>
             <CardDescription>
-              Entre com suas credenciais para acessar as configurações
+              Entre com suas credenciais da IQ Option
             </CardDescription>
           </CardHeader>
 
@@ -88,7 +99,7 @@ const AdminLogin = () => {
               <div className="space-y-2">
                 <Label htmlFor="email" className="flex items-center gap-2">
                   <Mail className="w-4 h-4" />
-                  Email
+                  Email IQ Option
                 </Label>
                 <Input
                   id="email"
@@ -106,7 +117,7 @@ const AdminLogin = () => {
               <div className="space-y-2">
                 <Label htmlFor="password" className="flex items-center gap-2">
                   <Lock className="w-4 h-4" />
-                  Senha
+                  Senha IQ Option
                 </Label>
                 <div className="relative">
                   <Input
@@ -131,14 +142,31 @@ const AdminLogin = () => {
                 </div>
               </div>
 
+              {/* Status Message */}
+              {getStatusMessage() && (
+                <p className="text-sm text-muted-foreground text-center flex items-center justify-center gap-2">
+                  {connectionStatus === 'connecting' && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {getStatusMessage()}
+                </p>
+              )}
+
               {/* Submit Button */}
               <Button
                 type="submit"
                 className="w-full gap-2"
                 disabled={isSubmitting || isLoading}
               >
-                <LogIn className="w-4 h-4" />
-                {isSubmitting ? 'Entrando...' : 'Entrar'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Conectando...
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    Entrar com IQ Option
+                  </>
+                )}
               </Button>
             </form>
           </CardContent>
@@ -146,7 +174,7 @@ const AdminLogin = () => {
 
         {/* Security Notice */}
         <p className="text-xs text-muted-foreground text-center mt-4">
-          🔒 Conexão segura via Supabase Auth
+          🔒 Conexão direta e segura com a IQ Option
         </p>
       </div>
     </div>

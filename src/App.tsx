@@ -3,8 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { IQOptionAuthProvider } from "@/contexts/IQOptionAuthContext";
+import { IQOptionProtectedRoute } from "@/components/IQOptionProtectedRoute";
 import Index from "./pages/Index";
 import Admin from "./pages/Admin";
 import AdminLogin from "./pages/AdminLogin";
@@ -20,7 +20,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AuthProvider>
+        <IQOptionAuthProvider>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/admin/login" element={<AdminLogin />} />
@@ -28,23 +28,23 @@ const App = () => (
             <Route 
               path="/admin" 
               element={
-                <ProtectedRoute>
+                <IQOptionProtectedRoute requireAdmin>
                   <Admin />
-                </ProtectedRoute>
+                </IQOptionProtectedRoute>
               } 
             />
             <Route 
               path="/client" 
               element={
-                <ProtectedRoute redirectTo="/client/login">
+                <IQOptionProtectedRoute redirectTo="/client/login">
                   <ClientDashboard />
-                </ProtectedRoute>
+                </IQOptionProtectedRoute>
               } 
             />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </AuthProvider>
+        </IQOptionAuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

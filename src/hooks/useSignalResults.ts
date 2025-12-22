@@ -176,7 +176,7 @@ export function useSignalResults() {
           // Map IQ Option result names to our format
           const mapResult = (iqResult: string): SignalResult => {
             if (iqResult === 'win') return 'win';
-            if (iqResult === 'loose' || iqResult === 'loss') return 'loss';
+            if (iqResult === 'loose' || iqResult === 'loss' || iqResult === 'expired') return 'loss';
             if (iqResult === 'equal' || iqResult === 'tie') return 'tie';
             return 'pending';
           };
@@ -279,7 +279,7 @@ export function useSignalResults() {
           // Map IQ Option result names to our format
           const mapResult = (iqResult: string): SignalResult => {
             if (iqResult === 'win') return 'win';
-            if (iqResult === 'loose' || iqResult === 'loss') return 'loss';
+            if (iqResult === 'loose' || iqResult === 'loss' || iqResult === 'expired') return 'loss';
             if (iqResult === 'equal' || iqResult === 'tie') return 'tie';
             return 'pending';
           };

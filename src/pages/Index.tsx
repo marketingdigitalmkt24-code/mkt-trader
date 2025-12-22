@@ -9,6 +9,7 @@ import { BankManagementCard } from '@/components/BankManagementCard';
 import { SafetyFiltersCard } from '@/components/SafetyFiltersCard';
 import { MarketStatusCard } from '@/components/MarketStatusCard';
 import { SignalHistorySection } from '@/components/SignalHistorySection';
+import { AIStatusIndicator } from '@/components/AIStatusIndicator';
 import { mockAssetPerformance, safetyFilters } from '@/data/mockData';
 import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
@@ -49,6 +50,8 @@ const Index = () => {
     updateConfig: updateAutoTradingConfig,
     checkAndAutoTrade,
     isPlacingTrade,
+    isAnalyzingAI,
+    activeTradesCount,
     lastTradeResult,
     resetDailyTrades,
   } = useAutoTrading();
@@ -109,6 +112,19 @@ const Index = () => {
             </div>
           </div>
         )}
+
+        {/* AI Status Indicator */}
+        <div className="mb-4">
+          <AIStatusIndicator
+            isAutoTradingEnabled={autoTradingConfig.enabled}
+            isAIEnabled={autoTradingConfig.useAIAnalysis}
+            isAnalyzing={isAnalyzingAI}
+            isPlacingTrade={isPlacingTrade}
+            activeTradesCount={activeTradesCount}
+            todayTrades={autoTradingConfig.todayTrades}
+            maxDailyTrades={autoTradingConfig.maxDailyTrades}
+          />
+        </div>
 
         <QuickStats signals={filteredSignals} />
         

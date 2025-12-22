@@ -13,6 +13,28 @@ import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 
+// Format asset name to be more readable (remove "front." prefix and format)
+const formatAssetName = (asset: string): string => {
+  // Remove "front." prefix if present
+  let name = asset.replace(/^front\./i, '');
+  
+  // Remove "-OTC" suffix temporarily for formatting
+  const isOTC = name.includes('-OTC') || name.includes('OTC');
+  name = name.replace(/-OTC$/i, '').replace(/OTC$/i, '');
+  
+  // Add slash for currency pairs (e.g., EURUSD -> EUR/USD)
+  if (name.length === 6 && /^[A-Z]+$/.test(name)) {
+    name = `${name.slice(0, 3)}/${name.slice(3)}`;
+  }
+  
+  // Re-add OTC indicator if it was present
+  if (isOTC) {
+    name = `${name} OTC`;
+  }
+  
+  return name;
+};
+
 interface SignalResultCardProps {
   signal: TradingSignal;
   onRegisterResult?: (signalId: string, result: SignalResult) => void;
@@ -80,6 +102,8 @@ export function SignalResultCard({
     });
   };
 
+  const displayAssetName = formatAssetName(signal.asset);
+
   return (
     <div className={cn(
       'glass-card p-4 transition-all duration-300',
@@ -103,7 +127,7 @@ export function SignalResultCard({
           
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-medium">{signal.asset}</span>
+              <span className="font-medium">{displayAssetName}</span>
               <div className={cn(
                 'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold',
                 isCall ? 'bg-call/20 text-call' : 'bg-put/20 text-put'

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { TradingSignal, SignalResult, TradingStats, SignalHistory } from '@/types/trading';
+import { iqOptionClient } from '@/services/IQOptionClient';
 
 const STORAGE_KEY = 'signal_history';
 const STATS_KEY = 'trading_stats';
@@ -358,22 +359,17 @@ export function useSignalResults() {
   }, [recalculateStats]);
 
   // Fetch results from IQ Option periodically
+  // NOTE: Server-side checking via backend function times out because IQ Option blocks datacenter IPs.
+  // We intentionally skip calling it to prevent repeated 401/timeout errors.
   const fetchIQOptionResults = useCallback(async () => {
-    try {
-      console.log('🔄 Checking IQ Option for results...');
-      const { data, error } = await supabase.functions.invoke('iqoption-check-results');
-      
-      if (error) {
-        console.error('Error fetching IQ Option results:', error);
-        return { success: false, error: error.message };
-      }
-      
-      console.log('📊 IQ Option results:', data);
-      return data;
-    } catch (err) {
-      console.error('Failed to fetch IQ Option results:', err);
-      return { success: false, error: String(err) };
+    if (!iqOptionClient.isConnected()) {
+      // No active browser connection -> nothing we can fetch safely.
+      return { success: false, error: 'IQ Option não conectado no navegador' };
     }
+
+    // Results should be captured client-side (WebSocket) and persisted to the database.
+    // (Not implemented yet) For now, we avoid the failing backend check.
+    return { success: false, error: 'Checagem via servidor desativada (timeout)' };
   }, []);
 
   // Poll for results every 60 seconds when there are pending operations

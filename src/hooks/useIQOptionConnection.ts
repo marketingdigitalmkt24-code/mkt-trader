@@ -37,15 +37,13 @@ export function useIQOptionConnection() {
 
   // Fetch daily stats from database
   const fetchDailyStats = useCallback(async () => {
-    if (!user) return;
-
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const { data: results, error } = await supabase
         .from('operation_results')
-        .select('*')
+        .select('result, profit, entry_price')
         .gte('created_at', today.toISOString())
         .order('created_at', { ascending: true });
 
@@ -54,6 +52,7 @@ export function useIQOptionConnection() {
       let profit = 0;
       let wins = 0;
       let losses = 0;
+      let ties = 0;
       let consecutiveLosses = 0;
       let currentStreak = 0;
 
@@ -61,24 +60,35 @@ export function useIQOptionConnection() {
         const resultType = result.result?.toLowerCase();
         if (resultType === 'win') {
           wins++;
+          // profit já vem como valor positivo do lucro
           profit += result.profit || 0;
           currentStreak = 0;
         } else if (resultType === 'loss' || resultType === 'loose') {
           losses++;
-          // Loss = negative profit or entry price lost
-          profit += result.profit || -(result.entry_price || 0);
+          // loss = perde o valor da entrada
+          profit -= result.entry_price || 0;
           currentStreak++;
           consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
         } else if (resultType === 'tie' || resultType === 'equal') {
-          // Empate - não conta como win nem loss
+          ties++;
+          // Empate - não ganha nem perde
           currentStreak = 0;
         }
         // 'pending' não afeta as estatísticas
       }
 
+      console.log('Daily stats calculated:', { 
+        todayTrades: (results || []).filter(r => r.result !== 'pending').length,
+        wins, 
+        losses, 
+        ties,
+        profit,
+        consecutiveLosses 
+      });
+
       setDailyStats({
         dailyProfit: profit,
-        todayTrades: (results || []).length,
+        todayTrades: (results || []).filter(r => r.result?.toLowerCase() !== 'pending').length,
         wins,
         losses,
         consecutiveLosses,
@@ -86,7 +96,7 @@ export function useIQOptionConnection() {
     } catch (error) {
       console.error('Error fetching daily stats:', error);
     }
-  }, [user]);
+  }, []);
 
   // Connect to IQ Option
   const connect = useCallback(async () => {
@@ -233,11 +243,32 @@ export function useIQOptionConnection() {
     }
   }, [user, connect]);
 
-  // Fetch daily stats periodically
+  // Fetch daily stats periodically and listen to realtime updates
   useEffect(() => {
     fetchDailyStats();
     const interval = setInterval(fetchDailyStats, 30000); // Every 30 seconds
-    return () => clearInterval(interval);
+
+    // Subscribe to realtime updates for operation_results
+    const channel = supabase
+      .channel('operation-results-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'operation_results'
+        },
+        (payload) => {
+          console.log('Operation result changed:', payload);
+          fetchDailyStats(); // Refresh stats when any result changes
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [fetchDailyStats]);
 
   return {

@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { TradingSignal, SignalResult, TradingStats, SignalHistory } from '@/types/trading';
-import { iqOptionClient } from '@/services/IQOptionClient';
 
 const STORAGE_KEY = 'signal_history';
 const STATS_KEY = 'trading_stats';
@@ -358,41 +357,101 @@ export function useSignalResults() {
     };
   }, [recalculateStats]);
 
-  // Fetch results from IQ Option periodically
-  // NOTE: Server-side checking via backend function times out because IQ Option blocks datacenter IPs.
-  // We intentionally skip calling it to prevent repeated 401/timeout errors.
-  const fetchIQOptionResults = useCallback(async () => {
-    if (!iqOptionClient.isConnected()) {
-      // No active browser connection -> nothing we can fetch safely.
-      return { success: false, error: 'IQ Option não conectado no navegador' };
-    }
-
-    // Results should be captured client-side (WebSocket) and persisted to the database.
-    // (Not implemented yet) For now, we avoid the failing backend check.
-    return { success: false, error: 'Checagem via servidor desativada (timeout)' };
-  }, []);
-
-  // Poll for results every 60 seconds when there are pending operations
-  useEffect(() => {
-    const checkForPendingResults = async () => {
-      const hasPending = history.some(h => h.result === 'pending');
-      if (hasPending) {
-        console.log('📡 Checking for pending results...');
-        await fetchIQOptionResults();
+  // Fetch latest results from database
+  const refreshResultsFromDB = useCallback(async () => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data, error } = await supabase
+        .from('operation_results')
+        .select('*')
+        .gte('created_at', today.toISOString())
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error refreshing results:', error);
+        return;
       }
-    };
+      
+      if (data && data.length > 0) {
+        console.log(`🔄 Refreshed ${data.length} results from database`);
+        
+        // Map IQ Option result names to our format
+        const mapResult = (iqResult: string): SignalResult => {
+          if (iqResult === 'win') return 'win';
+          if (iqResult === 'loose' || iqResult === 'loss' || iqResult === 'expired') return 'loss';
+          if (iqResult === 'equal' || iqResult === 'tie') return 'tie';
+          return 'pending';
+        };
+        
+        const dbHistory: SignalHistory[] = data.map(result => {
+          const mappedResult = mapResult(result.result);
+          return {
+            id: result.id,
+            signal: {
+              id: result.signal_id,
+              asset: result.asset,
+              assetIcon: '📊',
+              type: result.direction as 'CALL' | 'PUT',
+              price: result.entry_price || 0,
+              timestamp: new Date(result.created_at),
+              timeframe: 'M1',
+              expiration: '1 min',
+              strength: 3,
+              status: 'high_probability',
+              isHot: false,
+              marketType: 'otc',
+              indicators: {
+                rsi: { value: 50, signal: 'neutral' },
+                macd: { value: 0, signal: 0, histogram: 0, trend: 'neutral' },
+                bollinger: { upper: 0, middle: 0, lower: 0, position: 'middle' },
+                stochastic: { k: 50, d: 50, signal: 'neutral' },
+                movingAverages: { ema9: 0, ema21: 0, sma50: 0, trend: 'neutral' },
+                atr: { value: 0, volatility: 'medium' },
+                supportResistance: { nearestSupport: 0, nearestResistance: 0, pricePosition: 'middle' },
+                confluenceCount: 0,
+                confluenceScore: 0,
+              },
+              confirmations: ['IQ Option'],
+              result: mappedResult,
+              resultPrice: result.exit_price || 0,
+              profit: result.profit,
+              resultTime: new Date(result.created_at),
+            },
+            result: mappedResult,
+            entryPrice: result.entry_price || 0,
+            exitPrice: result.exit_price || 0,
+            profit: result.profit,
+            timestamp: new Date(result.created_at),
+            resultTimestamp: mappedResult !== 'pending' ? new Date(result.created_at) : undefined,
+          };
+        });
+        
+        setHistory(dbHistory);
+        const newStats = recalculateStats(dbHistory);
+        setStats(newStats);
+      }
+    } catch (err) {
+      console.error('Failed to refresh results:', err);
+    }
+  }, [recalculateStats]);
 
-    // Initial check after 30 seconds
-    const initialTimeout = setTimeout(checkForPendingResults, 30000);
+  // Poll for results every 10 seconds to keep history updated
+  useEffect(() => {
+    // Initial fetch
+    refreshResultsFromDB();
     
-    // Then check every 60 seconds
-    const interval = setInterval(checkForPendingResults, 60000);
+    // Poll every 10 seconds
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refreshing results...');
+      refreshResultsFromDB();
+    }, 10000);
 
     return () => {
-      clearTimeout(initialTimeout);
       clearInterval(interval);
     };
-  }, [history, fetchIQOptionResults]);
+  }, [refreshResultsFromDB]);
 
   // Adicionar sinal ao histórico e simular resultado automaticamente
   const addSignalWithSimulation = useCallback((signal: TradingSignal) => {
@@ -518,6 +577,6 @@ export function useSignalResults() {
     registerManualResult,
     clearHistory,
     getTodayHistory,
-    fetchIQOptionResults,
+    refreshResults: refreshResultsFromDB,
   };
 }

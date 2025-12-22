@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
-import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X, Percent, TrendingUp } from 'lucide-react';
+import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X, TrendingUp, Brain, Sparkles } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
@@ -18,19 +18,23 @@ interface AutoTradingConfig {
   // Profit target settings
   profitTargetType: 'none' | 'percentage' | 'value';
   profitTargetValue: number;
+  // AI analysis settings
+  useAIAnalysis: boolean;
+  aiMinConfidence: number;
 }
 
 interface AutoTradingCardProps {
   config: AutoTradingConfig;
   updateConfig: (updates: Partial<AutoTradingConfig>) => void;
   isPlacingTrade: boolean;
+  isAnalyzingAI?: boolean;
   lastTradeResult: { success: boolean; message: string } | null;
   defaultOpen?: boolean;
   currentBalance?: number;
   dailyProfit?: number;
 }
 
-export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTradeResult, defaultOpen = false, currentBalance = 0, dailyProfit = 0 }: AutoTradingCardProps) {
+export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyzingAI = false, lastTradeResult, defaultOpen = false, currentBalance = 0, dailyProfit = 0 }: AutoTradingCardProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [localConfig, setLocalConfig] = useState(config);
   const [hasChanges, setHasChanges] = useState(false);
@@ -93,6 +97,7 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
         <Bot className="w-4 h-4" />
         Auto Trading
         {config.enabled && <Badge variant="secondary" className="ml-1 text-xs">ON</Badge>}
+        {config.useAIAnalysis && config.enabled && <Badge variant="outline" className="ml-1 text-xs bg-purple-500/20"><Brain className="w-3 h-3 mr-1" />IA</Badge>}
         {profitTargetReached && <Badge variant="destructive" className="ml-1 text-xs">META</Badge>}
       </Button>
     );
@@ -108,6 +113,12 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
             {isPlacingTrade && (
               <Badge variant="outline" className="animate-pulse">
                 Executando...
+              </Badge>
+            )}
+            {isAnalyzingAI && (
+              <Badge variant="outline" className="animate-pulse bg-purple-500/20">
+                <Brain className="w-3 h-3 mr-1" />
+                IA Analisando...
               </Badge>
             )}
           </div>
@@ -196,6 +207,44 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
               ({config.todayTrades} de {localConfig.maxDailyTrades} hoje)
             </span>
           </div>
+        </div>
+
+        {/* AI Analysis */}
+        <div className="space-y-3 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-purple-500" />
+              <span className="font-medium">Análise por IA</span>
+              <Badge variant="outline" className="text-xs bg-purple-500/20">
+                <Sparkles className="w-3 h-3 mr-1" />
+                Novo
+              </Badge>
+            </Label>
+            <Switch
+              checked={localConfig.useAIAnalysis ?? true}
+              onCheckedChange={(useAIAnalysis) => handleLocalChange({ useAIAnalysis })}
+            />
+          </div>
+          
+          {(localConfig.useAIAnalysis ?? true) && (
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">
+                Confiança mínima da IA: {localConfig.aiMinConfidence ?? 70}%
+              </Label>
+              <Slider
+                value={[localConfig.aiMinConfidence ?? 70]}
+                onValueChange={([value]) => handleLocalChange({ aiMinConfidence: value })}
+                min={50}
+                max={95}
+                step={5}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                A IA analisa padrões técnicos e histórico para prever os melhores sinais.
+                Só executa trades quando a IA tem alta confiança de lucro.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Profit Target */}

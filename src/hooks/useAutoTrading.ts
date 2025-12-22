@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { TradingSignal } from '@/types/trading';
 import { useToast } from '@/hooks/use-toast';
+import { useAISignalAnalyzer } from '@/hooks/useAISignalAnalyzer';
 
 const STORAGE_KEY = 'autotrading_config';
 const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
@@ -15,6 +16,9 @@ interface AutoTradingConfig {
   // Profit target settings
   profitTargetType: 'none' | 'percentage' | 'value';
   profitTargetValue: number;
+  // AI analysis settings
+  useAIAnalysis: boolean;
+  aiMinConfidence: number;
 }
 
 interface TradeResult {
@@ -26,6 +30,7 @@ interface TradeResult {
 
 export function useAutoTrading() {
   const { toast } = useToast();
+  const { analyzeSignals, filterByAIRecommendation, isAnalyzing } = useAISignalAnalyzer();
   const processedSignals = useRef<Set<string>>(new Set());
   const tradingInProgress = useRef<Set<string>>(new Set());
   
@@ -46,6 +51,8 @@ export function useAutoTrading() {
           // Ensure new fields exist
           profitTargetType: parsed.profitTargetType || 'none',
           profitTargetValue: parsed.profitTargetValue || 0,
+          useAIAnalysis: parsed.useAIAnalysis ?? true,
+          aiMinConfidence: parsed.aiMinConfidence || 70,
         };
       }
     } catch (e) {
@@ -59,6 +66,8 @@ export function useAutoTrading() {
       todayTrades: 0,
       profitTargetType: 'none',
       profitTargetValue: 0,
+      useAIAnalysis: true,
+      aiMinConfidence: 70,
     };
   });
 
@@ -220,7 +229,7 @@ export function useAutoTrading() {
     return { success: false, error: 'No result' };
   }, [placeTradesSimultaneously]);
 
-  // Check and auto trade with profit target support
+  // Check and auto trade with profit target support and AI analysis
   const checkAndAutoTrade = useCallback(async (signals: TradingSignal[], currentDailyProfit?: number, currentBalance?: number) => {
     if (!config.enabled) return;
     
@@ -255,7 +264,7 @@ export function useAutoTrading() {
     }
 
     // Find high confluence signals that haven't been traded yet and aren't being traded
-    const eligibleSignals = signals.filter(signal => 
+    let eligibleSignals = signals.filter(signal => 
       signal.indicators.confluenceScore >= config.minConfluence &&
       !processedSignals.current.has(signal.id) &&
       !tradingInProgress.current.has(signal.id)
@@ -263,17 +272,61 @@ export function useAutoTrading() {
 
     if (eligibleSignals.length === 0) return;
 
+    // If AI analysis is enabled, filter signals through AI
+    if (config.useAIAnalysis && eligibleSignals.length > 0) {
+      console.log('🤖 Running AI analysis on eligible signals...');
+      
+      try {
+        const aiResult = await analyzeSignals(eligibleSignals);
+        
+        if (aiResult.analyzedSignals.length > 0) {
+          // Filter to only signals AI recommends to EXECUTE with minimum confidence
+          const aiApprovedSignals = filterByAIRecommendation(
+            eligibleSignals, 
+            aiResult, 
+            config.aiMinConfidence
+          );
+          
+          if (aiApprovedSignals.length === 0) {
+            console.log('🤖 AI rejected all signals - waiting for better opportunity');
+            
+            // Log rejected signals for debugging
+            aiResult.analyzedSignals.forEach(analysis => {
+              console.log(`   ❌ ${analysis.asset}: ${analysis.recommendation} (${analysis.confidence}%) - ${analysis.reason}`);
+            });
+            return;
+          }
+          
+          // Log AI decisions
+          aiResult.analyzedSignals.forEach(analysis => {
+            const icon = analysis.recommendation === 'EXECUTE' ? '✅' : '❌';
+            console.log(`   ${icon} ${analysis.asset}: ${analysis.recommendation} (${analysis.confidence}%) - ${analysis.reason}`);
+          });
+          
+          eligibleSignals = aiApprovedSignals;
+          
+          toast({
+            title: '🤖 IA aprovou sinais',
+            description: `${eligibleSignals.length} sinal(is) de alta probabilidade`,
+          });
+        }
+      } catch (err) {
+        console.error('AI analysis failed, falling back to confluence only:', err);
+        // Continue with original eligible signals if AI fails
+      }
+    }
+
     // Take up to remaining daily limit
     const signalsToTrade = eligibleSignals.slice(0, remainingTrades);
     
-    console.log(`🤖 Auto-trading ${signalsToTrade.length} signals detected:`);
+    console.log(`🚀 Auto-trading ${signalsToTrade.length} AI-approved signals:`);
     signalsToTrade.forEach(s => {
       console.log(`   - ${s.asset} ${s.type} (${s.indicators.confluenceScore}%)`);
     });
     
     // Execute all trades simultaneously
     await placeTradesSimultaneously(signalsToTrade);
-  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.profitTargetType, config.profitTargetValue, placeTradesSimultaneously, toast]);
+  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.profitTargetType, config.profitTargetValue, config.useAIAnalysis, config.aiMinConfidence, placeTradesSimultaneously, analyzeSignals, filterByAIRecommendation, toast]);
 
   const resetDailyTrades = useCallback(() => {
     setConfig(prev => ({ ...prev, todayTrades: 0 }));
@@ -285,6 +338,7 @@ export function useAutoTrading() {
     config,
     updateConfig,
     isPlacingTrade,
+    isAnalyzingAI: isAnalyzing,
     lastTradeResult,
     activeTradesCount,
     placeTrade,

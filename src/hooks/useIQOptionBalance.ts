@@ -133,16 +133,40 @@ export function useIQOptionBalance() {
     }
   }, []);
 
-  // Fetch on mount, when user changes, and every 10 seconds for more real-time data
+  // Fetch on mount, when user changes, and poll with backoff to avoid UI freezing on network blocks
   useEffect(() => {
-    if (user) {
-      fetchBalance();
-      
-      const interval = setInterval(fetchBalance, 10000); // Update every 10 seconds
-      
-      return () => clearInterval(interval);
-    }
-  }, [fetchBalance, user]);
+    if (!user) return;
+
+    let intervalId: number | undefined;
+    let cancelled = false;
+    let failureCount = 0;
+
+    const run = async () => {
+      if (cancelled) return;
+
+      await fetchBalance();
+
+      // If last fetch failed, back off to avoid repeated 10-15s timeouts
+      if (connectionStatus !== 'connected') {
+        failureCount = Math.min(failureCount + 1, 5);
+      } else {
+        failureCount = 0;
+      }
+
+      const nextMs = connectionStatus === 'connected'
+        ? 60000 // 1 min when healthy
+        : 60000 * (failureCount + 1); // 1-6 min backoff when failing
+
+      intervalId = window.setTimeout(run, nextMs);
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+      if (intervalId) window.clearTimeout(intervalId);
+    };
+  }, [fetchBalance, user, connectionStatus]);
 
   return {
     ...data,

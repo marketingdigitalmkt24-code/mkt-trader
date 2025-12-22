@@ -48,6 +48,7 @@ export type Database = {
           last_connected_at: string | null
           password: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           account_type?: string
@@ -58,6 +59,7 @@ export type Database = {
           last_connected_at?: string | null
           password: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           account_type?: string
@@ -68,6 +70,7 @@ export type Database = {
           last_connected_at?: string | null
           password?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }

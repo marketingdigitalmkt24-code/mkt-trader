@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { SignalHistory, SignalResult } from '@/types/trading';
+import { SignalHistory, SignalResult, TradingStats } from '@/types/trading';
 import { SignalResultCard } from './SignalResultCard';
 import { TradingStatsCard } from './TradingStatsCard';
 import { History, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './ui/button';
-import { useSignalResults } from '@/hooks/useSignalResults';
 
 interface SignalHistorySectionProps {
   history: SignalHistory[];
@@ -14,24 +13,66 @@ interface SignalHistorySectionProps {
 
 const ITEMS_PER_PAGE = 10;
 
+function calculateStats(historyData: SignalHistory[]): TradingStats {
+  const completed = historyData.filter((h) => h.result !== 'pending');
+  const wins = completed.filter((h) => h.result === 'win').length;
+  const losses = completed.filter((h) => h.result === 'loss').length;
+  const ties = completed.filter((h) => h.result === 'tie').length;
+  const pending = historyData.filter((h) => h.result === 'pending').length;
+
+  const winRate = wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0;
+  const totalProfit = historyData.reduce((sum, h) => sum + h.profit, 0);
+
+  // streak
+  let streak = 0;
+  let streakType: 'win' | 'loss' | 'none' = 'none';
+
+  for (let i = completed.length - 1; i >= 0; i--) {
+    const result = completed[i].result;
+    if (result === 'tie') continue;
+
+    if (streakType === 'none') {
+      streakType = result as 'win' | 'loss';
+      streak = 1;
+    } else if (result === streakType) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
+  return {
+    totalSignals: historyData.length,
+    wins,
+    losses,
+    ties,
+    pending,
+    winRate: Math.round(winRate * 10) / 10,
+    totalProfit: Math.round(totalProfit * 100) / 100,
+    streak,
+    streakType,
+  };
+}
+
 export function SignalHistorySection({ 
   history, 
   onRegisterResult,
   onClearHistory 
 }: SignalHistorySectionProps) {
-  const { stats, todayStats } = useSignalResults();
   const [currentPage, setCurrentPage] = useState(1);
   
-  const todayHistory = history.filter(h => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return new Date(h.timestamp) >= today;
+  const todayHistory = history.filter((h) => {
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
+    return new Date(h.timestamp).getTime() >= todayUtc.getTime();
   });
 
   // Calculate today's wins and losses
   const todayWins = todayHistory.filter(h => h.result === 'win').length;
   const todayLosses = todayHistory.filter(h => h.result === 'loss').length;
   const todayTies = todayHistory.filter(h => h.result === 'tie').length;
+  const totalStats = calculateStats(history);
+  const computedTodayStats = calculateStats(todayHistory);
 
   const totalPages = Math.ceil(history.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -72,8 +113,8 @@ export function SignalHistorySection({
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 mb-4">
-        <TradingStatsCard stats={todayStats} title="Hoje" />
-        <TradingStatsCard stats={stats} title="Total" />
+        <TradingStatsCard stats={computedTodayStats} title="Hoje" />
+        <TradingStatsCard stats={totalStats} title="Total" />
       </div>
 
       {/* History List */}

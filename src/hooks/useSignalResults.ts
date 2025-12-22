@@ -565,18 +565,18 @@ export function useSignalResults() {
     localStorage.removeItem(STATS_KEY);
   }, []);
 
-  // Obter histórico de hoje
+  // Obter histórico de hoje (UTC para bater com o backend)
   const getTodayHistory = useCallback(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return history.filter(h => new Date(h.timestamp) >= today);
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
+    return history.filter((h) => new Date(h.timestamp).getTime() >= todayUtc.getTime());
   }, [history]);
 
-  // Stats de hoje - memoized to prevent render-time function calls
+  // Stats de hoje (UTC para bater com o backend)
   const todayStats = useMemo((): TradingStats => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayHistory = history.filter(h => new Date(h.timestamp) >= today);
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
+    const todayHistory = history.filter((h) => new Date(h.timestamp).getTime() >= todayUtc.getTime());
     return recalculateStats(todayHistory);
   }, [history, recalculateStats]);
 

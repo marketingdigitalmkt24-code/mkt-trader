@@ -178,6 +178,7 @@ export function useSignalResults() {
             if (iqResult === 'win') return 'win';
             if (iqResult === 'loose' || iqResult === 'loss') return 'loss';
             if (iqResult === 'equal' || iqResult === 'tie') return 'tie';
+            if (iqResult === 'expired') return 'loss'; // Treat expired as loss
             return 'pending';
           };
           
@@ -281,6 +282,7 @@ export function useSignalResults() {
             if (iqResult === 'win') return 'win';
             if (iqResult === 'loose' || iqResult === 'loss') return 'loss';
             if (iqResult === 'equal' || iqResult === 'tie') return 'tie';
+            if (iqResult === 'expired') return 'loss'; // Treat expired as loss
             return 'pending';
           };
           
@@ -358,6 +360,27 @@ export function useSignalResults() {
     };
   }, [recalculateStats]);
 
+  // Cleanup expired pending operations
+  const cleanupExpiredPending = useCallback(async () => {
+    try {
+      // Mark operations older than 10 minutes as expired
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      
+      const { data, error } = await supabase
+        .from('operation_results')
+        .update({ result: 'expired' })
+        .eq('result', 'pending')
+        .lt('created_at', tenMinutesAgo)
+        .select();
+      
+      if (!error && data && data.length > 0) {
+        console.log(`🧹 Marked ${data.length} expired pending operations`);
+      }
+    } catch (err) {
+      console.error('Error cleaning up expired pending:', err);
+    }
+  }, []);
+
   // Fetch results from IQ Option periodically
   // NOTE: Server-side checking via backend function times out because IQ Option blocks datacenter IPs.
   // We intentionally skip calling it to prevent repeated 401/timeout errors.
@@ -378,6 +401,8 @@ export function useSignalResults() {
       const hasPending = history.some(h => h.result === 'pending');
       if (hasPending) {
         console.log('📡 Checking for pending results...');
+        // First cleanup old pending
+        await cleanupExpiredPending();
         await fetchIQOptionResults();
       }
     };
@@ -392,7 +417,7 @@ export function useSignalResults() {
       clearTimeout(initialTimeout);
       clearInterval(interval);
     };
-  }, [history, fetchIQOptionResults]);
+  }, [history, fetchIQOptionResults, cleanupExpiredPending]);
 
   // Adicionar sinal ao histórico e simular resultado automaticamente
   const addSignalWithSimulation = useCallback((signal: TradingSignal) => {

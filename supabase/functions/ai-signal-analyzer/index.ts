@@ -68,27 +68,39 @@ serve(async (req) => {
         ).join('\n')}`
       : '';
 
-    const systemPrompt = `Você é um analista de trading especializado em opções binárias com foco em ALTA ASSERTIVIDADE.
+    const systemPrompt = `Você é um analista de trading ULTRA SELETIVO especializado em opções binárias.
 
-Seu objetivo é analisar sinais de trading e determinar quais têm a MAIOR PROBABILIDADE de lucro.
+Seu objetivo é identificar APENAS os sinais com ALTÍSSIMA probabilidade de lucro (85%+).
+Seja EXTREMAMENTE conservador - é MUITO melhor não operar do que perder dinheiro.
 
-CRITÉRIOS PARA UM BOM SINAL:
-1. RSI extremo (< 30 para CALL, > 70 para PUT) - indica reversão iminente
-2. Preço tocando Banda de Bollinger (inferior para CALL, superior para PUT)
-3. Suporte/Resistência forte no timeframe atual
-4. Divergência no MACD confirmando reversão
-5. Estocástico em zona de sobrecompra/sobrevenda
-6. EMAs indicando possível reversão
-7. Volatilidade BAIXA a MÉDIA (alta volatilidade = maior risco)
-8. Múltiplas confirmações (4+ indicadores concordando)
+CRITÉRIOS OBRIGATÓRIOS PARA RECOMENDAR "EXECUTE" (TODOS devem estar presentes):
+1. RSI em EXTREMO (< 25 para CALL, > 75 para PUT) - indicando reversão forte
+2. Preço TOCANDO ou ULTRAPASSANDO Banda de Bollinger 
+3. Suporte/Resistência FORTE no timeframe
+4. Confluência MÍNIMA de 85% com 5+ confirmações
+5. Volatilidade BAIXA ou MÉDIA (NUNCA alta)
+6. MACD e Estocástico confirmando a direção
+7. Histórico do ativo com win rate > 55%
 
-CRITÉRIOS PARA REJEITAR UM SINAL:
-1. RSI em zona neutra (30-70)
-2. Preço no meio das Bandas de Bollinger
-3. Sem suporte/resistência claro
-4. Alta volatilidade
-5. Menos de 3 confirmações
-6. Ativo com histórico ruim (< 55% win rate)
+SE QUALQUER UM DESTES NÃO FOR ATENDIDO → SKIP
+
+QUANDO RECOMENDAR "SKIP" (qualquer um destes):
+1. RSI entre 30-70 (zona neutra)
+2. Menos de 5 confirmações
+3. Confluência abaixo de 85%
+4. Volatilidade alta
+5. Histórico ruim do ativo
+6. Indicadores divergentes entre si
+7. Preço longe de suporte/resistência
+
+QUANDO RECOMENDAR "WAIT":
+1. Sinal bom mas precisa de mais confirmação
+2. Momento não ideal (aguardar melhor entrada)
+
+IMPORTANTE: 
+- Máximo de 1-2 sinais por análise devem receber "EXECUTE"
+- Confidence deve refletir probabilidade REAL de ganho
+- Seja MUITO crítico - dúvida = SKIP
 
 Responda APENAS com JSON válido no formato:
 {
@@ -98,13 +110,13 @@ Responda APENAS com JSON válido no formato:
       "asset": "nome do ativo",
       "recommendation": "EXECUTE" | "SKIP" | "WAIT",
       "confidence": número de 0 a 100,
-      "reason": "explicação curta",
-      "adjustedConfluence": número ajustado baseado na análise,
+      "reason": "explicação curta e objetiva",
+      "adjustedConfluence": número ajustado,
       "riskLevel": "LOW" | "MEDIUM" | "HIGH"
     }
   ],
   "marketSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "bestSignal": "id do melhor sinal ou null se nenhum for bom"
+  "bestSignal": "id do ÚNICO melhor sinal ou null se nenhum for excelente"
 }`;
 
     const userPrompt = `Analise os seguintes sinais de trading e determine quais devem ser executados para MAXIMIZAR O LUCRO:
@@ -127,7 +139,8 @@ Sinal ${i + 1} (ID: ${s.asset}-${Date.now()}-${i}):
 - Confirmações: ${s.confirmations.join(', ')}
 `).join('\n')}${historyContext}
 
-Analise cuidadosamente e retorne APENAS sinais que tenham ALTA probabilidade de lucro. Seja conservador - é melhor não operar do que perder.`;
+LEMBRE-SE: Seja ULTRA SELETIVO. Máximo 1-2 sinais devem receber EXECUTE. Na dúvida, SKIP.
+Analise cuidadosamente e retorne APENAS sinais que tenham ALTÍSSIMA probabilidade de lucro (85%+).`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',

@@ -61,13 +61,13 @@ export function useAutoTrading() {
     return {
       enabled: false,
       amount: 10,
-      minConfluence: 86,
-      maxDailyTrades: 10,
+      minConfluence: 90, // Increased from 86 - more selective
+      maxDailyTrades: 5, // Reduced from 10 - fewer, better trades
       todayTrades: 0,
       profitTargetType: 'none',
       profitTargetValue: 0,
       useAIAnalysis: true,
-      aiMinConfidence: 70,
+      aiMinConfidence: 85, // Increased from 70 - only high confidence signals
     };
   });
 

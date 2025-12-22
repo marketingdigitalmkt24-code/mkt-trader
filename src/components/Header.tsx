@@ -19,7 +19,7 @@ export function Header({ isConnected, lastUpdate, isLoading, isSearching }: Head
             </div>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-lg font-bold text-foreground truncate">
-                Binary Analyzer
+                Agência MKT | Day Trade
               </h1>
               <p className="text-xs text-muted-foreground hidden sm:block">
                 Análise Técnica Avançada

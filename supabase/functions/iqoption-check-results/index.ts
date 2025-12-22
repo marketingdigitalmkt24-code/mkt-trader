@@ -20,13 +20,7 @@ interface PositionResult {
   close_quote?: number;
 }
 
-// Configuration
-const MAX_RETRIES = 3;
-const LOGIN_TIMEOUT_MS = 10000; // 10 seconds timeout
-const RETRY_DELAY_MS = 2000; // 2 seconds between retries
-
-// IQ Option API endpoints
-const IQ_OPTION_AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
+// IQ Option WebSocket URL - use direct WebSocket auth instead of HTTP
 const IQ_OPTION_WS_URL = 'wss://iqoption.com/echo/websocket';
 
 // Helper function to delay
@@ -34,97 +28,121 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Fetch with timeout
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-}
-
-async function loginToIQOptionWithRetry(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
-  let lastError: string | null = null;
-  
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      console.log(`Login attempt ${attempt}/${MAX_RETRIES} with ${LOGIN_TIMEOUT_MS}ms timeout...`);
-      
-      const response = await fetchWithTimeout(
-        IQ_OPTION_AUTH_URL,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          },
-          body: new URLSearchParams({
-            identifier: email,
-            password: password,
-          }),
-        },
-        LOGIN_TIMEOUT_MS
-      );
-
-      const data = await response.json();
-      console.log('Login response status:', response.status);
-      
-      if (data.code === 'success' && data.ssid) {
-        console.log(`Login successful on attempt ${attempt}`);
-        return { ssid: data.ssid, error: null };
-      } else {
-        lastError = data.message || 'Login failed';
-        console.error(`Login failed on attempt ${attempt}:`, lastError);
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        lastError = `Timeout after ${LOGIN_TIMEOUT_MS}ms`;
-        console.error(`Login timeout on attempt ${attempt}`);
-      } else {
-        lastError = String(error);
-        console.error(`Login error on attempt ${attempt}:`, lastError);
-      }
-    }
+// Login via WebSocket directly (bypasses HTTP API that may be blocked)
+async function loginViaWebSocket(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
+  return new Promise((resolve) => {
+    console.log('Attempting WebSocket direct login...');
     
-    // Wait before retrying (except on last attempt)
-    if (attempt < MAX_RETRIES) {
-      console.log(`Waiting ${RETRY_DELAY_MS}ms before retry...`);
-      await delay(RETRY_DELAY_MS);
-    }
-  }
-  
-  console.error(`All ${MAX_RETRIES} login attempts failed`);
-  return { ssid: null, error: `Failed after ${MAX_RETRIES} attempts: ${lastError}` };
+    const ws = new WebSocket(IQ_OPTION_WS_URL);
+    let resolved = false;
+    
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        ws.close();
+        resolve({ ssid: null, error: 'WebSocket login timeout' });
+      }
+    }, 15000);
+
+    ws.onopen = () => {
+      console.log('WebSocket connected, sending credentials...');
+      // Send login via WebSocket
+      ws.send(JSON.stringify({
+        name: 'login',
+        msg: {
+          email: email,
+          password: password,
+        }
+      }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('WS Auth response:', data.name);
+        
+        if (data.name === 'login' && data.msg?.ssid) {
+          console.log('WebSocket login successful!');
+          clearTimeout(timeout);
+          resolved = true;
+          ws.close();
+          resolve({ ssid: data.msg.ssid, error: null });
+        }
+        
+        if (data.name === 'login' && data.msg?.code === 'error') {
+          console.error('Login error:', data.msg);
+          clearTimeout(timeout);
+          resolved = true;
+          ws.close();
+          resolve({ ssid: null, error: data.msg.message || 'Invalid credentials' });
+        }
+        
+        // Handle profile message as implicit auth success
+        if (data.name === 'profile' && data.msg?.user_id) {
+          console.log('Got profile, extracting session...');
+          // If we got profile, connection is authenticated
+          clearTimeout(timeout);
+          resolved = true;
+          // Return a placeholder - we'll use the open WS connection
+          resolve({ ssid: 'ws_authenticated', error: null });
+        }
+      } catch (e) {
+        console.error('Parse error:', e);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        resolve({ ssid: null, error: 'WebSocket connection failed' });
+      }
+    };
+
+    ws.onclose = () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        resolve({ ssid: null, error: 'WebSocket closed before auth' });
+      }
+    };
+  });
 }
 
-async function getClosedPositions(ssid: string, accountType: string): Promise<PositionResult[]> {
+// Combined function: login and get positions in one WebSocket connection
+async function loginAndGetPositions(
+  email: string, 
+  password: string, 
+  accountType: string
+): Promise<{ success: boolean; positions: PositionResult[]; error?: string }> {
   return new Promise((resolve) => {
     const positions: PositionResult[] = [];
     let balanceId = 0;
+    let authenticated = false;
     
-    console.log('Connecting to IQ Option WebSocket for results...');
+    console.log('Connecting to IQ Option WebSocket...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
     
     const timeout = setTimeout(() => {
-      console.log('WebSocket timeout, returning positions found:', positions.length);
+      console.log('Connection timeout');
       ws.close();
-      resolve(positions);
-    }, 15000); // 15 seconds WebSocket timeout
+      if (!authenticated) {
+        resolve({ success: false, positions: [], error: 'Connection timeout' });
+      } else {
+        resolve({ success: true, positions });
+      }
+    }, 30000);
 
     ws.onopen = () => {
       console.log('WebSocket connected, authenticating...');
+      // Try login via WebSocket message
       ws.send(JSON.stringify({
-        name: 'ssid',
-        msg: ssid,
+        name: 'login',
+        msg: {
+          email: email,
+          password: password,
+        }
       }));
     };
 
@@ -132,15 +150,33 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
       try {
         const data = JSON.parse(event.data);
         
-        // Skip timeSync messages
         if (data.name !== 'timeSync') {
           console.log('Received:', data.name);
         }
         
+        // Handle successful login response
+        if (data.name === 'login') {
+          if (data.msg?.ssid) {
+            console.log('Login successful via WebSocket!');
+            authenticated = true;
+            // Authenticate with SSID
+            ws.send(JSON.stringify({
+              name: 'ssid',
+              msg: data.msg.ssid,
+            }));
+          } else if (data.msg?.code === 'error') {
+            console.error('Login failed:', data.msg);
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ success: false, positions: [], error: data.msg.message || 'Invalid credentials' });
+            return;
+          }
+        }
+        
         if (data.name === 'profile') {
           console.log('Authenticated! Getting balance and history...');
+          authenticated = true;
           
-          // Get correct balance ID
           const balances = data.msg.balances || [];
           for (const balance of balances) {
             if (accountType === 'PRACTICE' && balance.type === 4) {
@@ -158,7 +194,7 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
           
           console.log('Using balance ID:', balanceId);
           
-          // Request closed binary options history - try multiple formats
+          // Request history
           ws.send(JSON.stringify({
             name: 'sendMessage',
             msg: {
@@ -172,30 +208,13 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
               },
             },
           }));
-          
-          // Also try alternative history request format
-          ws.send(JSON.stringify({
-            name: 'sendMessage',
-            msg: {
-              name: 'get-history-positions',
-              version: '1.0',
-              body: {
-                user_balance_id: balanceId,
-                instrument_types: ['turbo'],
-                limit: 100,
-                offset: 0,
-              },
-            },
-          }));
         }
         
-        // Handle history positions response - check multiple event names
+        // Handle history positions
         if (data.name === 'portfolio.get-history-positions' || 
-            data.name === 'history-positions' || 
-            (data.name === 'portfolio.order-changed' && data.msg)) {
-          console.log('Received history positions, processing...');
+            data.name === 'history-positions') {
+          console.log('Received history positions');
           
-          // Handle different response structures
           let positionsList = [];
           if (data.msg?.positions) {
             positionsList = data.msg.positions;
@@ -205,29 +224,15 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
             positionsList = data.msg.history;
           }
           
-          console.log('Found', positionsList.length, 'positions in response');
+          console.log('Found', positionsList.length, 'positions');
 
-          if (positionsList.length > 0) {
-            try {
-              console.log('Sample position keys:', Object.keys(positionsList[0] || {}));
-              console.log(
-                'Sample position snippet:',
-                JSON.stringify(positionsList[0]).slice(0, 800)
-              );
-            } catch (_e) {
-              // ignore
-            }
-          }
-          
           for (const pos of positionsList) {
-            // Determine win/loss status based on different API response formats
             let win = 'pending';
             const profit = pos.close_profit ?? pos.pnl ?? pos.profit ?? pos.win_amount ?? 0;
             
-            // Check various fields for win status
             if (pos.status === 'closed' || pos.close_time || pos.close_at) {
               if (typeof pos.win === 'string') {
-                win = pos.win; // 'win', 'loose', 'equal'
+                win = pos.win;
               } else if (profit > 0) {
                 win = 'win';
               } else if (profit < 0) {
@@ -239,7 +244,6 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
               win = pos.result;
             }
             
-            // Get the best IDs to match with our stored iq_option_id (usually numeric)
             const candidateIds = [
               pos.option_id,
               pos.position_id,
@@ -252,7 +256,6 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
             const matchIds = Array.from(new Set(candidateIds)).filter(Boolean);
 
             if (matchIds.length > 0) {
-              console.log(`Position ${matchIds[0]} (ids=${matchIds.join(',')}): win=${win}, profit=${profit}`);
               positions.push({
                 matchIds,
                 rawJson: JSON.stringify(pos),
@@ -263,44 +266,14 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
             }
           }
           
-          console.log('Processed', positions.length, 'closed positions total');
+          console.log('Processed', positions.length, 'positions');
           
-          // Close after receiving data
+          // Done - close after a short delay
           setTimeout(() => {
             clearTimeout(timeout);
             ws.close();
-            resolve(positions);
+            resolve({ success: true, positions });
           }, 1000);
-        }
-        
-        // Handle option-closed event (real-time)
-        if (data.name === 'option-closed' || data.name === 'binary-options.option-closed') {
-          console.log('Option closed event received');
-          const msg = data.msg;
-          if (msg && (msg.id || msg.option_id || msg.position_id || msg.external_id)) {
-            let win = 'pending';
-            if (msg.profit !== undefined) {
-              if (msg.profit > 0) win = 'win';
-              else if (msg.profit < 0) win = 'loose';
-              else win = 'equal';
-            } else if (msg.win) {
-              win = msg.win;
-            }
-
-            const candidateIds = [msg.id, msg.option_id, msg.position_id, msg.external_id]
-              .filter((v) => v !== undefined && v !== null)
-              .map((v) => String(v));
-
-            const matchIds = Array.from(new Set(candidateIds)).filter(Boolean);
-
-            positions.push({
-              matchIds,
-              rawJson: JSON.stringify(msg),
-              win,
-              profit: msg.profit || 0,
-              close_quote: msg.close_quote,
-            });
-          }
         }
         
       } catch (e) {
@@ -311,11 +284,15 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
       clearTimeout(timeout);
-      resolve(positions);
+      if (!authenticated) {
+        resolve({ success: false, positions: [], error: 'Connection error' });
+      } else {
+        resolve({ success: true, positions });
+      }
     };
 
     ws.onclose = () => {
-      console.log('WebSocket closed, found', positions.length, 'positions');
+      console.log('WebSocket closed');
       clearTimeout(timeout);
     };
   });
@@ -331,7 +308,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get IQ Option credentials from database
+    // Get IQ Option credentials
     const { data: configData, error: configError } = await supabase
       .from('iqoption_config')
       .select('email, password, account_type')
@@ -352,16 +329,19 @@ serve(async (req) => {
 
     const credentials: IQOptionCredentials = configData;
     
-    // Login to IQ Option with retry
-    console.log('Starting login with retry mechanism...');
-    const { ssid, error: loginError } = await loginToIQOptionWithRetry(credentials.email, credentials.password);
+    // Login and get positions in one connection
+    console.log('Starting combined login and fetch...');
+    const result = await loginAndGetPositions(
+      credentials.email, 
+      credentials.password, 
+      credentials.account_type
+    );
     
-    if (!ssid) {
+    if (!result.success) {
       return new Response(
         JSON.stringify({ 
-          error: loginError || 'Failed to login to IQ Option',
-          success: false,
-          retriesAttempted: MAX_RETRIES
+          error: result.error || 'Failed to connect',
+          success: false
         }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -373,7 +353,7 @@ serve(async (req) => {
       .update({ last_connected_at: new Date().toISOString() })
       .eq('email', credentials.email);
 
-    // Get pending operations from our database
+    // Get pending operations
     const { data: pendingOperations, error: pendingError } = await supabase
       .from('operation_results')
       .select('id, iq_option_id, signal_id')
@@ -383,14 +363,12 @@ serve(async (req) => {
       console.error('Error fetching pending operations:', pendingError);
     }
 
-    console.log('Found', pendingOperations?.length || 0, 'pending operations to check');
-
-    // Get closed positions from IQ Option
-    const closedPositions = await getClosedPositions(ssid, credentials.account_type);
-    console.log(`Found ${closedPositions.length} closed positions from IQ Option`);
+    console.log('Found', pendingOperations?.length || 0, 'pending operations');
 
     // Update pending operations with results
     let updatedCount = 0;
+    const closedPositions = result.positions;
+    
     if (pendingOperations && closedPositions.length > 0) {
       for (const pending of pendingOperations) {
         const iqId = pending.iq_option_id ? String(pending.iq_option_id) : '';
@@ -402,15 +380,15 @@ serve(async (req) => {
         );
         
         if (closed && closed.win !== 'pending') {
-          const result = closed.win === 'win' ? 'win' : 
-                         closed.win === 'loose' ? 'loss' : 'tie';
+          const resultStatus = closed.win === 'win' ? 'win' : 
+                       closed.win === 'loose' ? 'loss' : 'tie';
           
-          console.log(`Updating ${pending.id}: ${result} (profit: ${closed.profit})`);
+          console.log(`Updating ${pending.id}: ${resultStatus}`);
           
           const { error: updateError } = await supabase
             .from('operation_results')
             .update({
-              result,
+              result: resultStatus,
               profit: closed.profit,
               exit_price: closed.close_quote || null,
             })
@@ -418,14 +396,12 @@ serve(async (req) => {
 
           if (!updateError) {
             updatedCount++;
-          } else {
-            console.error('Error updating result:', updateError);
           }
         }
       }
     }
 
-    console.log(`Updated ${updatedCount} operation results`);
+    console.log(`Updated ${updatedCount} results`);
 
     return new Response(
       JSON.stringify({ 

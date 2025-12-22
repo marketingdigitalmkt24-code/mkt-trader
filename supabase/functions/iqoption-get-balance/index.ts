@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 interface IQOptionCredentials {
@@ -18,114 +18,127 @@ interface BalanceInfo {
   accountType: string;
 }
 
-const IQ_OPTION_WS_URL = "wss://iqoption.com/echo/websocket";
+const IQ_OPTION_AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
+const IQ_OPTION_WS_URL = 'wss://iqoption.com/echo/websocket';
 
-function getBalanceFromProfile(profileMsg: any, accountType: string): BalanceInfo | null {
-  const balances = profileMsg?.balances || [];
+async function loginToIQOption(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
+  try {
+    console.log('Attempting to login to IQ Option...');
+    
+    const response = await fetch(IQ_OPTION_AUTH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+      body: new URLSearchParams({
+        identifier: email,
+        password: password,
+      }),
+    });
 
-  for (const bal of balances) {
-    // type 1 = REAL, type 4 = PRACTICE (demo)
-    if (accountType === "PRACTICE" && bal.type === 4) {
-      return { balance: bal.amount, currency: bal.currency || "USD", accountType: "PRACTICE" };
+    const data = await response.json();
+    console.log('Login response status:', response.status);
+    
+    if (data.code === 'success' && data.ssid) {
+      console.log('Login successful, SSID obtained');
+      return { ssid: data.ssid, error: null };
+    } else {
+      console.error('Login failed:', data.message || 'Unknown error');
+      return { ssid: null, error: data.message || 'Login failed' };
     }
-    if (accountType === "REAL" && bal.type === 1) {
-      return { balance: bal.amount, currency: bal.currency || "USD", accountType: "REAL" };
-    }
+  } catch (error) {
+    console.error('Login error:', error);
+    return { ssid: null, error: String(error) };
   }
-
-  // Fallback: first balance
-  if (balances.length > 0) {
-    return { balance: balances[0].amount, currency: balances[0].currency || "USD", accountType: accountType || "UNKNOWN" };
-  }
-
-  return null;
 }
 
-async function connectAndGetProfile(email: string, password: string): Promise<{ ws: WebSocket; profileMsg: any }>{
-  return await new Promise((resolve, reject) => {
+async function getBalance(ssid: string, accountType: string): Promise<BalanceInfo | null> {
+  return new Promise((resolve) => {
+    console.log('Connecting to IQ Option WebSocket for balance...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
-    let done = false;
-
+    
+    let balanceInfo: BalanceInfo | null = null;
+    
     const timeout = setTimeout(() => {
-      if (done) return;
-      done = true;
-      try { ws.close(); } catch { /* ignore */ }
-      reject(new Error("Timeout ao conectar na IQ Option"));
+      console.log('Balance fetch timeout, closing connection');
+      ws.close();
+      resolve(null);
     }, 15000);
 
-    const finishError = (message: string) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timeout);
-      try { ws.close(); } catch { /* ignore */ }
-      reject(new Error(message));
-    };
-
     ws.onopen = () => {
-      console.log("📡 WS conectado, autenticando...");
+      console.log('WebSocket connected, authenticating...');
       ws.send(JSON.stringify({
-        name: "authenticate",
-        msg: { email, password },
+        name: 'ssid',
+        msg: ssid,
       }));
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data?.name !== "timeSync") console.log("Received:", data?.name);
-
-        if (data?.name === "auth-error" || data?.name === "error") {
-          return finishError(data?.msg?.message || "Falha ao autenticar na IQ Option");
+        
+        if (data.name !== 'timeSync') {
+          console.log('Received message:', data.name);
         }
-
-        // Sometimes comes as 'authenticated' first
-        if (data?.name === "authenticated" && data?.ssid) {
-          console.log("✅ authenticated, enviando ssid...");
-          ws.send(JSON.stringify({ name: "ssid", msg: data.ssid }));
-          return;
-        }
-
-        // Some implementations send profile directly
-        if (data?.name === "profile" && data?.msg) {
-          if (done) return;
-          done = true;
+        
+        if (data.name === 'profile') {
+          console.log('Authenticated! Getting balance...');
+          
+          const balances = data.msg.balances || [];
+          console.log('Available balances:', balances.length);
+          
+          for (const balance of balances) {
+            // type 1 = REAL, type 4 = PRACTICE (demo)
+            if (accountType === 'PRACTICE' && balance.type === 4) {
+              balanceInfo = {
+                balance: balance.amount,
+                currency: balance.currency || 'USD',
+                accountType: 'PRACTICE',
+              };
+              console.log('Found PRACTICE balance:', balanceInfo);
+              break;
+            } else if (accountType === 'REAL' && balance.type === 1) {
+              balanceInfo = {
+                balance: balance.amount,
+                currency: balance.currency || 'USD',
+                accountType: 'REAL',
+              };
+              console.log('Found REAL balance:', balanceInfo);
+              break;
+            }
+          }
+          
           clearTimeout(timeout);
-          resolve({ ws, profileMsg: data.msg });
-          return;
-        }
-
-        // If 'authenticated' already includes profile-ish msg
-        if (data?.name === "authenticated" && data?.msg?.balances) {
-          if (done) return;
-          done = true;
-          clearTimeout(timeout);
-          resolve({ ws, profileMsg: data.msg });
-          return;
+          ws.close();
+          resolve(balanceInfo);
         }
       } catch (e) {
-        console.error("Parse error:", e);
+        console.error('Error parsing message:', e);
       }
     };
 
-    ws.onerror = () => {
-      finishError("Erro de conexão WebSocket com a IQ Option");
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      clearTimeout(timeout);
+      resolve(null);
     };
 
     ws.onclose = () => {
-      if (done) return;
-      finishError("Conexão fechada antes de autenticar");
+      console.log('WebSocket closed');
+      clearTimeout(timeout);
     };
   });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Get user_id from request body (optional)
@@ -134,50 +147,71 @@ serve(async (req) => {
       const body = await req.json();
       userId = body?.userId || null;
     } catch {
-      // ignore
+      // No body or invalid JSON, continue without userId
     }
 
     // Build query for IQ Option credentials
     let query = supabase
-      .from("iqoption_config")
-      .select("email, password, account_type")
-      .eq("is_active", true);
+      .from('iqoption_config')
+      .select('email, password, account_type')
+      .eq('is_active', true);
 
-    if (userId) query = query.eq("user_id", userId);
+    // Filter by user_id if provided
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
 
-    const { data: configData, error: configError } = await query.limit(1).maybeSingle();
+    const { data: configData, error: configError } = await query
+      .limit(1)
+      .maybeSingle();
 
     if (configError || !configData) {
+      console.error('No IQ Option credentials found');
       return new Response(
-        JSON.stringify({ success: false, error: "No IQ Option credentials configured" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ 
+          success: false,
+          error: 'No IQ Option credentials configured' 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const credentials: IQOptionCredentials = configData;
-
-    // Auth via WebSocket (no HTTP login)
-    const { ws, profileMsg } = await connectAndGetProfile(credentials.email, credentials.password);
-
-    const balanceInfo = getBalanceFromProfile(profileMsg, credentials.account_type);
-
-    try { ws.close(); } catch { /* ignore */ }
-
-    if (!balanceInfo) {
+    
+    // Login to IQ Option
+    const { ssid, error: loginError } = await loginToIQOption(credentials.email, credentials.password);
+    
+    if (!ssid) {
       return new Response(
-        JSON.stringify({ success: false, error: "Não foi possível ler o saldo da conta" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ 
+          success: false,
+          error: loginError || 'Failed to login to IQ Option' 
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Today's stats from operation_results
+    // Get balance
+    const balanceInfo = await getBalance(ssid, credentials.account_type);
+    
+    if (!balanceInfo) {
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: 'Failed to get balance' 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Get today's profit/loss from operation_results
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
+    
     const { data: todayResults, error: resultsError } = await supabase
-      .from("operation_results")
-      .select("result, profit, entry_price")
-      .gte("created_at", today.toISOString());
+      .from('operation_results')
+      .select('result, profit, entry_price')
+      .gte('created_at', today.toISOString());
 
     let dailyProfit = 0;
     let todayTrades = 0;
@@ -188,21 +222,29 @@ serve(async (req) => {
 
     if (todayResults && !resultsError) {
       todayTrades = todayResults.length;
-      for (const r of todayResults) {
-        if (r.result === "win") {
-          dailyProfit += r.profit || 0;
+      
+      // Calculate profits and stats
+      for (const result of todayResults) {
+        if (result.result === 'win') {
+          dailyProfit += result.profit || 0;
           wins++;
           tempConsecutive = 0;
-        } else if (r.result === "loose" || r.result === "loss") {
-          dailyProfit -= r.entry_price || 0;
+        } else if (result.result === 'loose' || result.result === 'loss') {
+          // Loss = entry_price amount lost
+          dailyProfit -= result.entry_price || 0;
           losses++;
           tempConsecutive++;
-          consecutiveLosses = Math.max(consecutiveLosses, tempConsecutive);
-        } else if (r.result === "equal" || r.result === "tie") {
+          if (tempConsecutive > consecutiveLosses) {
+            consecutiveLosses = tempConsecutive;
+          }
+        } else if (result.result === 'equal') {
+          // Tie - no profit/loss
           tempConsecutive = 0;
         }
       }
     }
+
+    console.log('Daily stats:', { dailyProfit, todayTrades, wins, losses, consecutiveLosses });
 
     return new Response(
       JSON.stringify({
@@ -216,14 +258,15 @@ serve(async (req) => {
         losses,
         consecutiveLosses,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error("Error:", errorMessage);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error:', errorMessage);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

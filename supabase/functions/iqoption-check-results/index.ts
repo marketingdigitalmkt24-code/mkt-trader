@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 interface IQOptionCredentials {
@@ -20,106 +20,239 @@ interface PositionResult {
   close_quote?: number;
 }
 
-const IQ_OPTION_WS_URL = "wss://iqoption.com/echo/websocket";
+// Configuration
+const MAX_RETRIES = 3;
+const LOGIN_TIMEOUT_MS = 10000; // 10 seconds timeout
+const RETRY_DELAY_MS = 2000; // 2 seconds between retries
 
-async function getClosedPositionsViaWS(
-  email: string,
-  password: string,
-  accountType: string,
-): Promise<{ success: boolean; positions: PositionResult[]; error?: string }> {
-  return await new Promise((resolve) => {
+// IQ Option API endpoints
+const IQ_OPTION_AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
+const IQ_OPTION_WS_URL = 'wss://iqoption.com/echo/websocket';
+
+// Helper function to delay
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Fetch with timeout
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+async function loginToIQOptionWithRetry(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
+  let lastError: string | null = null;
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`Login attempt ${attempt}/${MAX_RETRIES} with ${LOGIN_TIMEOUT_MS}ms timeout...`);
+      
+      const response = await fetchWithTimeout(
+        IQ_OPTION_AUTH_URL,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+          body: new URLSearchParams({
+            identifier: email,
+            password: password,
+          }),
+        },
+        LOGIN_TIMEOUT_MS
+      );
+
+      const data = await response.json();
+      console.log('Login response status:', response.status);
+      
+      if (data.code === 'success' && data.ssid) {
+        console.log(`Login successful on attempt ${attempt}`);
+        return { ssid: data.ssid, error: null };
+      } else {
+        lastError = data.message || 'Login failed';
+        console.error(`Login failed on attempt ${attempt}:`, lastError);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        lastError = `Timeout after ${LOGIN_TIMEOUT_MS}ms`;
+        console.error(`Login timeout on attempt ${attempt}`);
+      } else {
+        lastError = String(error);
+        console.error(`Login error on attempt ${attempt}:`, lastError);
+      }
+    }
+    
+    // Wait before retrying (except on last attempt)
+    if (attempt < MAX_RETRIES) {
+      console.log(`Waiting ${RETRY_DELAY_MS}ms before retry...`);
+      await delay(RETRY_DELAY_MS);
+    }
+  }
+  
+  console.error(`All ${MAX_RETRIES} login attempts failed`);
+  return { ssid: null, error: `Failed after ${MAX_RETRIES} attempts: ${lastError}` };
+}
+
+async function getClosedPositions(ssid: string, accountType: string): Promise<PositionResult[]> {
+  return new Promise((resolve) => {
     const positions: PositionResult[] = [];
     let balanceId = 0;
-    let done = false;
-
+    
+    console.log('Connecting to IQ Option WebSocket for results...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
-
+    
     const timeout = setTimeout(() => {
-      if (done) return;
-      done = true;
-      try { ws.close(); } catch { /* ignore */ }
-      resolve({ success: false, positions: [], error: "Timeout ao buscar resultados" });
-    }, 30000);
-
-    const finish = (payload: { success: boolean; positions: PositionResult[]; error?: string }) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timeout);
-      try { ws.close(); } catch { /* ignore */ }
-      resolve(payload);
-    };
+      console.log('WebSocket timeout, returning positions found:', positions.length);
+      ws.close();
+      resolve(positions);
+    }, 15000); // 15 seconds WebSocket timeout
 
     ws.onopen = () => {
-      console.log("📡 WS conectado, autenticando...");
-      ws.send(JSON.stringify({ name: "authenticate", msg: { email, password } }));
+      console.log('WebSocket connected, authenticating...');
+      ws.send(JSON.stringify({
+        name: 'ssid',
+        msg: ssid,
+      }));
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data?.name !== "timeSync") console.log("Received:", data?.name);
-
-        if (data?.name === "auth-error" || data?.name === "error") {
-          return finish({ success: false, positions: [], error: data?.msg?.message || "Falha ao autenticar" });
+        
+        // Skip timeSync messages
+        if (data.name !== 'timeSync') {
+          console.log('Received:', data.name);
         }
-
-        if (data?.name === "authenticated" && data?.ssid) {
-          ws.send(JSON.stringify({ name: "ssid", msg: data.ssid }));
-          return;
-        }
-
-        if (data?.name === "profile") {
-          const balances = data.msg?.balances || [];
-          for (const bal of balances) {
-            if (accountType === "PRACTICE" && bal.type === 4) { balanceId = bal.id; break; }
-            if (accountType === "REAL" && bal.type === 1) { balanceId = bal.id; break; }
+        
+        if (data.name === 'profile') {
+          console.log('Authenticated! Getting balance and history...');
+          
+          // Get correct balance ID
+          const balances = data.msg.balances || [];
+          for (const balance of balances) {
+            if (accountType === 'PRACTICE' && balance.type === 4) {
+              balanceId = balance.id;
+              break;
+            } else if (accountType === 'REAL' && balance.type === 1) {
+              balanceId = balance.id;
+              break;
+            }
           }
-          if (!balanceId && balances.length > 0) balanceId = balances[0].id;
-
-          console.log("Balance ID:", balanceId);
-
+          
+          if (!balanceId && balances.length > 0) {
+            balanceId = balances[0].id;
+          }
+          
+          console.log('Using balance ID:', balanceId);
+          
+          // Request closed binary options history - try multiple formats
           ws.send(JSON.stringify({
-            name: "sendMessage",
+            name: 'sendMessage',
             msg: {
-              name: "portfolio.get-history-positions",
-              version: "2.0",
+              name: 'portfolio.get-history-positions',
+              version: '2.0',
               body: {
                 user_balance_id: balanceId,
-                instrument_types: ["binary-option", "turbo-option", "digital-option"],
+                instrument_types: ['binary-option', 'turbo-option', 'digital-option'],
                 limit: 100,
                 offset: 0,
               },
             },
           }));
-          return;
+          
+          // Also try alternative history request format
+          ws.send(JSON.stringify({
+            name: 'sendMessage',
+            msg: {
+              name: 'get-history-positions',
+              version: '1.0',
+              body: {
+                user_balance_id: balanceId,
+                instrument_types: ['turbo'],
+                limit: 100,
+                offset: 0,
+              },
+            },
+          }));
         }
+        
+        // Handle history positions response - check multiple event names
+        if (data.name === 'portfolio.get-history-positions' || 
+            data.name === 'history-positions' || 
+            (data.name === 'portfolio.order-changed' && data.msg)) {
+          console.log('Received history positions, processing...');
+          
+          // Handle different response structures
+          let positionsList = [];
+          if (data.msg?.positions) {
+            positionsList = data.msg.positions;
+          } else if (Array.isArray(data.msg)) {
+            positionsList = data.msg;
+          } else if (data.msg?.history) {
+            positionsList = data.msg.history;
+          }
+          
+          console.log('Found', positionsList.length, 'positions in response');
 
-        if (data?.name === "portfolio.get-history-positions" || data?.name === "history-positions") {
-          let positionsList: any[] = [];
-          if (data.msg?.positions) positionsList = data.msg.positions;
-          else if (Array.isArray(data.msg)) positionsList = data.msg;
-          else if (data.msg?.history) positionsList = data.msg.history;
-
+          if (positionsList.length > 0) {
+            try {
+              console.log('Sample position keys:', Object.keys(positionsList[0] || {}));
+              console.log(
+                'Sample position snippet:',
+                JSON.stringify(positionsList[0]).slice(0, 800)
+              );
+            } catch (_e) {
+              // ignore
+            }
+          }
+          
           for (const pos of positionsList) {
-            let win = "pending";
+            // Determine win/loss status based on different API response formats
+            let win = 'pending';
             const profit = pos.close_profit ?? pos.pnl ?? pos.profit ?? pos.win_amount ?? 0;
-
-            if (pos.status === "closed" || pos.close_time || pos.close_at) {
-              if (typeof pos.win === "string") win = pos.win;
-              else if (profit > 0) win = "win";
-              else if (profit < 0) win = "loose";
-              else win = "equal";
+            
+            // Check various fields for win status
+            if (pos.status === 'closed' || pos.close_time || pos.close_at) {
+              if (typeof pos.win === 'string') {
+                win = pos.win; // 'win', 'loose', 'equal'
+              } else if (profit > 0) {
+                win = 'win';
+              } else if (profit < 0) {
+                win = 'loose';
+              } else {
+                win = 'equal';
+              }
             } else if (pos.result) {
               win = pos.result;
             }
-
-            const candidateIds = [pos.option_id, pos.position_id, pos.external_id, pos.id]
+            
+            // Get the best IDs to match with our stored iq_option_id (usually numeric)
+            const candidateIds = [
+              pos.option_id,
+              pos.position_id,
+              pos.external_id,
+              pos.id,
+            ]
               .filter((v) => v !== undefined && v !== null)
               .map((v) => String(v));
 
             const matchIds = Array.from(new Set(candidateIds)).filter(Boolean);
 
             if (matchIds.length > 0) {
+              console.log(`Position ${matchIds[0]} (ids=${matchIds.join(',')}): win=${win}, profit=${profit}`);
               positions.push({
                 matchIds,
                 rawJson: JSON.stringify(pos),
@@ -129,111 +262,187 @@ async function getClosedPositionsViaWS(
               });
             }
           }
-
-          return finish({ success: true, positions });
+          
+          console.log('Processed', positions.length, 'closed positions total');
+          
+          // Close after receiving data
+          setTimeout(() => {
+            clearTimeout(timeout);
+            ws.close();
+            resolve(positions);
+          }, 1000);
         }
+        
+        // Handle option-closed event (real-time)
+        if (data.name === 'option-closed' || data.name === 'binary-options.option-closed') {
+          console.log('Option closed event received');
+          const msg = data.msg;
+          if (msg && (msg.id || msg.option_id || msg.position_id || msg.external_id)) {
+            let win = 'pending';
+            if (msg.profit !== undefined) {
+              if (msg.profit > 0) win = 'win';
+              else if (msg.profit < 0) win = 'loose';
+              else win = 'equal';
+            } else if (msg.win) {
+              win = msg.win;
+            }
+
+            const candidateIds = [msg.id, msg.option_id, msg.position_id, msg.external_id]
+              .filter((v) => v !== undefined && v !== null)
+              .map((v) => String(v));
+
+            const matchIds = Array.from(new Set(candidateIds)).filter(Boolean);
+
+            positions.push({
+              matchIds,
+              rawJson: JSON.stringify(msg),
+              win,
+              profit: msg.profit || 0,
+              close_quote: msg.close_quote,
+            });
+          }
+        }
+        
       } catch (e) {
-        console.error("Parse error:", e);
+        console.error('Error parsing message:', e);
       }
     };
 
-    ws.onerror = () => finish({ success: false, positions: [], error: "Erro de conexão WebSocket" });
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      clearTimeout(timeout);
+      resolve(positions);
+    };
+
     ws.onclose = () => {
-      if (!done) finish({ success: false, positions: [], error: "Conexão fechada" });
+      console.log('WebSocket closed, found', positions.length, 'positions');
+      clearTimeout(timeout);
     };
   });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Get IQ Option credentials from database
     const { data: configData, error: configError } = await supabase
-      .from("iqoption_config")
-      .select("email, password, account_type")
-      .eq("is_active", true)
+      .from('iqoption_config')
+      .select('email, password, account_type')
+      .eq('is_active', true)
       .limit(1)
       .maybeSingle();
 
     if (configError || !configData) {
+      console.error('No IQ Option credentials found');
       return new Response(
-        JSON.stringify({ success: false, error: "No IQ Option credentials configured" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ 
+          error: 'No IQ Option credentials configured',
+          success: false 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const credentials: IQOptionCredentials = configData;
-
-    const res = await getClosedPositionsViaWS(credentials.email, credentials.password, credentials.account_type);
-
-    if (!res.success) {
+    
+    // Login to IQ Option with retry
+    console.log('Starting login with retry mechanism...');
+    const { ssid, error: loginError } = await loginToIQOptionWithRetry(credentials.email, credentials.password);
+    
+    if (!ssid) {
       return new Response(
-        JSON.stringify({ success: false, error: res.error || "Falha ao conectar" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ 
+          error: loginError || 'Failed to login to IQ Option',
+          success: false,
+          retriesAttempted: MAX_RETRIES
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // Update last connected timestamp
     await supabase
-      .from("iqoption_config")
+      .from('iqoption_config')
       .update({ last_connected_at: new Date().toISOString() })
-      .eq("email", credentials.email);
+      .eq('email', credentials.email);
 
-    const { data: pendingOperations } = await supabase
-      .from("operation_results")
-      .select("id, iq_option_id, signal_id")
-      .eq("result", "pending");
+    // Get pending operations from our database
+    const { data: pendingOperations, error: pendingError } = await supabase
+      .from('operation_results')
+      .select('id, iq_option_id, signal_id')
+      .eq('result', 'pending');
 
+    if (pendingError) {
+      console.error('Error fetching pending operations:', pendingError);
+    }
+
+    console.log('Found', pendingOperations?.length || 0, 'pending operations to check');
+
+    // Get closed positions from IQ Option
+    const closedPositions = await getClosedPositions(ssid, credentials.account_type);
+    console.log(`Found ${closedPositions.length} closed positions from IQ Option`);
+
+    // Update pending operations with results
     let updatedCount = 0;
-    const closedPositions = res.positions;
-
     if (pendingOperations && closedPositions.length > 0) {
       for (const pending of pendingOperations) {
-        const iqId = pending.iq_option_id ? String(pending.iq_option_id) : "";
+        const iqId = pending.iq_option_id ? String(pending.iq_option_id) : '';
 
         const closed = closedPositions.find((p) =>
           (iqId && (p.matchIds.includes(iqId) || p.rawJson.includes(iqId))) ||
           p.matchIds.includes(String(pending.signal_id)) ||
           p.rawJson.includes(String(pending.signal_id))
         );
-
-        if (closed && closed.win !== "pending") {
-          const resultStatus = closed.win === "win" ? "win" : closed.win === "loose" ? "loss" : "tie";
-
+        
+        if (closed && closed.win !== 'pending') {
+          const result = closed.win === 'win' ? 'win' : 
+                         closed.win === 'loose' ? 'loss' : 'tie';
+          
+          console.log(`Updating ${pending.id}: ${result} (profit: ${closed.profit})`);
+          
           const { error: updateError } = await supabase
-            .from("operation_results")
+            .from('operation_results')
             .update({
-              result: resultStatus,
+              result,
               profit: closed.profit,
               exit_price: closed.close_quote || null,
             })
-            .eq("id", pending.id);
+            .eq('id', pending.id);
 
-          if (!updateError) updatedCount++;
+          if (!updateError) {
+            updatedCount++;
+          } else {
+            console.error('Error updating result:', updateError);
+          }
         }
       }
     }
 
+    console.log(`Updated ${updatedCount} operation results`);
+
     return new Response(
-      JSON.stringify({
+      JSON.stringify({ 
         success: true,
         pendingChecked: pendingOperations?.length || 0,
         closedPositions: closedPositions.length,
         updatedResults: updatedCount,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error("Error:", errorMessage);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error:', errorMessage);
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({ error: errorMessage, success: false }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

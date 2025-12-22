@@ -19,28 +19,9 @@ interface TradeResult {
   error?: string;
 }
 
-export interface AssetCandle {
-  open: number;
-  close: number;
-  high: number;
-  low: number;
-  volume: number;
-  time: number;
-}
-
-export interface AssetInfo {
-  id: number;
-  name: string;
-  enabled: boolean;
-  payout: number;
-  isSuspended: boolean;
-}
-
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 type ConnectionCallback = (status: ConnectionStatus) => void;
 type BalanceCallback = (balance: BalanceInfo | null) => void;
-type CandleCallback = (asset: string, candles: AssetCandle[]) => void;
-type AssetsCallback = (assets: AssetInfo[]) => void;
 
 class IQOptionClient {
   private ws: WebSocket | null = null;
@@ -48,34 +29,22 @@ class IQOptionClient {
   private credentials: IQOptionCredentials | null = null;
   private balanceId: number = 0;
   private activeAssets: Record<string, number> = {};
-  private assetInfoMap: Map<number, AssetInfo> = new Map();
   private connectionStatus: ConnectionStatus = 'disconnected';
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 3;
   private reconnectTimeout: NodeJS.Timeout | null = null;
-  private candleSubscriptions: Set<string> = new Set();
-  private lastCandles: Map<string, AssetCandle[]> = new Map();
   
   private onConnectionChange: ConnectionCallback | null = null;
   private onBalanceChange: BalanceCallback | null = null;
-  private onCandleUpdate: CandleCallback | null = null;
-  private onAssetsUpdate: AssetsCallback | null = null;
   private pendingTradeResolve: ((result: TradeResult) => void) | null = null;
 
   // IQ Option endpoints
   private readonly AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
   private readonly WS_URL = 'wss://iqoption.com/echo/websocket';
 
-  setCallbacks(
-    onConnection: ConnectionCallback, 
-    onBalance: BalanceCallback,
-    onCandle?: CandleCallback,
-    onAssets?: AssetsCallback
-  ) {
+  setCallbacks(onConnection: ConnectionCallback, onBalance: BalanceCallback) {
     this.onConnectionChange = onConnection;
     this.onBalanceChange = onBalance;
-    this.onCandleUpdate = onCandle || null;
-    this.onAssetsUpdate = onAssets || null;
   }
 
   private updateStatus(status: ConnectionStatus) {
@@ -307,63 +276,14 @@ class IQOptionClient {
           const binary = data.msg?.binary?.actives || {};
           
           this.activeAssets = {};
-          this.assetInfoMap.clear();
-          const assetsList: AssetInfo[] = [];
-          
           for (const [id, info] of Object.entries(binary)) {
-            const assetData = info as { 
-              name?: string; 
-              enabled?: boolean; 
-              is_suspended?: boolean;
-              option?: { profit?: { commission?: number } };
-            };
-            
-            const assetId = parseInt(id);
-            const name = assetData.name || '';
-            const payout = 100 - (assetData.option?.profit?.commission || 20);
-            
-            if (assetData.enabled && !assetData.is_suspended) {
-              this.activeAssets[name.toUpperCase()] = assetId;
-            }
-            
-            const assetInfo: AssetInfo = {
-              id: assetId,
-              name,
-              enabled: assetData.enabled || false,
-              payout,
-              isSuspended: assetData.is_suspended || false,
-            };
-            
-            this.assetInfoMap.set(assetId, assetInfo);
-            if (assetData.enabled && !assetData.is_suspended) {
-              assetsList.push(assetInfo);
+            const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
+            if (assetInfo.enabled && !assetInfo.is_suspended) {
+              const name = assetInfo.name || '';
+              this.activeAssets[name.toUpperCase()] = parseInt(id);
             }
           }
-          
           console.log('📈 Available assets:', Object.keys(this.activeAssets).length);
-          this.onAssetsUpdate?.(assetsList);
-        }
-
-        // Handle candle data
-        if (data.name === 'candles') {
-          const candles = data.msg?.candles || [];
-          const assetId = data.msg?.active_id;
-          
-          // Find asset name by ID
-          const assetInfo = this.assetInfoMap.get(assetId);
-          if (assetInfo && candles.length > 0) {
-            const formattedCandles: AssetCandle[] = candles.map((c: any) => ({
-              open: c.open,
-              close: c.close,
-              high: c.max,
-              low: c.min,
-              volume: c.volume || 0,
-              time: c.from,
-            }));
-            
-            this.lastCandles.set(assetInfo.name, formattedCandles);
-            this.onCandleUpdate?.(assetInfo.name, formattedCandles);
-          }
         }
 
         // Handle trade responses
@@ -520,91 +440,10 @@ class IQOptionClient {
     return this.connectionStatus === 'connected' && this.ws?.readyState === WebSocket.OPEN;
   }
 
-  // Subscribe to candle updates for an asset
-  subscribeToCandles(assetName: string, timeframe: number = 60): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    
-    const assetId = this.activeAssets[assetName.toUpperCase()] || 
-                    this.activeAssets[assetName.toUpperCase().replace('/', '')];
-    
-    if (!assetId) {
-      console.warn(`Asset ${assetName} not found for candle subscription`);
-      return;
-    }
-
-    if (this.candleSubscriptions.has(`${assetId}_${timeframe}`)) return;
-    
-    this.candleSubscriptions.add(`${assetId}_${timeframe}`);
-    
-    // Request historical candles
-    const now = Math.floor(Date.now() / 1000);
-    this.ws.send(JSON.stringify({
-      name: 'sendMessage',
-      msg: {
-        name: 'get-candles',
-        version: '2.0',
-        body: {
-          active_id: assetId,
-          size: timeframe,
-          from: now - (timeframe * 100),
-          to: now,
-        },
-      },
-    }));
-
-    // Subscribe to real-time candles
-    this.ws.send(JSON.stringify({
-      name: 'subscribeMessage',
-      msg: {
-        name: 'candle-generated',
-        params: {
-          routingFilters: {
-            active_id: assetId,
-            size: timeframe,
-          },
-        },
-      },
-    }));
-    
-    console.log(`📊 Subscribed to ${assetName} candles (${timeframe}s)`);
-  }
-
-  unsubscribeFromCandles(assetName: string, timeframe: number = 60): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    
-    const assetId = this.activeAssets[assetName.toUpperCase()];
-    if (!assetId) return;
-    
-    this.candleSubscriptions.delete(`${assetId}_${timeframe}`);
-    
-    this.ws.send(JSON.stringify({
-      name: 'unsubscribeMessage',
-      msg: {
-        name: 'candle-generated',
-        params: {
-          routingFilters: {
-            active_id: assetId,
-            size: timeframe,
-          },
-        },
-      },
-    }));
-  }
-
-  getAvailableAssets(): AssetInfo[] {
-    return Array.from(this.assetInfoMap.values()).filter(a => a.enabled && !a.isSuspended);
-  }
-
-  getLastCandles(assetName: string): AssetCandle[] {
-    return this.lastCandles.get(assetName) || [];
-  }
-
   disconnect() {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
     }
-    this.candleSubscriptions.clear();
-    this.lastCandles.clear();
     this.ws?.close();
     this.ws = null;
     this.ssid = null;

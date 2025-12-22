@@ -8,7 +8,6 @@ import { AssetRanking } from '@/components/AssetRanking';
 import { BankManagementCard } from '@/components/BankManagementCard';
 import { SafetyFiltersCard } from '@/components/SafetyFiltersCard';
 import { MarketStatusCard } from '@/components/MarketStatusCard';
-import { AISignalsPanel } from '@/components/AISignalsPanel';
 import { SignalHistorySection } from '@/components/SignalHistorySection';
 import { mockAssetPerformance, safetyFilters } from '@/data/mockData';
 import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
@@ -167,10 +166,6 @@ const Index = () => {
               otcOpen={marketStatus.otcOpen} 
               forexOpen={marketStatus.forexOpen} 
             />
-            
-            {/* AI Signals Panel - Powered by IQ Option API */}
-            <AISignalsPanel />
-            
             <BankManagementCard />
             <AssetRanking assets={mockAssetPerformance} />
             <SafetyFiltersCard filters={safetyFilters} />

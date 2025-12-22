@@ -4,12 +4,11 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { TrendingUp, Eye, EyeOff, Save, RefreshCw, CheckCircle, XCircle, Wifi, AlertTriangle } from 'lucide-react';
+import { TrendingUp, Eye, EyeOff, Save, RefreshCw, CheckCircle, XCircle, Wifi } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { iqOptionClient } from '@/services/IQOptionClient';
 
 interface IQOptionConfig {
   id: string;
@@ -142,64 +141,35 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
   };
 
   const testConnection = async () => {
-    if (!email || !password) {
-      toast({ title: 'Erro', description: 'Preencha email e senha primeiro', variant: 'destructive' });
-      return;
-    }
-
     setIsTesting(true);
     setTestResult(null);
     
     try {
-      // Test connection via client-side (browser) to avoid datacenter IP blocking
-      const result = await iqOptionClient.login({
-        email: email.trim(),
-        password: password.trim(),
-        accountType: accountType,
-      });
+      const { data, error } = await supabase.functions.invoke('iqoption-check-results');
       
-      if (result.success) {
+      if (error) throw error;
+      
+      if (data?.success) {
         setTestResult('success');
         toast({ 
           title: '✅ Conexão bem sucedida!', 
-          description: 'Credenciais válidas. Conexão com IQ Option estabelecida.'
+          description: `Encontradas ${data.totalPositions} operações. ${data.newResultsSaved} novos resultados salvos.`
         });
-        
-        // Update last_connected_at in database
-        if (config) {
-          await supabase
-            .from('iqoption_config')
-            .update({ last_connected_at: new Date().toISOString() })
-            .eq('id', config.id);
-          loadConfig();
-        }
       } else {
         setTestResult('error');
-        
-        // Check if it's a CORS error
-        const isCorsError = result.error?.includes('CORS') || result.error?.includes('fetch');
-        
-        if (isCorsError) {
-          toast({ 
-            title: '⚠️ Limitação de CORS', 
-            description: 'Não foi possível testar diretamente. Salve as credenciais e o sistema tentará conectar automaticamente.',
-            variant: 'default'
-          });
-        } else {
-          toast({ 
-            title: 'Erro na conexão', 
-            description: result.error || 'Credenciais inválidas ou conta bloqueada',
-            variant: 'destructive'
-          });
-        }
+        toast({ 
+          title: 'Erro na conexão', 
+          description: data?.error || 'Falha ao conectar com IQ Option',
+          variant: 'destructive'
+        });
       }
     } catch (error) {
       console.error('Test error:', error);
       setTestResult('error');
       toast({ 
-        title: '⚠️ Teste indisponível', 
-        description: 'Salve as credenciais. O sistema tentará conectar automaticamente.',
-        variant: 'default'
+        title: 'Erro', 
+        description: 'Falha ao testar conexão',
+        variant: 'destructive'
       });
     } finally {
       setIsTesting(false);
@@ -293,9 +263,8 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
         {/* Warning */}
         <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
           <p className="text-xs text-yellow-600 dark:text-yellow-400">
-            <AlertTriangle className="w-3 h-3 inline mr-1" />
-            <strong>Aviso:</strong> A IQ Option pode bloquear conexões de servidores. 
-            Se o teste falhar, salve suas credenciais e o sistema tentará conectar automaticamente pelo navegador.
+            ⚠️ <strong>Aviso de Segurança:</strong> Suas credenciais são armazenadas de forma criptografada no banco de dados. 
+            Recomendamos usar autenticação de 2 fatores na IQ Option.
           </p>
         </div>
 
@@ -310,7 +279,7 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
             variant="outline" 
             onClick={testConnection} 
             className="gap-2"
-            disabled={isTesting || !email || !password}
+            disabled={isTesting || !config}
           >
             {isTesting ? (
               <RefreshCw className="w-4 h-4 animate-spin" />

@@ -1,8 +1,7 @@
-import { LogOut, Bot, TrendingUp, BarChart3, Shield, Brain } from 'lucide-react';
+import { LogOut, Bot, TrendingUp, BarChart3, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
-import { AISignalsPanel } from '@/components/AISignalsPanel';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionBalance } from '@/hooks/useIQOptionBalance';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,17 +22,7 @@ const ClientDashboard = () => {
     resetDailyTrades,
   } = useAutoTrading();
 
-  const { 
-    balance, 
-    dailyProfit, 
-    todayTrades, 
-    wins, 
-    losses, 
-    isLoading: isLoadingBalance, 
-    refresh: refreshConnection 
-  } = useIQOptionBalance();
-
-  const currentBalance = balance || 0;
+  const { balance, dailyProfit, todayTrades, wins, losses, isLoading: isLoadingBalance, refresh } = useIQOptionBalance();
 
   const handleLogout = async () => {
     await signOut();
@@ -63,12 +52,12 @@ const ClientDashboard = () => {
             {/* User Info & Logout */}
             <div className="flex items-center gap-4">
               {/* Balance Display */}
-              {currentBalance > 0 && (
+              {balance > 0 && (
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <div className="text-xs text-muted-foreground">Saldo IQ Option</div>
                     <div className="text-lg font-bold text-call">
-                      ${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                   <Badge variant={dailyProfit >= 0 ? "default" : "destructive"}>
@@ -187,7 +176,7 @@ const ClientDashboard = () => {
                   isAnalyzingAI={isAnalyzingAI}
                   lastTradeResult={lastTradeResult}
                   defaultOpen={true}
-                  currentBalance={currentBalance}
+                  currentBalance={balance}
                   dailyProfit={dailyProfit}
                 />
               </CardContent>
@@ -208,17 +197,6 @@ const ClientDashboard = () => {
               </CardContent>
             </Card>
           </section>
-
-          {/* AI Signals Section */}
-          <section className="lg:col-span-2">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <Brain className="w-4 h-4 text-purple-400" />
-              </div>
-              <h2 className="text-xl font-bold text-foreground">Sinais da IA (Tempo Real)</h2>
-            </div>
-            <AISignalsPanel />
-          </section>
         </div>
 
         {/* Action Buttons */}
@@ -232,12 +210,12 @@ const ClientDashboard = () => {
           </button>
           
           <button
-            onClick={refreshConnection}
+            onClick={refresh}
             disabled={isLoadingBalance}
             className="px-6 py-3 bg-call/20 hover:bg-call/30 text-call rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
           >
             <TrendingUp className="w-4 h-4" />
-            Reconectar IQ Option
+            Atualizar Saldo
           </button>
         </div>
       </main>

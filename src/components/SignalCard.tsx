@@ -15,9 +15,32 @@ const marketTypeLabels = {
   otc: 'OTC',
 };
 
+// Format asset name to be more readable (remove "front." prefix and format)
+const formatAssetName = (asset: string): string => {
+  // Remove "front." prefix if present
+  let name = asset.replace(/^front\./i, '');
+  
+  // Remove "-OTC" suffix temporarily for formatting
+  const isOTC = name.includes('-OTC') || name.includes('OTC');
+  name = name.replace(/-OTC$/i, '').replace(/OTC$/i, '');
+  
+  // Add slash for currency pairs (e.g., EURUSD -> EUR/USD)
+  if (name.length === 6 && /^[A-Z]+$/.test(name)) {
+    name = `${name.slice(0, 3)}/${name.slice(3)}`;
+  }
+  
+  // Re-add OTC indicator if it was present
+  if (isOTC) {
+    name = `${name} OTC`;
+  }
+  
+  return name;
+};
+
 export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
   const [showIndicators, setShowIndicators] = useState(false);
   const isCall = signal.type === 'CALL';
+  const displayAssetName = formatAssetName(signal.asset);
   
   const renderStars = (count: number) => {
     return Array.from({ length: 4 }, (_, i) => (
@@ -66,7 +89,7 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
-              <span className="font-semibold text-foreground text-sm sm:text-base">{signal.asset}</span>
+              <span className="font-semibold text-foreground text-sm sm:text-base">{displayAssetName}</span>
               {signal.isHot && (
                 <span className="flex items-center gap-0.5 sm:gap-1 text-xs bg-gold/20 text-gold px-1.5 sm:px-2 py-0.5 rounded-full">
                   <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />

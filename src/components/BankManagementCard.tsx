@@ -1,29 +1,30 @@
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Wifi, WifiOff, PlugZap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
-import { useIQOptionBalance } from '@/hooks/useIQOptionBalance';
+import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function BankManagementCard() {
   const {
     balance,
-    currency,
-    accountType,
-    dailyProfit,
-    todayTrades,
-    wins,
-    losses,
-    consecutiveLosses,
+    dailyStats,
     isLoading,
     lastUpdate,
     connectionStatus,
-    refresh,
-  } = useIQOptionBalance();
+    connect,
+    disconnect,
+    isConnected,
+  } = useIQOptionConnection();
+
+  const { dailyProfit, todayTrades, wins, losses, consecutiveLosses } = dailyStats;
+  const currency = balance?.currency || 'USD';
+  const accountType = balance?.accountType || 'PRACTICE';
+  const currentBalance = balance?.balance || 0;
 
   const maxDailyTrades = 20;
   const riskPerTrade = 2;
-  const suggestedBet = (balance * riskPerTrade) / 100;
+  const suggestedBet = (currentBalance * riskPerTrade) / 100;
   const tradeProgress = (todayTrades / maxDailyTrades) * 100;
   const isOvertrading = todayTrades >= maxDailyTrades * 0.8;
   const hasConsecutiveLosses = consecutiveLosses >= 2;
@@ -40,15 +41,25 @@ export function BankManagementCard() {
     switch (connectionStatus) {
       case 'connected': return 'text-call';
       case 'disconnected': return 'text-put';
+      case 'error': return 'text-put';
       case 'connecting': return 'text-gold';
     }
   };
 
   const getConnectionStatusText = () => {
     switch (connectionStatus) {
-      case 'connected': return 'Conectado à IQ Option';
-      case 'disconnected': return 'Desconectado - Usando dados em cache';
+      case 'connected': return 'Conectado à IQ Option (client-side)';
+      case 'disconnected': return 'Desconectado';
+      case 'error': return 'Erro na conexão - Clique para reconectar';
       case 'connecting': return 'Conectando...';
+    }
+  };
+
+  const handleConnectionToggle = () => {
+    if (isConnected) {
+      disconnect();
+    } else {
+      connect();
     }
   };
 
@@ -84,19 +95,30 @@ export function BankManagementCard() {
           )}>
             {accountType === 'PRACTICE' ? 'DEMO' : 'REAL'}
           </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={refresh}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={handleConnectionToggle}
+                  disabled={isLoading || connectionStatus === 'connecting'}
+                >
+                  {isLoading || connectionStatus === 'connecting' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : isConnected ? (
+                    <RefreshCw className="w-4 h-4" />
+                  ) : (
+                    <PlugZap className="w-4 h-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isConnected ? 'Reconectar' : 'Conectar à IQ Option'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
 
@@ -104,7 +126,7 @@ export function BankManagementCard() {
       <div className="bg-secondary/50 rounded-xl p-4 mb-4">
         <div className="text-sm text-muted-foreground mb-1">Saldo Atual</div>
         <div className="text-2xl font-bold font-mono text-foreground">
-          {formatCurrency(balance)}
+          {formatCurrency(currentBalance)}
         </div>
         <div className="flex items-center gap-1 mt-1">
           {dailyProfit >= 0 ? (

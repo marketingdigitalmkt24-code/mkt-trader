@@ -2,7 +2,7 @@ export type SignalType = 'CALL' | 'PUT';
 export type Timeframe = 'M1' | 'M5';
 export type SignalStrength = 2 | 3 | 4;
 export type SignalStatus = 'high_probability' | 'moderate';
-export type MarketType = 'forex' | 'crypto' | 'otc';
+export type MarketType = 'forex' | 'crypto' | 'otc' | 'blitz';
 export type SignalResult = 'win' | 'loss' | 'pending' | 'tie';
 
 export interface TradingAsset {

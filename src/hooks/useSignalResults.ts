@@ -357,17 +357,14 @@ export function useSignalResults() {
     };
   }, [recalculateStats]);
 
-  // Fetch latest results from database
+  // Fetch latest results from database (all results, not just today)
   const refreshResultsFromDB = useCallback(async () => {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
       const { data, error } = await supabase
         .from('operation_results')
         .select('*')
-        .gte('created_at', today.toISOString())
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(500); // Limit to last 500 results
       
       if (error) {
         console.error('Error refreshing results:', error);
@@ -431,6 +428,20 @@ export function useSignalResults() {
         setHistory(dbHistory);
         const newStats = recalculateStats(dbHistory);
         setStats(newStats);
+      } else {
+        // No data - reset to empty
+        setHistory([]);
+        setStats({
+          totalSignals: 0,
+          wins: 0,
+          losses: 0,
+          ties: 0,
+          pending: 0,
+          winRate: 0,
+          totalProfit: 0,
+          streak: 0,
+          streakType: 'none',
+        });
       }
     } catch (err) {
       console.error('Failed to refresh results:', err);

@@ -13,6 +13,8 @@ interface AvailableAsset {
   isOTC: boolean;
   enabled: boolean;
   payout?: number;
+  isBlitz?: boolean;  // Turbo/Blitz assets (short expiration)
+  isBinary?: boolean; // Standard binary options
 }
 
 const IQ_OPTION_AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
@@ -95,11 +97,16 @@ async function getAvailableAssets(ssid: string): Promise<{ assets: AvailableAsse
           console.log('Received initialization data');
           receivedData = true;
           
-          // Parse binary options assets
+          // Parse binary options assets (standard)
           const binary = data.msg?.binary?.actives || {};
+          // Parse turbo/blitz assets (short expiration)
           const turbo = data.msg?.turbo?.actives || {};
           
-          // Combine binary and turbo assets
+          // Track which IDs are turbo/blitz
+          const turboIds = new Set(Object.keys(turbo));
+          const binaryIds = new Set(Object.keys(binary));
+          
+          // Combine all actives, marking source
           const allActives = { ...binary, ...turbo };
           
           for (const [id, info] of Object.entries(allActives)) {
@@ -111,12 +118,18 @@ async function getAvailableAssets(ssid: string): Promise<{ assets: AvailableAsse
                            assetInfo.underlying?.includes('-OTC') ||
                            assetInfo.description?.includes('OTC');
               
+              // Determine if it's Blitz (turbo) or standard Binary
+              const isBlitz = turboIds.has(id);
+              const isBinary = binaryIds.has(id);
+              
               // Determine asset type
               let type = 'forex';
               if (isOTC) {
                 type = 'otc';
               } else if (name.includes('BTC') || name.includes('ETH') || name.includes('LTC') || name.includes('XRP')) {
                 type = 'crypto';
+              } else if (isBlitz) {
+                type = 'blitz';
               }
               
               // Get payout percentage if available
@@ -131,21 +144,30 @@ async function getAvailableAssets(ssid: string): Promise<{ assets: AvailableAsse
                 isOTC: isOTC,
                 enabled: true,
                 payout: payout,
+                isBlitz: isBlitz,
+                isBinary: isBinary,
               });
             }
           }
           
+          // Sort by payout (higher first) to prioritize best opportunities
+          assets.sort((a, b) => (b.payout || 0) - (a.payout || 0));
+          
           console.log(`Found ${assets.length} available assets`);
           
-          // Log some examples
+          // Log breakdown
           const otcAssets = assets.filter(a => a.isOTC);
+          const blitzAssets = assets.filter(a => a.isBlitz && !a.isOTC);
+          const binaryAssets = assets.filter(a => a.isBinary && !a.isOTC && !a.isBlitz);
           const forexAssets = assets.filter(a => a.type === 'forex' && !a.isOTC);
           const cryptoAssets = assets.filter(a => a.type === 'crypto');
           
-          console.log(`OTC: ${otcAssets.length}, Forex: ${forexAssets.length}, Crypto: ${cryptoAssets.length}`);
+          console.log(`OTC: ${otcAssets.length}, Blitz: ${blitzAssets.length}, Binary: ${binaryAssets.length}, Forex: ${forexAssets.length}, Crypto: ${cryptoAssets.length}`);
           
-          if (otcAssets.length > 0) {
-            console.log('Sample OTC assets:', otcAssets.slice(0, 5).map(a => a.name));
+          // Log top payout assets
+          const topAssets = assets.filter(a => !a.isOTC).slice(0, 5);
+          if (topAssets.length > 0) {
+            console.log('Top non-OTC assets by payout:', topAssets.map(a => `${a.name} (${a.payout}%)`));
           }
           
           clearTimeout(timeout);
@@ -232,8 +254,10 @@ serve(async (req) => {
       );
     }
 
-    // Group assets by type
+    // Group assets by type with priority
     const groupedAssets = {
+      blitz: assets.filter(a => a.isBlitz && !a.isOTC),
+      binary: assets.filter(a => a.isBinary && !a.isOTC && !a.isBlitz),
       otc: assets.filter(a => a.isOTC),
       forex: assets.filter(a => a.type === 'forex' && !a.isOTC),
       crypto: assets.filter(a => a.type === 'crypto'),
@@ -241,6 +265,8 @@ serve(async (req) => {
 
     console.log('Returning assets:', {
       total: assets.length,
+      blitz: groupedAssets.blitz.length,
+      binary: groupedAssets.binary.length,
       otc: groupedAssets.otc.length,
       forex: groupedAssets.forex.length,
       crypto: groupedAssets.crypto.length,

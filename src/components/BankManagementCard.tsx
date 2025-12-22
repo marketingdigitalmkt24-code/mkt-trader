@@ -1,14 +1,14 @@
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Wifi, WifiOff, PlugZap } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Wifi, WifiOff, PlugZap, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
+import { useTradingStats, StatsPeriod } from '@/hooks/useTradingStats';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function BankManagementCard() {
   const {
     balance,
-    dailyStats,
     isLoading,
     lastUpdate,
     connectionStatus,
@@ -17,7 +17,9 @@ export function BankManagementCard() {
     isConnected,
   } = useIQOptionConnection();
 
-  const { dailyProfit, todayTrades, wins, losses, consecutiveLosses } = dailyStats;
+  const { period, setPeriod, stats, isLoading: statsLoading } = useTradingStats();
+
+  const { profit, trades, wins, losses, consecutiveLosses, winRate } = stats;
   const currency = balance?.currency || 'USD';
   const accountType = balance?.accountType || 'PRACTICE';
   const currentBalance = balance?.balance || 0;
@@ -25,10 +27,9 @@ export function BankManagementCard() {
   const maxDailyTrades = 20;
   const riskPerTrade = 2;
   const suggestedBet = (currentBalance * riskPerTrade) / 100;
-  const tradeProgress = (todayTrades / maxDailyTrades) * 100;
-  const isOvertrading = todayTrades >= maxDailyTrades * 0.8;
+  const tradeProgress = (trades / maxDailyTrades) * 100;
+  const isOvertrading = trades >= maxDailyTrades * 0.8;
   const hasConsecutiveLosses = consecutiveLosses >= 2;
-  const winRate = todayTrades > 0 ? ((wins / todayTrades) * 100).toFixed(1) : '0.0';
 
   const formatCurrency = (value: number) => {
     if (currency === 'BRL') {
@@ -62,6 +63,16 @@ export function BankManagementCard() {
       connect();
     }
   };
+
+  const getPeriodLabel = (p: StatsPeriod) => {
+    switch (p) {
+      case 'today': return 'Hoje';
+      case 'week': return 'Semana';
+      case 'month': return 'Mês';
+    }
+  };
+
+  const periodOptions: StatsPeriod[] = ['today', 'week', 'month'];
 
   return (
     <section className="glass-card p-4">
@@ -129,28 +140,52 @@ export function BankManagementCard() {
           {formatCurrency(currentBalance)}
         </div>
         
+        {/* Period Selector */}
+        <div className="flex items-center justify-center gap-1 mt-3 mb-2">
+          <Calendar className="w-4 h-4 text-muted-foreground mr-1" />
+          {periodOptions.map((p) => (
+            <Button
+              key={p}
+              variant={period === p ? "default" : "ghost"}
+              size="sm"
+              className={cn(
+                "h-7 px-3 text-xs",
+                period === p 
+                  ? "bg-primary text-primary-foreground" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              onClick={() => setPeriod(p)}
+              disabled={statsLoading}
+            >
+              {getPeriodLabel(p)}
+            </Button>
+          ))}
+        </div>
+        
         {/* Profit/Loss indicator */}
         <div className={cn(
-          "mt-3 p-2 rounded-lg flex items-center justify-center gap-2",
-          dailyProfit >= 0 
+          "p-2 rounded-lg flex items-center justify-center gap-2",
+          profit >= 0 
             ? "bg-call/20 border border-call/30" 
             : "bg-put/20 border border-put/30"
         )}>
-          {dailyProfit >= 0 ? (
+          {statsLoading ? (
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          ) : profit >= 0 ? (
             <>
               <TrendingUp className="w-5 h-5 text-call" />
               <span className="text-lg font-bold text-call">
-                +{formatCurrency(dailyProfit)}
+                +{formatCurrency(profit)}
               </span>
-              <span className="text-sm text-call/80">hoje</span>
+              <span className="text-sm text-call/80">{getPeriodLabel(period).toLowerCase()}</span>
             </>
           ) : (
             <>
               <TrendingDown className="w-5 h-5 text-put" />
               <span className="text-lg font-bold text-put">
-                {formatCurrency(dailyProfit)}
+                {formatCurrency(profit)}
               </span>
-              <span className="text-sm text-put/80">hoje</span>
+              <span className="text-sm text-put/80">{getPeriodLabel(period).toLowerCase()}</span>
             </>
           )}
         </div>
@@ -178,10 +213,10 @@ export function BankManagementCard() {
         <div className="bg-secondary/50 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1">
             <Activity className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Trades Hoje</span>
+            <span className="text-xs text-muted-foreground">Trades ({getPeriodLabel(period)})</span>
           </div>
           <div className={cn('font-mono font-bold', isOvertrading ? 'text-gold' : 'text-foreground')}>
-            {todayTrades}/{maxDailyTrades}
+            {trades}{period === 'today' ? `/${maxDailyTrades}` : ''}
           </div>
         </div>
       </div>
@@ -197,25 +232,27 @@ export function BankManagementCard() {
           <div className="text-xs text-muted-foreground">Losses</div>
         </div>
         <div className="bg-primary/10 rounded-lg p-2 text-center">
-          <div className="text-lg font-bold text-primary">{winRate}%</div>
+          <div className="text-lg font-bold text-primary">{winRate.toFixed(1)}%</div>
           <div className="text-xs text-muted-foreground">Win Rate</div>
         </div>
       </div>
 
-      {/* Trade Progress */}
-      <div className="mb-4">
-        <div className="flex justify-between text-xs text-muted-foreground mb-2">
-          <span>Progresso Diário</span>
-          <span>{tradeProgress.toFixed(0)}%</span>
+      {/* Trade Progress - only show for today */}
+      {period === 'today' && (
+        <div className="mb-4">
+          <div className="flex justify-between text-xs text-muted-foreground mb-2">
+            <span>Progresso Diário</span>
+            <span>{tradeProgress.toFixed(0)}%</span>
+          </div>
+          <Progress
+            value={tradeProgress}
+            className={cn('h-2', isOvertrading && '[&>div]:bg-gold')}
+          />
         </div>
-        <Progress
-          value={tradeProgress}
-          className={cn('h-2', isOvertrading && '[&>div]:bg-gold')}
-        />
-      </div>
+      )}
 
       {/* Alerts */}
-      {(isOvertrading || hasConsecutiveLosses) && (
+      {(isOvertrading || hasConsecutiveLosses) && period === 'today' && (
         <div className="space-y-2">
           {isOvertrading && (
             <div className="flex items-center gap-2 p-2 bg-gold/10 border border-gold/20 rounded-lg">

@@ -18,63 +18,40 @@ interface BalanceInfo {
   accountType: string;
 }
 
-// Multiple IQ Option API endpoints to try (some may be blocked by region/datacenter)
-const IQ_OPTION_AUTH_URLS = [
-  'https://auth.iqoption.com/api/v2/login',
-  'https://api.iqoption.com/api/v2/login',
-  'https://iqoption.com/api/v2/login',
-];
+// Use the same endpoint that works in iqoption-get-assets
+const IQ_OPTION_AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
 const IQ_OPTION_WS_URL = 'wss://iqoption.com/echo/websocket';
 
 async function loginToIQOption(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
-  for (const url of IQ_OPTION_AUTH_URLS) {
-    try {
-      console.log(`Attempting to login to IQ Option via: ${url}`);
+  try {
+    console.log('Attempting to login to IQ Option...');
+    
+    const response = await fetch(IQ_OPTION_AUTH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+      body: new URLSearchParams({
+        identifier: email,
+        password: password,
+      }),
+    });
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // fail fast
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-          'Origin': 'https://iqoption.com',
-          'Referer': 'https://iqoption.com/',
-        },
-        body: new URLSearchParams({
-          identifier: email,
-          password: password,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      const data = await response.json();
-      console.log('Login response status:', response.status, 'code:', data?.code);
-
-      if (data?.code === 'success' && data?.ssid) {
-        console.log('Login successful, SSID obtained');
-        return { ssid: data.ssid, error: null };
-      }
-
-      // If we got a clear auth error, stop trying other endpoints
-      if (data?.code === 'invalid' || data?.message) {
-        return { ssid: null, error: data.message || 'Email ou senha incorretos' };
-      }
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error(`Login attempt failed for ${url}:`, msg);
-      // try next url
+    const data = await response.json();
+    console.log('Login response status:', response.status);
+    
+    if (data.code === 'success' && data.ssid) {
+      console.log('Login successful, SSID obtained');
+      return { ssid: data.ssid, error: null };
+    } else {
+      console.error('Login failed:', data.message || 'Unknown error');
+      return { ssid: null, error: data.message || 'Login failed' };
     }
+  } catch (error) {
+    console.error('Login error:', error);
+    return { ssid: null, error: String(error) };
   }
-
-  return {
-    ssid: null,
-    error: 'Não foi possível acessar a IQ Option a partir deste servidor (possível bloqueio de rede).',
-  };
 }
 
 async function getBalance(ssid: string, accountType: string): Promise<BalanceInfo | null> {

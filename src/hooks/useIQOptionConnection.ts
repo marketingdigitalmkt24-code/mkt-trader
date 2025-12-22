@@ -38,7 +38,7 @@ export function useIQOptionConnection() {
 
   // Fetch balance from IQ Option API via Edge Function
   const refreshBalanceFromAPI = useCallback(async () => {
-    if (!user) return;
+    if (!user || isLoading) return;
 
     try {
       console.log('🔄 Fetching balance from IQ Option API...');
@@ -68,12 +68,14 @@ export function useIQOptionConnection() {
           consecutiveLosses: data.consecutiveLosses || 0,
         });
       } else {
-        console.error('❌ Failed to fetch balance:', error || data?.error);
+        // Silently fail - don't spam console with errors
+        console.warn('⚠️ Balance refresh skipped (server unavailable)');
       }
     } catch (error) {
-      console.error('❌ Error fetching balance:', error);
+      // Silently fail - edge function may be blocked by IQ Option
+      console.warn('⚠️ Balance refresh failed silently');
     }
-  }, [user]);
+  }, [user, isLoading]);
 
   // Fetch daily stats from database
   const fetchDailyStats = useCallback(async () => {
@@ -299,7 +301,7 @@ export function useIQOptionConnection() {
     }
   }, [user, connect]);
 
-  // Refresh balance periodically (every 15 seconds) and when operation results change
+  // Refresh balance periodically (every 60 seconds) and when operation results change
   useEffect(() => {
     if (!user || connectionStatus !== 'connected') return;
 
@@ -307,11 +309,11 @@ export function useIQOptionConnection() {
     refreshBalanceFromAPI();
     fetchDailyStats();
 
-    // Set up periodic balance refresh (every 15 seconds for more real-time updates)
+    // Set up periodic balance refresh (every 60 seconds to avoid rate limits)
     balanceRefreshInterval.current = setInterval(() => {
       console.log('⏰ Periodic balance refresh...');
       refreshBalanceFromAPI();
-    }, 15000);
+    }, 60000);
 
     // Subscribe to realtime updates for operation_results
     const channel = supabase
@@ -326,16 +328,14 @@ export function useIQOptionConnection() {
         (payload) => {
           console.log('📢 Operation result changed:', payload);
           
-          // Check if it's a loss - immediately refresh balance
+          // Check if it's a loss - refresh stats
           const newRecord = payload.new as { result?: string } | undefined;
           if (newRecord?.result?.toLowerCase() === 'loss' || newRecord?.result?.toLowerCase() === 'loose') {
-            console.log('⚠️ Loss detected! Refreshing balance immediately...');
-            toast.warning('Loss detectado! Atualizando saldo...', { duration: 2000 });
+            console.log('⚠️ Loss detected! Refreshing stats...');
           }
           
-          // Refresh stats and balance when any result changes
+          // Refresh stats when any result changes (but not balance - too many API calls)
           fetchDailyStats();
-          refreshBalanceFromAPI();
         }
       )
       .subscribe();

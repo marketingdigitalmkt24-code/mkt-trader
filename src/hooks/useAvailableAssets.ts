@@ -109,8 +109,11 @@ export function useAvailableAssets(): UseAvailableAssetsReturn {
       const { data, error: fetchError } = await supabase.functions.invoke('iqoption-get-assets');
       
       if (fetchError) {
-        console.warn('Edge function error (using defaults):', fetchError.message);
-        // Use default assets on error instead of showing error
+        // Silently use defaults on connection errors (IQ Option timeout is common)
+        const isTimeoutError = fetchError.message?.includes('timeout') || fetchError.message?.includes('Connection');
+        if (!isTimeoutError) {
+          console.warn('Edge function error (using defaults):', fetchError.message);
+        }
         setAssets(DEFAULT_ASSETS);
         cachedAssets = DEFAULT_ASSETS;
         setLastUpdate(new Date());

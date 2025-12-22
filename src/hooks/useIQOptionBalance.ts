@@ -95,13 +95,13 @@ export function useIQOptionBalance() {
       });
       
       if (error) {
-        console.error('Error fetching balance:', error);
-        setConnectionStatus('disconnected');
-        // Use cached data if available
-        const cached = getCachedData();
-        if (cached) {
-          console.log('📦 Using cached balance data');
+        // Silently handle timeout errors (IQ Option API can be slow/blocked)
+        const isTimeoutError = error.message?.includes('timeout') || error.message?.includes('Connection');
+        if (!isTimeoutError) {
+          console.warn('Balance fetch error (using cache):', error.message);
         }
+        setConnectionStatus('disconnected');
+        // Use cached data if available - already initialized from cache
         return;
       }
 

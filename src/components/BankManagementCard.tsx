@@ -128,25 +128,35 @@ export function BankManagementCard() {
         <div className="text-2xl font-bold font-mono text-foreground">
           {formatCurrency(currentBalance)}
         </div>
-        <div className="flex items-center gap-1 mt-1">
+        
+        {/* Profit/Loss indicator */}
+        <div className={cn(
+          "mt-3 p-2 rounded-lg flex items-center justify-center gap-2",
+          dailyProfit >= 0 
+            ? "bg-call/20 border border-call/30" 
+            : "bg-put/20 border border-put/30"
+        )}>
           {dailyProfit >= 0 ? (
             <>
-              <TrendingUp className="w-4 h-4 text-call" />
-              <span className="text-sm text-call font-medium">
-                +{formatCurrency(dailyProfit)} hoje
+              <TrendingUp className="w-5 h-5 text-call" />
+              <span className="text-lg font-bold text-call">
+                +{formatCurrency(dailyProfit)}
               </span>
+              <span className="text-sm text-call/80">hoje</span>
             </>
           ) : (
             <>
-              <TrendingDown className="w-4 h-4 text-put" />
-              <span className="text-sm text-put font-medium">
-                {formatCurrency(dailyProfit)} hoje
+              <TrendingDown className="w-5 h-5 text-put" />
+              <span className="text-lg font-bold text-put">
+                {formatCurrency(dailyProfit)}
               </span>
+              <span className="text-sm text-put/80">hoje</span>
             </>
           )}
         </div>
+        
         {lastUpdate && (
-          <div className="text-xs text-muted-foreground mt-2">
+          <div className="text-xs text-muted-foreground mt-2 text-center">
             Atualizado: {lastUpdate.toLocaleTimeString('pt-BR')}
           </div>
         )}

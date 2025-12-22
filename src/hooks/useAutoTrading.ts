@@ -271,12 +271,21 @@ export function useAutoTrading() {
       return;
     }
 
-    // Find high confluence signals that haven't been traded yet and aren't being traded
-    let eligibleSignals = signals.filter(signal => 
-      signal.indicators.confluenceScore >= config.minConfluence &&
-      !processedSignals.current.has(signal.id) &&
-      !tradingInProgress.current.has(signal.id)
-    );
+    // Find signals that haven't been traded yet and aren't being traded
+    // When AI is enabled, skip confluence filter (AI will analyze all signals)
+    // When AI is disabled, use confluence filter
+    let eligibleSignals = signals.filter(signal => {
+      const notProcessed = !processedSignals.current.has(signal.id);
+      const notInProgress = !tradingInProgress.current.has(signal.id);
+      
+      if (config.useAIAnalysis) {
+        // AI mode: include all unprocessed signals (AI will filter)
+        return notProcessed && notInProgress;
+      } else {
+        // Non-AI mode: use confluence filter
+        return signal.indicators.confluenceScore >= config.minConfluence && notProcessed && notInProgress;
+      }
+    });
 
     if (eligibleSignals.length === 0) return;
 

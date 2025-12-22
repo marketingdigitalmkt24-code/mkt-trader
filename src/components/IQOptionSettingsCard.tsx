@@ -171,8 +171,14 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
         });
       } else {
         setTestResult('error');
+        
+        // Check if it's a server block issue
+        const isServerBlock = result.error?.includes('bloqueando') || 
+                              result.error?.includes('timeout') ||
+                              result.error?.includes('timed out');
+        
         toast({ 
-          title: 'Erro na conexão', 
+          title: isServerBlock ? 'Servidor bloqueado' : 'Erro na conexão', 
           description: result.error || 'Falha ao conectar com IQ Option',
           variant: 'destructive'
         });

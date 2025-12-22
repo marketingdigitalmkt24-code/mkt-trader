@@ -169,24 +169,26 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
           </div>
         </div>
 
-        {/* Minimum Confluence */}
-        <div className="space-y-2">
-          <Label className="flex items-center gap-2">
-            <Target className="w-4 h-4" />
-            Confluência mínima: {localConfig.minConfluence}%
-          </Label>
-          <Slider
-            value={[localConfig.minConfluence]}
-            onValueChange={([value]) => handleLocalChange({ minConfluence: value })}
-            min={60}
-            max={100}
-            step={1}
-            className="w-full"
-          />
-          <p className="text-xs text-muted-foreground">
-            Só executa entradas com confluência acima de {localConfig.minConfluence}%
-          </p>
-        </div>
+        {/* Minimum Confluence - Hidden when AI is active */}
+        {!(localConfig.useAIAnalysis ?? true) && (
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Target className="w-4 h-4" />
+              Confluência mínima: {localConfig.minConfluence}%
+            </Label>
+            <Slider
+              value={[localConfig.minConfluence]}
+              onValueChange={([value]) => handleLocalChange({ minConfluence: value })}
+              min={60}
+              max={100}
+              step={1}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">
+              Só executa entradas com confluência acima de {localConfig.minConfluence}%
+            </p>
+          </div>
+        )}
 
         {/* Max Daily Trades */}
         <div className="space-y-2">
@@ -241,7 +243,7 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
               />
               <p className="text-xs text-muted-foreground">
                 A IA analisa padrões técnicos e histórico para prever os melhores sinais.
-                Só executa trades quando a IA tem alta confiança de lucro.
+                <span className="text-purple-400 font-medium"> Quando ativa, substitui o filtro de confluência.</span>
               </p>
             </div>
           )}

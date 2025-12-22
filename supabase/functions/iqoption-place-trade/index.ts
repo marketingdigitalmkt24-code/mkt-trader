@@ -20,6 +20,15 @@ interface IQOptionCredentials {
   account_type: string;
 }
 
+interface TradeResult {
+  success: boolean;
+  tradeId?: string;
+  result?: 'win' | 'loss' | 'tie' | 'pending';
+  profit?: number;
+  exitPrice?: number;
+  error?: string;
+}
+
 // Multiple IQ Option API endpoints to try
 const IQ_OPTION_AUTH_URLS = [
   'https://auth.iqoption.com/api/v2/login',
@@ -76,11 +85,11 @@ async function loginToIQOption(email: string, password: string): Promise<{ ssid:
   return { ssid: null, error: 'Não foi possível conectar à IQ Option' };
 }
 
-async function placeTrade(
+async function placeTradeAndWaitResult(
   ssid: string, 
   accountType: string,
   trade: TradeRequest
-): Promise<{ success: boolean; tradeId?: string; error?: string }> {
+): Promise<TradeResult> {
   return new Promise((resolve) => {
     console.log('Connecting to IQ Option WebSocket for trading...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
@@ -89,14 +98,24 @@ async function placeTrade(
     let tradeId: string | null = null;
     let activeAssets: Record<string, number> = {};
     let tradePlaced = false;
+    let resultReceived = false;
+    
+    // Timeout for the entire operation (trade + wait for result)
+    const expirationMs = (trade.expiration + 1) * 60 * 1000; // expiration + 1 minute buffer
+    const maxTimeout = Math.min(expirationMs, 120000); // Max 2 minutes
     
     const timeout = setTimeout(() => {
-      if (!tradePlaced) {
-        console.log('Trade timeout, closing connection');
+      if (!resultReceived) {
+        console.log('Operation timeout, closing connection');
         ws.close();
-        resolve({ success: false, error: 'Trade timeout - asset may be closed' });
+        if (tradePlaced && tradeId) {
+          // Trade was placed but result not received - mark as pending
+          resolve({ success: true, tradeId, result: 'pending', profit: 0 });
+        } else {
+          resolve({ success: false, error: 'Trade timeout - asset may be closed' });
+        }
       }
-    }, 20000); // 20 second timeout
+    }, maxTimeout);
 
     ws.onopen = () => {
       console.log('WebSocket connected, authenticating...');
@@ -266,9 +285,8 @@ async function placeTrade(
           const id = data.msg?.id || data.msg?.option_id;
           if (id) {
             tradeId = String(id);
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ success: true, tradeId: tradeId });
+            console.log(`Trade ID: ${tradeId} - waiting for result...`);
+            // Don't close yet - wait for the result
           }
         }
         
@@ -281,18 +299,78 @@ async function placeTrade(
             clearTimeout(timeout);
             ws.close();
             resolve({ success: false, error: data.msg.message });
-          } else if (data.msg.id) {
+          } else if (data.msg.id && !tradeId) {
             tradeId = String(data.msg.id);
-            console.log('Trade confirmed with ID:', tradeId);
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ success: true, tradeId: tradeId });
+            console.log(`Trade confirmed with ID: ${tradeId} - waiting for result...`);
           }
         }
         
-        // Handle listInfoData for getting actual tradeable assets
-        if (data.name === 'listInfoData' || data.name === 'activeSchedule') {
-          console.log('Received asset schedule data');
+        // Handle option closed event - THIS IS THE RESULT!
+        if (data.name === 'option-closed' || data.name === 'binary-options.option-closed') {
+          console.log('🎯 Option closed event received:', JSON.stringify(data.msg));
+          const msg = data.msg;
+          
+          // Check if this is our trade
+          const closedId = String(msg.id || msg.option_id || msg.position_id);
+          if (tradeId && closedId === tradeId) {
+            resultReceived = true;
+            
+            let result: 'win' | 'loss' | 'tie' = 'tie';
+            const profit = msg.profit || msg.win_amount || 0;
+            const exitPrice = msg.close_quote || msg.close_rate || msg.close_price || 0;
+            
+            if (msg.win === 'win' || profit > 0) {
+              result = 'win';
+            } else if (msg.win === 'loose' || msg.win === 'loss' || profit < 0) {
+              result = 'loss';
+            } else if (msg.win === 'equal' || profit === 0) {
+              result = 'tie';
+            }
+            
+            console.log(`✅ Trade result: ${result}, profit: ${profit}, exit price: ${exitPrice}`);
+            
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ 
+              success: true, 
+              tradeId, 
+              result, 
+              profit: Number(profit),
+              exitPrice: Number(exitPrice)
+            });
+          }
+        }
+        
+        // Handle portfolio order changed (also contains results)
+        if (data.name === 'portfolio.order-changed' && data.msg) {
+          const msg = data.msg;
+          const orderId = String(msg.id || msg.option_id || msg.external_id);
+          
+          if (tradeId && orderId === tradeId && msg.status === 'closed') {
+            resultReceived = true;
+            
+            const profit = msg.close_profit || msg.pnl || msg.profit || 0;
+            const exitPrice = msg.close_quote || msg.close_rate || 0;
+            
+            let result: 'win' | 'loss' | 'tie' = 'tie';
+            if (msg.win === 'win' || profit > 0) {
+              result = 'win';
+            } else if (msg.win === 'loose' || msg.win === 'loss' || profit < 0) {
+              result = 'loss';
+            }
+            
+            console.log(`✅ Trade result from portfolio: ${result}, profit: ${profit}`);
+            
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ 
+              success: true, 
+              tradeId, 
+              result, 
+              profit: Number(profit),
+              exitPrice: Number(exitPrice)
+            });
+          }
         }
         
         // Handle error responses
@@ -397,24 +475,31 @@ serve(async (req) => {
       );
     }
 
-    // Place the trade
-    const result = await placeTrade(ssid, credentials.account_type, tradeRequest);
+    // Place the trade and wait for result
+    const result = await placeTradeAndWaitResult(ssid, credentials.account_type, tradeRequest);
     
     console.log('Trade result:', result);
 
-    // Log the trade
-    if (result.success) {
-      await supabase
+    // Log the trade with actual result
+    if (result.success && result.tradeId) {
+      const insertResult = await supabase
         .from('operation_results')
         .insert({
           signal_id: tradeRequest.signalId || `manual_${Date.now()}`,
           asset: tradeRequest.asset,
           direction: tradeRequest.direction.toUpperCase(),
           entry_price: tradeRequest.amount,
-          result: 'pending',
-          profit: 0,
+          exit_price: result.exitPrice || null,
+          result: result.result || 'pending',
+          profit: result.profit || 0,
           iq_option_id: result.tradeId,
         });
+      
+      if (insertResult.error) {
+        console.error('Error saving result:', insertResult.error);
+      } else {
+        console.log(`💾 Saved trade result: ${result.result} with profit ${result.profit}`);
+      }
     }
 
     return new Response(

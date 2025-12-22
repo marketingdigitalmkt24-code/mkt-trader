@@ -324,7 +324,7 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
               className="gap-2"
               size="icon"
             >
-              <WifiOff className="w-4 h-4 text-red-500" />
+              <WifiOff className="w-4 h-4 text-destructive" />
             </Button>
           )}
         </div>

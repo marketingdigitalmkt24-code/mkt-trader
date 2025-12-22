@@ -59,38 +59,38 @@ export function TradingStatsCard({ stats, title = "Estatísticas" }: TradingStat
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-secondary/50 rounded-lg p-3 text-center">
-          <div className="flex items-center justify-center gap-1 text-call mb-1">
-            <TrendingUp className="w-4 h-4" />
-            <span className="font-bold text-lg">{stats.wins}</span>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <div className="bg-secondary/50 rounded-lg p-2 sm:p-3 text-center">
+          <div className="flex items-center justify-center gap-1 text-call mb-0.5 sm:mb-1">
+            <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="font-bold text-base sm:text-lg">{stats.wins}</span>
           </div>
           <span className="text-xs text-muted-foreground">Wins</span>
         </div>
         
-        <div className="bg-secondary/50 rounded-lg p-3 text-center">
-          <div className="flex items-center justify-center gap-1 text-put mb-1">
-            <TrendingDown className="w-4 h-4" />
-            <span className="font-bold text-lg">{stats.losses}</span>
+        <div className="bg-secondary/50 rounded-lg p-2 sm:p-3 text-center">
+          <div className="flex items-center justify-center gap-1 text-put mb-0.5 sm:mb-1">
+            <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="font-bold text-base sm:text-lg">{stats.losses}</span>
           </div>
           <span className="text-xs text-muted-foreground">Losses</span>
         </div>
         
-        <div className="bg-secondary/50 rounded-lg p-3 text-center">
-          <div className="flex items-center justify-center gap-1 mb-1">
-            <Target className="w-4 h-4 text-gold" />
-            <span className="font-bold text-lg">{stats.totalSignals}</span>
+        <div className="bg-secondary/50 rounded-lg p-2 sm:p-3 text-center">
+          <div className="flex items-center justify-center gap-1 mb-0.5 sm:mb-1">
+            <Target className="w-3 h-3 sm:w-4 sm:h-4 text-gold" />
+            <span className="font-bold text-base sm:text-lg">{stats.totalSignals}</span>
           </div>
           <span className="text-xs text-muted-foreground">Total</span>
         </div>
         
-        <div className="bg-secondary/50 rounded-lg p-3 text-center">
+        <div className="bg-secondary/50 rounded-lg p-2 sm:p-3 text-center">
           <div className={cn(
-            'flex items-center justify-center gap-1 mb-1',
+            'flex items-center justify-center gap-1 mb-0.5 sm:mb-1',
             isProfitable ? 'text-call' : 'text-put'
           )}>
-            <DollarSign className="w-4 h-4" />
-            <span className="font-bold text-lg">
+            <DollarSign className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="font-bold text-base sm:text-lg">
               {isProfitable ? '+' : ''}{stats.totalProfit.toFixed(2)}
             </span>
           </div>

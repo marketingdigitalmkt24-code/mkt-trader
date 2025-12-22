@@ -162,6 +162,8 @@ export function useSignalResults() {
           .from('operation_results')
           .select('*')
           .gte('created_at', today.toISOString())
+          .eq('is_auto_trade', true)
+          .eq('is_ai_analyzed', true)
           .order('created_at', { ascending: false });
         
         if (error) {
@@ -363,6 +365,8 @@ export function useSignalResults() {
       const { data, error } = await supabase
         .from('operation_results')
         .select('*')
+        .eq('is_auto_trade', true)
+        .eq('is_ai_analyzed', true)
         .order('created_at', { ascending: false })
         .limit(500); // Limit to last 500 results
       

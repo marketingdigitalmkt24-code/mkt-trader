@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useIQOptionAuth } from '@/contexts/IQOptionAuthContext';
 import { iqOptionClient } from '@/services/IQOptionClient';
 import { toast } from 'sonner';
 
@@ -21,7 +21,7 @@ interface DailyStats {
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export function useIQOptionConnection() {
-  const { user } = useAuth();
+  const { user, isConnected: authConnected, connectionStatus: authConnectionStatus } = useIQOptionAuth();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [balance, setBalance] = useState<BalanceInfo | null>(null);
   const [dailyStats, setDailyStats] = useState<DailyStats>({
@@ -33,12 +33,14 @@ export function useIQOptionConnection() {
   });
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const hasConnected = useRef(false);
+
+  // Sync connection status with auth context
+  useEffect(() => {
+    setConnectionStatus(authConnectionStatus);
+  }, [authConnectionStatus]);
 
   // Fetch daily stats from database
   const fetchDailyStats = useCallback(async () => {
-    if (!user) return;
-
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -58,11 +60,11 @@ export function useIQOptionConnection() {
       let currentStreak = 0;
 
       for (const result of results || []) {
-        if (result.result === 'WIN') {
+        if (result.result === 'WIN' || result.result === 'win') {
           wins++;
           profit += result.profit;
           currentStreak = 0;
-        } else if (result.result === 'LOSS') {
+        } else if (result.result === 'LOSS' || result.result === 'loss') {
           losses++;
           profit += result.profit;
           currentStreak++;
@@ -80,11 +82,11 @@ export function useIQOptionConnection() {
     } catch (error) {
       console.error('Error fetching daily stats:', error);
     }
-  }, [user]);
+  }, []);
 
-  // Connect to IQ Option
+  // Connect to IQ Option (now handled by auth context, this is for manual reconnection)
   const connect = useCallback(async () => {
-    if (!user || isLoading) return;
+    if (isLoading) return;
 
     setIsLoading(true);
     setConnectionStatus('connecting');
@@ -94,60 +96,31 @@ export function useIQOptionConnection() {
       const { data: config, error } = await supabase
         .from('iqoption_config')
         .select('email, password, account_type')
-        .eq('user_id', user.id)
         .eq('is_active', true)
+        .limit(1)
         .maybeSingle();
 
       if (error || !config) {
-        // Try global config
-        const { data: globalConfig, error: globalError } = await supabase
-          .from('iqoption_config')
-          .select('email, password, account_type')
-          .eq('is_active', true)
-          .maybeSingle();
+        setConnectionStatus('error');
+        toast.error('Nenhuma credencial IQ Option configurada');
+        return;
+      }
 
-        if (globalError || !globalConfig) {
-          setConnectionStatus('error');
-          toast.error('Nenhuma credencial IQ Option configurada');
-          return;
-        }
+      const result = await iqOptionClient.login({
+        email: config.email,
+        password: config.password,
+        accountType: config.account_type,
+      });
 
-        const result = await iqOptionClient.login({
-          email: globalConfig.email,
-          password: globalConfig.password,
-          accountType: globalConfig.account_type,
-        });
-
-        if (!result.success) {
-          setConnectionStatus('error');
-          toast.error(`Falha na conexão: ${result.error}`);
-          return;
-        }
-      } else {
-        const result = await iqOptionClient.login({
-          email: config.email,
-          password: config.password,
-          accountType: config.account_type,
-        });
-
-        if (!result.success) {
-          setConnectionStatus('error');
-          toast.error(`Falha na conexão: ${result.error}`);
-          return;
-        }
+      if (!result.success) {
+        setConnectionStatus('error');
+        toast.error(`Falha na conexão: ${result.error}`);
+        return;
       }
 
       setConnectionStatus('connected');
       setLastUpdate(new Date());
-      hasConnected.current = true;
       toast.success('Conectado à IQ Option');
-
-      // Update last connected timestamp
-      await supabase
-        .from('iqoption_config')
-        .update({ last_connected_at: new Date().toISOString() })
-        .eq('user_id', user.id)
-        .eq('is_active', true);
 
     } catch (error) {
       console.error('Connection error:', error);
@@ -156,13 +129,12 @@ export function useIQOptionConnection() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isLoading]);
+  }, [isLoading]);
 
   // Disconnect from IQ Option
   const disconnect = useCallback(() => {
     iqOptionClient.disconnect();
     setConnectionStatus('disconnected');
-    hasConnected.current = false;
   }, []);
 
   // Place a trade
@@ -215,17 +187,9 @@ export function useIQOptionConnection() {
     );
 
     return () => {
-      // Clean up on unmount
-      iqOptionClient.disconnect();
+      // Don't disconnect on unmount - let auth context handle it
     };
   }, []);
-
-  // Auto-connect when user is available
-  useEffect(() => {
-    if (user && !hasConnected.current) {
-      connect();
-    }
-  }, [user, connect]);
 
   // Fetch daily stats periodically
   useEffect(() => {
@@ -243,6 +207,6 @@ export function useIQOptionConnection() {
     connect,
     disconnect,
     placeTrade,
-    isConnected: iqOptionClient.isConnected(),
+    isConnected: authConnected || iqOptionClient.isConnected(),
   };
 }

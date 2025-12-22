@@ -61,11 +61,13 @@ export function SignalHistorySection({
 }: SignalHistorySectionProps) {
   const [currentPage, setCurrentPage] = useState(1);
   
-  const todayHistory = history.filter((h) => {
-    const todayUtc = new Date();
-    todayUtc.setUTCHours(0, 0, 0, 0);
-    return new Date(h.timestamp).getTime() >= todayUtc.getTime();
-  });
+  // Filter today's history and sort by most recent first
+  const todayUtc = new Date();
+  todayUtc.setUTCHours(0, 0, 0, 0);
+  
+  const todayHistory = history
+    .filter((h) => new Date(h.timestamp).getTime() >= todayUtc.getTime())
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   // Calculate today's wins and losses
   const todayWins = todayHistory.filter(h => h.result === 'win').length;
@@ -74,10 +76,11 @@ export function SignalHistorySection({
   const totalStats = calculateStats(history);
   const computedTodayStats = calculateStats(todayHistory);
 
-  const totalPages = Math.ceil(history.length / ITEMS_PER_PAGE);
+  // Paginate today's history (sorted by most recent first)
+  const totalPages = Math.ceil(todayHistory.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedHistory = history.slice(startIndex, endIndex);
+  const paginatedHistory = todayHistory.slice(startIndex, endIndex);
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
@@ -93,7 +96,7 @@ export function SignalHistorySection({
           <div>
             <h2 className="text-lg font-bold">Histórico de Resultados</h2>
             <p className="text-sm text-muted-foreground">
-              Hoje: <span className="text-call font-medium">{todayWins}W</span> / <span className="text-put font-medium">{todayLosses}L</span> / <span className="text-muted-foreground">{todayTies}T</span> • {history.length} total
+              Hoje: <span className="text-call font-medium">{todayWins}W</span> / <span className="text-put font-medium">{todayLosses}L</span> / <span className="text-muted-foreground">{todayTies}T</span> • {todayHistory.length} trades hoje
             </p>
           </div>
         </div>
@@ -188,7 +191,7 @@ export function SignalHistorySection({
           </Button>
           
           <span className="text-sm text-muted-foreground ml-2">
-            {startIndex + 1}-{Math.min(endIndex, history.length)} de {history.length}
+            {startIndex + 1}-{Math.min(endIndex, todayHistory.length)} de {todayHistory.length}
           </span>
         </div>
       )}

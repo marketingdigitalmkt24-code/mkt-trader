@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SignalHistory, SignalResult, TradingStats } from '@/types/trading';
+import { SignalHistory, TradingStats } from '@/types/trading';
 import { SignalResultCard } from './SignalResultCard';
 import { TradingStatsCard } from './TradingStatsCard';
 import { History, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -7,7 +7,6 @@ import { Button } from './ui/button';
 
 interface SignalHistorySectionProps {
   history: SignalHistory[];
-  onRegisterResult: (signalId: string, result: SignalResult) => void;
   onClearHistory: () => void;
 }
 
@@ -56,7 +55,6 @@ function calculateStats(historyData: SignalHistory[]): TradingStats {
 
 export function SignalHistorySection({ 
   history, 
-  onRegisterResult,
   onClearHistory 
 }: SignalHistorySectionProps) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -140,8 +138,7 @@ export function SignalHistorySection({
             <SignalResultCard
               key={entry.id}
               signal={entry.signal}
-              onRegisterResult={onRegisterResult}
-              showManualButtons={!entry.result || entry.result === 'pending'}
+              showManualButtons={false}
             />
           ))}
         </div>

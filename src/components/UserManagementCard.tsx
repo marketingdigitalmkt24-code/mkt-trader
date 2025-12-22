@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Users, UserPlus, Trash2, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Lock, Eye, EyeOff, Loader2, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
@@ -13,10 +14,12 @@ const userSchema = z.object({
   password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres').max(100, 'Senha muito longa'),
 });
 
-interface RegisteredUser {
+interface ClientProfile {
   id: string;
+  user_id: string;
   email: string;
   created_at: string;
+  is_active: boolean;
 }
 
 export function UserManagementCard() {
@@ -25,31 +28,24 @@ export function UserManagementCard() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [users, setUsers] = useState<RegisteredUser[]>([]);
+  const [users, setUsers] = useState<ClientProfile[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
 
-  // Fetch registered users from user_roles table (users with 'user' role)
+  // Fetch registered users from client_profiles table
   const fetchUsers = async () => {
     setIsLoadingUsers(true);
     try {
       const { data, error } = await supabase
-        .from('user_roles')
-        .select('user_id, created_at')
-        .eq('role', 'user');
+        .from('client_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching users:', error);
         return;
       }
 
-      // Map to display format
-      const mappedUsers = data?.map(item => ({
-        id: item.user_id,
-        email: '', // We can't access auth.users directly, will show ID
-        created_at: item.created_at || '',
-      })) || [];
-
-      setUsers(mappedUsers);
+      setUsers(data || []);
     } catch (err) {
       console.error('Error:', err);
     } finally {
@@ -100,10 +96,29 @@ export function UserManagementCard() {
     }
   };
 
+  const handleToggleActive = async (userId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('client_profiles')
+        .update({ is_active: !currentStatus })
+        .eq('user_id', userId);
+
+      if (error) {
+        toast({ title: 'Erro', description: 'Erro ao atualizar status', variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: 'Sucesso', description: `Usuário ${!currentStatus ? 'ativado' : 'desativado'}` });
+      fetchUsers();
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Erro ao atualizar status', variant: 'destructive' });
+    }
+  };
+
   const handleDeleteUser = async (userId: string) => {
     try {
       const { error } = await supabase
-        .from('user_roles')
+        .from('client_profiles')
         .delete()
         .eq('user_id', userId);
 
@@ -111,6 +126,12 @@ export function UserManagementCard() {
         toast({ title: 'Erro', description: 'Erro ao remover usuário', variant: 'destructive' });
         return;
       }
+
+      // Also remove from user_roles
+      await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId);
 
       toast({ title: 'Sucesso', description: 'Usuário removido' });
       fetchUsers();
@@ -218,22 +239,36 @@ export function UserManagementCard() {
                   key={user.id}
                   className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg"
                 >
-                  <div>
-                    <p className="text-sm font-medium truncate max-w-[200px]">
-                      {user.id.substring(0, 8)}...
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Criado em: {new Date(user.created_at).toLocaleDateString('pt-BR')}
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                      <UserCheck className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {user.email}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Criado em: {new Date(user.created_at).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => handleDeleteUser(user.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Badge 
+                      variant={user.is_active ? "default" : "secondary"}
+                      className="cursor-pointer"
+                      onClick={() => handleToggleActive(user.user_id, user.is_active)}
+                    >
+                      {user.is_active ? 'Ativo' : 'Inativo'}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteUser(user.user_id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

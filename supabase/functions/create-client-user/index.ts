@@ -65,7 +65,18 @@ serve(async (req) => {
 
     if (roleError) {
       console.error("Error assigning role:", roleError);
-      // Don't fail completely, user was created
+    }
+
+    // Save client profile with email
+    const { error: profileError } = await supabaseAdmin
+      .from("client_profiles")
+      .insert({
+        user_id: userData.user.id,
+        email: email,
+      });
+
+    if (profileError) {
+      console.error("Error saving profile:", profileError);
     }
 
     return new Response(

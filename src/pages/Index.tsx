@@ -22,7 +22,6 @@ type MarketFilter = 'ALL' | MarketType;
 const Index = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe | 'ALL'>('ALL');
   const [selectedMarket, setSelectedMarket] = useState<MarketFilter>('ALL');
-  const [processedSignalIds, setProcessedSignalIds] = useState<Set<string>>(new Set());
   
   const { 
     signals, 
@@ -40,8 +39,6 @@ const Index = () => {
     history,
     stats,
     todayStats,
-    addSignalWithSimulation,
-    registerManualResult,
     clearHistory,
   } = useSignalResults();
 
@@ -62,29 +59,6 @@ const Index = () => {
       checkAndAutoTrade(signals);
     }
   }, [signals, checkAndAutoTrade]);
-
-  // Simular resultado automaticamente quando um novo sinal aparece
-  useEffect(() => {
-    signals.forEach((signal) => {
-      if (!processedSignalIds.has(signal.id) && signal.indicators.confluenceCount >= 4) {
-        // Aguardar tempo da expiração para simular resultado
-        const expirationMs = signal.timeframe === 'M1' ? 120000 : 300000; // 2 ou 5 minutos
-        
-        setTimeout(() => {
-          const { result, profit } = addSignalWithSimulation(signal);
-          
-          // Registrar loss no controle de risco se necessário
-          if (result === 'loss') {
-            registerLoss();
-          }
-          
-          console.log(`📊 Resultado simulado: ${signal.asset} ${signal.type} = ${result} (${profit > 0 ? '+' : ''}${profit.toFixed(2)})`);
-        }, expirationMs);
-        
-        setProcessedSignalIds(prev => new Set(prev).add(signal.id));
-      }
-    });
-  }, [signals, processedSignalIds, addSignalWithSimulation, registerLoss]);
 
   // Filter signals by timeframe and market type
   const filteredSignals = signals.filter((s) => {
@@ -168,10 +142,9 @@ const Index = () => {
               maxDailySignals={maxDailySignals}
             />
             
-            {/* Histórico de Resultados */}
+            {/* Histórico de Resultados - Apenas Auto Trading */}
             <SignalHistorySection 
               history={history}
-              onRegisterResult={registerManualResult}
               onClearHistory={clearHistory}
             />
             

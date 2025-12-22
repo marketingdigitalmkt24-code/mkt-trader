@@ -375,8 +375,22 @@ export function useAutoTrading() {
           });
         }
       } catch (err) {
-        console.error('AI analysis failed, falling back to confluence only:', err);
-        // Continue with original eligible signals if AI fails
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.warn('AI analysis failed, using confluence fallback:', errorMsg);
+        
+        // Show toast for credits exhausted
+        if (errorMsg.includes('credits')) {
+          toast({
+            title: '⚠️ Créditos de IA esgotados',
+            description: 'Usando análise de confluência. Adicione créditos em Settings → Workspace → Usage',
+            variant: 'destructive',
+          });
+        }
+        
+        // Filter by confluence when AI fails
+        eligibleSignals = eligibleSignals.filter(
+          s => s.indicators.confluenceScore >= config.minConfluence
+        );
       }
     }
 

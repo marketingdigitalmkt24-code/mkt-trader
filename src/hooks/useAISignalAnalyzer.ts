@@ -187,34 +187,52 @@ export function useAISignalAnalyzer() {
   const filterByAIRecommendation = useCallback((
     signals: TradingSignal[],
     analysis: AIAnalysisResult,
-    minConfidence: number = 85 // Increased from 70
+    minConfidence: number = 90 // Increased from 85
   ): TradingSignal[] => {
-    // Only take the best signal if available, otherwise filter by criteria
+    // Only take the BEST signal - maximum 1 trade per analysis
     const bestSignalId = analysis.bestSignal;
     
-    return signals.filter(signal => {
+    // First, check if best signal meets all criteria
+    if (bestSignalId) {
+      const bestSignal = signals.find(s => s.id === bestSignalId || s.asset === bestSignalId);
+      const bestAnalysis = analysis.analyzedSignals.find(
+        a => a.signalId === bestSignalId || a.asset === bestSignalId
+      );
+      
+      if (bestSignal && bestAnalysis) {
+        const meetsCriteria = (
+          bestAnalysis.recommendation === 'EXECUTE' &&
+          bestAnalysis.confidence >= minConfidence &&
+          bestAnalysis.riskLevel === 'LOW' && // Only LOW risk
+          bestAnalysis.adjustedConfluence >= 90
+        );
+        
+        if (meetsCriteria) {
+          console.log(`🎯 Best signal selected: ${bestSignal.asset} (${bestAnalysis.confidence}% confidence)`);
+          return [bestSignal]; // Return ONLY the best signal
+        }
+      }
+    }
+    
+    // If no best signal, look for any signal that meets ULTRA strict criteria
+    const ultraStrictSignals = signals.filter(signal => {
       const aiAnalysis = analysis.analyzedSignals.find(
         a => a.asset === signal.asset || a.signalId === signal.id
       );
 
       if (!aiAnalysis) return false;
 
-      // Must be EXECUTE with high confidence and LOW or MEDIUM risk
-      const meetsBasicCriteria = (
+      // ULTRA strict: EXECUTE + 92%+ confidence + LOW risk + 92%+ confluence
+      return (
         aiAnalysis.recommendation === 'EXECUTE' &&
-        aiAnalysis.confidence >= minConfidence &&
-        aiAnalysis.riskLevel !== 'HIGH' &&
-        aiAnalysis.adjustedConfluence >= 85
+        aiAnalysis.confidence >= 92 &&
+        aiAnalysis.riskLevel === 'LOW' &&
+        aiAnalysis.adjustedConfluence >= 92
       );
-
-      // Prioritize best signal
-      if (bestSignalId && (signal.id === bestSignalId || aiAnalysis.signalId === bestSignalId)) {
-        return meetsBasicCriteria;
-      }
-
-      // For other signals, be even more strict
-      return meetsBasicCriteria && aiAnalysis.confidence >= 90;
     });
+    
+    // Return only the first (best) one
+    return ultraStrictSignals.slice(0, 1);
   }, []);
 
   const getSignalAnalysis = useCallback((

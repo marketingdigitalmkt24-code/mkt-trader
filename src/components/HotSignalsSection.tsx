@@ -25,45 +25,45 @@ export function HotSignalsSection({
     const isWarning = waitingMessage?.includes('pausado') || waitingMessage?.includes('loss');
     
     return (
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gold/20">
-              <Flame className="w-6 h-6 text-gold" />
+      <section className="mb-6 sm:mb-8">
+        <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gold/20 shrink-0">
+              <Flame className="w-4 h-4 sm:w-6 sm:h-6 text-gold" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-gradient-gold">
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-bold text-gradient-gold truncate">
                 SINAIS PREMIUM
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
                 Apenas 4+ confirmações simultâneas
               </p>
             </div>
           </div>
           
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-xs shrink-0">
             {dailySignalsCount}/{maxDailySignals} hoje
           </Badge>
         </div>
         
-        <div className={`glass-card p-8 text-center border-2 ${isWarning ? 'border-destructive/50 bg-destructive/5' : 'border-dashed border-border'}`}>
-          <div className="flex items-center justify-center gap-3 mb-4">
+        <div className={`glass-card p-4 sm:p-8 text-center border-2 ${isWarning ? 'border-destructive/50 bg-destructive/5' : 'border-dashed border-border'}`}>
+          <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3 sm:mb-4">
             {isWarning ? (
-              <AlertTriangle className="w-8 h-8 text-destructive animate-pulse" />
+              <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-destructive animate-pulse" />
             ) : (
               <>
-                <Search className="w-6 h-6 text-gold animate-pulse" />
-                <Shield className="w-6 h-6 text-muted-foreground opacity-50" />
-                <Target className="w-6 h-6 text-muted-foreground opacity-50" />
+                <Search className="w-5 h-5 sm:w-6 sm:h-6 text-gold animate-pulse" />
+                <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground opacity-50" />
+                <Target className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground opacity-50" />
               </>
             )}
           </div>
           
-          <p className={`font-medium mb-2 ${isWarning ? 'text-destructive' : 'text-foreground'}`}>
+          <p className={`font-medium mb-2 text-sm sm:text-base ${isWarning ? 'text-destructive' : 'text-foreground'}`}>
             {waitingMessage || 'Aguardando oportunidade de ALTA QUALIDADE'}
           </p>
           
-          <div className="flex flex-wrap justify-center gap-2 mt-4">
+          <div className="flex flex-wrap justify-center gap-1 sm:gap-2 mt-3 sm:mt-4">
             <Badge variant="secondary" className="text-xs">
               RSI extremo
             </Badge>
@@ -78,7 +78,7 @@ export function HotSignalsSection({
             </Badge>
           </div>
           
-          <p className="text-xs text-muted-foreground mt-4">
+          <p className="text-xs text-muted-foreground mt-3 sm:mt-4">
             Mínimo 4 confirmações obrigatórias | Máx {maxDailySignals} sinais/dia
           </p>
         </div>
@@ -87,40 +87,41 @@ export function HotSignalsSection({
   }
 
   return (
-    <section className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gold/20 glow-gold pulse-hot">
-            <Flame className="w-6 h-6 text-gold" />
+    <section className="mb-6 sm:mb-8">
+      <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gold/20 glow-gold pulse-hot shrink-0">
+            <Flame className="w-4 h-4 sm:w-6 sm:h-6 text-gold" />
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-gradient-gold">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-gradient-gold truncate">
               🏆 ALTA PROBABILIDADE
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               {hotSignals.length} {hotSignals.length === 1 ? 'sinal' : 'sinais'} com 4+ confirmações
             </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <Badge variant="outline" className="text-xs hidden xs:inline-flex">
             {dailySignalsCount}/{maxDailySignals} hoje
           </Badge>
-          <div className="flex items-center gap-1 bg-call/20 text-call px-3 py-1.5 rounded-full text-xs font-bold">
-            <span className="w-2 h-2 bg-call rounded-full animate-pulse" />
-            AO VIVO
+          <div className="flex items-center gap-1 bg-call/20 text-call px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-bold">
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-call rounded-full animate-pulse" />
+            <span className="hidden xs:inline">AO VIVO</span>
+            <span className="xs:hidden">LIVE</span>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
         {hotSignals.map((signal) => (
           <div key={signal.id} className="relative">
             <div className="absolute -top-2 -right-2 z-10">
               <Badge className="bg-gold text-gold-foreground font-bold text-xs shadow-lg">
                 <Star className="w-3 h-3 mr-1 fill-current" />
-                {signal.indicators.confluenceCount} CONFIRMAÇÕES
+                {signal.indicators.confluenceCount} CONF
               </Badge>
             </div>
             <SignalCard signal={signal} isHighlighted />

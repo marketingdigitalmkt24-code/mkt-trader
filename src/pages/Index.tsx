@@ -97,13 +97,13 @@ const Index = () => {
         isSearching={isSearching}
       />
       
-      <main className="container pb-8">
+      <main className="container px-4 pb-6 sm:pb-8">
         {/* Loading Overlay */}
         {isLoading && (
           <div className="fixed inset-0 z-40 bg-background/50 backdrop-blur-sm flex items-center justify-center">
-            <div className="glass-card p-6 flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
-              <span className="text-sm text-muted-foreground">Atualizando sinais...</span>
+            <div className="glass-card p-4 sm:p-6 flex flex-col items-center gap-2 sm:gap-3">
+              <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 text-primary animate-spin" />
+              <span className="text-xs sm:text-sm text-muted-foreground">Atualizando sinais...</span>
             </div>
           </div>
         )}
@@ -111,7 +111,7 @@ const Index = () => {
         <QuickStats signals={filteredSignals} />
         
         {/* Filters Row */}
-        <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
           <TimeframeFilter
             selected={selectedTimeframe}
             onChange={setSelectedTimeframe}
@@ -119,13 +119,13 @@ const Index = () => {
           
           {/* Market Type Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Mercado:</span>
-            <div className="flex bg-secondary/50 rounded-lg p-1">
+            <span className="text-xs sm:text-sm text-muted-foreground shrink-0">Mercado:</span>
+            <div className="flex bg-secondary/50 rounded-lg p-1 overflow-x-auto">
               {(['ALL', 'forex', 'crypto', 'otc'] as MarketFilter[]).map((market) => (
                 <button
                   key={market}
                   onClick={() => setSelectedMarket(market)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
                     selectedMarket === market
                       ? market === 'otc' 
                         ? 'bg-blue-500/20 text-blue-400 shadow-lg'
@@ -140,9 +140,9 @@ const Index = () => {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
           {/* Main Content - Signals */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <HotSignalsSection 
               signals={filteredSignals} 
               waitingMessage={waitingMessage}
@@ -161,7 +161,7 @@ const Index = () => {
           </div>
 
           {/* Sidebar - Stats & Management */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <MarketStatusCard 
               otcOpen={marketStatus.otcOpen} 
               forexOpen={marketStatus.forexOpen} 

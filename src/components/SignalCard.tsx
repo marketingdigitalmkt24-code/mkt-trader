@@ -54,31 +54,31 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start sm:items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div
             className={cn(
-              'w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold',
+              'w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center text-xl sm:text-2xl font-bold shrink-0',
               isCall ? 'bg-call/20' : 'bg-put/20'
             )}
           >
             {signal.assetIcon}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">{signal.asset}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+              <span className="font-semibold text-foreground text-sm sm:text-base">{signal.asset}</span>
               {signal.isHot && (
-                <span className="flex items-center gap-1 text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full">
-                  <Zap className="w-3 h-3" />
+                <span className="flex items-center gap-0.5 sm:gap-1 text-xs bg-gold/20 text-gold px-1.5 sm:px-2 py-0.5 rounded-full">
+                  <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                   HOT
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="w-3 h-3" />
-              {formatTime(signal.timestamp)}
+            <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground flex-wrap">
+              <Clock className="w-3 h-3 shrink-0" />
+              <span>{formatTime(signal.timestamp)}</span>
               <span className={cn(
-                'text-xs px-1.5 py-0.5 rounded',
+                'text-xs px-1 sm:px-1.5 py-0.5 rounded',
                 signal.marketType === 'otc' ? 'bg-blue-500/20 text-blue-400' :
                 signal.marketType === 'crypto' ? 'bg-orange-500/20 text-orange-400' :
                 'bg-green-500/20 text-green-400'
@@ -91,36 +91,36 @@ export function SignalCard({ signal, isHighlighted = false }: SignalCardProps) {
         
         <div
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-lg',
+            'flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl font-bold text-sm sm:text-lg shrink-0',
             isCall ? 'bg-call/20 text-call' : 'bg-put/20 text-put'
           )}
         >
           {isCall ? (
-            <TrendingUp className="w-5 h-5" />
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
           ) : (
-            <TrendingDown className="w-5 h-5" />
+            <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
           )}
           {signal.type}
         </div>
       </div>
 
       {/* Info Grid */}
-      <div className="grid grid-cols-4 gap-2 mb-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
         <div className="bg-secondary/50 rounded-lg p-2 text-center">
-          <div className="text-xs text-muted-foreground mb-1">Timeframe</div>
-          <div className="font-mono font-semibold">{signal.timeframe}</div>
+          <div className="text-xs text-muted-foreground mb-0.5 sm:mb-1">Timeframe</div>
+          <div className="font-mono font-semibold text-sm sm:text-base">{signal.timeframe}</div>
         </div>
         <div className="bg-secondary/50 rounded-lg p-2 text-center">
-          <div className="text-xs text-muted-foreground mb-1">Expiração</div>
-          <div className="font-mono font-semibold">{signal.expiration}</div>
+          <div className="text-xs text-muted-foreground mb-0.5 sm:mb-1">Expiração</div>
+          <div className="font-mono font-semibold text-sm sm:text-base">{signal.expiration}</div>
         </div>
         <div className="bg-secondary/50 rounded-lg p-2 text-center">
-          <div className="text-xs text-muted-foreground mb-1">Preço</div>
-          <div className="font-mono font-semibold text-sm">{signal.price.toLocaleString('pt-BR')}</div>
+          <div className="text-xs text-muted-foreground mb-0.5 sm:mb-1">Preço</div>
+          <div className="font-mono font-semibold text-xs sm:text-sm truncate">{signal.price.toLocaleString('pt-BR')}</div>
         </div>
         <div className="bg-secondary/50 rounded-lg p-2 text-center">
-          <div className="text-xs text-muted-foreground mb-1">Confluência</div>
-          <div className={cn('font-mono font-bold', getConfluenceColor(signal.indicators.confluenceScore))}>
+          <div className="text-xs text-muted-foreground mb-0.5 sm:mb-1">Confluência</div>
+          <div className={cn('font-mono font-bold text-sm sm:text-base', getConfluenceColor(signal.indicators.confluenceScore))}>
             {signal.indicators.confluenceScore}%
           </div>
         </div>

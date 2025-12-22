@@ -263,8 +263,6 @@ export function useSignalResults() {
           table: 'operation_results',
         },
         (payload) => {
-          console.log('📊 Realtime update:', payload.eventType, payload.new);
-          
           const result = payload.new as {
             id: string;
             signal_id: string;
@@ -275,7 +273,16 @@ export function useSignalResults() {
             result: string;
             profit: number;
             created_at: string;
+            is_auto_trade?: boolean;
           };
+          
+          // Only show auto trade results in history
+          if (!result.is_auto_trade) {
+            console.log('📊 Ignoring non-auto-trade result:', result.asset);
+            return;
+          }
+          
+          console.log('📊 Auto-trade result:', payload.eventType, result.asset, result.result);
           
           // Map IQ Option result names to our format
           const mapResult = (iqResult: string): SignalResult => {

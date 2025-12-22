@@ -2,11 +2,15 @@ import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, Refr
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
-import { useTradingStats, StatsPeriod } from '@/hooks/useTradingStats';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TradingStats } from '@/types/trading';
 
-export function BankManagementCard() {
+interface BankManagementCardProps {
+  todayStats?: TradingStats;
+}
+
+export function BankManagementCard({ todayStats }: BankManagementCardProps) {
   const {
     balance,
     isLoading,
@@ -18,9 +22,16 @@ export function BankManagementCard() {
     isConnected,
   } = useIQOptionConnection();
 
-  const { period, setPeriod, stats, isLoading: statsLoading, refresh: refreshStats } = useTradingStats();
-
-  const { profit, trades, wins, losses, consecutiveLosses, winRate } = stats;
+  // Use passed todayStats if available, otherwise fallback to defaults
+  const wins = todayStats?.wins ?? 0;
+  const losses = todayStats?.losses ?? 0;
+  const ties = todayStats?.ties ?? 0;
+  const trades = todayStats?.totalSignals ?? 0;
+  const profit = todayStats?.totalProfit ?? 0;
+  const winRate = todayStats?.winRate ?? 0;
+  const consecutiveLosses = todayStats?.streak ?? 0;
+  const streakType = todayStats?.streakType ?? 'none';
+  
   const currency = balance?.currency || 'USD';
   const accountType = balance?.accountType || 'PRACTICE';
   const currentBalance = balance?.balance || 0;
@@ -30,13 +41,12 @@ export function BankManagementCard() {
   const suggestedBet = (currentBalance * riskPerTrade) / 100;
   const tradeProgress = (trades / maxDailyTrades) * 100;
   const isOvertrading = trades >= maxDailyTrades * 0.8;
-  const hasConsecutiveLosses = consecutiveLosses >= 2;
+  const hasConsecutiveLosses = streakType === 'loss' && consecutiveLosses >= 2;
 
   const handleRefresh = async () => {
     if (refreshBalance) {
       await refreshBalance();
     }
-    refreshStats();
   };
 
   const formatCurrency = (value: number) => {
@@ -72,15 +82,6 @@ export function BankManagementCard() {
     }
   };
 
-  const getPeriodLabel = (p: StatsPeriod) => {
-    switch (p) {
-      case 'today': return 'Hoje';
-      case 'week': return 'Semana';
-      case 'month': return 'Mês';
-    }
-  };
-
-  const periodOptions: StatsPeriod[] = ['today', 'week', 'month'];
 
   return (
     <section className="glass-card p-4">
@@ -168,26 +169,10 @@ export function BankManagementCard() {
           {formatCurrency(currentBalance)}
         </div>
         
-        {/* Period Selector */}
+        {/* Stats label - Today only */}
         <div className="flex items-center justify-center gap-1 mt-3 mb-2">
           <Calendar className="w-4 h-4 text-muted-foreground mr-1" />
-          {periodOptions.map((p) => (
-            <Button
-              key={p}
-              variant={period === p ? "default" : "ghost"}
-              size="sm"
-              className={cn(
-                "h-7 px-3 text-xs",
-                period === p 
-                  ? "bg-primary text-primary-foreground" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => setPeriod(p)}
-              disabled={statsLoading}
-            >
-              {getPeriodLabel(p)}
-            </Button>
-          ))}
+          <span className="text-xs text-muted-foreground">Estatísticas de Hoje</span>
         </div>
         
         {/* Profit/Loss indicator */}
@@ -197,15 +182,13 @@ export function BankManagementCard() {
             ? "bg-call/20 border border-call/30" 
             : "bg-put/20 border border-put/30"
         )}>
-          {statsLoading ? (
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-          ) : profit >= 0 ? (
+          {profit >= 0 ? (
             <>
               <TrendingUp className="w-5 h-5 text-call" />
               <span className="text-lg font-bold text-call">
                 +{formatCurrency(profit)}
               </span>
-              <span className="text-sm text-call/80">{getPeriodLabel(period).toLowerCase()}</span>
+              <span className="text-sm text-call/80">hoje</span>
             </>
           ) : (
             <>
@@ -213,7 +196,7 @@ export function BankManagementCard() {
               <span className="text-lg font-bold text-put">
                 {formatCurrency(profit)}
               </span>
-              <span className="text-sm text-put/80">{getPeriodLabel(period).toLowerCase()}</span>
+              <span className="text-sm text-put/80">hoje</span>
             </>
           )}
         </div>
@@ -241,10 +224,10 @@ export function BankManagementCard() {
         <div className="bg-secondary/50 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1">
             <Activity className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Trades ({getPeriodLabel(period)})</span>
+            <span className="text-xs text-muted-foreground">Trades (Hoje)</span>
           </div>
           <div className={cn('font-mono font-bold', isOvertrading ? 'text-gold' : 'text-foreground')}>
-            {trades}{period === 'today' ? `/${maxDailyTrades}` : ''}
+            {trades}/{maxDailyTrades}
           </div>
         </div>
       </div>
@@ -265,22 +248,20 @@ export function BankManagementCard() {
         </div>
       </div>
 
-      {/* Trade Progress - only show for today */}
-      {period === 'today' && (
-        <div className="mb-4">
-          <div className="flex justify-between text-xs text-muted-foreground mb-2">
-            <span>Progresso Diário</span>
-            <span>{tradeProgress.toFixed(0)}%</span>
-          </div>
-          <Progress
-            value={tradeProgress}
-            className={cn('h-2', isOvertrading && '[&>div]:bg-gold')}
-          />
+      {/* Trade Progress */}
+      <div className="mb-4">
+        <div className="flex justify-between text-xs text-muted-foreground mb-2">
+          <span>Progresso Diário</span>
+          <span>{tradeProgress.toFixed(0)}%</span>
         </div>
-      )}
+        <Progress
+          value={tradeProgress}
+          className={cn('h-2', isOvertrading && '[&>div]:bg-gold')}
+        />
+      </div>
 
       {/* Alerts */}
-      {(isOvertrading || hasConsecutiveLosses) && period === 'today' && (
+      {(isOvertrading || hasConsecutiveLosses) && (
         <div className="space-y-2">
           {isOvertrading && (
             <div className="flex items-center gap-2 p-2 bg-gold/10 border border-gold/20 rounded-lg">

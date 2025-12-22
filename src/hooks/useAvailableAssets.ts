@@ -3,6 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { TradingAsset } from '@/types/trading';
 import { iqOptionClient } from '@/services/IQOptionClient';
 
+interface AssetSchedule {
+  open: boolean;
+  openTime?: string;  // HH:mm UTC
+  closeTime?: string; // HH:mm UTC
+  tradingDays?: number[]; // 0=Sun, 1=Mon, etc.
+}
+
 interface IQAsset {
   id: number;
   name: string;
@@ -10,6 +17,7 @@ interface IQAsset {
   isOTC: boolean;
   enabled: boolean;
   payout?: number;
+  schedule?: AssetSchedule;
 }
 
 interface UseAvailableAssetsReturn {
@@ -18,10 +26,13 @@ interface UseAvailableAssetsReturn {
   forexAssets: TradingAsset[];
   cryptoAssets: TradingAsset[];
   blitzAssets: TradingAsset[];
+  openAssets: TradingAsset[];
   isLoading: boolean;
   lastUpdate: Date | null;
   error: string | null;
   refresh: () => Promise<void>;
+  isAssetOpen: (symbol: string) => boolean;
+  getAssetSchedule: (symbol: string) => AssetSchedule | undefined;
 }
 
 // Default/fallback assets when API is not available
@@ -160,6 +171,7 @@ export function useAvailableAssets(): UseAvailableAssetsReturn {
             isOTC: asset.isOTC,
             iqOptionId: asset.id,
             payout: asset.payout,
+            schedule: asset.schedule,
           };
         });
 
@@ -207,6 +219,27 @@ export function useAvailableAssets(): UseAvailableAssetsReturn {
   const forexAssets = assets.filter(a => a.type === 'forex' && !a.isOTC);
   const cryptoAssets = assets.filter(a => a.type === 'crypto');
   const blitzAssets = assets.filter(a => a.type === 'blitz');
+  
+  // Get only open assets (tradeable right now)
+  const openAssets = assets.filter(a => a.schedule?.open !== false);
+
+  // Helper function to check if an asset is open
+  const isAssetOpen = useCallback((symbol: string): boolean => {
+    const asset = assets.find(a => 
+      a.symbol === symbol || 
+      a.symbol.replace('/', '').toLowerCase() === symbol.replace('/', '').replace('-', '').toLowerCase()
+    );
+    return asset?.schedule?.open !== false;
+  }, [assets]);
+
+  // Get schedule for an asset
+  const getAssetSchedule = useCallback((symbol: string): AssetSchedule | undefined => {
+    const asset = assets.find(a => 
+      a.symbol === symbol || 
+      a.symbol.replace('/', '').toLowerCase() === symbol.replace('/', '').replace('-', '').toLowerCase()
+    );
+    return asset?.schedule;
+  }, [assets]);
 
   return {
     assets,
@@ -214,10 +247,13 @@ export function useAvailableAssets(): UseAvailableAssetsReturn {
     forexAssets,
     cryptoAssets,
     blitzAssets,
+    openAssets,
     isLoading,
     lastUpdate,
     error,
     refresh: () => fetchAssets(true),
+    isAssetOpen,
+    getAssetSchedule,
   };
 }
 

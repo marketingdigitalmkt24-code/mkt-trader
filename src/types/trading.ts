@@ -5,6 +5,13 @@ export type SignalStatus = 'high_probability' | 'moderate';
 export type MarketType = 'forex' | 'crypto' | 'otc' | 'blitz';
 export type SignalResult = 'win' | 'loss' | 'pending' | 'tie';
 
+export interface AssetSchedule {
+  open: boolean;
+  openTime?: string;  // HH:mm UTC
+  closeTime?: string; // HH:mm UTC
+  tradingDays?: number[]; // 0=Sun, 1=Mon, etc.
+}
+
 export interface TradingAsset {
   symbol: string;
   icon: string;
@@ -14,6 +21,7 @@ export interface TradingAsset {
   isBinary?: boolean;
   iqOptionId?: number;
   payout?: number;
+  schedule?: AssetSchedule;
 }
 
 // Technical Indicators

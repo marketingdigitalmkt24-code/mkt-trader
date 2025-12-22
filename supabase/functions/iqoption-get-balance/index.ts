@@ -292,14 +292,15 @@ serve(async (req) => {
       );
     }
 
-    // Get today's stats from database
+    // Get today's stats from database (ONLY auto trades)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
     const { data: todayResults } = await supabase
       .from('operation_results')
       .select('result, profit, entry_price')
-      .gte('created_at', today.toISOString());
+      .gte('created_at', today.toISOString())
+      .eq('is_auto_trade', true); // Only count auto trading results
 
     let dailyProfit = 0;
     let todayTrades = 0;

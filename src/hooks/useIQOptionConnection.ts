@@ -88,6 +88,7 @@ export function useIQOptionConnection() {
         .from('operation_results')
         .select('result, profit, entry_price')
         .gte('created_at', todayUTC.toISOString())
+        .eq('is_auto_trade', true) // Only count auto trading results
         .order('created_at', { ascending: true });
 
       if (error) throw error;

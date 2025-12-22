@@ -38,13 +38,16 @@ export function useIQOptionConnection() {
   // Fetch daily stats from database
   const fetchDailyStats = useCallback(async () => {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Use UTC date to match database timestamps
+      const now = new Date();
+      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      
+      console.log('Fetching stats from:', todayUTC.toISOString());
 
       const { data: results, error } = await supabase
         .from('operation_results')
         .select('result, profit, entry_price')
-        .gte('created_at', today.toISOString())
+        .gte('created_at', todayUTC.toISOString())
         .order('created_at', { ascending: true });
 
       if (error) throw error;

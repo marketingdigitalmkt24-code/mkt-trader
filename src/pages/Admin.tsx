@@ -5,7 +5,7 @@ import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { UserManagementCard } from '@/components/UserManagementCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
-import { useIQOptionBalance } from '@/hooks/useIQOptionBalance';
+import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +23,18 @@ const Admin = () => {
     resetDailyTrades,
   } = useAutoTrading();
 
-  const { balance, dailyProfit, todayTrades, wins, losses, isLoading: isLoadingBalance, refresh } = useIQOptionBalance();
+  const {
+    balance: iqBalance,
+    dailyStats,
+    isLoading: isLoadingBalance,
+    connect: refresh,
+  } = useIQOptionConnection();
+
+  const balance = iqBalance?.balance ?? 0;
+  const dailyProfit = dailyStats?.dailyProfit ?? 0;
+  const todayTrades = dailyStats?.todayTrades ?? 0;
+  const wins = dailyStats?.wins ?? 0;
+  const losses = dailyStats?.losses ?? 0;
 
   const handleLogout = async () => {
     await signOut();

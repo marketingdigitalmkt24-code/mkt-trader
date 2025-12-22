@@ -37,6 +37,8 @@ const Index = () => {
 
   const {
     history,
+    stats,
+    todayStats,
     addSignalWithSimulation,
     registerManualResult,
     clearHistory,
@@ -166,7 +168,7 @@ const Index = () => {
               otcOpen={marketStatus.otcOpen} 
               forexOpen={marketStatus.forexOpen} 
             />
-            <BankManagementCard />
+            <BankManagementCard todayStats={todayStats} />
             <AssetRanking assets={mockAssetPerformance} />
             <SafetyFiltersCard filters={safetyFilters} />
           </div>

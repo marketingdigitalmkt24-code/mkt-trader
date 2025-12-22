@@ -4,15 +4,11 @@ import { Progress } from '@/components/ui/progress';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { TradingStats } from '@/types/trading';
 
-interface BankManagementCardProps {
-  todayStats?: TradingStats;
-}
-
-export function BankManagementCard({ todayStats }: BankManagementCardProps) {
+export function BankManagementCard() {
   const {
     balance,
+    dailyStats,
     isLoading,
     lastUpdate,
     connectionStatus,
@@ -22,15 +18,16 @@ export function BankManagementCard({ todayStats }: BankManagementCardProps) {
     isConnected,
   } = useIQOptionConnection();
 
-  // Use passed todayStats if available, otherwise fallback to defaults
-  const wins = todayStats?.wins ?? 0;
-  const losses = todayStats?.losses ?? 0;
-  const ties = todayStats?.ties ?? 0;
-  const trades = todayStats?.totalSignals ?? 0;
-  const profit = todayStats?.totalProfit ?? 0;
-  const winRate = todayStats?.winRate ?? 0;
-  const consecutiveLosses = todayStats?.streak ?? 0;
-  const streakType = todayStats?.streakType ?? 'none';
+  // Use REAL stats from IQ Option API (not simulated)
+  const wins = dailyStats.wins;
+  const losses = dailyStats.losses;
+  const trades = dailyStats.todayTrades;
+  const profit = dailyStats.dailyProfit;
+  const consecutiveLosses = dailyStats.consecutiveLosses;
+  
+  // Calculate win rate from real data
+  const totalDecided = wins + losses;
+  const winRate = totalDecided > 0 ? (wins / totalDecided) * 100 : 0;
   
   const currency = balance?.currency || 'USD';
   const accountType = balance?.accountType || 'PRACTICE';
@@ -41,7 +38,7 @@ export function BankManagementCard({ todayStats }: BankManagementCardProps) {
   const suggestedBet = (currentBalance * riskPerTrade) / 100;
   const tradeProgress = (trades / maxDailyTrades) * 100;
   const isOvertrading = trades >= maxDailyTrades * 0.8;
-  const hasConsecutiveLosses = streakType === 'loss' && consecutiveLosses >= 2;
+  const hasConsecutiveLosses = consecutiveLosses >= 2;
 
   const handleRefresh = async () => {
     if (refreshBalance) {

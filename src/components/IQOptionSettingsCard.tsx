@@ -8,6 +8,7 @@ import { TrendingUp, Eye, EyeOff, Save, RefreshCw, CheckCircle, XCircle, Wifi } 
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface IQOptionConfig {
   id: string;
@@ -16,6 +17,7 @@ interface IQOptionConfig {
   account_type: string;
   is_active: boolean;
   last_connected_at: string | null;
+  user_id: string;
 }
 
 interface IQOptionSettingsCardProps {
@@ -24,6 +26,7 @@ interface IQOptionSettingsCardProps {
 
 export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCardProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [config, setConfig] = useState<IQOptionConfig | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -37,17 +40,20 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
   const [accountType, setAccountType] = useState('PRACTICE');
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && user) {
       loadConfig();
     }
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   const loadConfig = async () => {
+    if (!user) return;
+    
     setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('iqoption_config')
         .select('*')
+        .eq('user_id', user.id)
         .eq('is_active', true)
         .limit(1)
         .maybeSingle();
@@ -57,6 +63,12 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
         setEmail(data.email);
         setPassword(data.password);
         setAccountType(data.account_type);
+      } else {
+        // Reset form if no config found
+        setConfig(null);
+        setEmail('');
+        setPassword('');
+        setAccountType('PRACTICE');
       }
     } catch (error) {
       console.error('Error loading config:', error);
@@ -66,6 +78,11 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
   };
 
   const saveConfig = async () => {
+    if (!user) {
+      toast({ title: 'Erro', description: 'Você precisa estar logado', variant: 'destructive' });
+      return;
+    }
+
     if (!email.trim() || !password.trim()) {
       toast({ title: 'Erro', description: 'Email e senha são obrigatórios', variant: 'destructive' });
       return;
@@ -93,19 +110,21 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
 
         if (error) throw error;
       } else {
-        // First, deactivate any existing configs
+        // First, deactivate any existing configs for this user
         await supabase
           .from('iqoption_config')
           .update({ is_active: false })
+          .eq('user_id', user.id)
           .eq('is_active', true);
 
-        // Insert new
+        // Insert new config with user_id
         const { error } = await supabase
           .from('iqoption_config')
           .insert({
             email: email.trim(),
             password: password.trim(),
             account_type: accountType,
+            user_id: user.id,
           });
 
         if (error) throw error;

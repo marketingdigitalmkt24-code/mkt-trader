@@ -373,7 +373,7 @@ serve(async (req) => {
       .update({ last_connected_at: new Date().toISOString() })
       .eq('email', credentials.email);
 
-    // Get pending operations from our database
+    // Get ALL pending operations from our database (no time limit - always fetch real results)
     const { data: pendingOperations, error: pendingError } = await supabase
       .from('operation_results')
       .select('id, iq_option_id, signal_id, created_at')
@@ -385,49 +385,17 @@ serve(async (req) => {
 
     console.log('Found', pendingOperations?.length || 0, 'pending operations to check');
 
-    // Mark OLD pending operations as expired (older than 10 minutes)
-    const now = new Date();
-    const expiredThreshold = new Date(now.getTime() - 10 * 60 * 1000); // 10 minutes ago
-    
-    let expiredCount = 0;
-    if (pendingOperations) {
-      for (const pending of pendingOperations) {
-        const createdAt = new Date(pending.created_at);
-        if (createdAt < expiredThreshold) {
-          console.log(`Marking ${pending.id} as expired (created ${pending.created_at})`);
-          const { error: expireError } = await supabase
-            .from('operation_results')
-            .update({
-              result: 'loss', // Count expired as loss
-              profit: 0,
-            })
-            .eq('id', pending.id);
-          
-          if (!expireError) {
-            expiredCount++;
-          }
-        }
-      }
-    }
-    
-    console.log(`Marked ${expiredCount} old pending operations as expired`);
-
-    // Filter out expired ones from pending check
-    const stillPending = pendingOperations?.filter(p => {
-      const createdAt = new Date(p.created_at);
-      return createdAt >= expiredThreshold;
-    }) || [];
-
-    // Get closed positions from IQ Option
+    // Get closed positions from IQ Option history
     const closedPositions = await getClosedPositions(ssid, credentials.account_type);
-    console.log(`Found ${closedPositions.length} closed positions from IQ Option`);
+    console.log(`Found ${closedPositions.length} closed positions from IQ Option history`);
 
-    // Update still-pending operations with results from IQ Option
+    // Update pending operations with REAL results from IQ Option history
     let updatedCount = 0;
-    if (stillPending.length > 0 && closedPositions.length > 0) {
-      for (const pending of stillPending) {
+    if (pendingOperations && pendingOperations.length > 0 && closedPositions.length > 0) {
+      for (const pending of pendingOperations) {
         const iqId = pending.iq_option_id ? String(pending.iq_option_id) : '';
 
+        // Search for matching closed position in IQ Option history
         const closed = closedPositions.find((p) =>
           (iqId && (p.matchIds.includes(iqId) || p.rawJson.includes(iqId))) ||
           p.matchIds.includes(String(pending.signal_id)) ||
@@ -438,7 +406,7 @@ serve(async (req) => {
           const result = closed.win === 'win' ? 'win' : 
                          closed.win === 'loose' ? 'loss' : 'tie';
           
-          console.log(`Updating ${pending.id}: ${result} (profit: ${closed.profit})`);
+          console.log(`✅ Found real result for ${pending.id}: ${result} (profit: ${closed.profit})`);
           
           const { error: updateError } = await supabase
             .from('operation_results')
@@ -454,17 +422,20 @@ serve(async (req) => {
           } else {
             console.error('Error updating result:', updateError);
           }
+        } else {
+          // Log pending operations that weren't found in history yet
+          console.log(`⏳ Still pending: ${pending.id} (iq_id: ${iqId || 'none'}, created: ${pending.created_at})`);
         }
       }
     }
 
-    console.log(`Updated ${updatedCount} operation results from IQ Option`);
+    console.log(`Updated ${updatedCount} operation results from IQ Option history`);
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        pendingChecked: stillPending.length,
-        expiredMarked: expiredCount,
+        pendingChecked: pendingOperations?.length || 0,
+        stillPending: (pendingOperations?.length || 0) - updatedCount,
         closedPositions: closedPositions.length,
         updatedResults: updatedCount,
       }),

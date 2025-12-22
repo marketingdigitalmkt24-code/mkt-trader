@@ -402,13 +402,16 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
       const iqAssets: TradingAsset[] = data.assets.map((asset: any) => ({
         symbol: asset.name,
         icon: asset.isOTC ? '🔵' : 
+              asset.isBlitz ? '⚡' :
               asset.name.includes('BTC') ? '₿' : 
               asset.name.includes('ETH') ? 'Ξ' : 
               asset.name.includes('EUR') ? '🇪🇺' :
               asset.name.includes('GBP') ? '🇬🇧' :
               asset.name.includes('USD') ? '🇺🇸' : '📊',
-        type: asset.isOTC ? 'otc' : asset.type,
+        type: asset.isOTC ? 'otc' : asset.isBlitz ? 'blitz' : asset.type,
         isOTC: asset.isOTC,
+        isBlitz: asset.isBlitz,
+        isBinary: asset.isBinary,
         iqOptionId: asset.id,
         payout: asset.payout,
       }));
@@ -420,12 +423,33 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
       lastIQAssetsFetch = now;
       
       // Filter based on weekend/weekday
-      const filteredAssets = iqAssets.filter(asset => {
-        const assetIsOTC = asset.isOTC || isOTCAsset(asset.symbol);
-        return weekend ? assetIsOTC : !assetIsOTC;
-      });
+      let filteredAssets: TradingAsset[];
       
-      console.log(`📊 Filtered to ${filteredAssets.length} ${weekend ? 'OTC' : 'non-OTC'} assets`);
+      if (weekend) {
+        // Weekend: only OTC assets
+        filteredAssets = iqAssets.filter(asset => asset.isOTC || isOTCAsset(asset.symbol));
+        console.log(`📊 Fim de semana: ${filteredAssets.length} ativos OTC disponíveis`);
+      } else {
+        // Weekday: prioritize Blitz and Binary, exclude OTC
+        const nonOTC = iqAssets.filter(asset => !asset.isOTC && !isOTCAsset(asset.symbol));
+        
+        // Prioritize: Blitz first, then Binary, then others
+        const blitzAssets = nonOTC.filter(a => a.isBlitz);
+        const binaryAssets = nonOTC.filter(a => a.isBinary && !a.isBlitz);
+        const otherAssets = nonOTC.filter(a => !a.isBlitz && !a.isBinary);
+        
+        // Sort each group by payout (higher first)
+        blitzAssets.sort((a, b) => (b.payout || 0) - (a.payout || 0));
+        binaryAssets.sort((a, b) => (b.payout || 0) - (a.payout || 0));
+        otherAssets.sort((a, b) => (b.payout || 0) - (a.payout || 0));
+        
+        // Combine with priority: Blitz > Binary > Others
+        filteredAssets = [...blitzAssets, ...binaryAssets, ...otherAssets];
+        
+        console.log(`📊 Dia útil - Blitz: ${blitzAssets.length}, Binárias: ${binaryAssets.length}, Outros: ${otherAssets.length}`);
+        console.log(`⚡ Priorizando Blitz e Binárias com melhor payout`);
+      }
+      
       return filteredAssets;
     }
   } catch (err) {

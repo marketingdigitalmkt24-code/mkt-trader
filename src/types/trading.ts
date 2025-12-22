@@ -10,6 +10,8 @@ export interface TradingAsset {
   icon: string;
   type: MarketType;
   isOTC?: boolean;
+  isBlitz?: boolean;
+  isBinary?: boolean;
   iqOptionId?: number;
   payout?: number;
 }

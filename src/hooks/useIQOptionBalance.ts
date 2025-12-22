@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface BalanceData {
   balance: number;
@@ -46,6 +47,7 @@ function setCachedData(data: BalanceData) {
 }
 
 export function useIQOptionBalance() {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
@@ -77,13 +79,20 @@ export function useIQOptionBalance() {
   });
 
   const fetchBalance = useCallback(async () => {
+    if (!user) {
+      setConnectionStatus('disconnected');
+      return;
+    }
+    
     setIsLoading(true);
     setConnectionStatus('connecting');
     
     try {
-      console.log('🔄 Fetching IQ Option balance...');
+      console.log('🔄 Fetching IQ Option balance for user:', user.id);
       
-      const { data: response, error } = await supabase.functions.invoke('iqoption-get-balance');
+      const { data: response, error } = await supabase.functions.invoke('iqoption-get-balance', {
+        body: { userId: user.id }
+      });
       
       if (error) {
         console.error('Error fetching balance:', error);
@@ -124,14 +133,16 @@ export function useIQOptionBalance() {
     }
   }, []);
 
-  // Fetch on mount and every 30 seconds
+  // Fetch on mount, when user changes, and every 10 seconds for more real-time data
   useEffect(() => {
-    fetchBalance();
-    
-    const interval = setInterval(fetchBalance, 30000);
-    
-    return () => clearInterval(interval);
-  }, [fetchBalance]);
+    if (user) {
+      fetchBalance();
+      
+      const interval = setInterval(fetchBalance, 10000); // Update every 10 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [fetchBalance, user]);
 
   return {
     ...data,

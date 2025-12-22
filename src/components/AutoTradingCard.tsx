@@ -5,8 +5,9 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
-import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X } from 'lucide-react';
+import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X, Percent, TrendingUp } from 'lucide-react';
 import { Badge } from './ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 interface AutoTradingConfig {
   enabled: boolean;
@@ -14,6 +15,9 @@ interface AutoTradingConfig {
   minConfluence: number;
   maxDailyTrades: number;
   todayTrades: number;
+  // Profit target settings
+  profitTargetType: 'none' | 'percentage' | 'value';
+  profitTargetValue: number;
 }
 
 interface AutoTradingCardProps {
@@ -22,12 +26,32 @@ interface AutoTradingCardProps {
   isPlacingTrade: boolean;
   lastTradeResult: { success: boolean; message: string } | null;
   defaultOpen?: boolean;
+  currentBalance?: number;
+  dailyProfit?: number;
 }
 
-export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTradeResult, defaultOpen = false }: AutoTradingCardProps) {
+export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTradeResult, defaultOpen = false, currentBalance = 0, dailyProfit = 0 }: AutoTradingCardProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [localConfig, setLocalConfig] = useState(config);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Calculate if profit target is reached
+  const isProfitTargetReached = () => {
+    if (config.profitTargetType === 'none' || config.profitTargetValue <= 0) return false;
+    
+    if (config.profitTargetType === 'percentage') {
+      // Calculate target based on percentage of initial balance
+      const initialBalance = currentBalance - dailyProfit;
+      if (initialBalance <= 0) return false;
+      const targetProfit = (initialBalance * config.profitTargetValue) / 100;
+      return dailyProfit >= targetProfit;
+    } else {
+      // Fixed value target
+      return dailyProfit >= config.profitTargetValue;
+    }
+  };
+
+  const profitTargetReached = isProfitTargetReached();
 
   // Sync local config when parent config changes
   useEffect(() => {
@@ -35,6 +59,13 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
       setLocalConfig(config);
     }
   }, [config, hasChanges]);
+
+  // Auto-disable when profit target is reached
+  useEffect(() => {
+    if (profitTargetReached && config.enabled) {
+      updateConfig({ enabled: false });
+    }
+  }, [profitTargetReached, config.enabled, updateConfig]);
 
   const handleLocalChange = (updates: Partial<AutoTradingConfig>) => {
     setLocalConfig(prev => ({ ...prev, ...updates }));
@@ -62,6 +93,7 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
         <Bot className="w-4 h-4" />
         Auto Trading
         {config.enabled && <Badge variant="secondary" className="ml-1 text-xs">ON</Badge>}
+        {profitTargetReached && <Badge variant="destructive" className="ml-1 text-xs">META</Badge>}
       </Button>
     );
   }
@@ -164,6 +196,65 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, lastTrad
               ({config.todayTrades} de {localConfig.maxDailyTrades} hoje)
             </span>
           </div>
+        </div>
+
+        {/* Profit Target */}
+        <div className="space-y-3 p-3 bg-secondary/30 rounded-lg">
+          <Label className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" />
+            Meta de Lucro (opcional)
+          </Label>
+          
+          <Select
+            value={localConfig.profitTargetType}
+            onValueChange={(value) => handleLocalChange({ profitTargetType: value as 'none' | 'percentage' | 'value' })}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Sem meta" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sem meta (funcionamento contínuo)</SelectItem>
+              <SelectItem value="percentage">Porcentagem da banca (%)</SelectItem>
+              <SelectItem value="value">Valor fixo ($)</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {localConfig.profitTargetType !== 'none' && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {localConfig.profitTargetType === 'percentage' ? '%' : '$'}
+              </span>
+              <Input
+                type="number"
+                min={1}
+                step={localConfig.profitTargetType === 'percentage' ? 1 : 0.01}
+                value={localConfig.profitTargetValue}
+                onChange={(e) => handleLocalChange({ profitTargetValue: Number(e.target.value) })}
+                className="w-32"
+                placeholder={localConfig.profitTargetType === 'percentage' ? 'Ex: 5' : 'Ex: 50.00'}
+              />
+              <span className="text-xs text-muted-foreground">
+                {localConfig.profitTargetType === 'percentage' 
+                  ? `(${((currentBalance - dailyProfit) * localConfig.profitTargetValue / 100).toFixed(2)} USD)`
+                  : 'de lucro'}
+              </span>
+            </div>
+          )}
+
+          {profitTargetReached && (
+            <div className="p-2 bg-call/20 border border-call/30 rounded-lg">
+              <p className="text-sm text-call font-medium flex items-center gap-2">
+                <Target className="w-4 h-4" />
+                🎉 Meta de lucro atingida! Auto Trading pausado.
+              </p>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            {localConfig.profitTargetType === 'none' 
+              ? 'Deixe sem meta para o auto trading funcionar continuamente.'
+              : 'Quando o lucro diário atingir a meta, o auto trading será desligado automaticamente.'}
+          </p>
         </div>
 
         {/* Save/Cancel Buttons */}

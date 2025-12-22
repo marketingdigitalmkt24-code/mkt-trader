@@ -141,11 +141,27 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get IQ Option credentials from database
-    const { data: configData, error: configError } = await supabase
+    // Get user_id from request body (optional)
+    let userId: string | null = null;
+    try {
+      const body = await req.json();
+      userId = body?.userId || null;
+    } catch {
+      // No body or invalid JSON, continue without userId
+    }
+
+    // Build query for IQ Option credentials
+    let query = supabase
       .from('iqoption_config')
       .select('email, password, account_type')
-      .eq('is_active', true)
+      .eq('is_active', true);
+
+    // Filter by user_id if provided
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data: configData, error: configError } = await query
       .limit(1)
       .maybeSingle();
 

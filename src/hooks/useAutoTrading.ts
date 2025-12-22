@@ -12,6 +12,9 @@ interface AutoTradingConfig {
   minConfluence: number;
   maxDailyTrades: number;
   todayTrades: number;
+  // Profit target settings
+  profitTargetType: 'none' | 'percentage' | 'value';
+  profitTargetValue: number;
 }
 
 interface TradeResult {
@@ -38,7 +41,12 @@ export function useAutoTrading() {
           localStorage.setItem('autotrading_last_date', today);
           return { ...parsed, todayTrades: 0 };
         }
-        return parsed;
+        return {
+          ...parsed,
+          // Ensure new fields exist
+          profitTargetType: parsed.profitTargetType || 'none',
+          profitTargetValue: parsed.profitTargetValue || 0,
+        };
       }
     } catch (e) {
       console.error('Failed to load autotrading config:', e);
@@ -49,6 +57,8 @@ export function useAutoTrading() {
       minConfluence: 86,
       maxDailyTrades: 10,
       todayTrades: 0,
+      profitTargetType: 'none',
+      profitTargetValue: 0,
     };
   });
 
@@ -210,8 +220,32 @@ export function useAutoTrading() {
     return { success: false, error: 'No result' };
   }, [placeTradesSimultaneously]);
 
-  const checkAndAutoTrade = useCallback(async (signals: TradingSignal[]) => {
+  // Check and auto trade with profit target support
+  const checkAndAutoTrade = useCallback(async (signals: TradingSignal[], currentDailyProfit?: number, currentBalance?: number) => {
     if (!config.enabled) return;
+    
+    // Check if profit target is reached
+    if (config.profitTargetType !== 'none' && config.profitTargetValue > 0 && currentDailyProfit !== undefined) {
+      let targetReached = false;
+      
+      if (config.profitTargetType === 'percentage' && currentBalance !== undefined) {
+        const initialBalance = currentBalance - currentDailyProfit;
+        const targetProfit = (initialBalance * config.profitTargetValue) / 100;
+        targetReached = currentDailyProfit >= targetProfit;
+      } else if (config.profitTargetType === 'value') {
+        targetReached = currentDailyProfit >= config.profitTargetValue;
+      }
+      
+      if (targetReached) {
+        console.log('🎯 Profit target reached! Disabling auto trading.');
+        setConfig(prev => ({ ...prev, enabled: false }));
+        toast({
+          title: '🎉 Meta de lucro atingida!',
+          description: `Lucro de $${currentDailyProfit.toFixed(2)} - Auto Trading pausado.`,
+        });
+        return;
+      }
+    }
     
     // Check daily limit
     const remainingTrades = config.maxDailyTrades - config.todayTrades;
@@ -239,7 +273,7 @@ export function useAutoTrading() {
     
     // Execute all trades simultaneously
     await placeTradesSimultaneously(signalsToTrade);
-  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, placeTradesSimultaneously]);
+  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.profitTargetType, config.profitTargetValue, placeTradesSimultaneously, toast]);
 
   const resetDailyTrades = useCallback(() => {
     setConfig(prev => ({ ...prev, todayTrades: 0 }));

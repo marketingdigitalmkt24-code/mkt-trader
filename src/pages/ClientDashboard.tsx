@@ -174,6 +174,8 @@ const ClientDashboard = () => {
                   isPlacingTrade={isPlacingTrade}
                   lastTradeResult={lastTradeResult}
                   defaultOpen={true}
+                  currentBalance={balance}
+                  dailyProfit={dailyProfit}
                 />
               </CardContent>
             </Card>

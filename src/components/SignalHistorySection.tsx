@@ -28,6 +28,11 @@ export function SignalHistorySection({
     return new Date(h.timestamp) >= today;
   });
 
+  // Calculate today's wins and losses
+  const todayWins = todayHistory.filter(h => h.result === 'win').length;
+  const todayLosses = todayHistory.filter(h => h.result === 'loss').length;
+  const todayTies = todayHistory.filter(h => h.result === 'tie').length;
+
   const totalPages = Math.ceil(history.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
@@ -47,7 +52,7 @@ export function SignalHistorySection({
           <div>
             <h2 className="text-lg font-bold">Histórico de Resultados</h2>
             <p className="text-sm text-muted-foreground">
-              {todayHistory.length} sinais hoje • {history.length} total
+              Hoje: <span className="text-call font-medium">{todayWins}W</span> / <span className="text-put font-medium">{todayLosses}L</span> / <span className="text-muted-foreground">{todayTies}T</span> • {history.length} total
             </p>
           </div>
         </div>

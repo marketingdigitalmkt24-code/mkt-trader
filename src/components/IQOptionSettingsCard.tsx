@@ -151,27 +151,23 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
     setTestResult(null);
     
     try {
-      // Use client-side connection to avoid server IP blocking
+      // Use Edge Function to avoid browser CORS/blocking
       const result = await iqOptionClient.login({
         email: email.trim(),
         password: password.trim(),
         accountType: accountType,
+        userId: user?.id,
       });
       
       if (result.success) {
         setTestResult('success');
-        
-        // Update last_connected_at in database
-        if (config) {
-          await supabase
-            .from('iqoption_config')
-            .update({ last_connected_at: new Date().toISOString() })
-            .eq('id', config.id);
-        }
+        loadConfig(); // Reload to get updated last_connected_at
         
         toast({ 
           title: '✅ Conexão bem sucedida!', 
-          description: 'Conectado à IQ Option via navegador'
+          description: result.balance !== undefined 
+            ? `Saldo: ${result.balance.toFixed(2)} USD` 
+            : 'Conectado à IQ Option'
         });
       } else {
         setTestResult('error');

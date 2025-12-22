@@ -1,10 +1,13 @@
-// IQ Option Client-Side Service
-// Connects directly from the browser via WebSocket
+// IQ Option Client Service
+// Uses Edge Functions as proxy to avoid browser CORS/blocking issues
+
+import { supabase } from '@/integrations/supabase/client';
 
 interface IQOptionCredentials {
   email: string;
   password: string;
   accountType: string;
+  userId?: string;
 }
 
 interface BalanceInfo {
@@ -24,22 +27,13 @@ type ConnectionCallback = (status: ConnectionStatus) => void;
 type BalanceCallback = (balance: BalanceInfo | null) => void;
 
 class IQOptionClient {
-  private ws: WebSocket | null = null;
-  private ssid: string | null = null;
-  private credentials: IQOptionCredentials | null = null;
-  private balanceId: number = 0;
-  private activeAssets: Record<string, number> = {};
   private connectionStatus: ConnectionStatus = 'disconnected';
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 3;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private credentials: IQOptionCredentials | null = null;
+  private balanceInfo: BalanceInfo | null = null;
+  private lastConnectedAt: Date | null = null;
   
   private onConnectionChange: ConnectionCallback | null = null;
   private onBalanceChange: BalanceCallback | null = null;
-  private pendingTradeResolve: ((result: TradeResult) => void) | null = null;
-
-  // IQ Option WebSocket endpoints
-  private readonly WS_URL = 'wss://iqoption.com/echo/websocket';
 
   setCallbacks(onConnection: ConnectionCallback, onBalance: BalanceCallback) {
     this.onConnectionChange = onConnection;
@@ -51,364 +45,119 @@ class IQOptionClient {
     this.onConnectionChange?.(status);
   }
 
-  async login(credentials: IQOptionCredentials): Promise<{ success: boolean; error?: string }> {
-    console.log('🔐 Connecting to IQ Option via WebSocket...');
+  async login(credentials: IQOptionCredentials): Promise<{ success: boolean; error?: string; balance?: number }> {
+    console.log('🔐 Authenticating with IQ Option via Edge Function...');
     this.credentials = credentials;
     this.updateStatus('connecting');
 
-    // Close existing connection if any
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.close();
-      this.ws = null;
-    }
+    try {
+      const { data, error } = await supabase.functions.invoke('iqoption-auth', {
+        body: {
+          email: credentials.email,
+          password: credentials.password,
+          accountType: credentials.accountType,
+          userId: credentials.userId,
+        },
+      });
 
-    return new Promise((resolve) => {
-      let authCompleted = false;
-      
-      const timeout = setTimeout(() => {
-        if (!authCompleted) {
-          console.error('❌ Connection timeout');
-          this.ws?.close();
-          this.ws = null;
-          this.updateStatus('error');
-          resolve({ success: false, error: 'Tempo de conexão esgotado. Verifique sua conexão de internet.' });
-        }
-      }, 20000);
-
-      try {
-        this.ws = new WebSocket(this.WS_URL);
-      } catch (error) {
-        clearTimeout(timeout);
-        console.error('❌ Failed to create WebSocket:', error);
+      if (error) {
+        console.error('❌ Edge function error:', error);
         this.updateStatus('error');
-        resolve({ success: false, error: 'Falha ao criar conexão WebSocket' });
-        return;
+        return { success: false, error: 'Erro ao conectar com o servidor' };
       }
 
-      this.ws.onopen = () => {
-        console.log('📡 WebSocket connected, sending authentication...');
-        // IQ Option expects SSID auth, but we can try direct auth message
-        this.ws?.send(JSON.stringify({
-          name: 'ssid',
-          msg: ''
-        }));
+      if (data?.success) {
+        console.log('✅ Connected successfully');
+        this.balanceInfo = {
+          balance: data.balance || 0,
+          currency: data.currency || 'USD',
+          accountType: data.accountType || credentials.accountType,
+        };
+        this.lastConnectedAt = new Date();
+        this.updateStatus('connected');
+        this.onBalanceChange?.(this.balanceInfo);
         
-        // Wait a bit then send authenticate
-        setTimeout(() => {
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({
-              name: 'authenticate',
-              msg: {
-                email: credentials.email,
-                password: credentials.password,
-              },
-            }));
-          }
-        }, 100);
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('📨 WS message:', data.name);
-          
-          // Successful authentication - we get profile message
-          if (data.name === 'profile') {
-            console.log('✅ Authenticated successfully');
-            authCompleted = true;
-            clearTimeout(timeout);
-            this.ssid = 'authenticated';
-            this.handleProfileMessage(data.msg);
-            this.updateStatus('connected');
-            this.reconnectAttempts = 0;
-            this.setupWebSocketHandlers();
-            resolve({ success: true });
-            return;
-          }
-
-          // Auth error responses
-          if (data.name === 'authenticated') {
-            if (data.msg === false) {
-              authCompleted = true;
-              clearTimeout(timeout);
-              this.ws?.close();
-              this.ws = null;
-              this.updateStatus('error');
-              resolve({ success: false, error: 'Email ou senha incorretos' });
-              return;
-            }
-          }
-
-          // SSID response - means we need to authenticate differently
-          if (data.name === 'ssid') {
-            // Server asking for SSID, but we don't have one - try authenticate
-            console.log('📤 Server requested SSID, sending auth...');
-          }
-
-          // Error message
-          if (data.name === 'error' || data.name === 'auth-error') {
-            authCompleted = true;
-            clearTimeout(timeout);
-            this.ws?.close();
-            this.ws = null;
-            this.updateStatus('error');
-            const errorMsg = data.msg?.message || data.msg || 'Falha na autenticação';
-            resolve({ success: false, error: errorMsg });
-            return;
-          }
-
-          // Timeouts
-          if (data.name === 'timeSync') {
-            // Ignore time sync
-          }
-        } catch (e) {
-          console.error('Parse error:', e);
-        }
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
-        if (!authCompleted) {
-          authCompleted = true;
-          clearTimeout(timeout);
-          this.updateStatus('error');
-          resolve({ 
-            success: false, 
-            error: 'Erro na conexão WebSocket. A IQ Option pode estar bloqueando conexões do navegador.' 
-          });
-        }
-      };
-
-      this.ws.onclose = (event) => {
-        console.log('🔌 WebSocket closed:', event.code, event.reason);
-        if (!authCompleted) {
-          authCompleted = true;
-          clearTimeout(timeout);
-          this.updateStatus('error');
-          resolve({ 
-            success: false, 
-            error: `Conexão fechada (código: ${event.code}). Tente novamente.` 
-          });
-        }
-      };
-    });
-  }
-
-  private handleProfileMessage(profile: any) {
-    const balances = profile?.balances || [];
-    
-    for (const balance of balances) {
-      if (this.credentials?.accountType === 'PRACTICE' && balance.type === 4) {
-        this.balanceId = balance.id;
-        this.onBalanceChange?.({
-          balance: balance.amount,
-          currency: balance.currency,
-          accountType: 'PRACTICE',
-        });
-        break;
-      } else if (this.credentials?.accountType === 'REAL' && balance.type === 1) {
-        this.balanceId = balance.id;
-        this.onBalanceChange?.({
-          balance: balance.amount,
-          currency: balance.currency,
-          accountType: 'REAL',
-        });
-        break;
+        return { 
+          success: true, 
+          balance: data.balance 
+        };
+      } else {
+        console.error('❌ Login failed:', data?.error);
+        this.updateStatus('error');
+        return { 
+          success: false, 
+          error: data?.error || 'Falha na autenticação' 
+        };
       }
-    }
-
-    // Request initialization data
-    this.ws?.send(JSON.stringify({
-      name: 'sendMessage',
-      msg: {
-        name: 'get-initialization-data',
-        version: '3.0',
-        body: {},
-      },
-    }));
-  }
-
-  private setupWebSocketHandlers() {
-    if (!this.ws) return;
-
-    this.ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        // Skip timeSync messages
-        if (data.name === 'timeSync') return;
-
-        // Handle balance updates
-        if (data.name === 'balance-changed') {
-          const balance = data.msg;
-          if (balance.id === this.balanceId) {
-            this.onBalanceChange?.({
-              balance: balance.current_amount,
-              currency: balance.currency,
-              accountType: this.credentials?.accountType || 'PRACTICE',
-            });
-          }
-        }
-
-        // Handle initialization data
-        if (data.name === 'initialization-data') {
-          console.log('📊 Received initialization data');
-          const binary = data.msg?.binary?.actives || {};
-          
-          this.activeAssets = {};
-          for (const [id, info] of Object.entries(binary)) {
-            const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
-            if (assetInfo.enabled && !assetInfo.is_suspended) {
-              const name = assetInfo.name || '';
-              this.activeAssets[name.toUpperCase()] = parseInt(id);
-            }
-          }
-          console.log('📈 Available assets:', Object.keys(this.activeAssets).length);
-        }
-
-        // Handle trade responses
-        if (data.name === 'binary-options.option-opened') {
-          const tradeId = data.msg?.id || data.msg?.option_id;
-          if (tradeId && this.pendingTradeResolve) {
-            this.pendingTradeResolve({ success: true, tradeId: String(tradeId) });
-            this.pendingTradeResolve = null;
-          }
-        }
-
-        if (data.name === 'option' && data.msg?.id) {
-          if (data.msg.message?.includes('not found')) {
-            this.pendingTradeResolve?.({ success: false, error: data.msg.message });
-          } else {
-            this.pendingTradeResolve?.({ success: true, tradeId: String(data.msg.id) });
-          }
-          this.pendingTradeResolve = null;
-        }
-
-        // Handle errors
-        if (data.name === 'error') {
-          this.pendingTradeResolve?.({ 
-            success: false, 
-            error: data.msg?.message || 'Unknown error' 
-          });
-          this.pendingTradeResolve = null;
-        }
-
-      } catch (e) {
-        console.error('Message parse error:', e);
-      }
-    };
-
-    this.ws.onclose = () => {
-      console.log('🔌 WebSocket closed');
-      this.updateStatus('disconnected');
-      this.tryReconnect();
-    };
-
-    this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
+    } catch (error) {
+      console.error('❌ Connection error:', error);
       this.updateStatus('error');
-    };
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Erro desconhecido' 
+      };
+    }
   }
 
-  private tryReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('Max reconnect attempts reached');
-      return;
+  async refreshBalance(): Promise<BalanceInfo | null> {
+    if (!this.credentials) {
+      return null;
     }
 
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
+    try {
+      const { data, error } = await supabase.functions.invoke('iqoption-get-balance', {
+        body: { userId: this.credentials.userId },
+      });
 
-    this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-    
-    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
-    
-    this.reconnectTimeout = setTimeout(() => {
-      if (this.credentials) {
-        this.login(this.credentials).catch(console.error);
+      if (!error && data?.success) {
+        this.balanceInfo = {
+          balance: data.balance,
+          currency: data.currency,
+          accountType: data.accountType,
+        };
+        this.lastConnectedAt = new Date();
+        this.updateStatus('connected');
+        this.onBalanceChange?.(this.balanceInfo);
+        return this.balanceInfo;
       }
-    }, delay);
+    } catch (e) {
+      console.error('Balance refresh error:', e);
+    }
+
+    return null;
   }
 
   async placeTrade(asset: string, direction: 'call' | 'put', amount: number, expiration: number): Promise<TradeResult> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return { success: false, error: 'Not connected to IQ Option' };
+    if (this.connectionStatus !== 'connected') {
+      return { success: false, error: 'Não conectado à IQ Option' };
     }
 
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        this.pendingTradeResolve = null;
-        resolve({ success: false, error: 'Trade timeout' });
-      }, 20000);
+    try {
+      const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
+        body: {
+          asset,
+          direction,
+          amount,
+          expiration,
+          userId: this.credentials?.userId,
+        },
+      });
 
-      this.pendingTradeResolve = (result) => {
-        clearTimeout(timeout);
-        resolve(result);
+      if (error) {
+        return { success: false, error: 'Erro ao executar trade' };
+      }
+
+      return {
+        success: data?.success || false,
+        tradeId: data?.tradeId,
+        error: data?.error,
       };
-
-      // Find asset ID
-      const assetName = asset.toUpperCase().replace(/\//g, '').replace(/-/g, '');
-      const assetNameWithDash = asset.toUpperCase().replace(/\//g, '-');
-      
-      let assetId = this.activeAssets[assetName] || 
-                    this.activeAssets[assetNameWithDash] ||
-                    this.activeAssets[asset.toUpperCase()];
-
-      if (!assetId) {
-        // Try partial match for OTC
-        const baseAsset = assetName.replace('OTC', '').replace('-', '');
-        for (const [name, id] of Object.entries(this.activeAssets)) {
-          if (name.includes(baseAsset)) {
-            assetId = id;
-            break;
-          }
-        }
-      }
-
-      if (!assetId) {
-        clearTimeout(timeout);
-        resolve({ success: false, error: `Asset ${asset} not available` });
-        return;
-      }
-
-      // Calculate expiration time
-      const now = Math.floor(Date.now() / 1000);
-      const nextMinute = Math.ceil(now / 60) * 60;
-      const expirationTime = nextMinute + (expiration * 60);
-
-      console.log(`📈 Placing ${direction.toUpperCase()} on ${asset} (ID: ${assetId})`);
-
-      // Set balance first
-      this.ws?.send(JSON.stringify({
-        name: 'sendMessage',
-        msg: {
-          name: 'set-active-balance',
-          version: '1.0',
-          body: { balance_id: this.balanceId },
-        },
-      }));
-
-      // Place trade
-      this.ws?.send(JSON.stringify({
-        name: 'sendMessage',
-        msg: {
-          name: 'binary-options.open-option',
-          version: '1.0',
-          body: {
-            user_balance_id: this.balanceId,
-            active_id: assetId,
-            option_type_id: 3,
-            direction: direction,
-            expired: expirationTime,
-            price: amount,
-            profit_percent: 0,
-          },
-        },
-      }));
-    });
+    } catch (e) {
+      return { 
+        success: false, 
+        error: e instanceof Error ? e.message : 'Erro desconhecido' 
+      };
+    }
   }
 
   getConnectionStatus(): ConnectionStatus {
@@ -416,24 +165,23 @@ class IQOptionClient {
   }
 
   isConnected(): boolean {
-    return this.connectionStatus === 'connected' && this.ws?.readyState === WebSocket.OPEN;
+    return this.connectionStatus === 'connected';
   }
 
-  getActiveAssets(): string[] {
-    return Object.keys(this.activeAssets);
+  getBalance(): BalanceInfo | null {
+    return this.balanceInfo;
+  }
+
+  getLastConnectedAt(): Date | null {
+    return this.lastConnectedAt;
   }
 
   disconnect() {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.close();
-    }
-    this.ws = null;
-    this.ssid = null;
+    this.connectionStatus = 'disconnected';
+    this.credentials = null;
+    this.balanceInfo = null;
     this.updateStatus('disconnected');
+    this.onBalanceChange?.(null);
   }
 }
 

@@ -114,6 +114,8 @@ export function useAutoTrading() {
           amount: config.amount,
           expiration: expiration,
           signalId: signal.id,
+          isAutoTrade: true,
+          isAIAnalyzed: config.useAIAnalysis,
         },
       });
       

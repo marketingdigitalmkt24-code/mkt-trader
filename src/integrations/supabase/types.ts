@@ -84,6 +84,8 @@ export type Database = {
           expiration_time: string | null
           id: string
           iq_option_id: string | null
+          is_ai_analyzed: boolean | null
+          is_auto_trade: boolean | null
           profit: number
           result: string
           signal_id: string
@@ -97,6 +99,8 @@ export type Database = {
           expiration_time?: string | null
           id?: string
           iq_option_id?: string | null
+          is_ai_analyzed?: boolean | null
+          is_auto_trade?: boolean | null
           profit?: number
           result: string
           signal_id: string
@@ -110,6 +114,8 @@ export type Database = {
           expiration_time?: string | null
           id?: string
           iq_option_id?: string | null
+          is_ai_analyzed?: boolean | null
+          is_auto_trade?: boolean | null
           profit?: number
           result?: string
           signal_id?: string

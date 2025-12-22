@@ -12,6 +12,8 @@ interface TradeRequest {
   amount: number;
   expiration: number; // in minutes
   signalId?: string;
+  isAutoTrade?: boolean;
+  isAIAnalyzed?: boolean;
 }
 
 interface IQOptionCredentials {
@@ -493,6 +495,8 @@ serve(async (req) => {
           result: result.result || 'pending',
           profit: result.profit || 0,
           iq_option_id: result.tradeId,
+          is_auto_trade: tradeRequest.isAutoTrade || false,
+          is_ai_analyzed: tradeRequest.isAIAnalyzed || false,
         });
       
       if (insertResult.error) {

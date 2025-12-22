@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SignalHistory, SignalResult, TradingStats } from '@/types/trading';
 import { SignalResultCard } from './SignalResultCard';
 import { TradingStatsCard } from './TradingStatsCard';
@@ -81,6 +81,11 @@ export function SignalHistorySection({
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const paginatedHistory = todayHistory.slice(startIndex, endIndex);
+
+  // Always show the most recent trades when new ones arrive
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [todayHistory.length]);
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));

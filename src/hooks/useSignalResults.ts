@@ -425,23 +425,22 @@ export function useSignalResults() {
           };
         });
         
-        setHistory(dbHistory);
-        const newStats = recalculateStats(dbHistory);
-        setStats(newStats);
-      } else {
-        // No data - reset to empty
-        setHistory([]);
-        setStats({
-          totalSignals: 0,
-          wins: 0,
-          losses: 0,
-          ties: 0,
-          pending: 0,
-          winRate: 0,
-          totalProfit: 0,
-          streak: 0,
-          streakType: 'none',
+        setHistory((prev) => {
+          const dbIds = new Set(dbHistory.map((h) => h.id));
+          const preserved = prev.filter((h) => !dbIds.has(h.id));
+
+          const merged = [...dbHistory, ...preserved].sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+
+          const limited = merged.slice(0, 500);
+          const newStats = recalculateStats(limited);
+          setStats(newStats);
+          return limited;
         });
+      } else {
+        // No data returned: keep current history (prevents wiping simulated/local entries)
+        console.log('No results returned from database; keeping existing history');
       }
     } catch (err) {
       console.error('Failed to refresh results:', err);

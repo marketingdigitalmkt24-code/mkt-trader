@@ -15,7 +15,7 @@ import {
   SignalStatus,
   MarketType
 } from '@/types/trading';
-import { getAvailableAssets as getLocalAssets, isOTCMarketOpen, isForexMarketOpen, OTC_ASSETS } from '@/utils/marketHours';
+import { getAvailableAssets as getLocalAssets, isOTCMarketOpen, isForexMarketOpen, OTC_ASSETS, isWeekend, isOTCAsset } from '@/utils/marketHours';
 import { supabase } from '@/integrations/supabase/client';
 
 // Cache para ativos da IQ Option
@@ -367,11 +367,20 @@ function tryGenerateHighQualitySignal(
 
 async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
   const now = Date.now();
+  const weekend = isWeekend();
+  
+  console.log(`📅 Modo de mercado: ${weekend ? 'FIM DE SEMANA (apenas OTC)' : 'DIA ÚTIL (apenas não-OTC)'}`);
   
   // Return cached if still valid
   if (cachedIQAssets.length > 0 && now - lastIQAssetsFetch < IQ_ASSETS_CACHE_DURATION) {
     console.log('📦 Using cached IQ Option assets:', cachedIQAssets.length);
-    return cachedIQAssets;
+    // Filter cached assets based on weekend/weekday
+    const filteredAssets = cachedIQAssets.filter(asset => {
+      const assetIsOTC = asset.isOTC || isOTCAsset(asset.symbol);
+      return weekend ? assetIsOTC : !assetIsOTC;
+    });
+    console.log(`📊 Filtered to ${filteredAssets.length} assets for ${weekend ? 'weekend' : 'weekday'}`);
+    return filteredAssets;
   }
 
   try {
@@ -382,7 +391,11 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
     if (error) {
       console.error('Error fetching assets:', error);
       // Fall back to local assets
-      return getLocalAssets();
+      const localAssets = getLocalAssets();
+      return localAssets.filter(asset => {
+        const assetIsOTC = asset.isOTC || isOTCAsset(asset.symbol);
+        return weekend ? assetIsOTC : !assetIsOTC;
+      });
     }
 
     if (data?.success && data?.assets && data.assets.length > 0) {
@@ -402,19 +415,31 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
 
       console.log(`✅ Fetched ${iqAssets.length} assets from IQ Option`);
       
-      // Update cache
+      // Update cache with ALL assets
       cachedIQAssets = iqAssets;
       lastIQAssetsFetch = now;
       
-      return iqAssets;
+      // Filter based on weekend/weekday
+      const filteredAssets = iqAssets.filter(asset => {
+        const assetIsOTC = asset.isOTC || isOTCAsset(asset.symbol);
+        return weekend ? assetIsOTC : !assetIsOTC;
+      });
+      
+      console.log(`📊 Filtered to ${filteredAssets.length} ${weekend ? 'OTC' : 'non-OTC'} assets`);
+      return filteredAssets;
     }
   } catch (err) {
     console.error('Error fetching IQ assets:', err);
   }
 
-  // Fallback to local OTC assets if IQ Option fetch fails
-  console.log('⚠️ Using fallback OTC assets');
-  return OTC_ASSETS;
+  // Fallback to local assets if IQ Option fetch fails
+  console.log('⚠️ Using fallback assets');
+  if (weekend) {
+    return OTC_ASSETS;
+  } else {
+    // Return non-OTC assets for weekdays
+    return getLocalAssets().filter(asset => !asset.isOTC && !isOTCAsset(asset.symbol));
+  }
 }
 
 function generateSignals(riskControl: RiskControl, availableAssets: TradingAsset[]): { signals: TradingSignal[]; message: string | null } {

@@ -187,8 +187,11 @@ export function useAISignalAnalyzer() {
   const filterByAIRecommendation = useCallback((
     signals: TradingSignal[],
     analysis: AIAnalysisResult,
-    minConfidence: number = 70
+    minConfidence: number = 85 // Increased from 70
   ): TradingSignal[] => {
+    // Only take the best signal if available, otherwise filter by criteria
+    const bestSignalId = analysis.bestSignal;
+    
     return signals.filter(signal => {
       const aiAnalysis = analysis.analyzedSignals.find(
         a => a.asset === signal.asset || a.signalId === signal.id
@@ -196,11 +199,21 @@ export function useAISignalAnalyzer() {
 
       if (!aiAnalysis) return false;
 
-      return (
+      // Must be EXECUTE with high confidence and LOW or MEDIUM risk
+      const meetsBasicCriteria = (
         aiAnalysis.recommendation === 'EXECUTE' &&
         aiAnalysis.confidence >= minConfidence &&
-        aiAnalysis.riskLevel !== 'HIGH'
+        aiAnalysis.riskLevel !== 'HIGH' &&
+        aiAnalysis.adjustedConfluence >= 85
       );
+
+      // Prioritize best signal
+      if (bestSignalId && (signal.id === bestSignalId || aiAnalysis.signalId === bestSignalId)) {
+        return meetsBasicCriteria;
+      }
+
+      // For other signals, be even more strict
+      return meetsBasicCriteria && aiAnalysis.confidence >= 90;
     });
   }, []);
 

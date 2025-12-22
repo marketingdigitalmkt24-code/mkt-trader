@@ -4,6 +4,26 @@ import { TradingSignal, SignalResult, TradingStats, SignalHistory } from '@/type
 
 const STORAGE_KEY = 'signal_history';
 const STATS_KEY = 'trading_stats';
+const MAX_HISTORY_ITEMS = 100; // Limit to prevent localStorage overflow
+
+// Safe localStorage operations
+const safeSetItem = (key: string, value: string): boolean => {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    console.warn('localStorage quota exceeded, clearing old data');
+    try {
+      // Clear signal history if quota exceeded
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e2) {
+      console.error('Failed to save to localStorage:', e2);
+      return false;
+    }
+  }
+};
 
 // Simular resultado baseado na confluência (quanto maior, mais chance de WIN)
 function simulateResult(confluenceScore: number): SignalResult {
@@ -120,13 +140,15 @@ export function useSignalResults() {
     };
   }, []);
 
-  // Persist to localStorage
+  // Persist to localStorage with limit
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    // Limit history size to prevent quota exceeded
+    const limitedHistory = history.slice(0, MAX_HISTORY_ITEMS);
+    safeSetItem(STORAGE_KEY, JSON.stringify(limitedHistory));
   }, [history]);
 
   useEffect(() => {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    safeSetItem(STATS_KEY, JSON.stringify(stats));
   }, [stats]);
 
   // Fetch existing results from database on mount

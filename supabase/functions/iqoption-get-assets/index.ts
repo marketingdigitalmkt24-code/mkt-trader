@@ -15,6 +15,12 @@ interface AvailableAsset {
   payout?: number;
   isBlitz?: boolean;  // Turbo/Blitz assets (short expiration)
   isBinary?: boolean; // Standard binary options
+  schedule?: {
+    open: boolean;
+    openTime?: string;  // HH:mm UTC
+    closeTime?: string; // HH:mm UTC
+    tradingDays?: number[]; // 0=Sun, 1=Mon, etc.
+  };
 }
 
 const IQ_OPTION_AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
@@ -112,40 +118,78 @@ async function getAvailableAssets(ssid: string): Promise<{ assets: AvailableAsse
           for (const [id, info] of Object.entries(allActives)) {
             const assetInfo = info as any;
             
-            if (assetInfo.enabled && !assetInfo.is_suspended) {
-              const name = assetInfo.name || '';
-              const isOTC = name.toLowerCase().includes('otc') || 
-                           assetInfo.underlying?.includes('-OTC') ||
-                           assetInfo.description?.includes('OTC');
-              
-              // Determine if it's Blitz (turbo) or standard Binary
-              const isBlitz = turboIds.has(id);
-              const isBinary = binaryIds.has(id);
-              
-              // Determine asset type
-              let type = 'forex';
-              if (isOTC) {
-                type = 'otc';
-              } else if (name.includes('BTC') || name.includes('ETH') || name.includes('LTC') || name.includes('XRP')) {
-                type = 'crypto';
-              } else if (isBlitz) {
-                type = 'blitz';
-              }
-              
-              // Get payout percentage if available
-              const payout = assetInfo.option?.profit?.commission || 
-                            assetInfo.profit_percent || 
-                            assetInfo.option?.profit_commission || 0;
-              
+            // Check if asset is currently open/tradeable
+            const isOpen = assetInfo.enabled && !assetInfo.is_suspended;
+            const name = assetInfo.name || '';
+            const isOTC = name.toLowerCase().includes('otc') || 
+                         assetInfo.underlying?.includes('-OTC') ||
+                         assetInfo.description?.includes('OTC');
+            
+            // Determine if it's Blitz (turbo) or standard Binary
+            const isBlitz = turboIds.has(id);
+            const isBinaryAsset = binaryIds.has(id);
+            
+            // Determine asset type
+            let type = 'forex';
+            if (isOTC) {
+              type = 'otc';
+            } else if (name.includes('BTC') || name.includes('ETH') || name.includes('LTC') || name.includes('XRP')) {
+              type = 'crypto';
+            } else if (isBlitz) {
+              type = 'blitz';
+            }
+            
+            // Get payout percentage if available
+            const payout = assetInfo.option?.profit?.commission || 
+                          assetInfo.profit_percent || 
+                          assetInfo.option?.profit_commission || 0;
+            
+            // Get trading schedule from IQ Option
+            const schedule = assetInfo.schedule || assetInfo.trading_schedule || null;
+            let tradingSchedule: AvailableAsset['schedule'] = {
+              open: isOpen,
+            };
+            
+            // OTC assets are always available (24/7)
+            if (isOTC) {
+              tradingSchedule = {
+                open: isOpen,
+                tradingDays: [0, 1, 2, 3, 4, 5, 6], // All days
+              };
+            } else if (type === 'crypto') {
+              // Crypto is 24/7
+              tradingSchedule = {
+                open: isOpen,
+                tradingDays: [0, 1, 2, 3, 4, 5, 6], // All days
+              };
+            } else if (schedule) {
+              // Parse actual schedule from IQ Option if available
+              tradingSchedule = {
+                open: isOpen,
+                openTime: schedule.open || undefined,
+                closeTime: schedule.close || undefined,
+                tradingDays: schedule.days || [1, 2, 3, 4, 5], // Default Mon-Fri
+              };
+            } else {
+              // Default Forex schedule (Mon-Fri)
+              tradingSchedule = {
+                open: isOpen,
+                tradingDays: [1, 2, 3, 4, 5], // Mon-Fri
+              };
+            }
+            
+            // Only add if asset is enabled (but include closed ones with schedule info)
+            if (assetInfo.enabled !== false) {
               assets.push({
                 id: parseInt(id),
                 name: name,
                 type: type,
                 isOTC: isOTC,
-                enabled: true,
+                enabled: isOpen,
                 payout: payout,
                 isBlitz: isBlitz,
-                isBinary: isBinary,
+                isBinary: isBinaryAsset,
+                schedule: tradingSchedule,
               });
             }
           }

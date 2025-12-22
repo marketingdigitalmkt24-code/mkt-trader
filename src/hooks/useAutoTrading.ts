@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { TradingSignal } from '@/types/trading';
 import { useToast } from '@/hooks/use-toast';
 import { useAISignalAnalyzer } from '@/hooks/useAISignalAnalyzer';
-import { isWeekend, isOTCAsset } from '@/utils/marketHours';
+import { getCachedAssets } from '@/hooks/useAvailableAssets';
 
 const STORAGE_KEY = 'autotrading_config';
 const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
@@ -297,24 +297,45 @@ export function useAutoTrading() {
       return;
     }
 
-    // Filter signals based on weekend/weekday
-    // Weekend: only OTC assets with AI analysis
-    // Weekday: only non-OTC assets
-    const weekend = isWeekend();
+    // Filter signals based on REAL asset availability from IQ Option API
+    // Get cached assets from the hook (these come from the API with real schedules)
+    const availableAssets = getCachedAssets();
     
-    // Find signals that haven't been traded yet and aren't being traded
-    // When AI is enabled, skip confluence filter (AI will analyze all signals)
-    // When AI is disabled, use confluence filter
+    // Create a map for quick lookup of open assets
+    const openAssetSymbols = new Set(
+      availableAssets
+        .filter(a => a.schedule?.open !== false) // Only assets marked as open
+        .map(a => a.symbol.toLowerCase().replace('/', '').replace('-', ''))
+    );
+    
+    // Helper to check if an asset is currently tradeable
+    const isAssetTradeable = (assetSymbol: string): boolean => {
+      const normalized = assetSymbol.toLowerCase().replace('/', '').replace('-', '');
+      
+      // Check if asset is in our open assets list
+      if (openAssetSymbols.has(normalized)) return true;
+      
+      // Also check with common variations
+      const variations = [
+        normalized,
+        normalized.replace('otc', ''),
+        normalized + 'otc',
+      ];
+      
+      return variations.some(v => openAssetSymbols.has(v));
+    };
+    
+    // Find signals that haven't been traded yet and are for OPEN assets
     let eligibleSignals = signals.filter(signal => {
       const notProcessed = !processedSignals.current.has(signal.id);
       const notInProgress = !tradingInProgress.current.has(signal.id);
-      const isOTC = isOTCAsset(signal.asset);
       
-      // Weekend: only allow OTC assets
-      // Weekday: only allow non-OTC assets
-      const validForMarket = weekend ? isOTC : !isOTC;
+      // Check if this asset is currently available for trading from IQ Option
+      const assetAvailable = isAssetTradeable(signal.asset);
       
-      if (!validForMarket) return false;
+      if (!assetAvailable) {
+        return false; // Skip closed assets
+      }
       
       if (config.useAIAnalysis) {
         // AI mode: include all unprocessed signals (AI will filter)
@@ -326,15 +347,12 @@ export function useAutoTrading() {
     });
 
     if (eligibleSignals.length === 0) {
-      if (weekend) {
-        console.log('📅 Fim de semana: aguardando sinais OTC com análise de IA...');
-      } else {
-        console.log('📅 Dia útil: aguardando sinais regulares (não-OTC)...');
-      }
+      const openCount = openAssetSymbols.size;
+      console.log(`📊 Aguardando sinais para ${openCount} ativos disponíveis na IQ Option...`);
       return;
     }
 
-    console.log(`📅 ${weekend ? 'Fim de semana - Modo OTC' : 'Dia útil - Modo Regular'}: ${eligibleSignals.length} sinais elegíveis`);
+    console.log(`🎯 ${eligibleSignals.length} sinais elegíveis para ativos ABERTOS`);
 
     // If AI analysis is enabled, filter signals through AI
     if (config.useAIAnalysis && eligibleSignals.length > 0) {

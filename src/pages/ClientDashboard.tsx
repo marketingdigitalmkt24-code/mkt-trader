@@ -17,6 +17,7 @@ const ClientDashboard = () => {
     config: autoTradingConfig,
     updateConfig: updateAutoTradingConfig,
     isPlacingTrade,
+    isAnalyzingAI,
     lastTradeResult,
     resetDailyTrades,
   } = useAutoTrading();
@@ -172,6 +173,7 @@ const ClientDashboard = () => {
                   config={autoTradingConfig}
                   updateConfig={updateAutoTradingConfig}
                   isPlacingTrade={isPlacingTrade}
+                  isAnalyzingAI={isAnalyzingAI}
                   lastTradeResult={lastTradeResult}
                   defaultOpen={true}
                   currentBalance={balance}

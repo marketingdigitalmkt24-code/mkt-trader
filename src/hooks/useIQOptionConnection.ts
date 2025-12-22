@@ -58,16 +58,22 @@ export function useIQOptionConnection() {
       let currentStreak = 0;
 
       for (const result of results || []) {
-        if (result.result === 'WIN') {
+        const resultType = result.result?.toLowerCase();
+        if (resultType === 'win') {
           wins++;
-          profit += result.profit;
+          profit += result.profit || 0;
           currentStreak = 0;
-        } else if (result.result === 'LOSS') {
+        } else if (resultType === 'loss' || resultType === 'loose') {
           losses++;
-          profit += result.profit;
+          // Loss = negative profit or entry price lost
+          profit += result.profit || -(result.entry_price || 0);
           currentStreak++;
           consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
+        } else if (resultType === 'tie' || resultType === 'equal') {
+          // Empate - não conta como win nem loss
+          currentStreak = 0;
         }
+        // 'pending' não afeta as estatísticas
       }
 
       setDailyStats({

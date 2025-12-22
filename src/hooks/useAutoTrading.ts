@@ -75,11 +75,47 @@ export function useAutoTrading() {
   const [isPlacingTrade, setIsPlacingTrade] = useState(false);
   const [lastTradeResult, setLastTradeResult] = useState<{ success: boolean; message: string } | null>(null);
   const [activeTradesCount, setActiveTradesCount] = useState(0);
+  const lastCheckResultsTime = useRef<number>(0);
+  const CHECK_RESULTS_INTERVAL = 30000; // 30 seconds
 
   // Persist config
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   }, [config]);
+
+  // Periodically check for pending results
+  useEffect(() => {
+    const checkPendingResults = async () => {
+      const now = Date.now();
+      if (now - lastCheckResultsTime.current < CHECK_RESULTS_INTERVAL) return;
+      
+      lastCheckResultsTime.current = now;
+      
+      try {
+        console.log('🔍 Checking pending results...');
+        const { data, error } = await supabase.functions.invoke('iqoption-check-results');
+        
+        if (error) {
+          // Silently fail - timeout errors are common
+          return;
+        }
+        
+        if (data?.updatedResults > 0 || data?.expiredMarked > 0) {
+          console.log(`📊 Results updated: ${data.updatedResults} from IQ Option, ${data.expiredMarked} expired`);
+        }
+      } catch (err) {
+        // Silently fail
+      }
+    };
+
+    // Check on mount
+    checkPendingResults();
+
+    // Check every 30 seconds
+    const interval = setInterval(checkPendingResults, CHECK_RESULTS_INTERVAL);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const updateConfig = useCallback((updates: Partial<AutoTradingConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));

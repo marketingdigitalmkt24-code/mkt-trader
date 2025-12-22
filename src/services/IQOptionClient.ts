@@ -1,5 +1,5 @@
 // IQ Option Client-Side Service
-// Connects directly from the browser to avoid server IP blocking
+// Connects directly from the browser via WebSocket
 
 interface IQOptionCredentials {
   email: string;
@@ -32,14 +32,13 @@ class IQOptionClient {
   private connectionStatus: ConnectionStatus = 'disconnected';
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 3;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   
   private onConnectionChange: ConnectionCallback | null = null;
   private onBalanceChange: BalanceCallback | null = null;
   private pendingTradeResolve: ((result: TradeResult) => void) | null = null;
 
-  // IQ Option endpoints
-  private readonly AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
+  // IQ Option WebSocket endpoints
   private readonly WS_URL = 'wss://iqoption.com/echo/websocket';
 
   setCallbacks(onConnection: ConnectionCallback, onBalance: BalanceCallback) {
@@ -53,146 +52,115 @@ class IQOptionClient {
   }
 
   async login(credentials: IQOptionCredentials): Promise<{ success: boolean; error?: string }> {
-    console.log('🔐 Client-side login to IQ Option...');
+    console.log('🔐 Connecting to IQ Option via WebSocket...');
     this.credentials = credentials;
     this.updateStatus('connecting');
 
-    try {
-      // Use a CORS proxy or direct connection
-      // Note: This may require a proxy due to CORS restrictions
-      const response = await fetch(this.AUTH_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          identifier: credentials.email,
-          password: credentials.password,
-        }),
-        mode: 'cors',
-      });
-
-      const data = await response.json();
-      
-      if (data.code === 'success' && data.ssid) {
-        console.log('✅ Login successful');
-        this.ssid = data.ssid;
-        await this.connectWebSocket();
-        return { success: true };
-      } else {
-        console.error('❌ Login failed:', data.message);
-        this.updateStatus('error');
-        return { success: false, error: data.message || 'Login failed' };
-      }
-    } catch (error) {
-      console.error('❌ Login error:', error);
-      // If CORS error, try WebSocket-only approach
-      if (error instanceof TypeError && String(error).includes('CORS')) {
-        console.log('⚠️ CORS error, trying direct WebSocket connection...');
-        return this.tryDirectWebSocketLogin(credentials);
-      }
-      this.updateStatus('error');
-      return { success: false, error: String(error) };
+    // Close existing connection if any
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
     }
-  }
 
-  private async tryDirectWebSocketLogin(credentials: IQOptionCredentials): Promise<{ success: boolean; error?: string }> {
     return new Promise((resolve) => {
-      this.credentials = credentials;
-      
-      const ws = new WebSocket(this.WS_URL);
-      let loginSent = false;
+      let authCompleted = false;
       
       const timeout = setTimeout(() => {
-        ws.close();
-        this.updateStatus('error');
-        resolve({ success: false, error: 'Connection timeout' });
-      }, 15000);
-
-      ws.onopen = () => {
-        console.log('📡 WebSocket connected, sending credentials...');
-        // Send login via WebSocket
-        ws.send(JSON.stringify({
-          name: 'authenticate',
-          msg: {
-            email: credentials.email,
-            password: credentials.password,
-          },
-        }));
-        loginSent = true;
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.name === 'authenticated' || data.name === 'profile') {
-            console.log('✅ Authenticated via WebSocket');
-            clearTimeout(timeout);
-            this.ws = ws;
-            this.ssid = data.ssid || 'websocket_session';
-            this.handleProfileMessage(data.msg);
-            this.updateStatus('connected');
-            this.setupWebSocketHandlers();
-            resolve({ success: true });
-          } else if (data.name === 'auth-error' || data.name === 'error') {
-            clearTimeout(timeout);
-            ws.close();
-            this.updateStatus('error');
-            resolve({ success: false, error: data.msg?.message || 'Authentication failed' });
-          }
-        } catch (e) {
-          console.error('Parse error:', e);
+        if (!authCompleted) {
+          console.error('❌ Connection timeout');
+          this.ws?.close();
+          this.ws = null;
+          this.updateStatus('error');
+          resolve({ success: false, error: 'Tempo de conexão esgotado. Verifique sua conexão de internet.' });
         }
-      };
+      }, 20000);
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      try {
+        this.ws = new WebSocket(this.WS_URL);
+      } catch (error) {
         clearTimeout(timeout);
+        console.error('❌ Failed to create WebSocket:', error);
         this.updateStatus('error');
-        resolve({ success: false, error: 'WebSocket connection failed' });
-      };
-    });
-  }
-
-  private async connectWebSocket(): Promise<void> {
-    if (!this.ssid) {
-      console.error('No SSID available');
-      return;
-    }
-
-    return new Promise((resolve, reject) => {
-      console.log('📡 Connecting to IQ Option WebSocket...');
-      
-      this.ws = new WebSocket(this.WS_URL);
-      
-      const timeout = setTimeout(() => {
-        console.error('WebSocket connection timeout');
-        this.ws?.close();
-        this.updateStatus('error');
-        reject(new Error('Connection timeout'));
-      }, 15000);
+        resolve({ success: false, error: 'Falha ao criar conexão WebSocket' });
+        return;
+      }
 
       this.ws.onopen = () => {
-        console.log('🔌 WebSocket opened, authenticating with SSID...');
+        console.log('📡 WebSocket connected, sending authentication...');
+        // IQ Option expects SSID auth, but we can try direct auth message
         this.ws?.send(JSON.stringify({
           name: 'ssid',
-          msg: this.ssid,
+          msg: ''
         }));
+        
+        // Wait a bit then send authenticate
+        setTimeout(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+              name: 'authenticate',
+              msg: {
+                email: credentials.email,
+                password: credentials.password,
+              },
+            }));
+          }
+        }, 100);
       };
 
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('📨 WS message:', data.name);
           
+          // Successful authentication - we get profile message
           if (data.name === 'profile') {
-            console.log('✅ WebSocket authenticated');
+            console.log('✅ Authenticated successfully');
+            authCompleted = true;
             clearTimeout(timeout);
+            this.ssid = 'authenticated';
             this.handleProfileMessage(data.msg);
             this.updateStatus('connected');
             this.reconnectAttempts = 0;
             this.setupWebSocketHandlers();
-            resolve();
+            resolve({ success: true });
+            return;
+          }
+
+          // Auth error responses
+          if (data.name === 'authenticated') {
+            if (data.msg === false) {
+              authCompleted = true;
+              clearTimeout(timeout);
+              this.ws?.close();
+              this.ws = null;
+              this.updateStatus('error');
+              resolve({ success: false, error: 'Email ou senha incorretos' });
+              return;
+            }
+          }
+
+          // SSID response - means we need to authenticate differently
+          if (data.name === 'ssid') {
+            // Server asking for SSID, but we don't have one - try authenticate
+            console.log('📤 Server requested SSID, sending auth...');
+          }
+
+          // Error message
+          if (data.name === 'error' || data.name === 'auth-error') {
+            authCompleted = true;
+            clearTimeout(timeout);
+            this.ws?.close();
+            this.ws = null;
+            this.updateStatus('error');
+            const errorMsg = data.msg?.message || data.msg || 'Falha na autenticação';
+            resolve({ success: false, error: errorMsg });
+            return;
+          }
+
+          // Timeouts
+          if (data.name === 'timeSync') {
+            // Ignore time sync
           }
         } catch (e) {
           console.error('Parse error:', e);
@@ -200,16 +168,29 @@ class IQOptionClient {
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        clearTimeout(timeout);
-        this.updateStatus('error');
-        reject(error);
+        console.error('❌ WebSocket error:', error);
+        if (!authCompleted) {
+          authCompleted = true;
+          clearTimeout(timeout);
+          this.updateStatus('error');
+          resolve({ 
+            success: false, 
+            error: 'Erro na conexão WebSocket. A IQ Option pode estar bloqueando conexões do navegador.' 
+          });
+        }
       };
 
-      this.ws.onclose = () => {
-        console.log('WebSocket closed');
-        this.updateStatus('disconnected');
-        this.tryReconnect();
+      this.ws.onclose = (event) => {
+        console.log('🔌 WebSocket closed:', event.code, event.reason);
+        if (!authCompleted) {
+          authCompleted = true;
+          clearTimeout(timeout);
+          this.updateStatus('error');
+          resolve({ 
+            success: false, 
+            error: `Conexão fechada (código: ${event.code}). Tente novamente.` 
+          });
+        }
       };
     });
   }
@@ -346,9 +327,7 @@ class IQOptionClient {
     console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
     
     this.reconnectTimeout = setTimeout(() => {
-      if (this.ssid) {
-        this.connectWebSocket().catch(console.error);
-      } else if (this.credentials) {
+      if (this.credentials) {
         this.login(this.credentials).catch(console.error);
       }
     }, delay);
@@ -440,11 +419,18 @@ class IQOptionClient {
     return this.connectionStatus === 'connected' && this.ws?.readyState === WebSocket.OPEN;
   }
 
+  getActiveAssets(): string[] {
+    return Object.keys(this.activeAssets);
+  }
+
   disconnect() {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
     }
-    this.ws?.close();
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+    }
     this.ws = null;
     this.ssid = null;
     this.updateStatus('disconnected');

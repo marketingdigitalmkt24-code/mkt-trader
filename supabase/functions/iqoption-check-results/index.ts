@@ -20,40 +20,90 @@ interface PositionResult {
   close_quote?: number;
 }
 
+// Configuration
+const MAX_RETRIES = 3;
+const LOGIN_TIMEOUT_MS = 10000; // 10 seconds timeout
+const RETRY_DELAY_MS = 2000; // 2 seconds between retries
+
 // IQ Option API endpoints
 const IQ_OPTION_AUTH_URL = 'https://auth.iqoption.com/api/v2/login';
 const IQ_OPTION_WS_URL = 'wss://iqoption.com/echo/websocket';
 
-async function loginToIQOption(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
-  try {
-    console.log('Attempting to login to IQ Option...');
-    
-    const response = await fetch(IQ_OPTION_AUTH_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-      body: new URLSearchParams({
-        identifier: email,
-        password: password,
-      }),
-    });
+// Helper function to delay
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-    const data = await response.json();
-    console.log('Login response status:', response.status);
-    
-    if (data.code === 'success' && data.ssid) {
-      console.log('Login successful, SSID obtained');
-      return { ssid: data.ssid, error: null };
-    } else {
-      console.error('Login failed:', data.message || 'Unknown error');
-      return { ssid: null, error: data.message || 'Login failed' };
-    }
+// Fetch with timeout
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
   } catch (error) {
-    console.error('Login error:', error);
-    return { ssid: null, error: String(error) };
+    clearTimeout(timeoutId);
+    throw error;
   }
+}
+
+async function loginToIQOptionWithRetry(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
+  let lastError: string | null = null;
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`Login attempt ${attempt}/${MAX_RETRIES} with ${LOGIN_TIMEOUT_MS}ms timeout...`);
+      
+      const response = await fetchWithTimeout(
+        IQ_OPTION_AUTH_URL,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+          body: new URLSearchParams({
+            identifier: email,
+            password: password,
+          }),
+        },
+        LOGIN_TIMEOUT_MS
+      );
+
+      const data = await response.json();
+      console.log('Login response status:', response.status);
+      
+      if (data.code === 'success' && data.ssid) {
+        console.log(`Login successful on attempt ${attempt}`);
+        return { ssid: data.ssid, error: null };
+      } else {
+        lastError = data.message || 'Login failed';
+        console.error(`Login failed on attempt ${attempt}:`, lastError);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        lastError = `Timeout after ${LOGIN_TIMEOUT_MS}ms`;
+        console.error(`Login timeout on attempt ${attempt}`);
+      } else {
+        lastError = String(error);
+        console.error(`Login error on attempt ${attempt}:`, lastError);
+      }
+    }
+    
+    // Wait before retrying (except on last attempt)
+    if (attempt < MAX_RETRIES) {
+      console.log(`Waiting ${RETRY_DELAY_MS}ms before retry...`);
+      await delay(RETRY_DELAY_MS);
+    }
+  }
+  
+  console.error(`All ${MAX_RETRIES} login attempts failed`);
+  return { ssid: null, error: `Failed after ${MAX_RETRIES} attempts: ${lastError}` };
 }
 
 async function getClosedPositions(ssid: string, accountType: string): Promise<PositionResult[]> {
@@ -68,7 +118,7 @@ async function getClosedPositions(ssid: string, accountType: string): Promise<Po
       console.log('WebSocket timeout, returning positions found:', positions.length);
       ws.close();
       resolve(positions);
-    }, 25000);
+    }, 15000); // 15 seconds WebSocket timeout
 
     ws.onopen = () => {
       console.log('WebSocket connected, authenticating...');
@@ -302,14 +352,16 @@ serve(async (req) => {
 
     const credentials: IQOptionCredentials = configData;
     
-    // Login to IQ Option
-    const { ssid, error: loginError } = await loginToIQOption(credentials.email, credentials.password);
+    // Login to IQ Option with retry
+    console.log('Starting login with retry mechanism...');
+    const { ssid, error: loginError } = await loginToIQOptionWithRetry(credentials.email, credentials.password);
     
     if (!ssid) {
       return new Response(
         JSON.stringify({ 
           error: loginError || 'Failed to login to IQ Option',
-          success: false 
+          success: false,
+          retriesAttempted: MAX_RETRIES
         }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

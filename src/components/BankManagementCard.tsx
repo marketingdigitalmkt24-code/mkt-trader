@@ -14,10 +14,11 @@ export function BankManagementCard() {
     connectionStatus,
     connect,
     disconnect,
+    refreshBalance,
     isConnected,
   } = useIQOptionConnection();
 
-  const { period, setPeriod, stats, isLoading: statsLoading } = useTradingStats();
+  const { period, setPeriod, stats, isLoading: statsLoading, refresh: refreshStats } = useTradingStats();
 
   const { profit, trades, wins, losses, consecutiveLosses, winRate } = stats;
   const currency = balance?.currency || 'USD';
@@ -30,6 +31,13 @@ export function BankManagementCard() {
   const tradeProgress = (trades / maxDailyTrades) * 100;
   const isOvertrading = trades >= maxDailyTrades * 0.8;
   const hasConsecutiveLosses = consecutiveLosses >= 2;
+
+  const handleRefresh = async () => {
+    if (refreshBalance) {
+      await refreshBalance();
+    }
+    refreshStats();
+  };
 
   const formatCurrency = (value: number) => {
     if (currency === 'BRL') {
@@ -106,6 +114,26 @@ export function BankManagementCard() {
           )}>
             {accountType === 'PRACTICE' ? 'DEMO' : 'REAL'}
           </span>
+          {isConnected && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleRefresh}
+                    disabled={isLoading}
+                  >
+                    <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Atualizar saldo</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -119,14 +147,14 @@ export function BankManagementCard() {
                   {isLoading || connectionStatus === 'connecting' ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : isConnected ? (
-                    <RefreshCw className="w-4 h-4" />
+                    <Wifi className="w-4 h-4 text-call" />
                   ) : (
                     <PlugZap className="w-4 h-4" />
                   )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{isConnected ? 'Reconectar' : 'Conectar à IQ Option'}</p>
+                <p>{isConnected ? 'Desconectar' : 'Conectar à IQ Option'}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

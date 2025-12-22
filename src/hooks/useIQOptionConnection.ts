@@ -34,6 +34,46 @@ export function useIQOptionConnection() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const hasConnected = useRef(false);
+  const balanceRefreshInterval = useRef<NodeJS.Timeout | null>(null);
+
+  // Fetch balance from IQ Option API via Edge Function
+  const refreshBalanceFromAPI = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      console.log('🔄 Fetching balance from IQ Option API...');
+      const { data, error } = await supabase.functions.invoke('iqoption-get-balance', {
+        body: { userId: user.id },
+      });
+
+      if (!error && data?.success) {
+        const newBalance: BalanceInfo = {
+          balance: data.balance,
+          currency: data.currency,
+          accountType: data.accountType,
+        };
+        
+        setBalance(newBalance);
+        setLastUpdate(new Date());
+        setConnectionStatus('connected');
+        
+        console.log('✅ Balance updated from API:', newBalance);
+        
+        // Also update daily stats from the API response
+        setDailyStats({
+          dailyProfit: data.dailyProfit || 0,
+          todayTrades: data.todayTrades || 0,
+          wins: data.wins || 0,
+          losses: data.losses || 0,
+          consecutiveLosses: data.consecutiveLosses || 0,
+        });
+      } else {
+        console.error('❌ Failed to fetch balance:', error || data?.error);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching balance:', error);
+    }
+  }, [user]);
 
   // Fetch daily stats from database
   const fetchDailyStats = useCallback(async () => {
@@ -42,7 +82,7 @@ export function useIQOptionConnection() {
       const now = new Date();
       const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
       
-      console.log('Fetching stats from:', todayUTC.toISOString());
+      console.log('📊 Fetching stats from:', todayUTC.toISOString());
 
       const { data: results, error } = await supabase
         .from('operation_results')
@@ -63,24 +103,20 @@ export function useIQOptionConnection() {
         const resultType = result.result?.toLowerCase();
         if (resultType === 'win') {
           wins++;
-          // profit já vem como valor positivo do lucro
           profit += result.profit || 0;
           currentStreak = 0;
         } else if (resultType === 'loss' || resultType === 'loose') {
           losses++;
-          // loss = perde o valor da entrada
           profit -= result.entry_price || 0;
           currentStreak++;
           consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
         } else if (resultType === 'tie' || resultType === 'equal') {
           ties++;
-          // Empate - não ganha nem perde
           currentStreak = 0;
         }
-        // 'pending' não afeta as estatísticas
       }
 
-      console.log('Daily stats calculated:', { 
+      console.log('📊 Daily stats calculated:', { 
         todayTrades: (results || []).filter(r => r.result !== 'pending').length,
         wins, 
         losses, 
@@ -135,6 +171,7 @@ export function useIQOptionConnection() {
           email: globalConfig.email,
           password: globalConfig.password,
           accountType: globalConfig.account_type,
+          userId: user.id,
         });
 
         if (!result.success) {
@@ -147,6 +184,7 @@ export function useIQOptionConnection() {
           email: config.email,
           password: config.password,
           accountType: config.account_type,
+          userId: user.id,
         });
 
         if (!result.success) {
@@ -168,6 +206,9 @@ export function useIQOptionConnection() {
         .eq('user_id', user.id)
         .eq('is_active', true);
 
+      // Immediately fetch balance after connection
+      await refreshBalanceFromAPI();
+
     } catch (error) {
       console.error('Connection error:', error);
       setConnectionStatus('error');
@@ -175,13 +216,19 @@ export function useIQOptionConnection() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isLoading]);
+  }, [user, isLoading, refreshBalanceFromAPI]);
 
   // Disconnect from IQ Option
   const disconnect = useCallback(() => {
     iqOptionClient.disconnect();
     setConnectionStatus('disconnected');
     hasConnected.current = false;
+    
+    // Clear balance refresh interval
+    if (balanceRefreshInterval.current) {
+      clearInterval(balanceRefreshInterval.current);
+      balanceRefreshInterval.current = null;
+    }
   }, []);
 
   // Place a trade
@@ -211,10 +258,13 @@ export function useIQOptionConnection() {
           profit: 0,
           iq_option_id: result.tradeId,
         });
+      
+      // Refresh balance after trade
+      setTimeout(() => refreshBalanceFromAPI(), 2000);
     }
 
     return result;
-  }, []);
+  }, [refreshBalanceFromAPI]);
 
   // Set up callbacks
   useEffect(() => {
@@ -236,6 +286,9 @@ export function useIQOptionConnection() {
     return () => {
       // Clean up on unmount
       iqOptionClient.disconnect();
+      if (balanceRefreshInterval.current) {
+        clearInterval(balanceRefreshInterval.current);
+      }
     };
   }, []);
 
@@ -246,14 +299,23 @@ export function useIQOptionConnection() {
     }
   }, [user, connect]);
 
-  // Fetch daily stats periodically and listen to realtime updates
+  // Refresh balance periodically (every 15 seconds) and when operation results change
   useEffect(() => {
+    if (!user || connectionStatus !== 'connected') return;
+
+    // Initial fetch
+    refreshBalanceFromAPI();
     fetchDailyStats();
-    const interval = setInterval(fetchDailyStats, 30000); // Every 30 seconds
+
+    // Set up periodic balance refresh (every 15 seconds for more real-time updates)
+    balanceRefreshInterval.current = setInterval(() => {
+      console.log('⏰ Periodic balance refresh...');
+      refreshBalanceFromAPI();
+    }, 15000);
 
     // Subscribe to realtime updates for operation_results
     const channel = supabase
-      .channel('operation-results-changes')
+      .channel('operation-results-changes-bank')
       .on(
         'postgres_changes',
         {
@@ -262,17 +324,30 @@ export function useIQOptionConnection() {
           table: 'operation_results'
         },
         (payload) => {
-          console.log('Operation result changed:', payload);
-          fetchDailyStats(); // Refresh stats when any result changes
+          console.log('📢 Operation result changed:', payload);
+          
+          // Check if it's a loss - immediately refresh balance
+          const newRecord = payload.new as { result?: string } | undefined;
+          if (newRecord?.result?.toLowerCase() === 'loss' || newRecord?.result?.toLowerCase() === 'loose') {
+            console.log('⚠️ Loss detected! Refreshing balance immediately...');
+            toast.warning('Loss detectado! Atualizando saldo...', { duration: 2000 });
+          }
+          
+          // Refresh stats and balance when any result changes
+          fetchDailyStats();
+          refreshBalanceFromAPI();
         }
       )
       .subscribe();
 
     return () => {
-      clearInterval(interval);
+      if (balanceRefreshInterval.current) {
+        clearInterval(balanceRefreshInterval.current);
+        balanceRefreshInterval.current = null;
+      }
       supabase.removeChannel(channel);
     };
-  }, [fetchDailyStats]);
+  }, [user, connectionStatus, refreshBalanceFromAPI, fetchDailyStats]);
 
   return {
     connectionStatus,
@@ -283,6 +358,7 @@ export function useIQOptionConnection() {
     connect,
     disconnect,
     placeTrade,
+    refreshBalance: refreshBalanceFromAPI,
     isConnected: iqOptionClient.isConnected(),
   };
 }

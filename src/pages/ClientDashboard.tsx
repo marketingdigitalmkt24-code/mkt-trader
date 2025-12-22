@@ -4,7 +4,7 @@ import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { AISignalsPanel } from '@/components/AISignalsPanel';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
-import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
+import { useIQOptionBalance } from '@/hooks/useIQOptionBalance';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,13 +25,15 @@ const ClientDashboard = () => {
 
   const { 
     balance, 
-    dailyStats,
+    dailyProfit, 
+    todayTrades, 
+    wins, 
+    losses, 
     isLoading: isLoadingBalance, 
-    connect: refreshConnection 
-  } = useIQOptionConnection();
+    refresh: refreshConnection 
+  } = useIQOptionBalance();
 
-  const currentBalance = balance?.balance || 0;
-  const { dailyProfit, todayTrades, wins, losses } = dailyStats;
+  const currentBalance = balance || 0;
 
   const handleLogout = async () => {
     await signOut();

@@ -89,6 +89,7 @@ export type Database = {
           profit: number
           result: string
           signal_id: string
+          timeframe: string
         }
         Insert: {
           asset: string
@@ -104,6 +105,7 @@ export type Database = {
           profit?: number
           result: string
           signal_id: string
+          timeframe?: string
         }
         Update: {
           asset?: string
@@ -119,6 +121,7 @@ export type Database = {
           profit?: number
           result?: string
           signal_id?: string
+          timeframe?: string
         }
         Relationships: []
       }

@@ -280,23 +280,60 @@ async function placeTradeAndWaitResult(
               // Adicionar com nome original
               activeAssets[name.toUpperCase()] = numId;
               
-              // Adicionar variações sem caracteres especiais
-              const nameNoSlash = name.replace(/\//g, '').toUpperCase();
-              const nameWithDash = name.replace(/\//g, '-').toUpperCase();
+              // Extrair nome base do ativo (ex: FRONT.GBPJPY-OTC -> GBPJPY)
+              // Formato IQ Option: FRONT.ASSETNAME-OTC ou FRONT.ASSETNAME-OP
+              let baseName = name.toUpperCase();
               
-              if (nameNoSlash !== name.toUpperCase()) {
-                activeAssets[nameNoSlash] = numId;
+              // Remover prefixo FRONT.
+              if (baseName.startsWith('FRONT.')) {
+                baseName = baseName.replace('FRONT.', '');
               }
-              if (nameWithDash !== name.toUpperCase()) {
-                activeAssets[nameWithDash] = numId;
+              
+              // Verificar se é OTC ou OP
+              const isOTC = baseName.includes('-OTC');
+              const isOP = baseName.includes('-OP');
+              
+              // Remover sufixos -OTC e -OP para pegar nome base
+              const cleanName = baseName.replace('-OTC', '').replace('-OP', '');
+              
+              // Adicionar variações para facilitar busca
+              if (isOTC) {
+                // Variações OTC: GBPJPY-OTC, GBP/JPY-OTC, GBPJPY OTC
+                activeAssets[`${cleanName}-OTC`] = numId;
+                activeAssets[`${cleanName}OTC`] = numId;
+                
+                // Adicionar com slash: GBP/JPY (para 6 chars, ex: GBPJPY -> GBP/JPY)
+                if (cleanName.length === 6) {
+                  const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
+                  activeAssets[`${withSlash}-OTC`] = numId;
+                  activeAssets[`${withSlash} OTC`] = numId;
+                }
+              } else if (isOP) {
+                // Variações regulares (não-OTC): GBPJPY, GBP/JPY, GBPJPY-OP
+                activeAssets[cleanName] = numId;
+                activeAssets[`${cleanName}-OP`] = numId;
+                
+                // Adicionar com slash: GBP/JPY (para 6 chars)
+                if (cleanName.length === 6) {
+                  const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
+                  activeAssets[withSlash] = numId;
+                  activeAssets[`${withSlash}-OP`] = numId;
+                }
+              } else {
+                // Formato sem sufixo
+                activeAssets[cleanName] = numId;
+                if (cleanName.length === 6) {
+                  const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
+                  activeAssets[withSlash] = numId;
+                }
               }
             }
           }
           
-          console.log(`📊 Ativos disponíveis: ${Object.keys(activeAssets).length} (binary: ${Object.keys(binary).length}, turbo: ${Object.keys(turbo).length})`);
+          console.log(`📊 Ativos mapeados: ${Object.keys(activeAssets).length} variações (binary: ${Object.keys(binary).length}, turbo: ${Object.keys(turbo).length})`);
           
           // Log some available assets for debugging
-          const sampleAssets = Object.keys(activeAssets).slice(0, 15).join(', ');
+          const sampleAssets = Object.keys(activeAssets).slice(0, 30).join(', ');
           console.log(`📋 Amostra de ativos: ${sampleAssets}`);
           
           // Now place the trade
@@ -307,53 +344,50 @@ async function placeTradeAndWaitResult(
           // Detectar se o ativo solicitado é OTC
           const isOTCAsset = trade.asset.toUpperCase().includes('OTC');
           
-          // Normalize asset name for lookup
-          const assetName = trade.asset.toUpperCase().replace(/\//g, '').replace(/-/g, '');
-          const assetNameWithDash = trade.asset.toUpperCase().replace(/\//g, '-');
-          const assetNameSlash = trade.asset.toUpperCase();
+          // Normalizar nome do ativo para busca
+          let cleanAsset = trade.asset.toUpperCase()
+            .replace(/\//g, '')  // Remove /
+            .replace(/-/g, '')   // Remove -
+            .replace(' ', '')    // Remove espaços
+            .replace('OTC', ''); // Remove OTC para pegar nome base
           
-          console.log(`🔍 Buscando ativo: ${trade.asset} (OTC: ${isOTCAsset})`);
+          console.log(`🔍 Buscando ativo: ${trade.asset} (base: ${cleanAsset}, OTC: ${isOTCAsset})`);
           
-          let assetId = activeAssets[assetName] || 
-                        activeAssets[assetNameWithDash] || 
-                        activeAssets[assetNameSlash] ||
-                        activeAssets[trade.asset.toUpperCase()];
+          // Criar lista de variações para buscar
+          const searchVariations = isOTCAsset 
+            ? [
+                // Variações para OTC
+                trade.asset.toUpperCase(),
+                `${cleanAsset}-OTC`,
+                `${cleanAsset}OTC`,
+                `FRONT.${cleanAsset}-OTC`,
+              ]
+            : [
+                // Variações para não-OTC
+                trade.asset.toUpperCase(),
+                cleanAsset,
+                `${cleanAsset}-OP`,
+                `FRONT.${cleanAsset}-OP`,
+                // Com slash
+                cleanAsset.length === 6 ? `${cleanAsset.slice(0, 3)}/${cleanAsset.slice(3)}` : null,
+                cleanAsset.length === 6 ? `${cleanAsset.slice(0, 3)}/${cleanAsset.slice(3)}-OP` : null,
+              ].filter(Boolean);
           
-          // Se não encontrou, tentar variações MANTENDO o tipo (OTC ou não-OTC)
-          if (!assetId) {
-            const variations = isOTCAsset 
-              ? [
-                  // Variações apenas para OTC
-                  assetName,
-                  assetName.replace('OTC', '-OTC'),
-                  assetName.replace('-OTC', 'OTC'),
-                  assetNameWithDash,
-                ]
-              : [
-                  // Variações apenas para não-OTC (NUNCA usar OTC)
-                  assetName,
-                  assetNameWithDash,
-                  assetNameSlash.replace('/', ''),
-                  assetNameSlash.replace('/', '-'),
-                ];
-            
-            for (const variation of variations) {
-              // IMPORTANTE: Não permitir substituição de não-OTC por OTC
-              const foundId = activeAssets[variation];
-              if (foundId) {
-                // Verificar se o ativo encontrado corresponde ao tipo solicitado
-                const foundName = Object.keys(activeAssets).find(k => activeAssets[k] === foundId);
-                const foundIsOTC = foundName?.includes('OTC') || false;
-                
-                if (isOTCAsset === foundIsOTC) {
-                  assetId = foundId;
-                  console.log(`✅ Ativo encontrado: ${variation} -> ID: ${assetId}`);
-                  break;
-                } else {
-                  console.log(`⚠️ Ativo ${variation} ignorado (tipo não corresponde: esperado OTC=${isOTCAsset}, encontrado OTC=${foundIsOTC})`);
-                }
-              }
+          let assetId: number | undefined;
+          let matchedVariation = '';
+          
+          for (const variation of searchVariations) {
+            if (variation && activeAssets[variation]) {
+              assetId = activeAssets[variation];
+              matchedVariation = variation;
+              console.log(`✅ Ativo encontrado: "${variation}" -> ID: ${assetId}`);
+              break;
             }
+          }
+          
+          // Log das variações tentadas se não encontrou
+          if (!assetId) {
+            console.log(`❌ Variações tentadas: ${searchVariations.join(', ')}`);
           }
           
           // NUNCA fazer fallback para OTC se o ativo original não era OTC

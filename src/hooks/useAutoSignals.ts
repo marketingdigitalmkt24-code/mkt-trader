@@ -402,7 +402,12 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
     }
 
     if (data?.success && data?.assets && data.assets.length > 0) {
-      const iqAssets: TradingAsset[] = data.assets.map((asset: any) => ({
+      // Filtrar APENAS ativos que estão ABERTOS e habilitados na IQ Option
+      const enabledAssets = data.assets.filter((asset: any) => asset.enabled === true);
+      
+      console.log(`📊 IQ Option: ${data.assets.length} total | ${enabledAssets.length} habilitados`);
+      
+      const iqAssets: TradingAsset[] = enabledAssets.map((asset: any) => ({
         symbol: asset.name,
         icon: asset.isOTC ? '🔵' : 
               asset.isBlitz ? '⚡' :
@@ -417,23 +422,24 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
         isBinary: asset.isBinary,
         iqOptionId: asset.id,
         payout: asset.payout,
+        enabled: asset.enabled,
       }));
 
-      console.log(`✅ Fetched ${iqAssets.length} assets from IQ Option`);
+      console.log(`✅ ${iqAssets.length} ativos ABERTOS na IQ Option`);
       
-      // Update cache with ALL assets
+      // Update cache with only ENABLED assets
       cachedIQAssets = iqAssets;
       lastIQAssetsFetch = now;
       
-      // Filter based on weekend/weekday
+      // Filter based on weekend/weekday - SOMENTE ativos abertos
       let filteredAssets: TradingAsset[];
       
       if (weekend) {
-        // Weekend: only OTC assets
+        // Weekend: only OTC assets that are OPEN
         filteredAssets = iqAssets.filter(asset => asset.isOTC || isOTCAsset(asset.symbol));
-        console.log(`📊 Fim de semana: ${filteredAssets.length} ativos OTC disponíveis`);
+        console.log(`📊 Fim de semana: ${filteredAssets.length} ativos OTC ABERTOS`);
       } else {
-        // Weekday: prioritize Blitz and Binary, exclude OTC
+        // Weekday: ONLY non-OTC assets that are OPEN
         const nonOTC = iqAssets.filter(asset => !asset.isOTC && !isOTCAsset(asset.symbol));
         
         // Prioritize: Blitz first, then Binary, then others
@@ -450,7 +456,12 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
         filteredAssets = [...blitzAssets, ...binaryAssets, ...otherAssets];
         
         console.log(`📊 Dia útil - Blitz: ${blitzAssets.length}, Binárias: ${binaryAssets.length}, Outros: ${otherAssets.length}`);
-        console.log(`⚡ Priorizando Blitz e Binárias com melhor payout`);
+        console.log(`⚡ APENAS ativos não-OTC ABERTOS (${filteredAssets.length} total)`);
+        
+        // LOG dos ativos que serão analisados
+        if (filteredAssets.length > 0) {
+          console.log(`🎯 Ativos para análise: ${filteredAssets.slice(0, 10).map(a => a.symbol).join(', ')}`);
+        }
       }
       
       return filteredAssets;
@@ -523,8 +534,21 @@ function generateSignals(riskControl: RiskControl, availableAssets: TradingAsset
 
   // Selecionar apenas o MELHOR sinal
   const bestSignal = allCandidates[0];
-  console.log(`🏆 Melhor sinal selecionado: ${bestSignal.asset} | Score: ${bestSignal.indicators.confluenceScore}% | Confirmações: ${bestSignal.indicators.confluenceCount}`);
-  console.log(`   📊 Candidatos analisados: ${allCandidates.length} | Descartados: ${allCandidates.length - 1}`);
+  const isOTC = bestSignal.asset.toUpperCase().includes('OTC') || bestSignal.marketType === 'otc';
+  const weekend = isWeekend();
+  
+  console.log(`🏆 Melhor sinal: ${bestSignal.asset} (${bestSignal.type})`);
+  console.log(`   📊 Score: ${bestSignal.indicators.confluenceScore}% | Confirmações: ${bestSignal.indicators.confluenceCount}`);
+  console.log(`   🔍 Tipo: ${isOTC ? 'OTC' : 'NÃO-OTC'} | Mercado: ${weekend ? 'FIM DE SEMANA' : 'DIA ÚTIL'}`);
+  console.log(`   📈 Candidatos: ${allCandidates.length} | Descartados: ${allCandidates.length - 1}`);
+
+  // VALIDAÇÃO FINAL: Garantir que o tipo corresponde ao dia
+  if (weekend && !isOTC) {
+    console.log(`⚠️ AVISO: Ativo não-OTC em fim de semana - pode não estar disponível`);
+  }
+  if (!weekend && isOTC) {
+    console.log(`⚠️ AVISO: Ativo OTC em dia útil - preferível usar ativos regulares`);
+  }
 
   return { 
     signals: [bestSignal],

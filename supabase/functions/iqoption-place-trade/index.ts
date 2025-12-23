@@ -265,17 +265,39 @@ async function placeTradeAndWaitResult(
         if (data.name === 'initialization-data') {
           console.log('Received initialization data');
           const binary = data.msg?.binary?.actives || {};
+          const turbo = data.msg?.turbo?.actives || {};
           
-          // Build active assets map
-          for (const [id, info] of Object.entries(binary)) {
+          // Combinar binary e turbo para ter todos os ativos
+          const allActives = { ...binary, ...turbo };
+          
+          // Build active assets map com múltiplas variações de nome
+          for (const [id, info] of Object.entries(allActives)) {
             const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
             if (assetInfo.enabled && !assetInfo.is_suspended) {
               const name = assetInfo.name || '';
-              activeAssets[name.toUpperCase()] = parseInt(id);
+              const numId = parseInt(id);
+              
+              // Adicionar com nome original
+              activeAssets[name.toUpperCase()] = numId;
+              
+              // Adicionar variações sem caracteres especiais
+              const nameNoSlash = name.replace(/\//g, '').toUpperCase();
+              const nameWithDash = name.replace(/\//g, '-').toUpperCase();
+              
+              if (nameNoSlash !== name.toUpperCase()) {
+                activeAssets[nameNoSlash] = numId;
+              }
+              if (nameWithDash !== name.toUpperCase()) {
+                activeAssets[nameWithDash] = numId;
+              }
             }
           }
           
-          console.log('Available assets count:', Object.keys(activeAssets).length);
+          console.log(`📊 Ativos disponíveis: ${Object.keys(activeAssets).length} (binary: ${Object.keys(binary).length}, turbo: ${Object.keys(turbo).length})`);
+          
+          // Log some available assets for debugging
+          const sampleAssets = Object.keys(activeAssets).slice(0, 15).join(', ');
+          console.log(`📋 Amostra de ativos: ${sampleAssets}`);
           
           // Now place the trade
           placeTradeWithAssets();

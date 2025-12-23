@@ -97,6 +97,7 @@ const Index = () => {
             activeTradesCount={activeTradesCount}
             todayTrades={autoTradingConfig.todayTrades}
             maxDailyTrades={autoTradingConfig.maxDailyTrades}
+            dailyLimitEnabled={autoTradingConfig.dailyLimitEnabled}
           />
         </div>
 

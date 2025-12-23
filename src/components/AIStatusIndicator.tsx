@@ -11,6 +11,7 @@ interface AIStatusIndicatorProps {
   activeTradesCount: number;
   todayTrades: number;
   maxDailyTrades: number;
+  dailyLimitEnabled?: boolean;
   lastAnalysisResult?: {
     approved: number;
     rejected: number;
@@ -26,6 +27,7 @@ export function AIStatusIndicator({
   activeTradesCount,
   todayTrades,
   maxDailyTrades,
+  dailyLimitEnabled = true,
   lastAnalysisResult,
 }: AIStatusIndicatorProps) {
   const getStatusColor = () => {
@@ -75,9 +77,11 @@ export function AIStatusIndicator({
                   <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {todayTrades}/{maxDailyTrades} trades hoje
-              </p>
+              {dailyLimitEnabled && (
+                <p className="text-xs text-muted-foreground">
+                  {todayTrades}/{maxDailyTrades} trades hoje
+                </p>
+              )}
             </div>
           </div>
 

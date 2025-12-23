@@ -211,12 +211,12 @@ export function useAISignalAnalyzer() {
   const filterByAIRecommendation = useCallback((
     signals: TradingSignal[],
     analysis: AIAnalysisResult,
-    minConfidence: number = 85
+    minConfidence: number = 95 // Mínimo MUITO ALTO para máxima assertividade
   ): TradingSignal[] => {
     // Check if we're in fallback mode (AI unavailable)
     const isFallbackMode = analysis.analyzedSignals.some(a => a.reason?.includes('Fallback'));
     
-    // NOVA LÓGICA: Aceitar MÚLTIPLOS sinais para diversificação
+    // LÓGICA ULTRA-SELETIVA: Poucos sinais, máxima assertividade
     const eligibleSignals = signals.filter(signal => {
       const aiAnalysis = analysis.analyzedSignals.find(
         a => a.asset === signal.asset || a.signalId === signal.id
@@ -224,43 +224,43 @@ export function useAISignalAnalyzer() {
 
       if (!aiAnalysis) return false;
 
-      // Relaxed criteria for fallback mode
+      // Fallback: ainda rigoroso
       if (isFallbackMode) {
         return (
           aiAnalysis.recommendation === 'EXECUTE' &&
-          aiAnalysis.confidence >= 75 &&
-          aiAnalysis.adjustedConfluence >= 75
+          aiAnalysis.confidence >= 90 &&
+          aiAnalysis.adjustedConfluence >= 90
         );
       }
 
-      // Modo normal: aceitar múltiplos sinais de alta qualidade
+      // Modo normal: MUITO rigoroso (>95% confiança)
       return (
         aiAnalysis.recommendation === 'EXECUTE' &&
         aiAnalysis.confidence >= minConfidence &&
-        aiAnalysis.riskLevel !== 'HIGH' &&
-        aiAnalysis.adjustedConfluence >= 85
+        aiAnalysis.riskLevel === 'LOW' &&
+        aiAnalysis.adjustedConfluence >= 95
       );
     });
     
-    // Ordenar por confluência/confiança
+    // Ordenar por confiança (maior primeiro)
     const sorted = eligibleSignals.sort((a, b) => {
       const aAnalysis = analysis.analyzedSignals.find(an => an.asset === a.asset);
       const bAnalysis = analysis.analyzedSignals.find(an => an.asset === b.asset);
-      const aScore = (aAnalysis?.confidence || 0) + a.indicators.confluenceScore;
-      const bScore = (bAnalysis?.confidence || 0) + b.indicators.confluenceScore;
-      return bScore - aScore;
+      return (bAnalysis?.confidence || 0) - (aAnalysis?.confidence || 0);
     });
     
-    // Retornar até 5 sinais diversificados (não apenas 1)
-    const maxSignals = isFallbackMode ? 3 : 5;
+    // MÁXIMO 3 SINAIS (poucos, mas assertivos)
+    const maxSignals = isFallbackMode ? 2 : 3;
     const selected = sorted.slice(0, maxSignals);
     
     if (selected.length > 0) {
-      console.log(`✅ ${selected.length} sinais diversificados selecionados:`);
+      console.log(`⭐ ${selected.length} sinal(is) ELITE selecionado(s):`);
       selected.forEach(s => {
         const analysis2 = analysis.analyzedSignals.find(a => a.asset === s.asset);
-        console.log(`   📊 ${s.asset}: ${analysis2?.confidence}% confiança`);
+        console.log(`   ⭐ ${s.asset}: ${analysis2?.confidence}% confiança`);
       });
+    } else {
+      console.log('⏳ Aguardando setup perfeito (>95%)...');
     }
     
     return selected;

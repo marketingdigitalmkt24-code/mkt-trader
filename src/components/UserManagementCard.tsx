@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, UserPlus, Trash2, Mail, Lock, Eye, EyeOff, Loader2, UserCheck } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Lock, Eye, EyeOff, Loader2, UserCheck, KeyRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const userSchema = z.object({
   email: z.string().email('Email inválido').max(255, 'Email muito longo'),
@@ -30,6 +38,14 @@ export function UserManagementCard() {
   const [isCreating, setIsCreating] = useState(false);
   const [users, setUsers] = useState<ClientProfile[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  
+  // Reset password state
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [resetUserId, setResetUserId] = useState('');
+  const [resetUserEmail, setResetUserEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   // Fetch registered users from client_profiles table
   const fetchUsers = async () => {
@@ -76,12 +92,18 @@ export function UserManagementCard() {
       });
 
       if (error) {
+        console.error('Edge function error:', error);
         toast({ title: 'Erro', description: error.message, variant: 'destructive' });
         return;
       }
 
       if (data?.error) {
-        toast({ title: 'Erro', description: data.error, variant: 'destructive' });
+        // Translate common errors
+        let errorMsg = data.error;
+        if (data.error.includes('already been registered')) {
+          errorMsg = 'Este email já está cadastrado';
+        }
+        toast({ title: 'Erro', description: errorMsg, variant: 'destructive' });
         return;
       }
 
@@ -138,6 +160,45 @@ export function UserManagementCard() {
     } catch (err) {
       toast({ title: 'Erro', description: 'Erro ao remover usuário', variant: 'destructive' });
     }
+  };
+
+  const handleResetPassword = async () => {
+    if (newPassword.length < 6) {
+      toast({ title: 'Erro', description: 'Senha deve ter pelo menos 6 caracteres', variant: 'destructive' });
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('reset-client-password', {
+        body: { userId: resetUserId, newPassword }
+      });
+
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+        return;
+      }
+
+      if (data?.error) {
+        toast({ title: 'Erro', description: data.error, variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: 'Sucesso', description: 'Senha redefinida com sucesso!' });
+      setResetPasswordOpen(false);
+      setNewPassword('');
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Erro ao redefinir senha', variant: 'destructive' });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const openResetPasswordDialog = (userId: string, userEmail: string) => {
+    setResetUserId(userId);
+    setResetUserEmail(userEmail);
+    setNewPassword('');
+    setResetPasswordOpen(true);
   };
 
   return (
@@ -263,6 +324,14 @@ export function UserManagementCard() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      title="Redefinir senha"
+                      onClick={() => openResetPasswordDialog(user.user_id, user.email)}
+                    >
+                      <KeyRound className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="text-destructive hover:text-destructive"
                       onClick={() => handleDeleteUser(user.user_id)}
                     >
@@ -274,6 +343,59 @@ export function UserManagementCard() {
             </div>
           )}
         </div>
+
+        {/* Reset Password Dialog */}
+        <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Redefinir Senha</DialogTitle>
+              <DialogDescription>
+                Defina uma nova senha para {resetUserEmail}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password" className="flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  Nova Senha
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="new-password"
+                    type={showNewPassword ? 'text' : 'password'}
+                    placeholder="Digite a nova senha"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    disabled={isResetting}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+              <Button onClick={handleResetPassword} disabled={isResetting} className="w-full">
+                {isResetting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Redefinindo...
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4 mr-2" />
+                    Redefinir Senha
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

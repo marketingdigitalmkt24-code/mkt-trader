@@ -42,15 +42,37 @@ const ClientLogin = () => {
       const { error } = await signIn(email, password);
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
-          toast({ title: 'Erro', description: 'Email ou senha incorretos', variant: 'destructive' });
+          toast({ title: 'Erro', description: 'Email ou senha incorretos. Verifique suas credenciais com o administrador.', variant: 'destructive' });
+        } else if (error.message.includes('Email not confirmed')) {
+          toast({ title: 'Erro', description: 'Email não confirmado. Entre em contato com o administrador.', variant: 'destructive' });
         } else {
           toast({ title: 'Erro', description: error.message, variant: 'destructive' });
         }
-      } else {
-        toast({ title: 'Bem-vindo!', description: 'Login realizado com sucesso' });
-        navigate('/client');
+        return;
       }
+      
+      // Check if user is active
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: session } = await supabase.auth.getSession();
+      
+      if (session?.session?.user) {
+        const { data: profile } = await supabase
+          .from('client_profiles')
+          .select('is_active')
+          .eq('user_id', session.session.user.id)
+          .maybeSingle();
+        
+        if (profile && !profile.is_active) {
+          await supabase.auth.signOut();
+          toast({ title: 'Acesso Negado', description: 'Sua conta está desativada. Entre em contato com o administrador.', variant: 'destructive' });
+          return;
+        }
+      }
+      
+      toast({ title: 'Bem-vindo!', description: 'Login realizado com sucesso' });
+      navigate('/client');
     } catch (err) {
+      console.error('Login error:', err);
       toast({ title: 'Erro', description: 'Ocorreu um erro inesperado', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);

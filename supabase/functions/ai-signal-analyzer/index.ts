@@ -183,9 +183,26 @@ LEMBRE-SE:
       }
       if (response.status === 402) {
         console.error('AI credits exhausted');
+        // Return fallback analysis instead of error to prevent app crash
         return new Response(
-          JSON.stringify({ error: 'AI credits exhausted' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ 
+            success: true,
+            creditsExhausted: true,
+            error: 'AI credits exhausted',
+            analyzedSignals: signals.map(s => ({
+              signalId: `${s.asset}-${Date.now()}`,
+              asset: s.asset,
+              recommendation: s.indicators.confluenceScore >= 80 ? 'EXECUTE' : 
+                              s.indicators.confluenceScore >= 65 ? 'WAIT' : 'SKIP',
+              confidence: s.indicators.confluenceScore,
+              reason: 'Fallback: créditos IA esgotados, usando confluência',
+              adjustedConfluence: s.indicators.confluenceScore,
+              riskLevel: s.indicators.atr?.volatility === 'high' ? 'HIGH' : 'LOW'
+            })),
+            marketSentiment: 'NEUTRAL',
+            bestSignal: signals.find(s => s.indicators.confluenceScore >= 80)?.asset || null
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       throw new Error(`AI gateway error: ${response.status}`);

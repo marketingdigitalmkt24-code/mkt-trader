@@ -35,8 +35,10 @@ interface TradeResult {
 
 export function useAutoTrading() {
   const { toast } = useToast();
-  const { analyzeSignals, filterByAIRecommendation, isAnalyzing } = useAISignalAnalyzer();
+  const { analyzeSignals, filterByAIRecommendation, isAnalyzing, error: aiError } = useAISignalAnalyzer();
   const processedSignals = useRef<Set<string>>(new Set());
+  const lastAIErrorShown = useRef<number>(0);
+  const AI_ERROR_COOLDOWN = 60000; // Only show AI error toast once per minute
   const tradingInProgress = useRef<Set<string>>(new Set());
   const activeAssetTrades = useRef<Set<string>>(new Set()); // Track assets with active trades
   
@@ -95,6 +97,22 @@ export function useAutoTrading() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   }, [config]);
+
+  // Show toast when AI credits are exhausted
+  useEffect(() => {
+    if (aiError && aiError.includes('credits')) {
+      const now = Date.now();
+      if (now - lastAIErrorShown.current > AI_ERROR_COOLDOWN) {
+        lastAIErrorShown.current = now;
+        toast({
+          title: "⚠️ Créditos de IA Esgotados",
+          description: "Sistema usando modo fallback baseado em confluência. Adicione créditos para análise completa.",
+          variant: "destructive",
+          duration: 10000,
+        });
+      }
+    }
+  }, [aiError, toast]);
 
   // Load active trades from database on mount and periodically refresh
   const refreshActiveAssetTrades = useCallback(async () => {

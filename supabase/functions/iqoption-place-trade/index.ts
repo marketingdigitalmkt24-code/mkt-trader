@@ -282,53 +282,65 @@ async function placeTradeAndWaitResult(
         }
         
         function placeTradeWithAssets() {
+          // Detectar se o ativo solicitado é OTC
+          const isOTCAsset = trade.asset.toUpperCase().includes('OTC');
+          
           // Normalize asset name for lookup
           const assetName = trade.asset.toUpperCase().replace(/\//g, '').replace(/-/g, '');
           const assetNameWithDash = trade.asset.toUpperCase().replace(/\//g, '-');
           const assetNameSlash = trade.asset.toUpperCase();
+          
+          console.log(`🔍 Buscando ativo: ${trade.asset} (OTC: ${isOTCAsset})`);
           
           let assetId = activeAssets[assetName] || 
                         activeAssets[assetNameWithDash] || 
                         activeAssets[assetNameSlash] ||
                         activeAssets[trade.asset.toUpperCase()];
           
-          // Try common OTC naming patterns
+          // Se não encontrou, tentar variações MANTENDO o tipo (OTC ou não-OTC)
           if (!assetId) {
-            const otcVariations = [
-              assetName,
-              assetName.replace('OTC', '-OTC'),
-              assetName.replace('-OTC', 'OTC'),
-              assetNameWithDash,
-              assetNameSlash.replace('/', ''),
-            ];
+            const variations = isOTCAsset 
+              ? [
+                  // Variações apenas para OTC
+                  assetName,
+                  assetName.replace('OTC', '-OTC'),
+                  assetName.replace('-OTC', 'OTC'),
+                  assetNameWithDash,
+                ]
+              : [
+                  // Variações apenas para não-OTC (NUNCA usar OTC)
+                  assetName,
+                  assetNameWithDash,
+                  assetNameSlash.replace('/', ''),
+                  assetNameSlash.replace('/', '-'),
+                ];
             
-            for (const variation of otcVariations) {
-              if (activeAssets[variation]) {
-                assetId = activeAssets[variation];
-                console.log(`Found asset with variation: ${variation} -> ID: ${assetId}`);
-                break;
+            for (const variation of variations) {
+              // IMPORTANTE: Não permitir substituição de não-OTC por OTC
+              const foundId = activeAssets[variation];
+              if (foundId) {
+                // Verificar se o ativo encontrado corresponde ao tipo solicitado
+                const foundName = Object.keys(activeAssets).find(k => activeAssets[k] === foundId);
+                const foundIsOTC = foundName?.includes('OTC') || false;
+                
+                if (isOTCAsset === foundIsOTC) {
+                  assetId = foundId;
+                  console.log(`✅ Ativo encontrado: ${variation} -> ID: ${assetId}`);
+                  break;
+                } else {
+                  console.log(`⚠️ Ativo ${variation} ignorado (tipo não corresponde: esperado OTC=${isOTCAsset}, encontrado OTC=${foundIsOTC})`);
+                }
               }
             }
           }
           
-          // If still not found, try partial match
+          // NUNCA fazer fallback para OTC se o ativo original não era OTC
           if (!assetId) {
-            const baseAsset = assetName.replace('OTC', '').replace('-', '');
-            for (const [name, id] of Object.entries(activeAssets)) {
-              if (name.includes(baseAsset) && name.includes('OTC')) {
-                assetId = id;
-                console.log(`Found asset with partial match: ${name} -> ID: ${assetId}`);
-                break;
-              }
-            }
-          }
-          
-          if (!assetId) {
-            console.error('Asset not found or not available:', trade.asset);
-            console.log('Looking for:', assetName, 'in assets:', Object.keys(activeAssets).slice(0, 20));
+            console.error(`❌ Ativo ${trade.asset} não encontrado (OTC: ${isOTCAsset})`);
+            console.log('Ativos disponíveis:', Object.keys(activeAssets).slice(0, 30).join(', '));
             clearTimeout(timeout);
             ws.close();
-            resolve({ success: false, error: `Asset ${trade.asset} not available for trading` });
+            resolve({ success: false, error: `Ativo ${trade.asset} não disponível para trading` });
             return;
           }
           

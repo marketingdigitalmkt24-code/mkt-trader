@@ -373,17 +373,22 @@ serve(async (req) => {
       .update({ last_connected_at: new Date().toISOString() })
       .eq('email', credentials.email);
 
-    // Get ALL pending operations from our database (no time limit - always fetch real results)
+    // Get ALL pending operations AND recent tie results (which might have real results now)
+    // Tie results within last 10 minutes should be re-checked as they might be temporary
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    
     const { data: pendingOperations, error: pendingError } = await supabase
       .from('operation_results')
-      .select('id, iq_option_id, signal_id, created_at')
-      .eq('result', 'pending');
+      .select('id, iq_option_id, signal_id, created_at, result')
+      .or(`result.eq.pending,and(result.eq.tie,created_at.gte.${tenMinutesAgo})`);
 
     if (pendingError) {
       console.error('Error fetching pending operations:', pendingError);
     }
 
-    console.log('Found', pendingOperations?.length || 0, 'pending operations to check');
+    const pendingCount = pendingOperations?.filter(p => p.result === 'pending').length || 0;
+    const tieCount = pendingOperations?.filter(p => p.result === 'tie').length || 0;
+    console.log(`Found ${pendingCount} pending + ${tieCount} recent tie operations to check`);
 
     // Get closed positions from IQ Option history
     const closedPositions = await getClosedPositions(ssid, credentials.account_type);

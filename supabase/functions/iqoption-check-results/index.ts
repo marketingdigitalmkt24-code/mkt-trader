@@ -184,34 +184,34 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
               if (!balanceId && balances.length > 0) balanceId = balances[0].id;
               console.log('Using balance ID:', balanceId);
 
-              // Request closed history (multiple formats for compatibility)
-              ws.send(JSON.stringify({
-                name: 'sendMessage',
-                msg: {
-                  name: 'portfolio.get-history-positions',
-                  version: '2.0',
-                  body: {
-                    user_balance_id: balanceId,
-                    instrument_types: ['binary-option', 'turbo-option', 'digital-option'],
-                    limit: 100,
-                    offset: 0,
-                  },
-                },
-              }));
+               // Request closed history (multiple formats for compatibility)
+               ws.send(JSON.stringify({
+                 name: 'sendMessage',
+                 msg: {
+                   name: 'portfolio.get-history-positions',
+                   version: '2.0',
+                   body: {
+                     user_balance_id: balanceId,
+                     instrument_types: ['binary-option', 'turbo-option', 'digital-option'],
+                     limit: 300,
+                     offset: 0,
+                   },
+                 },
+               }));
 
-              ws.send(JSON.stringify({
-                name: 'sendMessage',
-                msg: {
-                  name: 'get-history-positions',
-                  version: '1.0',
-                  body: {
-                    user_balance_id: balanceId,
-                    instrument_types: ['turbo'],
-                    limit: 100,
-                    offset: 0,
-                  },
-                },
-              }));
+               ws.send(JSON.stringify({
+                 name: 'sendMessage',
+                 msg: {
+                   name: 'get-history-positions',
+                   version: '1.0',
+                   body: {
+                     user_balance_id: balanceId,
+                     instrument_types: ['turbo'],
+                     limit: 300,
+                     offset: 0,
+                   },
+                 },
+               }));
             }
 
             const isHistoryMessage =
@@ -422,10 +422,9 @@ serve(async (req) => {
         const iqId = pending.iq_option_id ? String(pending.iq_option_id) : '';
 
         // Search for matching closed position in IQ Option history
+        // IMPORTANT: use strict ID matching to avoid false positives
         const closed = closedPositions.find((p) =>
-          (iqId && (p.matchIds.includes(iqId) || p.rawJson.includes(iqId))) ||
-          p.matchIds.includes(String(pending.signal_id)) ||
-          p.rawJson.includes(String(pending.signal_id))
+          iqId ? p.matchIds.includes(iqId) : p.matchIds.includes(String(pending.signal_id))
         );
         
         if (closed && closed.win !== 'pending') {

@@ -172,21 +172,35 @@ export function useAISignalAnalyzer() {
       console.error('❌ AI analysis error:', errorMessage);
       setError(errorMessage);
 
-      // Fallback: use confluence score
-      const fallbackResults: AIAnalyzedSignal[] = signals.map(s => ({
-        signalId: s.id,
-        asset: s.asset,
-        recommendation: s.indicators.confluenceScore >= 80 ? 'EXECUTE' : 
-                        s.indicators.confluenceScore >= 60 ? 'WAIT' : 'SKIP',
-        confidence: s.indicators.confluenceScore,
-        reason: 'Fallback: usando confluência original',
-        adjustedConfluence: s.indicators.confluenceScore,
-        riskLevel: s.indicators.atr.volatility === 'high' ? 'HIGH' : 'MEDIUM'
-      } as AIAnalyzedSignal));
+      // Fallback: use confluence score with RELAXED criteria
+      // Since AI is down, we use the signal's own confluence as confidence
+      const fallbackResults: AIAnalyzedSignal[] = signals.map(s => {
+        const confluence = s.indicators.confluenceScore;
+        const volatility = s.indicators.atr?.volatility || 'medium';
+        
+        // More permissive when AI is unavailable - trust the signal generation
+        return {
+          signalId: s.id,
+          asset: s.asset,
+          recommendation: confluence >= 75 ? 'EXECUTE' : 
+                          confluence >= 60 ? 'WAIT' : 'SKIP',
+          confidence: Math.min(confluence + 10, 100), // Boost confidence since signal passed generation
+          reason: `Fallback mode: confluência ${confluence}%`,
+          adjustedConfluence: confluence,
+          riskLevel: volatility === 'high' ? 'HIGH' : 'LOW' // Be more lenient on risk
+        } as AIAnalyzedSignal;
+      });
+
+      // Find best signal by confluence
+      const bestSignal = signals
+        .filter(s => s.indicators.confluenceScore >= 75)
+        .sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore)[0];
+
+      console.log(`⚠️ Fallback mode: ${fallbackResults.filter(s => s.recommendation === 'EXECUTE').length} signals eligible`);
 
       return {
         analyzedSignals: fallbackResults,
-        bestSignal: fallbackResults.find(s => s.recommendation === 'EXECUTE')?.signalId || null
+        bestSignal: bestSignal?.id || null
       };
 
     } finally {
@@ -197,8 +211,11 @@ export function useAISignalAnalyzer() {
   const filterByAIRecommendation = useCallback((
     signals: TradingSignal[],
     analysis: AIAnalysisResult,
-    minConfidence: number = 90 // Increased from 85
+    minConfidence: number = 80 // Reduced from 90 to allow more signals
   ): TradingSignal[] => {
+    // Check if we're in fallback mode (AI unavailable)
+    const isFallbackMode = analysis.analyzedSignals.some(a => a.reason?.includes('Fallback'));
+    
     // Only take the BEST signal - maximum 1 trade per analysis
     const bestSignalId = analysis.bestSignal;
     
@@ -210,39 +227,60 @@ export function useAISignalAnalyzer() {
       );
       
       if (bestSignal && bestAnalysis) {
+        // Relaxed criteria for fallback mode
+        const requiredConfidence = isFallbackMode ? 75 : minConfidence;
+        const requiredConfluence = isFallbackMode ? 75 : 85;
+        
         const meetsCriteria = (
           bestAnalysis.recommendation === 'EXECUTE' &&
-          bestAnalysis.confidence >= minConfidence &&
-          bestAnalysis.riskLevel === 'LOW' && // Only LOW risk
-          bestAnalysis.adjustedConfluence >= 90
+          bestAnalysis.confidence >= requiredConfidence &&
+          (isFallbackMode || bestAnalysis.riskLevel !== 'HIGH') && // Skip HIGH risk only
+          bestAnalysis.adjustedConfluence >= requiredConfluence
         );
         
         if (meetsCriteria) {
-          console.log(`🎯 Best signal selected: ${bestSignal.asset} (${bestAnalysis.confidence}% confidence)`);
+          console.log(`🎯 Best signal selected: ${bestSignal.asset} (${bestAnalysis.confidence}% confidence${isFallbackMode ? ' - fallback mode' : ''})`);
           return [bestSignal]; // Return ONLY the best signal
         }
       }
     }
     
-    // If no best signal, look for any signal that meets ULTRA strict criteria
-    const ultraStrictSignals = signals.filter(signal => {
+    // If no best signal, look for any signal that meets criteria
+    const eligibleSignals = signals.filter(signal => {
       const aiAnalysis = analysis.analyzedSignals.find(
         a => a.asset === signal.asset || a.signalId === signal.id
       );
 
       if (!aiAnalysis) return false;
 
-      // ULTRA strict: EXECUTE + 92%+ confidence + LOW risk + 92%+ confluence
+      // Relaxed criteria for fallback mode
+      if (isFallbackMode) {
+        return (
+          aiAnalysis.recommendation === 'EXECUTE' &&
+          aiAnalysis.confidence >= 75 &&
+          aiAnalysis.adjustedConfluence >= 75
+        );
+      }
+
+      // Normal AI mode: still strict but not ULTRA strict
       return (
         aiAnalysis.recommendation === 'EXECUTE' &&
-        aiAnalysis.confidence >= 92 &&
-        aiAnalysis.riskLevel === 'LOW' &&
-        aiAnalysis.adjustedConfluence >= 92
+        aiAnalysis.confidence >= 85 &&
+        aiAnalysis.riskLevel !== 'HIGH' &&
+        aiAnalysis.adjustedConfluence >= 85
       );
     });
     
-    // Return only the first (best) one
-    return ultraStrictSignals.slice(0, 1);
+    // Sort by confluence and return best one
+    const sorted = eligibleSignals.sort((a, b) => 
+      b.indicators.confluenceScore - a.indicators.confluenceScore
+    );
+    
+    if (sorted.length > 0) {
+      console.log(`✅ ${sorted.length} signals eligible, selecting best: ${sorted[0].asset}`);
+    }
+    
+    return sorted.slice(0, 1);
   }, []);
 
   const getSignalAnalysis = useCallback((

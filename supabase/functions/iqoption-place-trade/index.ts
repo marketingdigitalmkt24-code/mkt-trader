@@ -271,6 +271,9 @@ async function placeTradeAndWaitResult(
           const allActives = { ...binary, ...turbo };
           
           // Build active assets map com múltiplas variações de nome
+          const otcAssets: string[] = [];
+          const opAssets: string[] = [];
+          
           for (const [id, info] of Object.entries(allActives)) {
             const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
             if (assetInfo.enabled && !assetInfo.is_suspended) {
@@ -281,7 +284,6 @@ async function placeTradeAndWaitResult(
               activeAssets[name.toUpperCase()] = numId;
               
               // Extrair nome base do ativo (ex: FRONT.GBPJPY-OTC -> GBPJPY)
-              // Formato IQ Option: FRONT.ASSETNAME-OTC ou FRONT.ASSETNAME-OP
               let baseName = name.toUpperCase();
               
               // Remover prefixo FRONT.
@@ -298,31 +300,34 @@ async function placeTradeAndWaitResult(
               
               // Adicionar variações para facilitar busca
               if (isOTC) {
-                // Variações OTC: GBPJPY-OTC, GBP/JPY-OTC, GBPJPY OTC
+                otcAssets.push(cleanName);
+                // Variações OTC
                 activeAssets[`${cleanName}-OTC`] = numId;
                 activeAssets[`${cleanName}OTC`] = numId;
+                activeAssets[`${cleanName} OTC`] = numId;
                 
-                // Adicionar com slash: GBP/JPY (para 6 chars, ex: GBPJPY -> GBP/JPY)
-                if (cleanName.length === 6) {
+                if (cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)) {
                   const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
                   activeAssets[`${withSlash}-OTC`] = numId;
                   activeAssets[`${withSlash} OTC`] = numId;
+                  activeAssets[`${withSlash}OTC`] = numId;
                 }
               } else if (isOP) {
+                opAssets.push(cleanName);
                 // Variações regulares (não-OTC): GBPJPY, GBP/JPY, GBPJPY-OP
                 activeAssets[cleanName] = numId;
                 activeAssets[`${cleanName}-OP`] = numId;
                 
-                // Adicionar com slash: GBP/JPY (para 6 chars)
-                if (cleanName.length === 6) {
+                if (cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)) {
                   const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
                   activeAssets[withSlash] = numId;
                   activeAssets[`${withSlash}-OP`] = numId;
                 }
               } else {
-                // Formato sem sufixo
+                // Formato sem sufixo - considerar como regular (não-OTC)
+                opAssets.push(cleanName);
                 activeAssets[cleanName] = numId;
-                if (cleanName.length === 6) {
+                if (cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)) {
                   const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
                   activeAssets[withSlash] = numId;
                 }
@@ -330,11 +335,9 @@ async function placeTradeAndWaitResult(
             }
           }
           
-          console.log(`📊 Ativos mapeados: ${Object.keys(activeAssets).length} variações (binary: ${Object.keys(binary).length}, turbo: ${Object.keys(turbo).length})`);
-          
-          // Log some available assets for debugging
-          const sampleAssets = Object.keys(activeAssets).slice(0, 30).join(', ');
-          console.log(`📋 Amostra de ativos: ${sampleAssets}`);
+          console.log(`📊 Ativos mapeados: ${Object.keys(activeAssets).length} variações`);
+          console.log(`📈 Ativos regulares (-OP): ${opAssets.length > 0 ? opAssets.slice(0, 10).join(', ') : 'NENHUM'}`);
+          console.log(`🔵 Ativos OTC: ${otcAssets.length > 0 ? otcAssets.slice(0, 10).join(', ') : 'NENHUM'}`);
           
           // Now place the trade
           placeTradeWithAssets();
@@ -348,34 +351,47 @@ async function placeTradeAndWaitResult(
           let cleanAsset = trade.asset.toUpperCase()
             .replace(/\//g, '')  // Remove /
             .replace(/-/g, '')   // Remove -
-            .replace(' ', '')    // Remove espaços
+            .replace(/ /g, '')   // Remove espaços
             .replace('OTC', ''); // Remove OTC para pegar nome base
           
-          console.log(`🔍 Buscando ativo: ${trade.asset} (base: ${cleanAsset}, OTC: ${isOTCAsset})`);
+          // Gerar versão com slash se for par de moedas
+          const withSlash = cleanAsset.length === 6 && /^[A-Z]{6}$/.test(cleanAsset)
+            ? `${cleanAsset.slice(0, 3)}/${cleanAsset.slice(3)}`
+            : cleanAsset;
           
-          // Criar lista de variações para buscar
-          const searchVariations = isOTCAsset 
-            ? [
-                // Variações para OTC
-                trade.asset.toUpperCase(),
-                `${cleanAsset}-OTC`,
-                `${cleanAsset}OTC`,
-                `FRONT.${cleanAsset}-OTC`,
-              ]
-            : [
-                // Variações para não-OTC
-                trade.asset.toUpperCase(),
-                cleanAsset,
-                `${cleanAsset}-OP`,
-                `FRONT.${cleanAsset}-OP`,
-                // Com slash
-                cleanAsset.length === 6 ? `${cleanAsset.slice(0, 3)}/${cleanAsset.slice(3)}` : null,
-                cleanAsset.length === 6 ? `${cleanAsset.slice(0, 3)}/${cleanAsset.slice(3)}-OP` : null,
-              ].filter(Boolean);
+          console.log(`🔍 Buscando ativo: ${trade.asset} (base: ${cleanAsset}, slash: ${withSlash}, OTC: ${isOTCAsset})`);
+          
+          // Criar lista de variações para buscar - priorizar o tipo solicitado
+          let searchVariations: string[] = [];
+          
+          if (isOTCAsset) {
+            // Variações para OTC
+            searchVariations = [
+              trade.asset.toUpperCase(),
+              `${cleanAsset}-OTC`,
+              `${cleanAsset} OTC`,
+              `${cleanAsset}OTC`,
+              `${withSlash}-OTC`,
+              `${withSlash} OTC`,
+              `FRONT.${cleanAsset}-OTC`,
+            ];
+          } else {
+            // Variações para não-OTC (regular)
+            searchVariations = [
+              trade.asset.toUpperCase(),
+              withSlash,
+              cleanAsset,
+              `${cleanAsset}-OP`,
+              `${withSlash}-OP`,
+              `FRONT.${cleanAsset}-OP`,
+            ];
+          }
           
           let assetId: number | undefined;
           let matchedVariation = '';
+          let usedOTCFallback = false;
           
+          // Tentar encontrar com as variações principais
           for (const variation of searchVariations) {
             if (variation && activeAssets[variation]) {
               assetId = activeAssets[variation];
@@ -385,15 +401,33 @@ async function placeTradeAndWaitResult(
             }
           }
           
+          // Se não encontrou E não era OTC, tentar OTC como fallback (fim de semana)
+          if (!assetId && !isOTCAsset) {
+            console.log(`⚠️ Ativo regular não encontrado, tentando versão OTC...`);
+            const otcFallbackVariations = [
+              `${cleanAsset}-OTC`,
+              `${cleanAsset} OTC`,
+              `${withSlash}-OTC`,
+              `${withSlash} OTC`,
+              `FRONT.${cleanAsset}-OTC`,
+            ];
+            
+            for (const variation of otcFallbackVariations) {
+              if (activeAssets[variation]) {
+                assetId = activeAssets[variation];
+                matchedVariation = variation;
+                usedOTCFallback = true;
+                console.log(`🔄 Usando versão OTC: "${variation}" -> ID: ${assetId}`);
+                break;
+              }
+            }
+          }
+          
           // Log das variações tentadas se não encontrou
           if (!assetId) {
             console.log(`❌ Variações tentadas: ${searchVariations.join(', ')}`);
-          }
-          
-          // NUNCA fazer fallback para OTC se o ativo original não era OTC
-          if (!assetId) {
             console.error(`❌ Ativo ${trade.asset} não encontrado (OTC: ${isOTCAsset})`);
-            console.log('Ativos disponíveis:', Object.keys(activeAssets).slice(0, 30).join(', '));
+            console.log('Ativos disponíveis:', Object.keys(activeAssets).slice(0, 50).join(', '));
             clearTimeout(timeout);
             ws.close();
             resolve({ success: false, error: `Ativo ${trade.asset} não disponível para trading` });

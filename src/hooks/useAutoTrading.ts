@@ -34,6 +34,7 @@ export function useAutoTrading() {
   const { analyzeSignals, filterByAIRecommendation, isAnalyzing } = useAISignalAnalyzer();
   const processedSignals = useRef<Set<string>>(new Set());
   const tradingInProgress = useRef<Set<string>>(new Set());
+  const activeAssetTrades = useRef<Set<string>>(new Set()); // Track assets with active trades
   
   const [config, setConfig] = useState<AutoTradingConfig>(() => {
     try {
@@ -83,6 +84,29 @@ export function useAutoTrading() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   }, [config]);
 
+  // Load active trades from database on mount and periodically refresh
+  const refreshActiveAssetTrades = useCallback(async () => {
+    try {
+      // Get all pending/tie trades from last 10 minutes (active trades)
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { data: activeOps } = await supabase
+        .from('operation_results')
+        .select('asset, result')
+        .in('result', ['pending', 'tie'])
+        .gte('created_at', tenMinutesAgo);
+      
+      if (activeOps) {
+        activeAssetTrades.current.clear();
+        activeOps.forEach(op => {
+          activeAssetTrades.current.add(op.asset.toUpperCase());
+        });
+        console.log(`📊 Active trades on assets: ${Array.from(activeAssetTrades.current).join(', ') || 'none'}`);
+      }
+    } catch (err) {
+      console.error('Failed to refresh active asset trades:', err);
+    }
+  }, []);
+
   // Periodically check for pending results
   useEffect(() => {
     const checkPendingResults = async () => {
@@ -103,19 +127,23 @@ export function useAutoTrading() {
         if (data?.updatedResults > 0 || data?.expiredMarked > 0) {
           console.log(`📊 Results updated: ${data.updatedResults} from IQ Option, ${data.expiredMarked} expired`);
         }
+        
+        // Refresh active asset trades after checking results
+        await refreshActiveAssetTrades();
       } catch (err) {
         // Silently fail
       }
     };
 
     // Check on mount
+    refreshActiveAssetTrades();
     checkPendingResults();
 
     // Check every 30 seconds
     const interval = setInterval(checkPendingResults, CHECK_RESULTS_INTERVAL);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshActiveAssetTrades]);
 
   const updateConfig = useCallback((updates: Partial<AutoTradingConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));
@@ -177,27 +205,59 @@ export function useAutoTrading() {
     }
   }, [config.amount]);
 
-  // Place trades on multiple signals simultaneously
+  // Place trades on multiple signals simultaneously (one per asset)
   const placeTradesSimultaneously = useCallback(async (signals: TradingSignal[]): Promise<TradeResult[]> => {
     if (signals.length === 0) return [];
     
-    setIsPlacingTrade(true);
-    setActiveTradesCount(signals.length);
+    // Filter out signals for assets that already have active trades
+    const signalsToTrade = signals.filter(signal => {
+      const assetKey = signal.asset.toUpperCase();
+      if (activeAssetTrades.current.has(assetKey)) {
+        console.log(`⏸️ [${signal.asset}] Skipped - already has active trade`);
+        return false;
+      }
+      return true;
+    });
     
-    console.log(`🚀 Placing ${signals.length} trades simultaneously...`);
+    if (signalsToTrade.length === 0) {
+      console.log('⏸️ All signals skipped - assets already have active trades');
+      return [];
+    }
+    
+    // Only take ONE signal per asset (first one)
+    const uniqueAssetSignals: TradingSignal[] = [];
+    const seenAssets = new Set<string>();
+    
+    for (const signal of signalsToTrade) {
+      const assetKey = signal.asset.toUpperCase();
+      if (!seenAssets.has(assetKey)) {
+        seenAssets.add(assetKey);
+        uniqueAssetSignals.push(signal);
+      }
+    }
+    
+    console.log(`🎯 Trading ${uniqueAssetSignals.length} unique assets (skipped ${signalsToTrade.length - uniqueAssetSignals.length} duplicates)`);
+    
+    setIsPlacingTrade(true);
+    setActiveTradesCount(uniqueAssetSignals.length);
+    
+    console.log(`🚀 Placing ${uniqueAssetSignals.length} trades (one per asset)...`);
     const startTime = Date.now();
     
-    // Mark all signals as being traded
-    signals.forEach(signal => tradingInProgress.current.add(signal.id));
+    // Mark all signals and assets as being traded
+    uniqueAssetSignals.forEach(signal => {
+      tradingInProgress.current.add(signal.id);
+      activeAssetTrades.current.add(signal.asset.toUpperCase());
+    });
     
     try {
       // Execute all trades in parallel
       const results = await Promise.all(
-        signals.map(signal => placeSingleTrade(signal))
+        uniqueAssetSignals.map(signal => placeSingleTrade(signal))
       );
       
       const elapsed = Date.now() - startTime;
-      console.log(`⏱️ All ${signals.length} trades completed in ${elapsed}ms`);
+      console.log(`⏱️ All ${uniqueAssetSignals.length} trades completed in ${elapsed}ms`);
       
       // Process results
       const successfulTrades = results.filter(r => r.success);
@@ -232,6 +292,11 @@ export function useAutoTrading() {
           variant: 'destructive',
         });
         
+        // Remove failed assets from active trades so they can be retried
+        failedTrades.forEach(r => {
+          activeAssetTrades.current.delete(r.signal.asset.toUpperCase());
+        });
+        
         if (successfulTrades.length === 0) {
           setLastTradeResult({ 
             success: false, 
@@ -241,7 +306,7 @@ export function useAutoTrading() {
       }
       
       // Mark all as processed
-      signals.forEach(signal => {
+      uniqueAssetSignals.forEach(signal => {
         processedSignals.current.add(signal.id);
         tradingInProgress.current.delete(signal.id);
       });
@@ -325,10 +390,18 @@ export function useAutoTrading() {
       return variations.some(v => openAssetSymbols.has(v));
     };
     
-    // Find signals that haven't been traded yet and are for OPEN assets
+    // Find signals that haven't been traded yet and are for OPEN assets without active trades
     let eligibleSignals = signals.filter(signal => {
       const notProcessed = !processedSignals.current.has(signal.id);
       const notInProgress = !tradingInProgress.current.has(signal.id);
+      
+      // Check if this asset already has an active trade
+      const assetKey = signal.asset.toUpperCase();
+      const hasActiveTrade = activeAssetTrades.current.has(assetKey);
+      
+      if (hasActiveTrade) {
+        return false; // Skip assets with active trades
+      }
       
       // Check if this asset is currently available for trading from IQ Option
       const assetAvailable = isAssetTradeable(signal.asset);
@@ -347,12 +420,19 @@ export function useAutoTrading() {
     });
 
     if (eligibleSignals.length === 0) {
+      const activeCount = activeAssetTrades.current.size;
       const openCount = openAssetSymbols.size;
-      console.log(`📊 Aguardando sinais para ${openCount} ativos disponíveis na IQ Option...`);
+      if (activeCount > 0) {
+        console.log(`⏸️ Aguardando ${activeCount} trades ativos finalizarem: ${Array.from(activeAssetTrades.current).join(', ')}`);
+      } else {
+        console.log(`📊 Aguardando sinais para ${openCount} ativos disponíveis na IQ Option...`);
+      }
       return;
     }
 
-    console.log(`🎯 ${eligibleSignals.length} sinais elegíveis para ativos ABERTOS`);
+    const activeCount = activeAssetTrades.current.size;
+    console.log(`🎯 ${eligibleSignals.length} sinais elegíveis (${activeCount} ativos com trades ativos)`);
+
 
     // If AI analysis is enabled, filter signals through AI
     if (config.useAIAnalysis && eligibleSignals.length > 0) {

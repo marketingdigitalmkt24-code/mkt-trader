@@ -493,33 +493,41 @@ function generateSignals(riskControl: RiskControl, availableAssets: TradingAsset
     return { signals: [], message: 'Nenhum ativo disponível - verificando IQ Option...' };
   }
 
-  const signals: TradingSignal[] = [];
-  const usedAssets = new Set<string>();
+  // ============= BUSCAR APENAS 1 SINAL - O MELHOR =============
+  // Analisar todos os ativos e selecionar o de maior qualidade
+  const allCandidates: TradingSignal[] = [];
   const shuffledAssets = [...availableAssets].sort(() => Math.random() - 0.5);
 
-  // Tentar gerar no máximo 2 sinais por ciclo
-  const maxSignalsThisCycle = Math.min(2, MAX_DAILY_SIGNALS - riskControl.dailySignalsCount);
-
-  for (let i = 0; i < shuffledAssets.length && signals.length < maxSignalsThisCycle; i++) {
-    const asset = shuffledAssets[i];
-    if (!usedAssets.has(asset.symbol)) {
-      const signal = tryGenerateHighQualitySignal(asset);
-      if (signal) {
-        signals.push(signal);
-        usedAssets.add(asset.symbol);
-      }
+  for (const asset of shuffledAssets) {
+    const signal = tryGenerateHighQualitySignal(asset);
+    if (signal) {
+      allCandidates.push(signal);
     }
   }
 
-  if (signals.length === 0) {
+  if (allCandidates.length === 0) {
     return { 
       signals: [], 
       message: 'Aguardando oportunidade de ALTA QUALIDADE' 
     };
   }
 
+  // Ordenar por qualidade: confluence score + número de confirmações
+  allCandidates.sort((a, b) => {
+    // Primeiro por confluence score
+    const scoreDiff = b.indicators.confluenceScore - a.indicators.confluenceScore;
+    if (scoreDiff !== 0) return scoreDiff;
+    // Depois por número de confirmações
+    return b.indicators.confluenceCount - a.indicators.confluenceCount;
+  });
+
+  // Selecionar apenas o MELHOR sinal
+  const bestSignal = allCandidates[0];
+  console.log(`🏆 Melhor sinal selecionado: ${bestSignal.asset} | Score: ${bestSignal.indicators.confluenceScore}% | Confirmações: ${bestSignal.indicators.confluenceCount}`);
+  console.log(`   📊 Candidatos analisados: ${allCandidates.length} | Descartados: ${allCandidates.length - 1}`);
+
   return { 
-    signals: signals.sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore),
+    signals: [bestSignal],
     message: null
   };
 }

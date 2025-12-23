@@ -14,6 +14,7 @@ interface AutoTradingConfig {
   amount: number;
   minConfluence: number;
   maxDailyTrades: number;
+  dailyLimitEnabled: boolean;
   todayTrades: number;
   // Profit target settings
   profitTargetType: 'none' | 'percentage' | 'value';
@@ -195,24 +196,39 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
         )}
 
         {/* Max Daily Trades */}
-        <div className="space-y-2">
-          <Label className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            Limite diário de entradas
-          </Label>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={localConfig.maxDailyTrades}
-              onChange={(e) => handleLocalChange({ maxDailyTrades: Number(e.target.value) })}
-              className="w-20"
+        <div className="space-y-3 p-3 bg-secondary/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              <span className="font-medium">Limite diário de entradas</span>
+            </Label>
+            <Switch
+              checked={localConfig.dailyLimitEnabled ?? true}
+              onCheckedChange={(dailyLimitEnabled) => handleLocalChange({ dailyLimitEnabled })}
             />
-            <span className="text-sm text-muted-foreground">
-              ({config.todayTrades} de {localConfig.maxDailyTrades} hoje)
-            </span>
           </div>
+          
+          {(localConfig.dailyLimitEnabled ?? true) && (
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={localConfig.maxDailyTrades}
+                onChange={(e) => handleLocalChange({ maxDailyTrades: Number(e.target.value) })}
+                className="w-20"
+              />
+              <span className="text-sm text-muted-foreground">
+                ({config.todayTrades} de {localConfig.maxDailyTrades} hoje)
+              </span>
+            </div>
+          )}
+          
+          <p className="text-xs text-muted-foreground">
+            {(localConfig.dailyLimitEnabled ?? true)
+              ? `Máximo de ${localConfig.maxDailyTrades} operações por dia.`
+              : 'Sem limite de operações diárias.'}
+          </p>
         </div>
 
         {/* AI Analysis */}

@@ -14,6 +14,7 @@ interface AutoTradingConfig {
   amount: number;
   minConfluence: number;
   maxDailyTrades: number;
+  dailyLimitEnabled: boolean;
   todayTrades: number;
   // Profit target settings
   profitTargetType: 'none' | 'percentage' | 'value';
@@ -39,6 +40,7 @@ const DEFAULT_CONFIG: AutoTradingConfig = {
   amount: 10,
   minConfluence: 95,
   maxDailyTrades: 3,
+  dailyLimitEnabled: true,
   todayTrades: 0,
   profitTargetType: 'none',
   profitTargetValue: 0,
@@ -110,6 +112,7 @@ export function useAutoTrading() {
             amount: Number(data.trade_amount),
             minConfluence: data.min_confluence,
             maxDailyTrades: data.max_daily_trades,
+            dailyLimitEnabled: data.daily_limit_enabled ?? true,
             useAIAnalysis: data.use_ai_analysis,
             aiMinConfidence: data.ai_min_confidence,
             profitTargetType: data.profit_target_type as 'none' | 'percentage' | 'value',
@@ -147,6 +150,7 @@ export function useAutoTrading() {
         trade_amount: newConfig.amount,
         min_confluence: newConfig.minConfluence,
         max_daily_trades: newConfig.maxDailyTrades,
+        daily_limit_enabled: newConfig.dailyLimitEnabled,
         use_ai_analysis: newConfig.useAIAnalysis,
         ai_min_confidence: newConfig.aiMinConfidence,
         profit_target_type: newConfig.profitTargetType,
@@ -521,11 +525,13 @@ export function useAutoTrading() {
       }
     }
     
-    // Check daily limit
-    const remainingTrades = config.maxDailyTrades - config.todayTrades;
-    if (remainingTrades <= 0) {
-      console.log('Daily trade limit reached');
-      return;
+    // Check daily limit (only if enabled)
+    if (config.dailyLimitEnabled) {
+      const remainingTrades = config.maxDailyTrades - config.todayTrades;
+      if (remainingTrades <= 0) {
+        console.log('Daily trade limit reached');
+        return;
+      }
     }
 
     // Filter signals based on REAL asset availability from IQ Option API
@@ -658,8 +664,11 @@ export function useAutoTrading() {
       }
     }
 
-    // Take up to remaining daily limit
-    const signalsToTrade = eligibleSignals.slice(0, remainingTrades);
+    // Take up to remaining daily limit (or all if limit is disabled)
+    const maxSignals = config.dailyLimitEnabled 
+      ? config.maxDailyTrades - config.todayTrades 
+      : eligibleSignals.length;
+    const signalsToTrade = eligibleSignals.slice(0, Math.max(0, maxSignals));
     
     console.log(`🚀 Auto-trading ${signalsToTrade.length} AI-approved signals:`);
     signalsToTrade.forEach(s => {
@@ -668,7 +677,7 @@ export function useAutoTrading() {
     
     // Execute all trades simultaneously
     await placeTradesSimultaneously(signalsToTrade);
-  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.profitTargetType, config.profitTargetValue, config.useAIAnalysis, config.aiMinConfidence, placeTradesSimultaneously, analyzeSignals, filterByAIRecommendation, toast]);
+  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.dailyLimitEnabled, config.profitTargetType, config.profitTargetValue, config.useAIAnalysis, config.aiMinConfidence, placeTradesSimultaneously, analyzeSignals, filterByAIRecommendation, toast]);
 
   const resetDailyTrades = useCallback(() => {
     setConfig(prev => ({ ...prev, todayTrades: 0 }));

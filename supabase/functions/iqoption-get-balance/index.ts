@@ -264,7 +264,7 @@ serve(async (req) => {
     if (configError || !configData) {
       return new Response(
         JSON.stringify({ success: false, error: 'No IQ Option credentials configured' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -288,7 +288,7 @@ serve(async (req) => {
     if (!balanceResult?.success) {
       return new Response(
         JSON.stringify({ success: false, error: balanceResult?.error || 'Failed to get balance' }),
-        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -352,7 +352,7 @@ serve(async (req) => {
     console.error('Error:', errorMessage);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

@@ -15,7 +15,7 @@ import {
   SignalStatus,
   MarketType
 } from '@/types/trading';
-import { getAvailableAssets as getLocalAssets, isOTCMarketOpen, isForexMarketOpen, OTC_ASSETS, isWeekend, isOTCAsset } from '@/utils/marketHours';
+import { getAvailableAssets as getLocalAssets, isOTCMarketOpen, isForexMarketOpen, isWeekend, isOTCAsset } from '@/utils/marketHours';
 import { supabase } from '@/integrations/supabase/client';
 
 // Cache para ativos da IQ Option
@@ -390,8 +390,11 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
     
     if (error) {
       console.error('Error fetching assets:', error);
-      // Fall back to local assets
+      // Fall back to local assets and cache to avoid hammering the backend
       const localAssets = getLocalAssets();
+      cachedIQAssets = localAssets;
+      lastIQAssetsFetch = now;
+
       return localAssets.filter(asset => {
         const assetIsOTC = asset.isOTC || isOTCAsset(asset.symbol);
         return weekend ? assetIsOTC : !assetIsOTC;
@@ -458,12 +461,16 @@ async function fetchIQOptionAssets(): Promise<TradingAsset[]> {
 
   // Fallback to local assets if IQ Option fetch fails
   console.log('⚠️ Using fallback assets');
+  const localAssets = getLocalAssets();
+  cachedIQAssets = localAssets;
+  lastIQAssetsFetch = now;
+
   if (weekend) {
-    return OTC_ASSETS;
-  } else {
-    // Return non-OTC assets for weekdays
-    return getLocalAssets().filter(asset => !asset.isOTC && !isOTCAsset(asset.symbol));
+    return localAssets.filter(asset => asset.isOTC || isOTCAsset(asset.symbol));
   }
+
+  // Weekday: non-OTC assets
+  return localAssets.filter(asset => !asset.isOTC && !isOTCAsset(asset.symbol));
 }
 
 function generateSignals(riskControl: RiskControl, availableAssets: TradingAsset[]): { signals: TradingSignal[]; message: string | null } {

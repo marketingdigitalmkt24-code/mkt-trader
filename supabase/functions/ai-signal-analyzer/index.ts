@@ -309,11 +309,11 @@ serve(async (req) => {
   try {
     const { signals, historicalResults }: AnalysisRequest = await req.json();
 
-    // Usar Lovable AI (mais estável que Groq)
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      console.error('LOVABLE_API_KEY not configured');
-      throw new Error('AI service not configured');
+    // Usar Groq AI
+    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
+    if (!GROQ_API_KEY) {
+      console.error('GROQ_API_KEY not configured');
+      throw new Error('Groq AI service not configured');
     }
 
     if (!signals || signals.length === 0) {
@@ -411,27 +411,40 @@ ${goodAssets.length > 0 ? `✅ ATIVOS BONS (preferir): ${goodAssets.join(', ')}`
 
 Valide os sinais e retorne APENAS os que têm >94% de probabilidade de lucro.`;
 
-    // Chamar Lovable AI
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.1,
-        max_tokens: 1500,
-      }),
-    });
+    // Chamar Groq AI com retry
+    const makeRequest = async (retryCount = 0): Promise<Response> => {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.1,
+          max_tokens: 1000,
+        }),
+      });
+      
+      if (response.status === 429 && retryCount < 3) {
+        const delay = (retryCount + 1) * 3000;
+        console.log(`Rate limited, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        return makeRequest(retryCount + 1);
+      }
+      
+      return response;
+    };
+
+    const response = await makeRequest();
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Lovable AI error:', response.status, errorText);
+      console.error('Groq AI error:', response.status, errorText);
       
       // Fallback: usar análise pré-computada
       console.log('⚠️ Usando análise pré-computada (fallback)');

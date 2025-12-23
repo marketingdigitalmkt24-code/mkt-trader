@@ -363,7 +363,7 @@ serve(async (req) => {
           success: false,
           retriesAttempted: MAX_RETRIES
         }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -447,7 +447,7 @@ serve(async (req) => {
     console.error('Error:', errorMessage);
     return new Response(
       JSON.stringify({ error: errorMessage, success: false }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

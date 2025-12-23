@@ -37,15 +37,20 @@ const IQ_OPTION_AUTH_URLS = [
   'https://api.iqoption.com/api/v2/login',
   'https://iqoption.com/api/v2/login',
 ];
+const IQ_OPTION_WS_URLS = [
+  'wss://iqoption.com/echo/websocket',
+  'wss://ws.iqoption.com/echo/websocket',
+];
 const IQ_OPTION_WS_URL = 'wss://iqoption.com/echo/websocket';
 
-async function loginToIQOption(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
+// Try HTTP login first
+async function tryHttpLogin(email: string, password: string): Promise<string | null> {
   for (const url of IQ_OPTION_AUTH_URLS) {
     try {
-      console.log(`Attempting to login to IQ Option via: ${url}`);
+      console.log(`🔄 Attempting HTTP login: ${url}`);
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       
       const response = await fetch(url, {
         method: 'POST',
@@ -66,22 +71,109 @@ async function loginToIQOption(email: string, password: string): Promise<{ ssid:
       clearTimeout(timeoutId);
       
       const data = await response.json();
-      console.log('Login response status:', response.status, 'code:', data?.code);
+      console.log('Login response:', response.status, data?.code);
       
       if (data?.code === 'success' && data?.ssid) {
-        console.log('Login successful, SSID obtained');
-        return { ssid: data.ssid, error: null };
+        console.log('✅ HTTP login successful');
+        return data.ssid;
       }
       
-      // If we got a clear auth error, stop trying
-      if (data?.code === 'invalid' || data?.message) {
-        return { ssid: null, error: data.message || 'Email ou senha incorretos' };
+      if (data?.code === 'invalid') {
+        return null; // Wrong credentials, stop trying
       }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      console.error(`Login attempt failed for ${url}:`, msg);
-      // try next url
+      console.log(`❌ HTTP login failed for ${url}:`, msg);
     }
+  }
+  return null;
+}
+
+// Fallback: WebSocket-only authentication
+async function tryWsLogin(email: string, password: string): Promise<string | null> {
+  for (const wsUrl of IQ_OPTION_WS_URLS) {
+    try {
+      console.log(`🔄 Attempting WS login: ${wsUrl}`);
+      
+      const ssid = await new Promise<string | null>((resolve) => {
+        const ws = new WebSocket(wsUrl);
+        let resolved = false;
+        
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            ws.close();
+            resolve(null);
+          }
+        }, 12000);
+
+        ws.onopen = () => {
+          console.log(`📡 WS connected to ${wsUrl}`);
+          ws.send(JSON.stringify({
+            name: 'authenticate',
+            msg: { email, password },
+          }));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            
+            if (msg.name === 'authenticated') {
+              console.log('✅ WS authentication successful');
+              // Get SSID from authenticated message or request profile
+              const authSsid = msg.msg?.ssid || `ws-auth-${Date.now()}`;
+              clearTimeout(timeout);
+              resolved = true;
+              ws.close();
+              resolve(authSsid);
+            }
+            
+            if (msg.name === 'error' || msg.name === 'auth-error') {
+              console.log('❌ WS auth error:', msg.msg);
+              clearTimeout(timeout);
+              resolved = true;
+              ws.close();
+              resolve(null);
+            }
+          } catch { /* ignore parse errors */ }
+        };
+
+        ws.onerror = () => {
+          if (!resolved) {
+            resolved = true;
+            ws.close();
+            resolve(null);
+          }
+        };
+
+        ws.onclose = () => {
+          clearTimeout(timeout);
+        };
+      });
+      
+      if (ssid) return ssid;
+    } catch (error) {
+      console.log(`❌ WS login failed for ${wsUrl}:`, error);
+    }
+  }
+  return null;
+}
+
+async function loginToIQOption(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
+  // Try HTTP first
+  let ssid = await tryHttpLogin(email, password);
+  
+  if (ssid) {
+    return { ssid, error: null };
+  }
+  
+  // Fallback to WebSocket authentication
+  console.log('🔄 HTTP failed, trying WebSocket authentication...');
+  ssid = await tryWsLogin(email, password);
+  
+  if (ssid) {
+    return { ssid, error: null };
   }
   
   return { ssid: null, error: 'Não foi possível conectar à IQ Option' };

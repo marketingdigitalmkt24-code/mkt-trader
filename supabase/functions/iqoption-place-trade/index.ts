@@ -401,9 +401,25 @@ async function placeTradeAndWaitResult(
             }
           }
           
-          // Se não encontrou E não era OTC, tentar OTC como fallback (fim de semana)
+          // Se não encontrou E não era OTC, verificar contexto antes de fallback
           if (!assetId && !isOTCAsset) {
-            console.log(`⚠️ Ativo regular não encontrado, tentando versão OTC...`);
+            // Verificar se é fim de semana (UTC)
+            const now = new Date();
+            const dayOfWeek = now.getUTCDay(); // 0 = domingo, 6 = sábado
+            const hour = now.getUTCHours();
+            
+            // Mercado forex fecha sexta 21:00 UTC e abre domingo 21:00 UTC
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 || 
+                             (dayOfWeek === 5 && hour >= 21);
+            
+            if (isWeekend) {
+              console.log(`📅 Fim de semana detectado (dia: ${dayOfWeek}, hora UTC: ${hour}) - OTC é esperado`);
+            } else {
+              console.log(`⚠️ DIA DE SEMANA (dia: ${dayOfWeek}, hora UTC: ${hour}) - ativo ${cleanAsset} NÃO está aberto na IQ Option`);
+              console.log(`📋 Ativos regulares disponíveis: ${Object.keys(activeAssets).filter(k => !k.includes('OTC') && k.length <= 10).slice(0, 25).join(', ')}`);
+            }
+            
+            console.log(`🔄 Tentando fallback para versão OTC...`);
             const otcFallbackVariations = [
               `${cleanAsset}-OTC`,
               `${cleanAsset} OTC`,

@@ -14,6 +14,7 @@ interface TradeRequest {
   signalId?: string;
   isAutoTrade?: boolean;
   isAIAnalyzed?: boolean;
+  timeframe?: string; // M1, M5, etc.
 }
 
 interface IQOptionCredentials {
@@ -712,6 +713,9 @@ serve(async (req) => {
 
     // Log the trade with actual result
     if (result.success && result.tradeId) {
+      // Determine timeframe from expiration or use provided value
+      const timeframe = tradeRequest.timeframe || (tradeRequest.expiration <= 1 ? 'M1' : tradeRequest.expiration <= 5 ? 'M5' : 'M15');
+      
       const insertResult = await supabase
         .from('operation_results')
         .insert({
@@ -725,6 +729,7 @@ serve(async (req) => {
           iq_option_id: result.tradeId,
           is_auto_trade: tradeRequest.isAutoTrade || false,
           is_ai_analyzed: tradeRequest.isAIAnalyzed || false,
+          timeframe: timeframe,
         });
       
       if (insertResult.error) {

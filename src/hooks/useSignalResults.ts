@@ -202,6 +202,7 @@ export function useSignalResults() {
           
           const dbHistory: SignalHistory[] = data.map(result => {
             const mappedResult = mapResult(result.result);
+            const timeframe = (result as any).timeframe || 'M1';
             return {
               id: result.id,
               signal: {
@@ -211,8 +212,8 @@ export function useSignalResults() {
                 type: result.direction as 'CALL' | 'PUT',
                 price: result.entry_price || 0,
                 timestamp: new Date(result.created_at),
-                timeframe: 'M1', // Will be overwritten if we have signal data
-                expiration: '1 min',
+                timeframe: timeframe as 'M1' | 'M5',
+                expiration: timeframe === 'M5' ? '5 min' : '1 min',
                 strength: 3,
                 status: 'high_probability',
                 isHot: false,
@@ -311,6 +312,7 @@ export function useSignalResults() {
           };
           
           const mappedResult = mapResult(result.result);
+          const timeframe = (result as any).timeframe || 'M1';
           
           // Add to history
           const historyEntry: SignalHistory = {
@@ -322,8 +324,8 @@ export function useSignalResults() {
               type: result.direction as 'CALL' | 'PUT',
               price: result.entry_price || 0,
               timestamp: new Date(result.created_at),
-              timeframe: 'M1',
-              expiration: '1 min',
+              timeframe: timeframe as 'M1' | 'M5',
+              expiration: timeframe === 'M5' ? '5 min' : '1 min',
               strength: 3,
               status: 'high_probability',
               isHot: false,
@@ -413,6 +415,7 @@ export function useSignalResults() {
         
         const dbHistory: SignalHistory[] = data.map(result => {
           const mappedResult = mapResult(result.result);
+          const timeframe = (result as any).timeframe || 'M1';
           return {
             id: result.id,
             signal: {
@@ -422,8 +425,8 @@ export function useSignalResults() {
               type: result.direction as 'CALL' | 'PUT',
               price: result.entry_price || 0,
               timestamp: new Date(result.created_at),
-              timeframe: 'M1',
-              expiration: '1 min',
+              timeframe: timeframe as 'M1' | 'M5',
+              expiration: timeframe === 'M5' ? '5 min' : '1 min',
               strength: 3,
               status: 'high_probability',
               isHot: false,

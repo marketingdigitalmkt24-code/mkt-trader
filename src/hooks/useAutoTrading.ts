@@ -301,6 +301,7 @@ export function useAutoTrading() {
           signalId: `${signal.id}${entryNumber ? `-${entryNumber}` : ''}`,
           isAutoTrade: true,
           isAIAnalyzed: config.useAIAnalysis,
+          timeframe: signal.timeframe, // Include timeframe for history tracking
         },
       });
       

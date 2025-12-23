@@ -602,7 +602,8 @@ export function useAutoTrading() {
     };
     
     // Find signals that haven't been traded yet and are for OPEN assets without active trades
-    let eligibleSignals = signals.filter(signal => {
+    // STEP 1: First filter for basic eligibility
+    const rawEligibleSignals = signals.filter(signal => {
       const notProcessed = !processedSignals.current.has(signal.id);
       const notInProgress = !tradingInProgress.current.has(signal.id);
       
@@ -629,6 +630,22 @@ export function useAutoTrading() {
         return signal.indicators.confluenceScore >= config.minConfluence && notProcessed && notInProgress;
       }
     });
+    
+    // STEP 2: CRITICAL - Deduplicate by asset (keep only highest confluence per asset)
+    const assetSignalMap = new Map<string, TradingSignal>();
+    rawEligibleSignals.forEach(signal => {
+      const assetKey = signal.asset.toUpperCase();
+      const existing = assetSignalMap.get(assetKey);
+      
+      if (!existing || signal.indicators.confluenceScore > existing.indicators.confluenceScore) {
+        assetSignalMap.set(assetKey, signal);
+      }
+    });
+    
+    // Convert back to array - now we have exactly 1 signal per asset
+    let eligibleSignals = Array.from(assetSignalMap.values());
+    
+    console.log(`🔍 Sinais após deduplicação: ${eligibleSignals.length} ativos únicos (de ${rawEligibleSignals.length} sinais totais)`);
 
     if (eligibleSignals.length === 0) {
       const activeCount = activeAssetTrades.current.size;

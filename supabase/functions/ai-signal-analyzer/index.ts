@@ -60,15 +60,33 @@ serve(async (req) => {
       );
     }
 
-    // Pre-filter: only analyze top 5 signals by confluence to reduce token usage
-    // Groq free tier has 12k tokens/min limit
+    // ULTRA CONSERVATIVE PRE-FILTER: Only analyze signals with EXTREME conditions
+    // This reduces losses by only considering the best setups
     const topSignals = signals
-      .filter(s => s.indicators.confluenceScore >= 75) // Only high confluence signals
+      .filter(s => {
+        const rsi = s.indicators.rsi.value;
+        const conf = s.indicators.confluenceScore;
+        const vol = s.indicators.atr.volatility;
+        const stochK = s.indicators.stochastic?.k || 50;
+        const stochD = s.indicators.stochastic?.d || 50;
+        
+        // STRICT CRITERIA: RSI extreme + high confluence + low volatility
+        const isRSIExtreme = rsi <= 20 || rsi >= 80; // More extreme RSI
+        const isHighConfluence = conf >= 85; // Higher confluence threshold
+        const isLowVolatility = vol === 'low' || vol === 'normal';
+        const isStochConfirm = (rsi <= 20 && stochK <= 25) || (rsi >= 80 && stochK >= 75);
+        
+        // Must meet at least 3 criteria
+        const criteriaCount = [isRSIExtreme, isHighConfluence, isLowVolatility, isStochConfirm]
+          .filter(Boolean).length;
+        
+        return criteriaCount >= 3;
+      })
       .sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore)
-      .slice(0, 5); // Max 5 signals to stay within token limits
+      .slice(0, 3); // Max 3 signals for quality over quantity
 
     if (topSignals.length === 0) {
-      console.log('No signals with confluence >= 70%, skipping AI analysis');
+      console.log('No signals meeting ULTRA CONSERVATIVE criteria, waiting for better opportunity...');
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -77,7 +95,7 @@ serve(async (req) => {
             asset: s.asset,
             recommendation: 'SKIP',
             confidence: s.indicators.confluenceScore,
-            reason: 'Confluência insuficiente para análise',
+            reason: 'Não atende critérios ultra-conservadores (RSI extremo + conf 85%+ + vol baixa)',
             adjustedConfluence: s.indicators.confluenceScore,
             riskLevel: 'HIGH'
           })),
@@ -88,21 +106,41 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Analyzing ${topSignals.length} top signals with AI (from ${signals.length} total)...`);
+    console.log(`🎯 Found ${topSignals.length} ULTRA QUALITY signals (from ${signals.length} total)...`);
 
-    // Build context with historical data
+    // Build context with historical data - avoid assets with low win rate
+    const badAssets = historicalResults?.filter(h => h.winRate < 55).map(h => h.asset) || [];
     const historyContext = historicalResults && historicalResults.length > 0
-      ? `\n\nHistórico recente:\n${historicalResults.slice(0, 5).map(h => 
-          `${h.asset}: ${h.winRate.toFixed(0)}% win`
-        ).join(', ')}`
-      : '';
+      ? `\nEvitar: ${badAssets.join(', ')}` : '';
 
-    const systemPrompt = `Analista de trading conservador. Analise sinais e responda JSON:
-{"analyzedSignals":[{"signalId":"asset","asset":"nome","recommendation":"EXECUTE|SKIP","confidence":0-100,"reason":"motivo","adjustedConfluence":num,"riskLevel":"LOW|HIGH"}],"marketSentiment":"NEUTRAL","bestSignal":"asset ou null"}
-Regras: Máx 1 EXECUTE. RSI<25 ou >75, confluência>85%, volatilidade baixa = EXECUTE. Caso contrário SKIP.`;
+    // ULTRA CONSERVATIVE PROMPT - Focus on profit only
+    const systemPrompt = `Analista ULTRA-CONSERVADOR de opções binárias. Você DEVE evitar perdas a todo custo.
 
-    const userPrompt = `Sinais:
-${topSignals.map((s, i) => `${s.asset} ${s.type} RSI:${s.indicators.rsi.value.toFixed(0)} Conf:${s.indicators.confluenceScore}% Vol:${s.indicators.atr.volatility}`).join('\n')}
+REGRAS OBRIGATÓRIAS para EXECUTE:
+1. RSI EXTREMO: <=20 (oversold) OU >=80 (overbought) - SEM EXCEÇÃO
+2. Confluência: >=88% - Mínimo absoluto
+3. Volatilidade: BAIXA ou NORMAL apenas
+4. Stochastic confirmando: K<=25 para oversold OU K>=75 para overbought
+5. MACD alinhado com direção do trade
+
+SE QUALQUER critério falhar = SKIP imediatamente.
+Máximo 1 EXECUTE por análise. Prefira NENHUM trade a um trade ruim.
+
+Responda APENAS JSON:
+{"analyzedSignals":[{"signalId":"asset","asset":"nome","recommendation":"EXECUTE|SKIP","confidence":0-100,"reason":"motivo curto","adjustedConfluence":num,"riskLevel":"LOW|HIGH"}],"marketSentiment":"NEUTRAL","bestSignal":"asset ou null"}`;
+
+    const userPrompt = `Análise ULTRA-CONSERVADORA:
+${topSignals.map(s => {
+  const rsi = s.indicators.rsi.value.toFixed(0);
+  const conf = s.indicators.confluenceScore;
+  const vol = s.indicators.atr.volatility;
+  const stochK = s.indicators.stochastic?.k?.toFixed(0) || '50';
+  const macd = s.indicators.macd?.trend || 'neutral';
+  return `${s.asset} ${s.type} | RSI:${rsi} Stoch:${stochK} Conf:${conf}% Vol:${vol} MACD:${macd}`;
+}).join('\n')}
+${historyContext}
+
+LEMBRE: Só EXECUTE se TODOS os 5 critérios forem atendidos. Na dúvida, SKIP.
 JSON apenas:`;
 
     // Use Groq API - llama-3.1-8b-instant is fast and within free tier limits

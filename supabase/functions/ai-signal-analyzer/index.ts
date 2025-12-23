@@ -42,10 +42,11 @@ serve(async (req) => {
   try {
     const { signals, historicalResults }: AnalysisRequest = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      console.error('LOVABLE_API_KEY not configured');
-      throw new Error('AI service not configured');
+    // Use Google AI API key (free tier)
+    const GOOGLE_AI_API_KEY = Deno.env.get('GOOGLE_AI_API_KEY');
+    if (!GOOGLE_AI_API_KEY) {
+      console.error('GOOGLE_AI_API_KEY not configured');
+      throw new Error('Google AI service not configured');
     }
 
     if (!signals || signals.length === 0) {
@@ -145,59 +146,44 @@ LEMBRE-SE:
 - Confiança mínima para EXECUTE: 90%
 - Prefira não operar a operar com dúvida`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    // Use Google AI Gemini API (free tier)
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_AI_API_KEY}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+          }
         ],
-        temperature: 0.3, // Low temperature for consistent analysis
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 4096,
+        }
       }),
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Google AI error:', response.status, errorText);
+      
       if (response.status === 429) {
         console.warn('AI rate limit reached');
         return new Response(
           JSON.stringify({ 
-            success: false, 
-            error: 'Rate limit exceeded, try again later',
+            success: true, 
+            error: 'Rate limit exceeded',
             analyzedSignals: signals.map(s => ({
               signalId: `${s.asset}-${Date.now()}`,
               asset: s.asset,
-              recommendation: 'WAIT',
+              recommendation: s.indicators.confluenceScore >= 80 ? 'EXECUTE' : 'SKIP',
               confidence: s.indicators.confluenceScore,
-              reason: 'AI analysis unavailable, using original confluence',
+              reason: 'Fallback: rate limit, usando confluência',
               adjustedConfluence: s.indicators.confluenceScore,
-              riskLevel: 'MEDIUM'
-            }))
-          }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (response.status === 402) {
-        console.error('AI credits exhausted');
-        // Return fallback analysis instead of error to prevent app crash
-        return new Response(
-          JSON.stringify({ 
-            success: true,
-            creditsExhausted: true,
-            error: 'AI credits exhausted',
-            analyzedSignals: signals.map(s => ({
-              signalId: `${s.asset}-${Date.now()}`,
-              asset: s.asset,
-              recommendation: s.indicators.confluenceScore >= 80 ? 'EXECUTE' : 
-                              s.indicators.confluenceScore >= 65 ? 'WAIT' : 'SKIP',
-              confidence: s.indicators.confluenceScore,
-              reason: 'Fallback: créditos IA esgotados, usando confluência',
-              adjustedConfluence: s.indicators.confluenceScore,
-              riskLevel: s.indicators.atr?.volatility === 'high' ? 'HIGH' : 'LOW'
+              riskLevel: 'LOW'
             })),
             marketSentiment: 'NEUTRAL',
             bestSignal: signals.find(s => s.indicators.confluenceScore >= 80)?.asset || null
@@ -205,13 +191,35 @@ LEMBRE-SE:
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      throw new Error(`AI gateway error: ${response.status}`);
+      
+      // Any other error - use fallback
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          error: `Google AI error: ${response.status}`,
+          analyzedSignals: signals.map(s => ({
+            signalId: `${s.asset}-${Date.now()}`,
+            asset: s.asset,
+            recommendation: s.indicators.confluenceScore >= 80 ? 'EXECUTE' : 
+                            s.indicators.confluenceScore >= 65 ? 'WAIT' : 'SKIP',
+            confidence: s.indicators.confluenceScore,
+            reason: 'Fallback: erro na API, usando confluência',
+            adjustedConfluence: s.indicators.confluenceScore,
+            riskLevel: s.indicators.atr?.volatility === 'high' ? 'HIGH' : 'LOW'
+          })),
+          marketSentiment: 'NEUTRAL',
+          bestSignal: signals.find(s => s.indicators.confluenceScore >= 80)?.asset || null
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    // Google AI response format: candidates[0].content.parts[0].text
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!content) {
+      console.error('No content in Google AI response:', JSON.stringify(data));
       throw new Error('No response from AI');
     }
 

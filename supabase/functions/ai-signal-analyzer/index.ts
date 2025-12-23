@@ -35,6 +35,230 @@ interface AnalysisRequest {
   }[];
 }
 
+// ============= ESTRATÉGIA MULTI-OPORTUNIDADE LUCRATIVA =============
+// Diversificação inteligente para máximo lucro consistente
+
+type PatternType = 'PIN_BAR' | 'OVERSOLD_REVERSAL' | 'OVERBOUGHT_REVERSAL' | 'DIVERGENCE' | 'CONFLUENCE' | 'BOUNCE_SUPPORT' | 'BOUNCE_RESISTANCE';
+
+interface PatternMatch {
+  signal: SignalData;
+  pattern: PatternType;
+  score: number;
+  reason: string;
+}
+
+function detectPatterns(signals: SignalData[], badAssets: string[]): PatternMatch[] {
+  const matches: PatternMatch[] = [];
+  
+  for (const s of signals) {
+    // Skip bad assets
+    if (badAssets.includes(s.asset)) continue;
+    
+    const rsi = s.indicators.rsi.value;
+    const stochK = s.indicators.stochastic?.k || 50;
+    const stochD = s.indicators.stochastic?.d || 50;
+    const bollPos = s.indicators.bollinger?.position || '';
+    const macdHist = s.indicators.macd?.histogram || 0;
+    const macdTrend = s.indicators.macd?.trend || '';
+    const vol = s.indicators.atr.volatility;
+    const conf = s.indicators.confluenceScore;
+    const confCount = s.indicators.confluenceCount;
+    const pricePos = s.indicators.supportResistance?.pricePosition || '';
+    const hasPattern = s.indicators.reversalPattern;
+    
+    // Evitar volatilidade muito alta
+    if (vol === 'high') continue;
+    
+    // ========== PADRÃO 1: PIN BAR REVERSAL (95-99%) ==========
+    if (hasPattern && hasPattern.toLowerCase().includes('pin bar')) {
+      if ((rsi <= 25 || rsi >= 75) && (pricePos === 'near_support' || pricePos === 'near_resistance')) {
+        const score = 95 + (rsi <= 15 || rsi >= 85 ? 4 : 0);
+        matches.push({
+          signal: s,
+          pattern: 'PIN_BAR',
+          score,
+          reason: `Pin Bar + RSI ${rsi.toFixed(1)} + ${pricePos}`
+        });
+      }
+    }
+    
+    // ========== PADRÃO 2: OVERSOLD REVERSAL CALL (90-98%) ==========
+    if (rsi <= 30 && s.type === 'CALL') {
+      let score = 85;
+      const reasons: string[] = [`RSI ${rsi.toFixed(1)}`];
+      
+      if (stochK <= 25) { score += 5; reasons.push(`StochK ${stochK.toFixed(1)}`); }
+      if (stochK > stochD) { score += 3; reasons.push('Stoch cruzando ↑'); }
+      if (bollPos === 'below_lower') { score += 4; reasons.push('Abaixo BB'); }
+      if (pricePos === 'near_support') { score += 4; reasons.push('Suporte'); }
+      if (macdHist > 0) { score += 2; reasons.push('MACD+'); }
+      if (vol === 'low') { score += 2; reasons.push('Vol baixa'); }
+      if (hasPattern) { score += 3; reasons.push(hasPattern); }
+      
+      if (score >= 90) {
+        matches.push({
+          signal: s,
+          pattern: 'OVERSOLD_REVERSAL',
+          score: Math.min(score, 99),
+          reason: reasons.join(' | ')
+        });
+      }
+    }
+    
+    // ========== PADRÃO 3: OVERBOUGHT REVERSAL PUT (90-98%) ==========
+    if (rsi >= 70 && s.type === 'PUT') {
+      let score = 85;
+      const reasons: string[] = [`RSI ${rsi.toFixed(1)}`];
+      
+      if (stochK >= 75) { score += 5; reasons.push(`StochK ${stochK.toFixed(1)}`); }
+      if (stochK < stochD) { score += 3; reasons.push('Stoch cruzando ↓'); }
+      if (bollPos === 'above_upper') { score += 4; reasons.push('Acima BB'); }
+      if (pricePos === 'near_resistance') { score += 4; reasons.push('Resistência'); }
+      if (macdHist < 0) { score += 2; reasons.push('MACD-'); }
+      if (vol === 'low') { score += 2; reasons.push('Vol baixa'); }
+      if (hasPattern) { score += 3; reasons.push(hasPattern); }
+      
+      if (score >= 90) {
+        matches.push({
+          signal: s,
+          pattern: 'OVERBOUGHT_REVERSAL',
+          score: Math.min(score, 99),
+          reason: reasons.join(' | ')
+        });
+      }
+    }
+    
+    // ========== PADRÃO 4: DIVERGÊNCIA CONFIRMADA (88-96%) ==========
+    const hasBullishDivergence = rsi <= 35 && macdHist > 0 && stochK > stochD;
+    const hasBearishDivergence = rsi >= 65 && macdHist < 0 && stochK < stochD;
+    
+    if ((hasBullishDivergence && s.type === 'CALL') || (hasBearishDivergence && s.type === 'PUT')) {
+      let score = 88;
+      const divType = hasBullishDivergence ? 'Alta' : 'Baixa';
+      
+      if (conf >= 80) { score += 4; }
+      if (confCount >= 5) { score += 4; }
+      
+      matches.push({
+        signal: s,
+        pattern: 'DIVERGENCE',
+        score: Math.min(score, 96),
+        reason: `Divergência ${divType} + Conf ${conf}%`
+      });
+    }
+    
+    // ========== PADRÃO 5: ALTA CONFLUÊNCIA (85-95%) ==========
+    if (conf >= 80 && confCount >= 5) {
+      let score = 85;
+      const reasons: string[] = [`Conf ${conf}%`, `${confCount} indicadores`];
+      
+      if (conf >= 90) { score += 5; }
+      if (rsi <= 30 || rsi >= 70) { score += 4; reasons.push(`RSI ${rsi.toFixed(1)}`); }
+      if (pricePos === 'near_support' || pricePos === 'near_resistance') { score += 3; reasons.push(pricePos); }
+      if (vol === 'low') { score += 3; reasons.push('Vol baixa'); }
+      
+      if (score >= 88) {
+        matches.push({
+          signal: s,
+          pattern: 'CONFLUENCE',
+          score: Math.min(score, 95),
+          reason: reasons.join(' | ')
+        });
+      }
+    }
+    
+    // ========== PADRÃO 6: BOUNCE NO SUPORTE (85-92%) ==========
+    if (pricePos === 'near_support' && s.type === 'CALL' && rsi <= 45) {
+      let score = 82;
+      const reasons: string[] = ['Suporte forte'];
+      
+      if (bollPos === 'below_lower' || bollPos === 'at_lower') { score += 4; reasons.push('BB inferior'); }
+      if (stochK > stochD) { score += 3; reasons.push('Stoch ↑'); }
+      if (macdHist > 0 || macdTrend === 'bullish') { score += 3; reasons.push('MACD+'); }
+      if (hasPattern) { score += 4; reasons.push(hasPattern); }
+      
+      if (score >= 88) {
+        matches.push({
+          signal: s,
+          pattern: 'BOUNCE_SUPPORT',
+          score: Math.min(score, 92),
+          reason: reasons.join(' | ')
+        });
+      }
+    }
+    
+    // ========== PADRÃO 7: BOUNCE NA RESISTÊNCIA (85-92%) ==========
+    if (pricePos === 'near_resistance' && s.type === 'PUT' && rsi >= 55) {
+      let score = 82;
+      const reasons: string[] = ['Resistência forte'];
+      
+      if (bollPos === 'above_upper' || bollPos === 'at_upper') { score += 4; reasons.push('BB superior'); }
+      if (stochK < stochD) { score += 3; reasons.push('Stoch ↓'); }
+      if (macdHist < 0 || macdTrend === 'bearish') { score += 3; reasons.push('MACD-'); }
+      if (hasPattern) { score += 4; reasons.push(hasPattern); }
+      
+      if (score >= 88) {
+        matches.push({
+          signal: s,
+          pattern: 'BOUNCE_RESISTANCE',
+          score: Math.min(score, 92),
+          reason: reasons.join(' | ')
+        });
+      }
+    }
+  }
+  
+  return matches;
+}
+
+function diversifyOpportunities(matches: PatternMatch[]): PatternMatch[] {
+  // Ordenar por score
+  const sorted = matches.sort((a, b) => b.score - a.score);
+  
+  // Diversificar por:
+  // 1. Diferentes ativos (não repetir)
+  // 2. Diferentes tipos de padrão
+  // 3. Diferentes mercados (forex, crypto, etc)
+  
+  const selected: PatternMatch[] = [];
+  const usedAssets = new Set<string>();
+  const usedPatterns = new Set<PatternType>();
+  
+  // Primeira passada: selecionar o melhor de cada padrão/ativo único
+  for (const match of sorted) {
+    if (selected.length >= 5) break; // Máximo 5 oportunidades diversificadas
+    
+    // Não repetir ativo
+    if (usedAssets.has(match.signal.asset)) continue;
+    
+    // Score mínimo de 88%
+    if (match.score < 88) continue;
+    
+    // Preferir diversidade de padrões (mas não obrigatório)
+    const patternBonus = !usedPatterns.has(match.pattern) ? 2 : 0;
+    
+    if (match.score + patternBonus >= 88) {
+      selected.push(match);
+      usedAssets.add(match.signal.asset);
+      usedPatterns.add(match.pattern);
+    }
+  }
+  
+  // Se não temos pelo menos 2, relaxar critérios
+  if (selected.length < 2) {
+    for (const match of sorted) {
+      if (selected.length >= 3) break;
+      if (usedAssets.has(match.signal.asset)) continue;
+      if (match.score >= 85) {
+        selected.push(match);
+        usedAssets.add(match.signal.asset);
+      }
+    }
+  }
+  
+  return selected;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -60,115 +284,28 @@ serve(async (req) => {
       );
     }
 
-    // ============= ESTRATÉGIA 99% LUCRATIVA =============
-    // Baseada nos 5 MELHORES padrões de alta probabilidade:
-    // 1. PIN BAR REVERSAL - Candle de reversão em extremo
-    // 2. DOUBLE BOTTOM/TOP - Padrão de reversão clássico
-    // 3. RSI DIVERGENCE - Divergência confirmada
-    // 4. BOLLINGER SQUEEZE BREAKOUT - Rompimento após compressão
-    // 5. TRIPLE CONFLUENCE - 3+ indicadores alinhados
+    // Lista de ativos a evitar (win rate < 55%)
+    const badAssets = historicalResults?.filter(h => h.winRate < 55).map(h => h.asset) || [];
     
-    const topSignals = signals
-      .filter(s => {
-        const rsi = s.indicators.rsi.value;
-        const conf = s.indicators.confluenceScore;
-        const vol = s.indicators.atr.volatility;
-        const stochK = s.indicators.stochastic?.k || 50;
-        const stochD = s.indicators.stochastic?.d || 50;
-        const bollPos = s.indicators.bollinger?.position || '';
-        const macdHist = s.indicators.macd?.histogram || 0;
-        const macdTrend = s.indicators.macd?.trend || '';
-        const price = s.price;
-        const bollLower = s.indicators.bollinger?.lower || 0;
-        const bollUpper = s.indicators.bollinger?.upper || 0;
-        const bollMiddle = s.indicators.bollinger?.middle || 0;
-        const pricePos = s.indicators.supportResistance?.pricePosition || '';
-        const hasPattern = s.indicators.reversalPattern;
-        
-        // ========== PADRÃO 1: PIN BAR PERFEITO (99% WIN RATE) ==========
-        // Pin bar em extremo de RSI com confirmação de suporte/resistência
-        const isPinBarReversal = 
-          hasPattern && 
-          hasPattern.toLowerCase().includes('pin bar') &&
-          (rsi <= 15 || rsi >= 85) && // RSI MUITO extremo
-          (pricePos === 'near_support' || pricePos === 'near_resistance');
-        
-        // ========== PADRÃO 2: OVERSOLD EXTREMO PERFEITO (98% WIN RATE) ==========
-        // RSI < 15 + Stoch < 15 + Bollinger inferior + Suporte
-        const isPerfectOversold = 
-          rsi <= 15 && 
-          stochK <= 15 && 
-          stochD <= 20 &&
-          stochK > stochD && // Cruzando para CIMA
-          bollPos === 'below_lower' &&
-          pricePos === 'near_support' &&
-          macdHist > 0 && // MACD positivo = momentum de alta
-          vol !== 'high';
-        
-        // ========== PADRÃO 3: OVERBOUGHT EXTREMO PERFEITO (98% WIN RATE) ==========
-        // RSI > 85 + Stoch > 85 + Bollinger superior + Resistência
-        const isPerfectOverbought = 
-          rsi >= 85 && 
-          stochK >= 85 && 
-          stochD >= 80 &&
-          stochK < stochD && // Cruzando para BAIXO
-          bollPos === 'above_upper' &&
-          pricePos === 'near_resistance' &&
-          macdHist < 0 && // MACD negativo = momentum de baixa
-          vol !== 'high';
-        
-        // ========== PADRÃO 4: DIVERGÊNCIA TRIPLA (97% WIN RATE) ==========
-        // RSI extremo + MACD divergente + Stoch confirmando
-        const isTripleDivergence = 
-          ((rsi <= 20 && macdHist > 0 && stochK > stochD) || // Bullish divergence
-           (rsi >= 80 && macdHist < 0 && stochK < stochD)) && // Bearish divergence
-          conf >= 90 &&
-          vol !== 'high';
-        
-        // ========== PADRÃO 5: CONFLUÊNCIA MÁXIMA (96% WIN RATE) ==========
-        // 6+ indicadores confirmando + RSI extremo + baixa volatilidade
-        const isMaxConfluence = 
-          conf >= 95 && // Confluência altíssima
-          (rsi <= 18 || rsi >= 82) && // RSI muito extremo
-          vol === 'low' && // Volatilidade baixa
-          s.indicators.confluenceCount >= 6 && // Muitos indicadores
-          (pricePos === 'near_support' || pricePos === 'near_resistance');
-        
-        // ========== CRITÉRIO FINAL: APENAS OS MELHORES ==========
-        return isPinBarReversal || 
-               isPerfectOversold || 
-               isPerfectOverbought || 
-               isTripleDivergence || 
-               isMaxConfluence;
-      })
-      .sort((a, b) => {
-        // Pontuação de qualidade
-        const getQualityScore = (s: SignalData) => {
-          let score = s.indicators.confluenceScore;
-          const rsi = s.indicators.rsi.value;
-          
-          // Bonus por RSI muito extremo
-          if (rsi <= 15 || rsi >= 85) score += 20;
-          else if (rsi <= 20 || rsi >= 80) score += 10;
-          
-          // Bonus por padrão de candle
-          if (s.indicators.reversalPattern) score += 15;
-          
-          // Bonus por baixa volatilidade
-          if (s.indicators.atr.volatility === 'low') score += 10;
-          
-          // Bonus por muitas confirmações
-          if (s.indicators.confluenceCount >= 6) score += 10;
-          
-          return score;
-        };
-        
-        return getQualityScore(b) - getQualityScore(a);
-      })
-      .slice(0, 2); // Máximo 2 sinais para foco total
+    // Lista de ativos bons (win rate > 65%)
+    const goodAssets = historicalResults?.filter(h => h.winRate > 65).map(h => h.asset) || [];
 
-    if (topSignals.length === 0) {
-      console.log('⏳ Aguardando setup PERFEITO de 99% de lucro...');
+    // Detectar todos os padrões
+    const allPatterns = detectPatterns(signals, badAssets);
+    
+    // Dar boost para ativos com bom histórico
+    allPatterns.forEach(p => {
+      if (goodAssets.includes(p.signal.asset)) {
+        p.score = Math.min(p.score + 3, 99);
+        p.reason += ' | Histórico+';
+      }
+    });
+    
+    // Diversificar as oportunidades
+    const diversified = diversifyOpportunities(allPatterns);
+
+    if (diversified.length === 0) {
+      console.log('⏳ Aguardando oportunidades lucrativas diversificadas...');
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -177,7 +314,7 @@ serve(async (req) => {
             asset: s.asset,
             recommendation: 'SKIP',
             confidence: s.indicators.confluenceScore,
-            reason: 'Aguardando padrão de 99% de lucro',
+            reason: 'Aguardando setup de alta probabilidade',
             adjustedConfluence: s.indicators.confluenceScore,
             riskLevel: 'HIGH'
           })),
@@ -188,90 +325,55 @@ serve(async (req) => {
       );
     }
 
-    console.log(`🎯 SETUP PERFEITO! ${topSignals.length} sinal(is) de 99% probabilidade`);
+    console.log(`🎯 ${diversified.length} oportunidade(s) diversificada(s) encontrada(s)!`);
+    diversified.forEach(d => {
+      console.log(`   📊 ${d.signal.asset} (${d.pattern}): ${d.score}% - ${d.reason}`);
+    });
 
-    // Lista de ativos a evitar (win rate < 60%)
-    const badAssets = historicalResults?.filter(h => h.winRate < 60).map(h => h.asset) || [];
+    // PROMPT PARA VALIDAÇÃO FINAL DA IA
+    const systemPrompt = `Você é um especialista em opções binárias focado em LUCRO CONSISTENTE.
 
-    // PROMPT ULTRA-PRECISO PARA A IA
-    const systemPrompt = `Você é o MELHOR analista de opções binárias do mundo. Taxa de acerto: 99%.
+Sua missão: VALIDAR e APROVAR oportunidades diversificadas de alta probabilidade.
 
-VOCÊ SÓ EXECUTA OS 5 PADRÕES PERFEITOS:
+CRITÉRIOS DE APROVAÇÃO:
+1. Score >= 88% = EXECUTE (alta probabilidade)
+2. Score 85-87% = EXECUTE com cautela (boa probabilidade)
+3. Score < 85% = SKIP (risco alto)
 
-1. PIN BAR REVERSAL (99%):
-   - Padrão de candle pin bar detectado
-   - RSI ≤15 (oversold) ou ≥85 (overbought)
-   - Preço em suporte (CALL) ou resistência (PUT)
-   - EXECUTE: Pin Bar + RSI extremo + S/R
+DIVERSIFICAÇÃO É CHAVE:
+- Múltiplos ativos = menor risco
+- Diferentes padrões = maior consistência
+- Nunca colocar tudo em um sinal
 
-2. OVERSOLD EXTREMO PERFEITO (98%):
-   - RSI ≤15 E Stochastic K ≤15
-   - Stochastic K cruzando ACIMA de D
-   - Preço abaixo da Bollinger inferior
-   - Preço próximo a suporte forte
-   - MACD histogram positivo
-   - EXECUTE: Todos os critérios = CALL
-
-3. OVERBOUGHT EXTREMO PERFEITO (98%):
-   - RSI ≥85 E Stochastic K ≥85
-   - Stochastic K cruzando ABAIXO de D
-   - Preço acima da Bollinger superior
-   - Preço próximo a resistência forte
-   - MACD histogram negativo
-   - EXECUTE: Todos os critérios = PUT
-
-4. DIVERGÊNCIA TRIPLA (97%):
-   - RSI extremo (≤20 ou ≥80)
-   - MACD histogram em direção oposta
-   - Stochastic confirmando reversão
-   - Alta confluência (≥90%)
-   - EXECUTE: 3 indicadores divergindo
-
-5. CONFLUÊNCIA MÁXIMA (96%):
-   - Confluência ≥95%
-   - RSI muito extremo (≤18 ou ≥82)
-   - Volatilidade BAIXA
-   - 6+ indicadores confirmando
-   - Preço em S/R
-   - EXECUTE: Todos os critérios
-
-REGRAS ABSOLUTAS:
-- Só EXECUTE se TODOS os critérios do padrão forem atendidos
-- Máximo 1 EXECUTE por análise
-- SKIP se qualquer critério falhar
-- SKIP se volatilidade alta
-- SKIP se ativo está na lista de evitar
+PADRÕES VALIDADOS:
+- PIN_BAR: Reversão forte em extremos
+- OVERSOLD_REVERSAL: RSI baixo + confirmações
+- OVERBOUGHT_REVERSAL: RSI alto + confirmações
+- DIVERGENCE: Divergência confirmada
+- CONFLUENCE: Múltiplos indicadores alinhados
+- BOUNCE_SUPPORT: Retorno no suporte
+- BOUNCE_RESISTANCE: Retorno na resistência
 
 Responda APENAS com JSON válido:
-{"analyzedSignals":[{"signalId":"asset","asset":"nome","recommendation":"EXECUTE|SKIP","confidence":96-99,"reason":"Padrão X completo","adjustedConfluence":num,"riskLevel":"LOW"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset ou null"}`;
+{"analyzedSignals":[{"signalId":"asset","asset":"nome","recommendation":"EXECUTE|SKIP","confidence":85-99,"reason":"descrição","adjustedConfluence":num,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"melhor asset ou null"}`;
 
-    const userPrompt = `SINAIS DE 99% DETECTADOS:
+    const userPrompt = `OPORTUNIDADES DIVERSIFICADAS DETECTADAS:
 
-${topSignals.map(s => {
+${diversified.map((d, i) => {
+  const s = d.signal;
   const rsi = s.indicators.rsi.value.toFixed(1);
   const stochK = s.indicators.stochastic?.k?.toFixed(1) || '50';
-  const stochD = s.indicators.stochastic?.d?.toFixed(1) || '50';
-  const macdH = s.indicators.macd?.histogram?.toFixed(4) || '0';
-  const macdTrend = s.indicators.macd?.trend || 'neutral';
-  const boll = s.indicators.bollinger?.position || 'middle';
-  const vol = s.indicators.atr.volatility;
   const conf = s.indicators.confluenceScore;
-  const confCount = s.indicators.confluenceCount;
-  const pricePos = s.indicators.supportResistance?.pricePosition || '';
-  const pattern = s.indicators.reversalPattern || 'Nenhum';
   
-  return `📊 ${s.asset} ${s.type}
-   RSI: ${rsi} | Stoch K: ${stochK} D: ${stochD}
-   MACD-H: ${macdH} (${macdTrend})
-   Bollinger: ${boll} | Vol: ${vol}
-   Confluência: ${conf}% (${confCount} indicadores)
-   Posição: ${pricePos}
-   Padrão: ${pattern}`;
+  return `${i + 1}. ${s.asset} ${s.type} (${d.pattern})
+   Score: ${d.score}% | RSI: ${rsi} | Stoch: ${stochK} | Conf: ${conf}%
+   Motivo: ${d.reason}`;
 }).join('\n\n')}
 
 ${badAssets.length > 0 ? `\n⚠️ EVITAR: ${badAssets.join(', ')}` : ''}
+${goodAssets.length > 0 ? `\n✅ BOM HISTÓRICO: ${goodAssets.join(', ')}` : ''}
 
-Identifique qual padrão de 99% está completo. Responda JSON:`;
+Valide as oportunidades acima. APROVAR todas com score >= 85%. Responda JSON:`;
 
     const makeRequest = async (retryCount = 0): Promise<Response> => {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -286,8 +388,8 @@ Identifique qual padrão de 99% está completo. Responda JSON:`;
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
           ],
-          temperature: 0.1, // Muito baixo para consistência
-          max_tokens: 800,
+          temperature: 0.1,
+          max_tokens: 1000,
         }),
       });
       
@@ -307,24 +409,21 @@ Identifique qual padrão de 99% está completo. Responda JSON:`;
       const errorText = await response.text();
       console.error('Groq AI error:', response.status, errorText);
       
-      // Fallback: usar lógica interna para sinais perfeitos
-      const bestSignal = topSignals[0];
-      const rsi = bestSignal.indicators.rsi.value;
-      
+      // Fallback: usar análise pré-computada
       return new Response(
         JSON.stringify({ 
           success: true,
-          analyzedSignals: topSignals.map(s => ({
-            signalId: `${s.asset}-${Date.now()}`,
-            asset: s.asset,
-            recommendation: s.indicators.confluenceScore >= 95 ? 'EXECUTE' : 'SKIP',
-            confidence: s.indicators.confluenceScore,
-            reason: 'Fallback: confluência máxima',
-            adjustedConfluence: s.indicators.confluenceScore,
-            riskLevel: 'LOW'
+          analyzedSignals: diversified.map(d => ({
+            signalId: `${d.signal.asset}-${Date.now()}`,
+            asset: d.signal.asset,
+            recommendation: d.score >= 85 ? 'EXECUTE' : 'SKIP',
+            confidence: d.score,
+            reason: `${d.pattern}: ${d.reason}`,
+            adjustedConfluence: d.score,
+            riskLevel: d.score >= 92 ? 'LOW' : 'MEDIUM'
           })),
-          marketSentiment: rsi <= 30 ? 'BULLISH' : rsi >= 70 ? 'BEARISH' : 'NEUTRAL',
-          bestSignal: bestSignal?.asset || null
+          marketSentiment: 'NEUTRAL',
+          bestSignal: diversified[0]?.signal.asset || null
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -364,36 +463,28 @@ Identifique qual padrão de 99% está completo. Responda JSON:`;
       }
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
-      const bestSignal = topSignals[0];
+      // Usar análise pré-computada
       analysis = {
-        analyzedSignals: topSignals.map(s => ({
-          signalId: s.asset,
-          asset: s.asset,
-          recommendation: s.indicators.confluenceScore >= 95 ? 'EXECUTE' : 'SKIP',
-          confidence: s.indicators.confluenceScore,
-          reason: 'Fallback: padrão perfeito detectado',
-          adjustedConfluence: s.indicators.confluenceScore,
-          riskLevel: 'LOW'
+        analyzedSignals: diversified.map(d => ({
+          signalId: d.signal.asset,
+          asset: d.signal.asset,
+          recommendation: d.score >= 85 ? 'EXECUTE' : 'SKIP',
+          confidence: d.score,
+          reason: `${d.pattern}: ${d.reason}`,
+          adjustedConfluence: d.score,
+          riskLevel: d.score >= 92 ? 'LOW' : 'MEDIUM'
         })),
         marketSentiment: 'NEUTRAL',
-        bestSignal: bestSignal?.asset || null
+        bestSignal: diversified[0]?.signal.asset || null
       };
     }
 
-    // Garantir que apenas 1 EXECUTE no máximo
+    // Garantir que temos múltiplos EXECUTE (diversificação)
     const executeSignals = analysis.analyzedSignals?.filter((a: any) => a.recommendation === 'EXECUTE') || [];
-    if (executeSignals.length > 1) {
-      // Manter apenas o melhor
-      const best = executeSignals.reduce((a: any, b: any) => 
-        (a.confidence || 0) > (b.confidence || 0) ? a : b
-      );
-      analysis.analyzedSignals = analysis.analyzedSignals.map((a: any) => ({
-        ...a,
-        recommendation: a.asset === best.asset ? 'EXECUTE' : 'SKIP',
-        reason: a.asset === best.asset ? a.reason : 'Secundário - melhor opção encontrada'
-      }));
-    }
+    
+    console.log(`✅ ${executeSignals.length} sinais EXECUTE aprovados para diversificação`);
 
+    // Adicionar sinais não analisados como SKIP
     const allSignalAnalysis = signals.map(s => {
       const aiResult = analysis.analyzedSignals?.find((a: any) => a.asset === s.asset);
       if (aiResult) return aiResult;
@@ -403,7 +494,7 @@ Identifique qual padrão de 99% está completo. Responda JSON:`;
         asset: s.asset,
         recommendation: 'SKIP',
         confidence: s.indicators.confluenceScore,
-        reason: 'Não atende critérios de 99%',
+        reason: 'Não atende critérios de diversificação',
         adjustedConfluence: s.indicators.confluenceScore,
         riskLevel: 'HIGH'
       };
@@ -412,7 +503,8 @@ Identifique qual padrão de 99% está completo. Responda JSON:`;
     console.log('Analysis result:', JSON.stringify({ 
       bestSignal: analysis.bestSignal, 
       sentiment: analysis.marketSentiment,
-      executeCount: executeSignals.length 
+      executeCount: executeSignals.length,
+      patterns: diversified.map(d => d.pattern)
     }));
 
     return new Response(

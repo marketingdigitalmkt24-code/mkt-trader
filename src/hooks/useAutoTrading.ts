@@ -20,6 +20,10 @@ interface AutoTradingConfig {
   // AI analysis settings
   useAIAnalysis: boolean;
   aiMinConfidence: number;
+  // Scaled entries strategy
+  useScaledEntries: boolean;
+  scaledEntriesCount: number; // Number of entries per asset (2-5)
+  scaledEntriesDelay: number; // Delay between entries in seconds (5-30)
 }
 
 interface TradeResult {
@@ -55,6 +59,10 @@ export function useAutoTrading() {
           profitTargetValue: parsed.profitTargetValue || 0,
           useAIAnalysis: parsed.useAIAnalysis ?? true,
           aiMinConfidence: parsed.aiMinConfidence || 70,
+          // Scaled entries fields
+          useScaledEntries: parsed.useScaledEntries ?? false,
+          scaledEntriesCount: parsed.scaledEntriesCount || 3,
+          scaledEntriesDelay: parsed.scaledEntriesDelay || 10,
         };
       }
     } catch (e) {
@@ -63,13 +71,17 @@ export function useAutoTrading() {
     return {
       enabled: false,
       amount: 10,
-      minConfluence: 95, // Increased - more selective
-      maxDailyTrades: 3, // Reduced - fewer but better trades
+      minConfluence: 95,
+      maxDailyTrades: 3,
       todayTrades: 0,
       profitTargetType: 'none',
       profitTargetValue: 0,
       useAIAnalysis: true,
-      aiMinConfidence: 90, // Increased - only very high confidence
+      aiMinConfidence: 90,
+      // Scaled entries defaults
+      useScaledEntries: false,
+      scaledEntriesCount: 3,
+      scaledEntriesDelay: 10,
     };
   });
 
@@ -161,14 +173,18 @@ export function useAutoTrading() {
     }
   };
 
+  // Helper to delay execution
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
   // Place a single trade via Edge Function (server-side)
-  const placeSingleTrade = useCallback(async (signal: TradingSignal): Promise<TradeResult> => {
+  const placeSingleTrade = useCallback(async (signal: TradingSignal, entryNumber?: number): Promise<TradeResult> => {
     const startTime = Date.now();
+    const entryLabel = entryNumber ? ` [Entrada ${entryNumber}]` : '';
     
     try {
       const expiration = getExpirationFromTimeframe(signal.timeframe);
       
-      console.log(`🎯 [${signal.asset}] Placing trade via Edge Function: ${signal.type} $${config.amount}`);
+      console.log(`🎯 [${signal.asset}]${entryLabel} Placing trade via Edge Function: ${signal.type} $${config.amount}`);
       
       // Call Edge Function directly - no need for frontend WebSocket connection
       const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
@@ -177,33 +193,64 @@ export function useAutoTrading() {
           direction: signal.type.toLowerCase(),
           amount: config.amount,
           expiration: expiration,
-          signalId: signal.id,
+          signalId: `${signal.id}${entryNumber ? `-${entryNumber}` : ''}`,
           isAutoTrade: true,
           isAIAnalyzed: config.useAIAnalysis,
         },
       });
       
       const elapsed = Date.now() - startTime;
-      console.log(`⏱️ [${signal.asset}] Trade completed in ${elapsed}ms`);
+      console.log(`⏱️ [${signal.asset}]${entryLabel} Trade completed in ${elapsed}ms`);
 
       if (error) {
-        console.error(`❌ [${signal.asset}] Edge Function error:`, error);
+        console.error(`❌ [${signal.asset}]${entryLabel} Edge Function error:`, error);
         return { signal, success: false, error: 'Erro ao conectar com servidor' };
       }
 
       if (data?.success) {
-        console.log(`✅ [${signal.asset}] Trade executed successfully, ID: ${data.tradeId}`);
+        console.log(`✅ [${signal.asset}]${entryLabel} Trade executed successfully, ID: ${data.tradeId}`);
         return { signal, success: true, tradeId: data.tradeId };
       } else {
-        console.error(`❌ [${signal.asset}] Trade failed:`, data?.error);
+        console.error(`❌ [${signal.asset}]${entryLabel} Trade failed:`, data?.error);
         return { signal, success: false, error: data?.error || 'Trade failed' };
       }
     } catch (err) {
       const elapsed = Date.now() - startTime;
-      console.error(`❌ [${signal.asset}] Trade error after ${elapsed}ms:`, err);
+      console.error(`❌ [${signal.asset}]${entryLabel} Trade error after ${elapsed}ms:`, err);
       return { signal, success: false, error: String(err) };
     }
-  }, [config.amount]);
+  }, [config.amount, config.useAIAnalysis]);
+
+  // Place scaled entries - multiple entries on the same asset with delay
+  const placeScaledEntries = useCallback(async (signal: TradingSignal): Promise<TradeResult[]> => {
+    const results: TradeResult[] = [];
+    const { scaledEntriesCount, scaledEntriesDelay } = config;
+    
+    console.log(`📊 [${signal.asset}] Starting scaled entries: ${scaledEntriesCount} entries with ${scaledEntriesDelay}s delay`);
+    
+    for (let i = 1; i <= scaledEntriesCount; i++) {
+      // Place trade
+      const result = await placeSingleTrade(signal, i);
+      results.push(result);
+      
+      // If trade failed, stop placing more entries
+      if (!result.success) {
+        console.log(`⛔ [${signal.asset}] Stopping scaled entries after failure on entry ${i}`);
+        break;
+      }
+      
+      // Wait before next entry (except for last one)
+      if (i < scaledEntriesCount) {
+        console.log(`⏳ [${signal.asset}] Waiting ${scaledEntriesDelay}s before entry ${i + 1}...`);
+        await delay(scaledEntriesDelay * 1000);
+      }
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    console.log(`📈 [${signal.asset}] Scaled entries complete: ${successCount}/${scaledEntriesCount} successful`);
+    
+    return results;
+  }, [config.scaledEntriesCount, config.scaledEntriesDelay, placeSingleTrade]);
 
   // Place trades on multiple signals simultaneously (one per asset)
   const placeTradesSimultaneously = useCallback(async (signals: TradingSignal[]): Promise<TradeResult[]> => {
@@ -238,10 +285,14 @@ export function useAutoTrading() {
     
     console.log(`🎯 Trading ${uniqueAssetSignals.length} unique assets (skipped ${signalsToTrade.length - uniqueAssetSignals.length} duplicates)`);
     
-    setIsPlacingTrade(true);
-    setActiveTradesCount(uniqueAssetSignals.length);
+    const useScaled = config.useScaledEntries;
+    const expectedTrades = useScaled ? uniqueAssetSignals.length * config.scaledEntriesCount : uniqueAssetSignals.length;
     
-    console.log(`🚀 Placing ${uniqueAssetSignals.length} trades (one per asset)...`);
+    setIsPlacingTrade(true);
+    setActiveTradesCount(expectedTrades);
+    
+    const strategyType = useScaled ? `entradas escalonadas (${config.scaledEntriesCount}x)` : 'entrada única';
+    console.log(`🚀 Placing ${uniqueAssetSignals.length} trades usando ${strategyType}...`);
     const startTime = Date.now();
     
     // Mark all signals and assets as being traded
@@ -251,17 +302,27 @@ export function useAutoTrading() {
     });
     
     try {
-      // Execute all trades in parallel
-      const results = await Promise.all(
-        uniqueAssetSignals.map(signal => placeSingleTrade(signal))
-      );
+      let allResults: TradeResult[] = [];
+      
+      if (useScaled) {
+        // Execute scaled entries sequentially for each asset (but assets in parallel)
+        const scaledResultsPerAsset = await Promise.all(
+          uniqueAssetSignals.map(signal => placeScaledEntries(signal))
+        );
+        allResults = scaledResultsPerAsset.flat();
+      } else {
+        // Execute single trade per asset in parallel
+        allResults = await Promise.all(
+          uniqueAssetSignals.map(signal => placeSingleTrade(signal))
+        );
+      }
       
       const elapsed = Date.now() - startTime;
-      console.log(`⏱️ All ${uniqueAssetSignals.length} trades completed in ${elapsed}ms`);
+      console.log(`⏱️ All ${allResults.length} trades completed in ${elapsed}ms`);
       
       // Process results
-      const successfulTrades = results.filter(r => r.success);
-      const failedTrades = results.filter(r => !r.success);
+      const successfulTrades = allResults.filter(r => r.success);
+      const failedTrades = allResults.filter(r => !r.success);
       
       // Update trade count
       if (successfulTrades.length > 0) {
@@ -270,16 +331,20 @@ export function useAutoTrading() {
           todayTrades: prev.todayTrades + successfulTrades.length,
         }));
         
-        // Show success toast
-        const successAssets = successfulTrades.map(r => r.signal.asset).join(', ');
+        // Show success toast with scaled info
+        const uniqueSuccessAssets = [...new Set(successfulTrades.map(r => r.signal.asset))];
+        const description = useScaled 
+          ? `${successfulTrades.length} entradas em ${uniqueSuccessAssets.join(', ')}`
+          : uniqueSuccessAssets.join(', ');
+        
         toast({
           title: `✅ ${successfulTrades.length} entrada(s) executada(s)!`,
-          description: successAssets,
+          description,
         });
         
         setLastTradeResult({ 
           success: true, 
-          message: `${successfulTrades.length} trades executados: ${successAssets}` 
+          message: `${successfulTrades.length} trades executados: ${description}` 
         });
       }
       
@@ -311,12 +376,12 @@ export function useAutoTrading() {
         tradingInProgress.current.delete(signal.id);
       });
       
-      return results;
+      return allResults;
     } finally {
       setIsPlacingTrade(false);
       setActiveTradesCount(0);
     }
-  }, [placeSingleTrade, toast]);
+  }, [config.useScaledEntries, config.scaledEntriesCount, placeSingleTrade, placeScaledEntries, toast]);
 
   // Legacy single trade function (for manual trades)
   const placeTrade = useCallback(async (signal: TradingSignal) => {

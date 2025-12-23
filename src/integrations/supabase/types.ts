@@ -203,6 +203,57 @@ export type Database = {
         }
         Relationships: []
       }
+      user_trading_settings: {
+        Row: {
+          ai_min_confidence: number
+          auto_trading_enabled: boolean
+          created_at: string
+          id: string
+          max_consecutive_losses: number
+          max_daily_trades: number
+          min_confluence: number
+          profit_target_type: string
+          profit_target_value: number
+          risk_per_trade: number
+          trade_amount: number
+          updated_at: string
+          use_ai_analysis: boolean
+          user_id: string
+        }
+        Insert: {
+          ai_min_confidence?: number
+          auto_trading_enabled?: boolean
+          created_at?: string
+          id?: string
+          max_consecutive_losses?: number
+          max_daily_trades?: number
+          min_confluence?: number
+          profit_target_type?: string
+          profit_target_value?: number
+          risk_per_trade?: number
+          trade_amount?: number
+          updated_at?: string
+          use_ai_analysis?: boolean
+          user_id: string
+        }
+        Update: {
+          ai_min_confidence?: number
+          auto_trading_enabled?: boolean
+          created_at?: string
+          id?: string
+          max_consecutive_losses?: number
+          max_daily_trades?: number
+          min_confluence?: number
+          profit_target_type?: string
+          profit_target_value?: number
+          risk_per_trade?: number
+          trade_amount?: number
+          updated_at?: string
+          use_ai_analysis?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_numbers: {
         Row: {
           created_at: string

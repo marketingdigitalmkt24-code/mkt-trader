@@ -146,25 +146,39 @@ LEMBRE-SE:
 - Confiança mínima para EXECUTE: 90%
 - Prefira não operar a operar com dúvida`;
 
-    // Use Google AI Gemini API (free tier)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_AI_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+    // Use Google AI Gemini API (free tier) - gemini-1.5-flash has more generous limits
+    const makeRequest = async (retryCount = 0): Promise<Response> => {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_AI_API_KEY}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 2048,
           }
-        ],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 4096,
-        }
-      }),
-    });
+        }),
+      });
+      
+      // Retry on rate limit with exponential backoff
+      if (response.status === 429 && retryCount < 2) {
+        const delay = (retryCount + 1) * 3000; // 3s, 6s
+        console.log(`Rate limited, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        return makeRequest(retryCount + 1);
+      }
+      
+      return response;
+    };
+
+    const response = await makeRequest();
 
     if (!response.ok) {
       const errorText = await response.text();

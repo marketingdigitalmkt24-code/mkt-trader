@@ -140,6 +140,24 @@ export function useSignalResults() {
     };
   }, []);
 
+  // Reset completo (zera UI/localStorage). Obs: o histórico no banco é gerenciado separadamente.
+  const resetHistory = useCallback(() => {
+    setHistory([]);
+    setStats({
+      totalSignals: 0,
+      wins: 0,
+      losses: 0,
+      ties: 0,
+      pending: 0,
+      winRate: 0,
+      totalProfit: 0,
+      streak: 0,
+      streakType: 'none',
+    });
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STATS_KEY);
+  }, []);
+
   // Persist to localStorage with limit
   useEffect(() => {
     // Limit history size to prevent quota exceeded
@@ -450,8 +468,25 @@ export function useSignalResults() {
           return limited;
         });
       } else {
-        // No data returned: keep current history (prevents wiping simulated/local entries)
-        console.log('No results returned from database; keeping existing history');
+        // Sem resultados no banco: limpar histórico local para começar do zero
+        console.log('📊 No results returned from database; clearing local history');
+        setHistory((prev) => {
+          if (prev.length === 0) return prev;
+          return [];
+        });
+        setStats({
+          totalSignals: 0,
+          wins: 0,
+          losses: 0,
+          ties: 0,
+          pending: 0,
+          winRate: 0,
+          totalProfit: 0,
+          streak: 0,
+          streakType: 'none',
+        });
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STATS_KEY);
       }
     } catch (err) {
       console.error('Failed to refresh results:', err);
@@ -555,25 +590,8 @@ export function useSignalResults() {
       return updated;
     });
   }, [recalculateStats]);
-
-
-  // Limpar histórico
-  const clearHistory = useCallback(() => {
-    setHistory([]);
-    setStats({
-      totalSignals: 0,
-      wins: 0,
-      losses: 0,
-      ties: 0,
-      pending: 0,
-      winRate: 0,
-      totalProfit: 0,
-      streak: 0,
-      streakType: 'none',
-    });
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(STATS_KEY);
-  }, []);
+  // Limpar histórico (UI/localStorage)
+  const clearHistory = resetHistory;
 
   // Obter histórico de hoje (UTC para bater com o backend)
   const getTodayHistory = useCallback(() => {

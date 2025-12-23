@@ -401,41 +401,59 @@ async function placeTradeAndWaitResult(
             }
           }
           
-          // Se não encontrou E não era OTC, verificar contexto antes de fallback
+          // Se não encontrou E não era OTC, verificar se é fim de semana para decidir sobre OTC
           if (!assetId && !isOTCAsset) {
-            // Verificar se é fim de semana (UTC)
+            // Calcular hora de Brasília (UTC-3)
             const now = new Date();
-            const dayOfWeek = now.getUTCDay(); // 0 = domingo, 6 = sábado
-            const hour = now.getUTCHours();
+            const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const brazilTime = new Date(utcTime - (3 * 60 * 60 * 1000)); // UTC-3
             
-            // Mercado forex fecha sexta 21:00 UTC e abre domingo 21:00 UTC
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 || 
-                             (dayOfWeek === 5 && hour >= 21);
+            const dayOfWeek = brazilTime.getDay(); // 0 = domingo, 6 = sábado
+            const hour = brazilTime.getHours();
+            const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+            
+            console.log(`🇧🇷 Horário Brasília: ${dayNames[dayOfWeek]} ${hour}:${brazilTime.getMinutes().toString().padStart(2, '0')}`);
+            
+            // Mercado forex fecha sexta ~18:00 BRT e abre domingo ~18:00 BRT
+            // Simplificando: sábado inteiro e domingo até ~18h = fim de semana
+            const isWeekend = dayOfWeek === 6 || // Sábado
+                             (dayOfWeek === 0 && hour < 18) || // Domingo antes das 18h
+                             (dayOfWeek === 5 && hour >= 18); // Sexta após 18h
             
             if (isWeekend) {
-              console.log(`📅 Fim de semana detectado (dia: ${dayOfWeek}, hora UTC: ${hour}) - OTC é esperado`);
-            } else {
-              console.log(`⚠️ DIA DE SEMANA (dia: ${dayOfWeek}, hora UTC: ${hour}) - ativo ${cleanAsset} NÃO está aberto na IQ Option`);
-              console.log(`📋 Ativos regulares disponíveis: ${Object.keys(activeAssets).filter(k => !k.includes('OTC') && k.length <= 10).slice(0, 25).join(', ')}`);
-            }
-            
-            console.log(`🔄 Tentando fallback para versão OTC...`);
-            const otcFallbackVariations = [
-              `${cleanAsset}-OTC`,
-              `${cleanAsset} OTC`,
-              `${withSlash}-OTC`,
-              `${withSlash} OTC`,
-              `FRONT.${cleanAsset}-OTC`,
-            ];
-            
-            for (const variation of otcFallbackVariations) {
-              if (activeAssets[variation]) {
-                assetId = activeAssets[variation];
-                matchedVariation = variation;
-                usedOTCFallback = true;
-                console.log(`🔄 Usando versão OTC: "${variation}" -> ID: ${assetId}`);
-                break;
+              console.log(`📅 FIM DE SEMANA detectado - OTC permitido como fallback`);
+              
+              // Tentar OTC apenas no fim de semana
+              const otcFallbackVariations = [
+                `${cleanAsset}-OTC`,
+                `${cleanAsset} OTC`,
+                `${withSlash}-OTC`,
+                `${withSlash} OTC`,
+                `FRONT.${cleanAsset}-OTC`,
+              ];
+              
+              for (const variation of otcFallbackVariations) {
+                if (activeAssets[variation]) {
+                  assetId = activeAssets[variation];
+                  matchedVariation = variation;
+                  usedOTCFallback = true;
+                  console.log(`🔄 Usando versão OTC: "${variation}" -> ID: ${assetId}`);
+                  break;
+                }
               }
+            } else {
+              // DIA DE SEMANA - NÃO usar OTC, falhar a operação
+              console.log(`🚫 DIA DE SEMANA - OTC NÃO permitido`);
+              console.log(`❌ Ativo ${cleanAsset} não está disponível na IQ Option neste momento`);
+              console.log(`📋 Ativos regulares abertos: ${Object.keys(activeAssets).filter(k => !k.includes('OTC') && k.length <= 10).slice(0, 25).join(', ')}`);
+              
+              clearTimeout(timeout);
+              ws.close();
+              resolve({ 
+                success: false, 
+                error: `Ativo ${trade.asset} não disponível (OTC bloqueado em dia de semana)` 
+              });
+              return;
             }
           }
           

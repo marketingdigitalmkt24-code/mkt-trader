@@ -60,15 +60,6 @@ export function useAutoTrading() {
   const AI_ERROR_COOLDOWN = 60000; // Only show AI error toast once per minute
   const tradingInProgress = useRef<Set<string>>(new Set());
   const activeAssetTrades = useRef<Set<string>>(new Set()); // Track assets with active trades
-  const inFlightAssetLocks = useRef<Set<string>>(new Set()); // Local locks while placing trades
-  const POST_SUCCESS_LOCK_GRACE_MS = 15000;
-
-  const normalizeAssetKey = (asset: string) =>
-    asset
-      .toUpperCase()
-      .replace(/OTC/g, '')
-      .replace(/[^A-Z0-9]/g, '');
-
   const settingsLoaded = useRef(false);
   const isSavingToDb = useRef(false);
   
@@ -206,31 +197,21 @@ export function useAutoTrading() {
   // Load active trades from database on mount and periodically refresh
   const refreshActiveAssetTrades = useCallback(async () => {
     try {
-      // Keep a wider window (some expirations are >10min) and include local in-flight locks
-      const lookbackIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-
+      // Get all pending/tie trades from last 10 minutes (active trades)
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       const { data: activeOps } = await supabase
         .from('operation_results')
         .select('asset, result')
         .in('result', ['pending', 'tie'])
-        .gte('created_at', lookbackIso);
-
-      const dbActive = new Set<string>();
+        .gte('created_at', tenMinutesAgo);
+      
       if (activeOps) {
+        activeAssetTrades.current.clear();
         activeOps.forEach(op => {
-          dbActive.add(normalizeAssetKey(op.asset));
+          activeAssetTrades.current.add(op.asset.toUpperCase());
         });
+        console.log(`📊 Active trades on assets: ${Array.from(activeAssetTrades.current).join(', ') || 'none'}`);
       }
-
-      // Active assets = DB pending/tie union local in-flight locks
-      activeAssetTrades.current = new Set([
-        ...Array.from(dbActive),
-        ...Array.from(inFlightAssetLocks.current),
-      ]);
-
-      console.log(
-        `📊 Active trades on assets: ${Array.from(activeAssetTrades.current).join(', ') || 'none'}`
-      );
     } catch (err) {
       console.error('Failed to refresh active asset trades:', err);
     }
@@ -304,27 +285,12 @@ export function useAutoTrading() {
   const placeSingleTrade = useCallback(async (signal: TradingSignal, entryNumber?: number): Promise<TradeResult> => {
     const startTime = Date.now();
     const entryLabel = entryNumber ? ` [Entrada ${entryNumber}]` : '';
-    const assetKey = normalizeAssetKey(signal.asset);
-
-    // Check AGAIN if asset already has active trade (double-check before placing)
-    // NOTE: For scaled entries, we allow entries 2+ for the same signal, but we keep the asset locked.
-    if (activeAssetTrades.current.has(assetKey) && !entryNumber) {
-      console.log(`⏸️ [${signal.asset}] Skipped - asset already has active trade (normalized lock)`);
-      return { signal, success: false, error: 'Ativo já tem operação ativa' };
-    }
-
-    // Mark asset as having active trade IMMEDIATELY (before API call)
-    if (!entryNumber || entryNumber === 1) {
-      inFlightAssetLocks.current.add(assetKey);
-      activeAssetTrades.current.add(assetKey);
-      console.log(`🔒 [${signal.asset}] Locked (${assetKey}) - preventing concurrent trades`);
-    }
-
+    
     try {
       const expiration = getExpirationFromTimeframe(signal.timeframe);
-
+      
       console.log(`🎯 [${signal.asset}]${entryLabel} Placing trade via Edge Function: ${signal.type} $${config.amount}`);
-
+      
       // Call Edge Function directly - no need for frontend WebSocket connection
       const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
         body: {
@@ -338,52 +304,25 @@ export function useAutoTrading() {
           timeframe: signal.timeframe, // Include timeframe for history tracking
         },
       });
-
+      
       const elapsed = Date.now() - startTime;
       console.log(`⏱️ [${signal.asset}]${entryLabel} Trade completed in ${elapsed}ms`);
 
       if (error) {
         console.error(`❌ [${signal.asset}]${entryLabel} Edge Function error:`, error);
-        // Unlock asset on error (only if first entry or single entry)
-        if (!entryNumber || entryNumber === 1) {
-          inFlightAssetLocks.current.delete(assetKey);
-          activeAssetTrades.current.delete(assetKey);
-          console.log(`🔓 [${signal.asset}] Unlocked (${assetKey}) after error`);
-        }
         return { signal, success: false, error: 'Erro ao conectar com servidor' };
       }
 
       if (data?.success) {
         console.log(`✅ [${signal.asset}]${entryLabel} Trade executed successfully, ID: ${data.tradeId}`);
-
-        // Keep asset locked; remove only the in-flight lock after a short grace period
-        // (so refreshActiveAssetTrades can pick up the DB pending entry reliably).
-        if (!entryNumber || entryNumber === 1) {
-          setTimeout(() => {
-            inFlightAssetLocks.current.delete(assetKey);
-          }, POST_SUCCESS_LOCK_GRACE_MS);
-        }
-
         return { signal, success: true, tradeId: data.tradeId };
+      } else {
+        console.error(`❌ [${signal.asset}]${entryLabel} Trade failed:`, data?.error);
+        return { signal, success: false, error: data?.error || 'Trade failed' };
       }
-
-      console.error(`❌ [${signal.asset}]${entryLabel} Trade failed:`, data?.error);
-      // Unlock asset on failure (only if first entry or single entry)
-      if (!entryNumber || entryNumber === 1) {
-        inFlightAssetLocks.current.delete(assetKey);
-        activeAssetTrades.current.delete(assetKey);
-        console.log(`🔓 [${signal.asset}] Unlocked (${assetKey}) after trade failure`);
-      }
-      return { signal, success: false, error: data?.error || 'Trade failed' };
     } catch (err) {
       const elapsed = Date.now() - startTime;
       console.error(`❌ [${signal.asset}]${entryLabel} Trade error after ${elapsed}ms:`, err);
-      // Unlock asset on exception (only if first entry or single entry)
-      if (!entryNumber || entryNumber === 1) {
-        inFlightAssetLocks.current.delete(assetKey);
-        activeAssetTrades.current.delete(assetKey);
-        console.log(`🔓 [${signal.asset}] Unlocked (${assetKey}) after exception`);
-      }
       return { signal, success: false, error: String(err) };
     }
   }, [config.amount, config.useAIAnalysis]);
@@ -425,9 +364,9 @@ export function useAutoTrading() {
     
     // Filter out signals for assets that already have active trades
     const signalsToTrade = signals.filter(signal => {
-      const assetKey = normalizeAssetKey(signal.asset);
+      const assetKey = signal.asset.toUpperCase();
       if (activeAssetTrades.current.has(assetKey)) {
-        console.log(`⏸️ [${signal.asset}] Skipped - already has active trade (${assetKey})`);
+        console.log(`⏸️ [${signal.asset}] Skipped - already has active trade`);
         return false;
       }
       return true;
@@ -443,7 +382,7 @@ export function useAutoTrading() {
     const seenAssets = new Set<string>();
     
     for (const signal of signalsToTrade) {
-      const assetKey = normalizeAssetKey(signal.asset);
+      const assetKey = signal.asset.toUpperCase();
       if (!seenAssets.has(assetKey)) {
         seenAssets.add(assetKey);
         uniqueAssetSignals.push(signal);
@@ -462,9 +401,10 @@ export function useAutoTrading() {
     console.log(`🚀 Placing ${uniqueAssetSignals.length} trades usando ${strategyType}...`);
     const startTime = Date.now();
     
-    // Mark all signals as being traded (assets will be locked in placeSingleTrade)
+    // Mark all signals and assets as being traded
     uniqueAssetSignals.forEach(signal => {
       tradingInProgress.current.add(signal.id);
+      activeAssetTrades.current.add(signal.asset.toUpperCase());
     });
     
     try {
@@ -514,13 +454,18 @@ export function useAutoTrading() {
         });
       }
       
-      // Show error toast for failed trades (assets already unlocked in placeSingleTrade)
+      // Show error toast for failed trades
       if (failedTrades.length > 0) {
         const failedAssets = failedTrades.map(r => r.signal.asset).join(', ');
         toast({
           title: `❌ ${failedTrades.length} entrada(s) falhou`,
           description: failedAssets,
           variant: 'destructive',
+        });
+        
+        // Remove failed assets from active trades so they can be retried
+        failedTrades.forEach(r => {
+          activeAssetTrades.current.delete(r.signal.asset.toUpperCase());
         });
         
         if (successfulTrades.length === 0) {
@@ -624,7 +569,7 @@ export function useAutoTrading() {
       const notInProgress = !tradingInProgress.current.has(signal.id);
       
       // Check if this asset already has an active trade
-      const assetKey = normalizeAssetKey(signal.asset);
+      const assetKey = signal.asset.toUpperCase();
       const hasActiveTrade = activeAssetTrades.current.has(assetKey);
       
       if (hasActiveTrade) {

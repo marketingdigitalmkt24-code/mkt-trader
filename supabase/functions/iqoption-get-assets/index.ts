@@ -123,15 +123,38 @@ async function getAssetsViaWs(ssid: string): Promise<{ assets: AvailableAsset[];
               for (const [id, info] of Object.entries(allActives)) {
                 const assetInfo = info as any;
                 const isOpen = assetInfo.enabled && !assetInfo.is_suspended;
-                const name = assetInfo.name || '';
-                const isOTC = name.toLowerCase().includes('otc') || 
-                             assetInfo.underlying?.includes('-OTC');
+                const rawName = assetInfo.name || '';
+                
+                // Normalizar nome do ativo para formato padrão (ex: FRONT.GBPJPY-OP -> GBP/JPY)
+                let name = rawName.toUpperCase();
+                
+                // Remover prefixo FRONT.
+                if (name.startsWith('FRONT.')) {
+                  name = name.replace('FRONT.', '');
+                }
+                
+                // Detectar tipo OTC
+                const isOTC = name.includes('-OTC') || rawName.toLowerCase().includes('otc');
+                
+                // Remover sufixos -OTC e -OP
+                let cleanName = name.replace('-OTC', '').replace('-OP', '');
+                
+                // Converter para formato com slash se for par de moedas (6 caracteres)
+                if (cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)) {
+                  cleanName = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
+                }
+                
+                // Adicionar sufixo OTC se necessário
+                if (isOTC) {
+                  cleanName = `${cleanName} OTC`;
+                }
+                
                 const isBlitz = turboIds.has(id);
                 const isBinaryAsset = binaryIds.has(id);
                 
                 let type = 'forex';
                 if (isOTC) type = 'otc';
-                else if (name.includes('BTC') || name.includes('ETH') || name.includes('LTC') || name.includes('XRP')) type = 'crypto';
+                else if (cleanName.includes('BTC') || cleanName.includes('ETH') || cleanName.includes('LTC') || cleanName.includes('XRP')) type = 'crypto';
                 else if (isBlitz) type = 'blitz';
                 
                 const payout = assetInfo.option?.profit?.commission || assetInfo.profit_percent || 0;
@@ -145,8 +168,15 @@ async function getAssetsViaWs(ssid: string): Promise<{ assets: AvailableAsset[];
                 
                 if (assetInfo.enabled !== false) {
                   assets.push({
-                    id: parseInt(id), name, type, isOTC, enabled: isOpen,
-                    payout, isBlitz, isBinary: isBinaryAsset, schedule: tradingSchedule,
+                    id: parseInt(id), 
+                    name: cleanName,  // Nome normalizado
+                    type, 
+                    isOTC, 
+                    enabled: isOpen,
+                    payout, 
+                    isBlitz, 
+                    isBinary: isBinaryAsset, 
+                    schedule: tradingSchedule,
                   });
                 }
               }
@@ -247,22 +277,46 @@ async function tryWsOnlyAuth(email: string, password: string): Promise<{ assets:
               for (const [id, info] of Object.entries(allActives)) {
                 const assetInfo = info as any;
                 const isOpen = assetInfo.enabled && !assetInfo.is_suspended;
-                const name = assetInfo.name || '';
-                const isOTC = name.toLowerCase().includes('otc') || assetInfo.underlying?.includes('-OTC');
+                const rawName = assetInfo.name || '';
+                
+                // Normalizar nome do ativo para formato padrão
+                let name = rawName.toUpperCase();
+                if (name.startsWith('FRONT.')) {
+                  name = name.replace('FRONT.', '');
+                }
+                
+                const isOTC = name.includes('-OTC') || rawName.toLowerCase().includes('otc');
+                let cleanName = name.replace('-OTC', '').replace('-OP', '');
+                
+                // Converter para formato com slash se for par de moedas
+                if (cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)) {
+                  cleanName = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
+                }
+                
+                if (isOTC) {
+                  cleanName = `${cleanName} OTC`;
+                }
+                
                 const isBlitz = turboIds.has(id);
                 const isBinaryAsset = binaryIds.has(id);
                 
                 let type = 'forex';
                 if (isOTC) type = 'otc';
-                else if (name.includes('BTC') || name.includes('ETH') || name.includes('LTC') || name.includes('XRP')) type = 'crypto';
+                else if (cleanName.includes('BTC') || cleanName.includes('ETH') || cleanName.includes('LTC') || cleanName.includes('XRP')) type = 'crypto';
                 else if (isBlitz) type = 'blitz';
                 
                 const payout = assetInfo.option?.profit?.commission || assetInfo.profit_percent || 0;
                 
                 if (assetInfo.enabled !== false) {
                   assets.push({
-                    id: parseInt(id), name, type, isOTC, enabled: isOpen,
-                    payout, isBlitz, isBinary: isBinaryAsset,
+                    id: parseInt(id), 
+                    name: cleanName, 
+                    type, 
+                    isOTC, 
+                    enabled: isOpen,
+                    payout, 
+                    isBlitz, 
+                    isBinary: isBinaryAsset,
                     schedule: { open: isOpen, tradingDays: isOTC || type === 'crypto' ? [0,1,2,3,4,5,6] : [1,2,3,4,5] },
                   });
                 }

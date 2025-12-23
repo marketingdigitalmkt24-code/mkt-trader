@@ -241,19 +241,21 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
                 const toNum = (v: any) => (typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN);
 
                 let win = 'pending';
+
+                // Priority order for profit: pnl_net > pnl > close_profit (pnl_net is the real net result)
                 const profitRaw =
-                  pos.close_profit ??
+                  pos.pnl_net ??
                   pos.pnl ??
+                  pos.close_profit ??
                   pos.profit ??
                   pos.close_profit_amount ??
                   pos.net_profit ??
-                  pos.win_amount ??
                   0;
 
                 let profit = toNum(profitRaw);
                 if (!Number.isFinite(profit)) profit = 0;
 
-                // If API provides payout (win_amount) but not net profit, compute net = win_amount - investment
+                // If profit is still 0, try computing from win_amount - investment
                 if (profit === 0 && pos.win_amount != null) {
                   const investmentRaw = pos.amount ?? pos.invest ?? pos.investment ?? pos.buy_amount ?? pos.open_amount;
                   const investment = toNum(investmentRaw);
@@ -264,11 +266,27 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
                   }
                 }
 
+                // Determine win/loss/tie - prioritize raw_event.result if available
+                const rawEvent = pos.raw_event?.binary_options_option_changed1;
+                const explicitResult = rawEvent?.result || pos.close_reason || pos.result;
+
                 if (pos.status === 'closed' || pos.close_time || pos.close_at) {
-                  if (typeof pos.win === 'string') win = pos.win; // 'win', 'loose', 'equal'
-                  else if (profit > 0) win = 'win';
-                  else if (profit < 0) win = 'loose';
-                  else win = 'equal';
+                  // Use explicit result from IQ Option if available
+                  if (explicitResult === 'win') {
+                    win = 'win';
+                  } else if (explicitResult === 'loose' || explicitResult === 'loss') {
+                    win = 'loose';
+                  } else if (explicitResult === 'equal' || explicitResult === 'tie') {
+                    win = 'equal';
+                  } else if (typeof pos.win === 'string') {
+                    win = pos.win; // 'win', 'loose', 'equal'
+                  } else if (profit > 0) {
+                    win = 'win';
+                  } else if (profit < 0) {
+                    win = 'loose';
+                  } else {
+                    win = 'equal';
+                  }
                 } else if (pos.result) {
                   win = pos.result;
                 }

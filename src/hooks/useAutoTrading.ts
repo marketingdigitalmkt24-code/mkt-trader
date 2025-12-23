@@ -285,6 +285,19 @@ export function useAutoTrading() {
   const placeSingleTrade = useCallback(async (signal: TradingSignal, entryNumber?: number): Promise<TradeResult> => {
     const startTime = Date.now();
     const entryLabel = entryNumber ? ` [Entrada ${entryNumber}]` : '';
+    const assetKey = signal.asset.toUpperCase();
+    
+    // Check AGAIN if asset already has active trade (double-check before placing)
+    if (activeAssetTrades.current.has(assetKey) && !entryNumber) {
+      console.log(`⏸️ [${signal.asset}] Skipped - asset already has active trade (race condition prevented)`);
+      return { signal, success: false, error: 'Ativo já tem operação ativa' };
+    }
+    
+    // Mark asset as having active trade IMMEDIATELY (before API call)
+    if (!entryNumber || entryNumber === 1) {
+      activeAssetTrades.current.add(assetKey);
+      console.log(`🔒 [${signal.asset}] Locked - preventing concurrent trades`);
+    }
     
     try {
       const expiration = getExpirationFromTimeframe(signal.timeframe);
@@ -310,19 +323,35 @@ export function useAutoTrading() {
 
       if (error) {
         console.error(`❌ [${signal.asset}]${entryLabel} Edge Function error:`, error);
+        // Unlock asset on error (only if first entry or single entry)
+        if (!entryNumber || entryNumber === 1) {
+          activeAssetTrades.current.delete(assetKey);
+          console.log(`🔓 [${signal.asset}] Unlocked after error`);
+        }
         return { signal, success: false, error: 'Erro ao conectar com servidor' };
       }
 
       if (data?.success) {
         console.log(`✅ [${signal.asset}]${entryLabel} Trade executed successfully, ID: ${data.tradeId}`);
+        // Keep asset locked - will be unlocked when trade result is received
         return { signal, success: true, tradeId: data.tradeId };
       } else {
         console.error(`❌ [${signal.asset}]${entryLabel} Trade failed:`, data?.error);
+        // Unlock asset on failure (only if first entry or single entry)
+        if (!entryNumber || entryNumber === 1) {
+          activeAssetTrades.current.delete(assetKey);
+          console.log(`🔓 [${signal.asset}] Unlocked after trade failure`);
+        }
         return { signal, success: false, error: data?.error || 'Trade failed' };
       }
     } catch (err) {
       const elapsed = Date.now() - startTime;
       console.error(`❌ [${signal.asset}]${entryLabel} Trade error after ${elapsed}ms:`, err);
+      // Unlock asset on exception (only if first entry or single entry)
+      if (!entryNumber || entryNumber === 1) {
+        activeAssetTrades.current.delete(assetKey);
+        console.log(`🔓 [${signal.asset}] Unlocked after exception`);
+      }
       return { signal, success: false, error: String(err) };
     }
   }, [config.amount, config.useAIAnalysis]);
@@ -401,10 +430,9 @@ export function useAutoTrading() {
     console.log(`🚀 Placing ${uniqueAssetSignals.length} trades usando ${strategyType}...`);
     const startTime = Date.now();
     
-    // Mark all signals and assets as being traded
+    // Mark all signals as being traded (assets will be locked in placeSingleTrade)
     uniqueAssetSignals.forEach(signal => {
       tradingInProgress.current.add(signal.id);
-      activeAssetTrades.current.add(signal.asset.toUpperCase());
     });
     
     try {
@@ -454,18 +482,13 @@ export function useAutoTrading() {
         });
       }
       
-      // Show error toast for failed trades
+      // Show error toast for failed trades (assets already unlocked in placeSingleTrade)
       if (failedTrades.length > 0) {
         const failedAssets = failedTrades.map(r => r.signal.asset).join(', ');
         toast({
           title: `❌ ${failedTrades.length} entrada(s) falhou`,
           description: failedAssets,
           variant: 'destructive',
-        });
-        
-        // Remove failed assets from active trades so they can be retried
-        failedTrades.forEach(r => {
-          activeAssetTrades.current.delete(r.signal.asset.toUpperCase());
         });
         
         if (successfulTrades.length === 0) {

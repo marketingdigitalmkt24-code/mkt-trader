@@ -4,6 +4,7 @@ import { TradingSignal } from '@/types/trading';
 import { useToast } from '@/hooks/use-toast';
 import { useAISignalAnalyzer } from '@/hooks/useAISignalAnalyzer';
 import { getCachedAssets } from '@/hooks/useAvailableAssets';
+import { useAuth } from '@/contexts/AuthContext';
 
 const STORAGE_KEY = 'autotrading_config';
 const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
@@ -33,58 +34,51 @@ interface TradeResult {
   error?: string;
 }
 
+const DEFAULT_CONFIG: AutoTradingConfig = {
+  enabled: false,
+  amount: 10,
+  minConfluence: 95,
+  maxDailyTrades: 3,
+  todayTrades: 0,
+  profitTargetType: 'none',
+  profitTargetValue: 0,
+  useAIAnalysis: true,
+  aiMinConfidence: 90,
+  useScaledEntries: false,
+  scaledEntriesCount: 3,
+  scaledEntriesDelay: 10,
+};
+
 export function useAutoTrading() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const { analyzeSignals, filterByAIRecommendation, isAnalyzing, error: aiError } = useAISignalAnalyzer();
   const processedSignals = useRef<Set<string>>(new Set());
   const lastAIErrorShown = useRef<number>(0);
   const AI_ERROR_COOLDOWN = 60000; // Only show AI error toast once per minute
   const tradingInProgress = useRef<Set<string>>(new Set());
   const activeAssetTrades = useRef<Set<string>>(new Set()); // Track assets with active trades
+  const settingsLoaded = useRef(false);
+  const isSavingToDb = useRef(false);
   
   const [config, setConfig] = useState<AutoTradingConfig>(() => {
+    // Load from localStorage initially for fast startup
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Reset daily trades if it's a new day
         const lastDate = localStorage.getItem('autotrading_last_date');
         const today = new Date().toDateString();
         if (lastDate !== today) {
           localStorage.setItem('autotrading_last_date', today);
           return { ...parsed, todayTrades: 0 };
         }
-        return {
-          ...parsed,
-          // Ensure new fields exist
-          profitTargetType: parsed.profitTargetType || 'none',
-          profitTargetValue: parsed.profitTargetValue || 0,
-          useAIAnalysis: parsed.useAIAnalysis ?? true,
-          aiMinConfidence: parsed.aiMinConfidence || 70,
-          // Scaled entries fields
-          useScaledEntries: parsed.useScaledEntries ?? false,
-          scaledEntriesCount: parsed.scaledEntriesCount || 3,
-          scaledEntriesDelay: parsed.scaledEntriesDelay || 10,
-        };
+        return { ...DEFAULT_CONFIG, ...parsed };
       }
     } catch (e) {
       console.error('Failed to load autotrading config:', e);
     }
-    return {
-      enabled: false,
-      amount: 10,
-      minConfluence: 95,
-      maxDailyTrades: 3,
-      todayTrades: 0,
-      profitTargetType: 'none',
-      profitTargetValue: 0,
-      useAIAnalysis: true,
-      aiMinConfidence: 90,
-      // Scaled entries defaults
-      useScaledEntries: false,
-      scaledEntriesCount: 3,
-      scaledEntriesDelay: 10,
-    };
+    return DEFAULT_CONFIG;
   });
 
   const [isPlacingTrade, setIsPlacingTrade] = useState(false);
@@ -93,7 +87,89 @@ export function useAutoTrading() {
   const lastCheckResultsTime = useRef<number>(0);
   const CHECK_RESULTS_INTERVAL = 30000; // 30 seconds
 
-  // Persist config
+  // Load settings from database when user is available
+  useEffect(() => {
+    if (!user?.id || settingsLoaded.current) return;
+
+    const loadFromDatabase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_trading_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error loading settings from DB:', error);
+          return;
+        }
+
+        if (data) {
+          const dbConfig: AutoTradingConfig = {
+            enabled: data.auto_trading_enabled,
+            amount: Number(data.trade_amount),
+            minConfluence: data.min_confluence,
+            maxDailyTrades: data.max_daily_trades,
+            useAIAnalysis: data.use_ai_analysis,
+            aiMinConfidence: data.ai_min_confidence,
+            profitTargetType: data.profit_target_type as 'none' | 'percentage' | 'value',
+            profitTargetValue: Number(data.profit_target_value),
+            // Keep local values for these
+            todayTrades: config.todayTrades,
+            useScaledEntries: config.useScaledEntries,
+            scaledEntriesCount: config.scaledEntriesCount,
+            scaledEntriesDelay: config.scaledEntriesDelay,
+          };
+          
+          setConfig(prev => ({ ...prev, ...dbConfig }));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(dbConfig));
+          console.log('✅ Settings loaded from database');
+        }
+        
+        settingsLoaded.current = true;
+      } catch (err) {
+        console.error('Failed to load settings from database:', err);
+      }
+    };
+
+    loadFromDatabase();
+  }, [user?.id]);
+
+  // Save settings to database when config changes
+  const saveToDatabase = useCallback(async (newConfig: AutoTradingConfig) => {
+    if (!user?.id || isSavingToDb.current) return;
+
+    isSavingToDb.current = true;
+    try {
+      const dbData = {
+        user_id: user.id,
+        auto_trading_enabled: newConfig.enabled,
+        trade_amount: newConfig.amount,
+        min_confluence: newConfig.minConfluence,
+        max_daily_trades: newConfig.maxDailyTrades,
+        use_ai_analysis: newConfig.useAIAnalysis,
+        ai_min_confidence: newConfig.aiMinConfidence,
+        profit_target_type: newConfig.profitTargetType,
+        profit_target_value: newConfig.profitTargetValue,
+      };
+
+      const { error } = await supabase
+        .from('user_trading_settings')
+        .upsert(dbData, { onConflict: 'user_id' });
+
+      if (error) {
+        console.error('Error saving settings to DB:', error);
+      } else {
+        console.log('✅ Settings saved to database');
+      }
+    } catch (err) {
+      console.error('Failed to save settings to database:', err);
+    } finally {
+      isSavingToDb.current = false;
+    }
+  }, [user?.id]);
+
+  // Persist config to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   }, [config]);
@@ -176,8 +252,15 @@ export function useAutoTrading() {
   }, [refreshActiveAssetTrades]);
 
   const updateConfig = useCallback((updates: Partial<AutoTradingConfig>) => {
-    setConfig(prev => ({ ...prev, ...updates }));
-  }, []);
+    setConfig(prev => {
+      const newConfig = { ...prev, ...updates };
+      // Save to database in background (don't block UI)
+      if (user?.id) {
+        saveToDatabase(newConfig);
+      }
+      return newConfig;
+    });
+  }, [user?.id, saveToDatabase]);
 
   // Map timeframe to expiration in minutes
   const getExpirationFromTimeframe = (timeframe: string): number => {

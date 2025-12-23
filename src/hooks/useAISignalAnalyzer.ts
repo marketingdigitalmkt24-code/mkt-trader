@@ -216,10 +216,21 @@ export function useAISignalAnalyzer() {
     // Check if we're in fallback mode (AI unavailable)
     const isFallbackMode = analysis.analyzedSignals.some(a => a.reason?.includes('Fallback') || a.reason?.includes('fallback'));
     
+    // DEDUPLICAÇÃO RIGOROSA: Apenas 1 sinal por asset
+    const seenAssets = new Set<string>();
+    const uniqueSignals = signals.filter(signal => {
+      const assetKey = signal.asset.toUpperCase();
+      if (seenAssets.has(assetKey)) {
+        return false;
+      }
+      seenAssets.add(assetKey);
+      return true;
+    });
+    
     // LÓGICA PROFIT-FIRST: Poucos sinais, máxima assertividade
-    const eligibleSignals = signals.filter(signal => {
+    const eligibleSignals = uniqueSignals.filter(signal => {
       const aiAnalysis = analysis.analyzedSignals.find(
-        a => a.asset === signal.asset || a.signalId === signal.id
+        a => a.asset.toUpperCase() === signal.asset.toUpperCase() || a.signalId === signal.id
       );
 
       if (!aiAnalysis) return false;
@@ -252,8 +263,8 @@ export function useAISignalAnalyzer() {
     
     // Ordenar por confiança e padrão (GOLDEN primeiro)
     const sorted = eligibleSignals.sort((a, b) => {
-      const aAnalysis = analysis.analyzedSignals.find(an => an.asset === a.asset);
-      const bAnalysis = analysis.analyzedSignals.find(an => an.asset === b.asset);
+      const aAnalysis = analysis.analyzedSignals.find(an => an.asset.toUpperCase() === a.asset.toUpperCase());
+      const bAnalysis = analysis.analyzedSignals.find(an => an.asset.toUpperCase() === b.asset.toUpperCase());
       
       // GOLDEN_SETUP tem prioridade
       const aIsGolden = aAnalysis?.reason?.includes('GOLDEN') ? 1 : 0;
@@ -264,18 +275,29 @@ export function useAISignalAnalyzer() {
       return (bAnalysis?.confidence || 0) - (aAnalysis?.confidence || 0);
     });
     
-    // MÁXIMO 2-3 SINAIS (qualidade > quantidade)
+    // MÁXIMO 2-3 SINAIS DE ATIVOS DIFERENTES (qualidade > quantidade)
     const hasGoldenSetup = sorted.some(s => {
-      const analysis2 = analysis.analyzedSignals.find(a => a.asset === s.asset);
+      const analysis2 = analysis.analyzedSignals.find(a => a.asset.toUpperCase() === s.asset.toUpperCase());
       return analysis2?.reason?.includes('GOLDEN');
     });
     const maxSignals = isFallbackMode ? 1 : (hasGoldenSetup ? 2 : 3);
-    const selected = sorted.slice(0, maxSignals);
     
-    if (selected.length > 0) {
-      console.log(`⭐ ${selected.length} sinal(is) PROFIT-FIRST selecionado(s):`);
-      selected.forEach(s => {
-        const analysis2 = analysis.analyzedSignals.find(a => a.asset === s.asset);
+    // Garantir que não há ativos duplicados na seleção final
+    const finalSelection: TradingSignal[] = [];
+    const finalAssets = new Set<string>();
+    
+    for (const signal of sorted) {
+      const assetKey = signal.asset.toUpperCase();
+      if (!finalAssets.has(assetKey) && finalSelection.length < maxSignals) {
+        finalAssets.add(assetKey);
+        finalSelection.push(signal);
+      }
+    }
+    
+    if (finalSelection.length > 0) {
+      console.log(`⭐ ${finalSelection.length} sinal(is) PROFIT-FIRST selecionado(s) (ativos únicos):`);
+      finalSelection.forEach(s => {
+        const analysis2 = analysis.analyzedSignals.find(a => a.asset.toUpperCase() === s.asset.toUpperCase());
         const pattern = analysis2?.reason?.split(':')[0] || 'ELITE';
         console.log(`   🎯 ${s.asset}: ${analysis2?.confidence}% | ${pattern}`);
       });
@@ -283,7 +305,7 @@ export function useAISignalAnalyzer() {
       console.log('⏳ Aguardando setup elite (>94%)...');
     }
     
-    return selected;
+    return finalSelection;
   }, []);
 
   const getSignalAnalysis = useCallback((

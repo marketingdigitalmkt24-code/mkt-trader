@@ -197,13 +197,13 @@ export function useAutoTrading() {
   // Load active trades from database on mount and periodically refresh
   const refreshActiveAssetTrades = useCallback(async () => {
     try {
-      // Get all pending/tie trades from last 10 minutes (active trades)
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      // Get all pending trades from last 30 minutes (active trades)
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
       const { data: activeOps } = await supabase
         .from('operation_results')
         .select('asset, result')
-        .in('result', ['pending', 'tie'])
-        .gte('created_at', tenMinutesAgo);
+        .eq('result', 'pending')
+        .gte('created_at', thirtyMinutesAgo);
       
       if (activeOps) {
         activeAssetTrades.current.clear();
@@ -214,6 +214,24 @@ export function useAutoTrading() {
       }
     } catch (err) {
       console.error('Failed to refresh active asset trades:', err);
+    }
+  }, []);
+
+  // Check if asset has active trade in database (real-time check)
+  const hasActiveTradeForAsset = useCallback(async (asset: string): Promise<boolean> => {
+    try {
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data, count } = await supabase
+        .from('operation_results')
+        .select('id', { count: 'exact', head: true })
+        .eq('result', 'pending')
+        .ilike('asset', asset)
+        .gte('created_at', thirtyMinutesAgo);
+      
+      return (count ?? 0) > 0;
+    } catch (err) {
+      console.error(`Failed to check active trade for ${asset}:`, err);
+      return true; // Assume there's an active trade on error to be safe
     }
   }, []);
 
@@ -362,11 +380,14 @@ export function useAutoTrading() {
   const placeTradesSimultaneously = useCallback(async (signals: TradingSignal[]): Promise<TradeResult[]> => {
     if (signals.length === 0) return [];
     
-    // Filter out signals for assets that already have active trades
+    // Refresh active asset trades before filtering
+    await refreshActiveAssetTrades();
+    
+    // Filter out signals for assets that already have active trades (from local cache)
     const signalsToTrade = signals.filter(signal => {
       const assetKey = signal.asset.toUpperCase();
       if (activeAssetTrades.current.has(assetKey)) {
-        console.log(`⏸️ [${signal.asset}] Skipped - already has active trade`);
+        console.log(`⏸️ [${signal.asset}] Skipped - already has active trade (cache)`);
         return false;
       }
       return true;
@@ -389,20 +410,37 @@ export function useAutoTrading() {
       }
     }
     
-    console.log(`🎯 Trading ${uniqueAssetSignals.length} unique assets (skipped ${signalsToTrade.length - uniqueAssetSignals.length} duplicates)`);
+    // Double-check with database for each unique asset (real-time verification)
+    const verifiedSignals: TradingSignal[] = [];
+    for (const signal of uniqueAssetSignals) {
+      const hasActive = await hasActiveTradeForAsset(signal.asset);
+      if (hasActive) {
+        console.log(`⏸️ [${signal.asset}] Skipped - confirmed active trade in database`);
+        activeAssetTrades.current.add(signal.asset.toUpperCase());
+      } else {
+        verifiedSignals.push(signal);
+      }
+    }
+    
+    if (verifiedSignals.length === 0) {
+      console.log('⏸️ All signals skipped after database verification');
+      return [];
+    }
+    
+    console.log(`🎯 Trading ${verifiedSignals.length} unique assets (skipped ${signalsToTrade.length - verifiedSignals.length} with active trades)`);
     
     const useScaled = config.useScaledEntries;
-    const expectedTrades = useScaled ? uniqueAssetSignals.length * config.scaledEntriesCount : uniqueAssetSignals.length;
+    const expectedTrades = useScaled ? verifiedSignals.length * config.scaledEntriesCount : verifiedSignals.length;
     
     setIsPlacingTrade(true);
     setActiveTradesCount(expectedTrades);
     
     const strategyType = useScaled ? `entradas escalonadas (${config.scaledEntriesCount}x)` : 'entrada única';
-    console.log(`🚀 Placing ${uniqueAssetSignals.length} trades usando ${strategyType}...`);
+    console.log(`🚀 Placing ${verifiedSignals.length} trades usando ${strategyType}...`);
     const startTime = Date.now();
     
     // Mark all signals and assets as being traded
-    uniqueAssetSignals.forEach(signal => {
+    verifiedSignals.forEach(signal => {
       tradingInProgress.current.add(signal.id);
       activeAssetTrades.current.add(signal.asset.toUpperCase());
     });
@@ -413,13 +451,13 @@ export function useAutoTrading() {
       if (useScaled) {
         // Execute scaled entries sequentially for each asset (but assets in parallel)
         const scaledResultsPerAsset = await Promise.all(
-          uniqueAssetSignals.map(signal => placeScaledEntries(signal))
+          verifiedSignals.map(signal => placeScaledEntries(signal))
         );
         allResults = scaledResultsPerAsset.flat();
       } else {
         // Execute single trade per asset in parallel
         allResults = await Promise.all(
-          uniqueAssetSignals.map(signal => placeSingleTrade(signal))
+          verifiedSignals.map(signal => placeSingleTrade(signal))
         );
       }
       
@@ -477,7 +515,7 @@ export function useAutoTrading() {
       }
       
       // Mark all as processed
-      uniqueAssetSignals.forEach(signal => {
+      verifiedSignals.forEach(signal => {
         processedSignals.current.add(signal.id);
         tradingInProgress.current.delete(signal.id);
       });
@@ -487,7 +525,7 @@ export function useAutoTrading() {
       setIsPlacingTrade(false);
       setActiveTradesCount(0);
     }
-  }, [config.useScaledEntries, config.scaledEntriesCount, placeSingleTrade, placeScaledEntries, toast]);
+  }, [config.useScaledEntries, config.scaledEntriesCount, placeSingleTrade, placeScaledEntries, refreshActiveAssetTrades, hasActiveTradeForAsset, toast]);
 
   // Legacy single trade function (for manual trades)
   const placeTrade = useCallback(async (signal: TradingSignal) => {

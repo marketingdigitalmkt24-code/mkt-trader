@@ -392,14 +392,14 @@ serve(async (req) => {
       .update({ last_connected_at: new Date().toISOString() })
       .eq('email', credentials.email);
 
-    // Get ALL pending operations AND recent tie results (which might have real results now)
-    // Tie results within last 10 minutes should be re-checked as they might be temporary
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-
+    // Get ALL pending operations AND ALL tie results (which should be verified)
+    // TIE results are often temporary placeholders - we should always verify them
     const { data: pendingOperations, error: pendingError } = await supabase
       .from('operation_results')
       .select('id, iq_option_id, signal_id, created_at, result')
-      .or(`result.eq.pending,and(result.eq.tie,created_at.gte.${tenMinutesAgo})`);
+      .or('result.eq.pending,result.eq.tie')
+      .order('created_at', { ascending: false })
+      .limit(200);
 
     if (pendingError) {
       console.error('Error fetching pending operations:', pendingError);

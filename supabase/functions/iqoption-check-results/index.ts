@@ -122,6 +122,7 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
         let balanceId = 0;
         let authenticated = false;
         let resolved = false;
+        let finishTimer: number | null = null;
 
         console.log(`Connecting to IQ Option WebSocket for results: ${wsUrl}`);
         const ws = new WebSocket(wsUrl);
@@ -139,6 +140,7 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
           if (resolved) return;
           resolved = true;
           clearTimeout(timeout);
+          if (finishTimer) clearTimeout(finishTimer);
           ws.close();
           resolve({ positions, authenticated, usedWsUrl: wsUrl });
         };
@@ -184,34 +186,40 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
               if (!balanceId && balances.length > 0) balanceId = balances[0].id;
               console.log('Using balance ID:', balanceId);
 
-               // Request closed history (multiple formats for compatibility)
-               ws.send(JSON.stringify({
-                 name: 'sendMessage',
-                 msg: {
-                   name: 'portfolio.get-history-positions',
-                   version: '2.0',
-                   body: {
-                     user_balance_id: balanceId,
-                     instrument_types: ['binary-option', 'turbo-option', 'digital-option'],
-                     limit: 300,
-                     offset: 0,
-                   },
-                 },
-               }));
+              // Request closed history (multiple pages for better matching)
+              const historyOffsets = [0, 300, 600];
 
-               ws.send(JSON.stringify({
-                 name: 'sendMessage',
-                 msg: {
-                   name: 'get-history-positions',
-                   version: '1.0',
-                   body: {
-                     user_balance_id: balanceId,
-                     instrument_types: ['turbo'],
-                     limit: 300,
-                     offset: 0,
-                   },
-                 },
-               }));
+              for (const offset of historyOffsets) {
+                ws.send(JSON.stringify({
+                  name: 'sendMessage',
+                  msg: {
+                    name: 'portfolio.get-history-positions',
+                    version: '2.0',
+                    body: {
+                      user_balance_id: balanceId,
+                      instrument_types: ['binary-option', 'turbo-option', 'digital-option'],
+                      limit: 300,
+                      offset,
+                    },
+                  },
+                }));
+              }
+
+              for (const offset of historyOffsets) {
+                ws.send(JSON.stringify({
+                  name: 'sendMessage',
+                  msg: {
+                    name: 'get-history-positions',
+                    version: '1.0',
+                    body: {
+                      user_balance_id: balanceId,
+                      instrument_types: ['turbo'],
+                      limit: 300,
+                      offset,
+                    },
+                  },
+                }));
+              }
             }
 
             const isHistoryMessage =
@@ -230,8 +238,31 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
               console.log('Found', positionsList.length, 'positions in response');
 
               for (const pos of positionsList) {
+                const toNum = (v: any) => (typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN);
+
                 let win = 'pending';
-                const profit = pos.close_profit ?? pos.pnl ?? pos.profit ?? pos.win_amount ?? 0;
+                const profitRaw =
+                  pos.close_profit ??
+                  pos.pnl ??
+                  pos.profit ??
+                  pos.close_profit_amount ??
+                  pos.net_profit ??
+                  pos.win_amount ??
+                  0;
+
+                let profit = toNum(profitRaw);
+                if (!Number.isFinite(profit)) profit = 0;
+
+                // If API provides payout (win_amount) but not net profit, compute net = win_amount - investment
+                if (profit === 0 && pos.win_amount != null) {
+                  const investmentRaw = pos.amount ?? pos.invest ?? pos.investment ?? pos.buy_amount ?? pos.open_amount;
+                  const investment = toNum(investmentRaw);
+                  const winAmount = toNum(pos.win_amount);
+                  if (Number.isFinite(investment) && Number.isFinite(winAmount)) {
+                    const net = winAmount - investment;
+                    if (net !== 0) profit = net;
+                  }
+                }
 
                 if (pos.status === 'closed' || pos.close_time || pos.close_at) {
                   if (typeof pos.win === 'string') win = pos.win; // 'win', 'loose', 'equal'
@@ -261,8 +292,9 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
 
               console.log('Processed', positions.length, 'closed positions total');
 
-              // small delay to allow any trailing messages, then finish
-              setTimeout(finish, 800);
+              // Debounce finish to allow multiple pages/messages to arrive
+              if (finishTimer) clearTimeout(finishTimer);
+              finishTimer = setTimeout(finish, 1200);
             }
 
             if (data.name === 'option-closed' || data.name === 'binary-options.option-closed') {
@@ -332,6 +364,13 @@ serve(async (req) => {
   }
 
   try {
+    const body = await req.json().catch(() => ({}));
+    const debugIqOptionIds: string[] = Array.isArray((body as any)?.debugIqOptionIds)
+      ? (body as any).debugIqOptionIds.map((v: any) => String(v))
+      : (body as any)?.debugIqOptionId
+        ? [String((body as any).debugIqOptionId)]
+        : [];
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -415,6 +454,21 @@ serve(async (req) => {
       `Found ${closedPositions.length} closed positions from IQ Option history (ws=${wsResult.usedWsUrl || 'n/a'})`
     );
 
+    const debugMatches = debugIqOptionIds.length
+      ? debugIqOptionIds.map((id) => {
+          const match = closedPositions.find((p) => p.matchIds.includes(id));
+          return match
+            ? {
+                iq_option_id: id,
+                win: match.win,
+                profit: match.profit,
+                close_quote: match.close_quote ?? null,
+                raw: match.rawJson,
+              }
+            : { iq_option_id: id, notFound: true };
+        })
+      : [];
+
     // Update pending operations with REAL results from IQ Option history
     let updatedCount = 0;
     if (pendingOperations && pendingOperations.length > 0 && closedPositions.length > 0) {
@@ -456,16 +510,18 @@ serve(async (req) => {
 
     console.log(`Updated ${updatedCount} operation results from IQ Option history`);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        pendingChecked: pendingOperations?.length || 0,
-        stillPending: (pendingOperations?.length || 0) - updatedCount,
-        closedPositions: closedPositions.length,
-        updatedResults: updatedCount,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    const responsePayload = {
+      success: true,
+      pendingChecked: pendingOperations?.length || 0,
+      stillPending: (pendingOperations?.length || 0) - updatedCount,
+      closedPositions: closedPositions.length,
+      updatedResults: updatedCount,
+      ...(debugMatches.length ? { debugMatches } : {}),
+    };
+
+    return new Response(JSON.stringify(responsePayload), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

@@ -8,6 +8,7 @@ interface UserTradingSettings {
   tradeAmount: number;
   minConfluence: number;
   maxDailyTrades: number;
+  dailyLimitEnabled: boolean;
   useAIAnalysis: boolean;
   aiMinConfidence: number;
   profitTargetType: 'none' | 'percentage' | 'value';
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS: UserTradingSettings = {
   tradeAmount: 10,
   minConfluence: 95,
   maxDailyTrades: 3,
+  dailyLimitEnabled: true,
   useAIAnalysis: true,
   aiMinConfidence: 90,
   profitTargetType: 'none',
@@ -62,6 +64,7 @@ export function useUserSettings() {
           tradeAmount: Number(data.trade_amount),
           minConfluence: data.min_confluence,
           maxDailyTrades: data.max_daily_trades,
+          dailyLimitEnabled: data.daily_limit_enabled ?? true,
           useAIAnalysis: data.use_ai_analysis,
           aiMinConfidence: data.ai_min_confidence,
           profitTargetType: data.profit_target_type as 'none' | 'percentage' | 'value',
@@ -99,6 +102,7 @@ export function useUserSettings() {
         trade_amount: mergedSettings.tradeAmount,
         min_confluence: mergedSettings.minConfluence,
         max_daily_trades: mergedSettings.maxDailyTrades,
+        daily_limit_enabled: mergedSettings.dailyLimitEnabled,
         use_ai_analysis: mergedSettings.useAIAnalysis,
         ai_min_confidence: mergedSettings.aiMinConfidence,
         profit_target_type: mergedSettings.profitTargetType,

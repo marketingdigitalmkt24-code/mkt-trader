@@ -208,6 +208,7 @@ export type Database = {
           ai_min_confidence: number
           auto_trading_enabled: boolean
           created_at: string
+          daily_limit_enabled: boolean
           id: string
           max_consecutive_losses: number
           max_daily_trades: number
@@ -224,6 +225,7 @@ export type Database = {
           ai_min_confidence?: number
           auto_trading_enabled?: boolean
           created_at?: string
+          daily_limit_enabled?: boolean
           id?: string
           max_consecutive_losses?: number
           max_daily_trades?: number
@@ -240,6 +242,7 @@ export type Database = {
           ai_min_confidence?: number
           auto_trading_enabled?: boolean
           created_at?: string
+          daily_limit_enabled?: boolean
           id?: string
           max_consecutive_losses?: number
           max_daily_trades?: number

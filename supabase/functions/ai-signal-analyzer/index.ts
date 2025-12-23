@@ -60,8 +60,12 @@ serve(async (req) => {
       );
     }
 
-    // ULTRA CONSERVATIVE PRE-FILTER: Only analyze signals with EXTREME conditions
-    // This reduces losses by only considering the best setups
+    // ============= ESTRATÉGIA DE REVERSÃO LUCRATIVA =============
+    // Baseada em padrões estatisticamente comprovados para opções binárias:
+    // 1. Reversão em extremos de RSI com confirmação Stochastic
+    // 2. Toques em Bollinger Bands com divergência
+    // 3. Confluência múltipla de indicadores
+    
     const topSignals = signals
       .filter(s => {
         const rsi = s.indicators.rsi.value;
@@ -69,33 +73,64 @@ serve(async (req) => {
         const vol = s.indicators.atr.volatility;
         const stochK = s.indicators.stochastic?.k || 50;
         const stochD = s.indicators.stochastic?.d || 50;
+        const bollPos = s.indicators.bollinger?.position || '';
+        const macdHist = s.indicators.macd?.histogram || 0;
+        const price = s.price;
+        const bollLower = s.indicators.bollinger?.lower || 0;
+        const bollUpper = s.indicators.bollinger?.upper || 0;
         
-        // STRICT CRITERIA: RSI extreme + high confluence + low volatility
-        const isRSIExtreme = rsi <= 20 || rsi >= 80; // More extreme RSI
-        const isHighConfluence = conf >= 85; // Higher confluence threshold
+        // PADRÃO 1: OVERSOLD REVERSAL (CALL)
+        // RSI muito baixo + Stoch cruzando para cima + preço tocando Bollinger inferior
+        const isOversoldReversal = 
+          rsi <= 25 && 
+          stochK <= 30 && 
+          stochK > stochD && // Stoch cruzando para cima
+          (bollPos === 'lower' || price <= bollLower * 1.002);
+        
+        // PADRÃO 2: OVERBOUGHT REVERSAL (PUT)
+        // RSI muito alto + Stoch cruzando para baixo + preço tocando Bollinger superior
+        const isOverboughtReversal = 
+          rsi >= 75 && 
+          stochK >= 70 && 
+          stochK < stochD && // Stoch cruzando para baixo
+          (bollPos === 'upper' || price >= bollUpper * 0.998);
+        
+        // PADRÃO 3: DIVERGÊNCIA MACD
+        // MACD histogram mudando direção em extremo RSI
+        const hasMACDDivergence = 
+          (rsi <= 30 && macdHist > 0) || // RSI baixo mas MACD positivo = reversão CALL
+          (rsi >= 70 && macdHist < 0);   // RSI alto mas MACD negativo = reversão PUT
+        
+        // CRITÉRIOS DE QUALIDADE
+        const isHighConfluence = conf >= 80;
         const isLowVolatility = vol === 'low' || vol === 'normal';
-        const isStochConfirm = (rsi <= 20 && stochK <= 25) || (rsi >= 80 && stochK >= 75);
+        const isExtremeRSI = rsi <= 20 || rsi >= 80;
         
-        // Must meet at least 3 criteria
-        const criteriaCount = [isRSIExtreme, isHighConfluence, isLowVolatility, isStochConfirm]
-          .filter(Boolean).length;
+        // Pelo menos 1 padrão de reversão + confluência alta + volatilidade ok
+        const hasReversalPattern = isOversoldReversal || isOverboughtReversal || hasMACDDivergence;
         
-        return criteriaCount >= 3;
+        return (hasReversalPattern && isHighConfluence && isLowVolatility) ||
+               (isExtremeRSI && conf >= 88 && isLowVolatility);
       })
-      .sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore)
-      .slice(0, 3); // Max 3 signals for quality over quantity
+      .sort((a, b) => {
+        // Priorizar RSI mais extremos
+        const rsiScoreA = Math.abs(50 - a.indicators.rsi.value);
+        const rsiScoreB = Math.abs(50 - b.indicators.rsi.value);
+        return (rsiScoreB + b.indicators.confluenceScore) - (rsiScoreA + a.indicators.confluenceScore);
+      })
+      .slice(0, 3);
 
     if (topSignals.length === 0) {
-      console.log('No signals meeting ULTRA CONSERVATIVE criteria, waiting for better opportunity...');
+      console.log('⏳ Aguardando padrão de REVERSÃO lucrativo...');
       return new Response(
         JSON.stringify({ 
           success: true, 
-          analyzedSignals: signals.map(s => ({
+          analyzedSignals: signals.slice(0, 5).map(s => ({
             signalId: `${s.asset}-${Date.now()}`,
             asset: s.asset,
             recommendation: 'SKIP',
             confidence: s.indicators.confluenceScore,
-            reason: 'Não atende critérios ultra-conservadores (RSI extremo + conf 85%+ + vol baixa)',
+            reason: 'Sem padrão de reversão confirmado',
             adjustedConfluence: s.indicators.confluenceScore,
             riskLevel: 'HIGH'
           })),
@@ -106,42 +141,44 @@ serve(async (req) => {
       );
     }
 
-    console.log(`🎯 Found ${topSignals.length} ULTRA QUALITY signals (from ${signals.length} total)...`);
+    console.log(`🎯 REVERSÃO DETECTADA! ${topSignals.length} sinais de alta probabilidade`);
 
-    // Build context with historical data - avoid assets with low win rate
+    // Evitar ativos com histórico ruim
     const badAssets = historicalResults?.filter(h => h.winRate < 55).map(h => h.asset) || [];
-    const historyContext = historicalResults && historicalResults.length > 0
-      ? `\nEvitar: ${badAssets.join(', ')}` : '';
 
-    // ULTRA CONSERVATIVE PROMPT - Focus on profit only
-    const systemPrompt = `Analista ULTRA-CONSERVADOR de opções binárias. Você DEVE evitar perdas a todo custo.
+    // PROMPT FOCADO EM REVERSÕES
+    const systemPrompt = `Analista especialista em REVERSÕES de opções binárias. Você analisa padrões de reversão.
 
-REGRAS OBRIGATÓRIAS para EXECUTE:
-1. RSI EXTREMO: <=20 (oversold) OU >=80 (overbought) - SEM EXCEÇÃO
-2. Confluência: >=88% - Mínimo absoluto
-3. Volatilidade: BAIXA ou NORMAL apenas
-4. Stochastic confirmando: K<=25 para oversold OU K>=75 para overbought
-5. MACD alinhado com direção do trade
+ESTRATÉGIA DE REVERSÃO LUCRATIVA:
+1. OVERSOLD REVERSAL (CALL): RSI≤25 + Stoch<30 cruzando para cima + preço na Bollinger inferior
+2. OVERBOUGHT REVERSAL (PUT): RSI≥75 + Stoch>70 cruzando para baixo + preço na Bollinger superior  
+3. DIVERGÊNCIA: RSI extremo com MACD em direção oposta
 
-SE QUALQUER critério falhar = SKIP imediatamente.
-Máximo 1 EXECUTE por análise. Prefira NENHUM trade a um trade ruim.
+EXECUTE apenas se:
+- RSI EXTREMO: ≤20 (oversold para CALL) ou ≥80 (overbought para PUT)
+- Stochastic confirmando direção
+- Confluência ≥85%
+- Volatilidade baixa/normal
+- MACD alinhado ou divergência confirmada
 
-Responda APENAS JSON:
-{"analyzedSignals":[{"signalId":"asset","asset":"nome","recommendation":"EXECUTE|SKIP","confidence":0-100,"reason":"motivo curto","adjustedConfluence":num,"riskLevel":"LOW|HIGH"}],"marketSentiment":"NEUTRAL","bestSignal":"asset ou null"}`;
+SKIP se qualquer critério falhar. Máximo 1 EXECUTE.
 
-    const userPrompt = `Análise ULTRA-CONSERVADORA:
+JSON: {"analyzedSignals":[{"signalId":"asset","asset":"nome","recommendation":"EXECUTE|SKIP","confidence":0-100,"reason":"padrão","adjustedConfluence":num,"riskLevel":"LOW|HIGH"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset ou null"}`;
+
+    const userPrompt = `Sinais de REVERSÃO detectados:
 ${topSignals.map(s => {
   const rsi = s.indicators.rsi.value.toFixed(0);
-  const conf = s.indicators.confluenceScore;
-  const vol = s.indicators.atr.volatility;
   const stochK = s.indicators.stochastic?.k?.toFixed(0) || '50';
-  const macd = s.indicators.macd?.trend || 'neutral';
-  return `${s.asset} ${s.type} | RSI:${rsi} Stoch:${stochK} Conf:${conf}% Vol:${vol} MACD:${macd}`;
+  const stochD = s.indicators.stochastic?.d?.toFixed(0) || '50';
+  const macdH = s.indicators.macd?.histogram?.toFixed(4) || '0';
+  const boll = s.indicators.bollinger?.position || 'middle';
+  const vol = s.indicators.atr.volatility;
+  const conf = s.indicators.confluenceScore;
+  return `${s.asset} ${s.type} | RSI:${rsi} StochK:${stochK} StochD:${stochD} MACD-H:${macdH} Boll:${boll} Vol:${vol} Conf:${conf}%`;
 }).join('\n')}
-${historyContext}
+${badAssets.length > 0 ? `\nEVITAR (histórico ruim): ${badAssets.join(', ')}` : ''}
 
-LEMBRE: Só EXECUTE se TODOS os 5 critérios forem atendidos. Na dúvida, SKIP.
-JSON apenas:`;
+Analise os padrões de REVERSÃO. Só EXECUTE se for reversão clara. JSON:`;
 
     // Use Groq API - llama-3.1-8b-instant is fast and within free tier limits
     const makeRequest = async (retryCount = 0): Promise<Response> => {

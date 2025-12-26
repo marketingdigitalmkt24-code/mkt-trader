@@ -340,11 +340,19 @@ async function placeTradeAndWaitResult(
           console.log(`📈 Ativos regulares (-OP): ${opAssets.length > 0 ? opAssets.slice(0, 10).join(', ') : 'NENHUM'}`);
           console.log(`🔵 Ativos OTC: ${otcAssets.length > 0 ? otcAssets.slice(0, 10).join(', ') : 'NENHUM'}`);
           
-          // Now place the trade
-          placeTradeWithAssets();
+          // Verificar disponibilidade de mercados Blitz/Binary via IQ Option API
+          // opAssets contém os ativos regulares (Blitz/Binary) disponíveis
+          const hasBlitzBinaryOpen = opAssets.length > 0;
+          
+          console.log(`🎯 VERIFICAÇÃO DE MERCADO VIA API IQ OPTION:`);
+          console.log(`   📊 Blitz/Binary: ${hasBlitzBinaryOpen ? 'ABERTO' : 'FECHADO'} (${opAssets.length} ativos)`);
+          console.log(`   📊 OTC: ${otcAssets.length} ativos disponíveis`);
+          
+          // Now place the trade with market availability info
+          placeTradeWithAssets(hasBlitzBinaryOpen, opAssets.length, otcAssets.length);
         }
         
-        function placeTradeWithAssets() {
+        function placeTradeWithAssets(hasBlitzBinaryOpen: boolean, blitzBinaryCount: number, otcCount: number) {
           // Detectar se o ativo solicitado é OTC
           const isOTCAsset = trade.asset.toUpperCase().includes('OTC');
           
@@ -361,12 +369,26 @@ async function placeTradeAndWaitResult(
             : cleanAsset;
           
           console.log(`🔍 Buscando ativo: ${trade.asset} (base: ${cleanAsset}, slash: ${withSlash}, OTC: ${isOTCAsset})`);
+          console.log(`📈 Status mercados: Blitz/Binary=${hasBlitzBinaryOpen ? 'ABERTO' : 'FECHADO'} (${blitzBinaryCount}), OTC=${otcCount} ativos`);
+          
+          // REGRA PRINCIPAL: Se mercado Blitz/Binary está ABERTO, BLOQUEAR operações OTC
+          if (hasBlitzBinaryOpen && isOTCAsset) {
+            console.log(`🚫 BLOQUEANDO OTC - Mercado Blitz/Binary está ABERTO com ${blitzBinaryCount} ativos`);
+            console.log(`   ℹ️ OTC só é permitido quando Blitz/Binary estiver FECHADO`);
+            clearTimeout(timeout);
+            ws.close();
+            resolve({ 
+              success: false, 
+              error: `OTC bloqueado - Mercados Blitz/Binary estão abertos (${blitzBinaryCount} ativos disponíveis)` 
+            });
+            return;
+          }
           
           // Criar lista de variações para buscar - priorizar o tipo solicitado
           let searchVariations: string[] = [];
           
           if (isOTCAsset) {
-            // Variações para OTC
+            // Variações para OTC (só chega aqui se Blitz/Binary está fechado)
             searchVariations = [
               trade.asset.toUpperCase(),
               `${cleanAsset}-OTC`,
@@ -402,29 +424,27 @@ async function placeTradeAndWaitResult(
             }
           }
           
-          // Se não encontrou E não era OTC, verificar se é fim de semana para decidir sobre OTC
+          // Se não encontrou E não era OTC, verificar disponibilidade de mercados via API
           if (!assetId && !isOTCAsset) {
-            // Calcular hora de Brasília (UTC-3)
-            const now = new Date();
-            const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-            const brazilTime = new Date(utcTime - (3 * 60 * 60 * 1000)); // UTC-3
-            
-            const dayOfWeek = brazilTime.getDay(); // 0 = domingo, 6 = sábado
-            const hour = brazilTime.getHours();
-            const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-            
-            console.log(`🇧🇷 Horário Brasília: ${dayNames[dayOfWeek]} ${hour}:${brazilTime.getMinutes().toString().padStart(2, '0')}`);
-            
-            // Mercado forex fecha sexta ~18:00 BRT e abre domingo ~18:00 BRT
-            // Simplificando: sábado inteiro e domingo até ~18h = fim de semana
-            const isWeekend = dayOfWeek === 6 || // Sábado
-                             (dayOfWeek === 0 && hour < 18) || // Domingo antes das 18h
-                             (dayOfWeek === 5 && hour >= 18); // Sexta após 18h
-            
-            if (isWeekend) {
-              console.log(`📅 FIM DE SEMANA detectado - OTC permitido como fallback`);
+            // NOVA LÓGICA: Usar dados da API IQ Option ao invés de verificar horário
+            if (hasBlitzBinaryOpen) {
+              // Mercado Blitz/Binary está ABERTO mas o ativo específico não está disponível
+              console.log(`🚫 Ativo ${cleanAsset} não encontrado`);
+              console.log(`   📊 Mercado Blitz/Binary está ABERTO (${blitzBinaryCount} ativos)`);
+              console.log(`   🚫 OTC BLOQUEADO - só operar Blitz/Binary quando disponível`);
+              console.log(`📋 Ativos regulares abertos: ${Object.keys(activeAssets).filter(k => !k.includes('OTC') && k.length <= 10).slice(0, 25).join(', ')}`);
               
-              // Tentar OTC apenas no fim de semana
+              clearTimeout(timeout);
+              ws.close();
+              resolve({ 
+                success: false, 
+                error: `Ativo ${trade.asset} não disponível (OTC bloqueado - Blitz/Binary aberto)` 
+              });
+              return;
+            } else {
+              // Mercado Blitz/Binary está FECHADO - permitir OTC como fallback
+              console.log(`📅 Mercado Blitz/Binary FECHADO (API IQ Option) - OTC permitido como fallback`);
+              
               const otcFallbackVariations = [
                 `${cleanAsset}-OTC`,
                 `${cleanAsset} OTC`,
@@ -442,19 +462,6 @@ async function placeTradeAndWaitResult(
                   break;
                 }
               }
-            } else {
-              // DIA DE SEMANA - NÃO usar OTC, falhar a operação
-              console.log(`🚫 DIA DE SEMANA - OTC NÃO permitido`);
-              console.log(`❌ Ativo ${cleanAsset} não está disponível na IQ Option neste momento`);
-              console.log(`📋 Ativos regulares abertos: ${Object.keys(activeAssets).filter(k => !k.includes('OTC') && k.length <= 10).slice(0, 25).join(', ')}`);
-              
-              clearTimeout(timeout);
-              ws.close();
-              resolve({ 
-                success: false, 
-                error: `Ativo ${trade.asset} não disponível (OTC bloqueado em dia de semana)` 
-              });
-              return;
             }
           }
           

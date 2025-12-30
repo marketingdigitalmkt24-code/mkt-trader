@@ -35,18 +35,29 @@ interface AnalysisRequest {
   }[];
 }
 
-// ============= ESTRATÉGIA PROFIT MASTER =============
-// Baseada em análise de dados históricos reais:
-// - Ativos com melhor performance: EUR/JPY, USD/JPY, GBP/USD, EUR/USD
-// - Padrões vencedores: RSI extremo + Stochastic extremo + MACD confirmando
-// - Win rate alvo: >80% (qualidade máxima)
-// - Filosofia: APENAS trades com padrões comprovadamente lucrativos
+// ============= ESTRATÉGIA DATA-DRIVEN PROFIT =============
+// Baseada em análise de dados reais dos últimos 7 dias:
+// - TOP 3 ativos: GBP/JPY (67.9%), ETH/USD (62.5%), AUD/CAD (59.1%)
+// - Win rate alvo: >70% (foco em qualidade)
+// - Filosofia: APENAS operar ativos com histórico COMPROVADO de lucro
 
-// Ativos preferidos baseados em histórico real (win rate >55%)
-const PREFERRED_ASSETS = ['EUR/JPY', 'USD/JPY', 'GBP/USD', 'EUR/USD', 'AUD/CAD', 'AUD/USD'];
+// ============= ATIVOS BASEADOS EM DADOS REAIS (últimos 7 dias) =============
+// Ativos LUCRATIVOS (win rate >60%):
+// - GBP/JPY: 67.9% | +$731 | 28 trades
+// - ETH/USD: 62.5% | +$260 | 16 trades
+// - AUD/CAD: 59.1% | +$533 | 44 trades (próximo do limite)
 
-// Ativos a evitar (performance ruim no histórico)
-const AVOID_ASSETS = ['BTC/USD', 'EUR/GBP', 'GBP/JPY'];
+const PREFERRED_ASSETS = ['GBP/JPY', 'ETH/USD', 'AUD/CAD'];
+
+// Ativos a EVITAR (win rate <55% ou prejuízo):
+// - AUD/USD: 43.9% | -$858
+// - EUR/USD: 47.6% | -$1205
+// - GBP/USD: 50.4% | -$515
+// - BTC/USD: 33.3% | -$228
+// - EUR/GBP: 29.4% | -$672
+// - EUR/USD-OTC: 27.3% | -$544
+
+const AVOID_ASSETS = ['AUD/USD', 'EUR/USD', 'GBP/USD', 'BTC/USD', 'EUR/GBP', 'EUR/JPY', 'USD/CAD', 'USD/JPY', 'GBP/JPY', 'EUR/USD-OTC', 'EUR/GBP-OTC'];
 
 type PatternType = 
   | 'EXTREME_OVERSOLD' 

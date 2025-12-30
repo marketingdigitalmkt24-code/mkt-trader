@@ -35,10 +35,10 @@ interface AnalysisRequest {
   }[];
 }
 
-// ============= ESTRATÉGIA ZERO PERDA: LUCRO GARANTIDO =============
-// MODO MÁXIMA PRECISÃO: Busca diversos trades mas TODOS devem lucrar
-// Meta: Perda quase ZERO - analisar muitos, executar apenas os perfeitos
-// Filosofia: Quantidade de análises + Qualidade absoluta na execução
+// ============= ESTRATÉGIA LUCRO CONSISTENTE =============
+// MODO: Gerar MÚLTIPLOS trades com alta probabilidade de lucro
+// Meta: MAIORIA DOS TRADES = LUCRO (>75% win rate)
+// Filosofia: Mais trades de qualidade = mais lucro total
 
 type PatternType = 
   | 'EXTREME_OVERSOLD' 
@@ -308,11 +308,11 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
       }
     }
     
-    // APROVAR se tiver padrão + critérios suficientes + score alto + risco baixo
-    const minScore = 98; // Score mínimo para execução
-    const maxRisk = 40; // Risco máximo tolerável
+    // APROVAR se tiver padrão + critérios suficientes + score alto + risco aceitável
+    const minScore = 85; // Score mínimo para execução (relaxado para mais trades)
+    const maxRisk = 60; // Risco máximo tolerável (mais flexível)
     
-    if (pattern && criteriaCount >= 5 && score >= minScore && riskScore <= maxRisk) {
+    if (pattern && criteriaCount >= 3 && score >= minScore && riskScore <= maxRisk) {
       matches.push({
         signal: s,
         pattern,
@@ -325,7 +325,7 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
       });
       console.log(`✅ ${s.asset} (${pattern}): Score ${score.toFixed(1)}% | Risco ${riskScore}% | Critérios ${criteriaCount}`);
     } else if (pattern) {
-      console.log(`⚠️ ${s.asset} (${pattern}): Score ${score.toFixed(1)}% < ${minScore}% ou Risco ${riskScore}% > ${maxRisk}%`);
+      console.log(`⚠️ ${s.asset} (${pattern}): Score ${score.toFixed(1)}% | Risco ${riskScore}% | Critérios ${criteriaCount} - Não aprovado`);
     }
   }
   
@@ -358,28 +358,25 @@ function selectBestSignals(matches: PatternMatch[]): PatternMatch[] {
   const selected: PatternMatch[] = [];
   const usedAssets = new Set<string>();
   
-  // PERMITIR MÚLTIPLOS SINAIS DESDE QUE TODOS SEJAM PERFEITOS
-  // Ultra Safe/Diamond = até 3 sinais, Golden = até 2, outros = 1
-  const hasUltraSafe = sorted.some(s => s.pattern === 'ULTRA_SAFE');
-  const hasDiamond = sorted.some(s => s.pattern === 'DIAMOND_SETUP');
-  const hasGolden = sorted.some(s => s.pattern === 'GOLDEN_SETUP');
-  const maxSignals = hasUltraSafe ? 3 : (hasDiamond ? 3 : (hasGolden ? 2 : 1));
+  // PERMITIR MÚLTIPLOS SINAIS - foco em QUANTIDADE com QUALIDADE
+  // Até 5 sinais simultâneos para maximizar lucro
+  const maxSignals = 5;
   
   for (const match of sorted) {
     if (selected.length >= maxSignals) break;
     if (usedAssets.has(match.signal.asset)) continue;
-    // Score mínimo de 98%
-    if (match.score < 98) continue;
-    // Risco máximo de 40%
-    if (match.riskScore > 40) continue;
-    // Mínimo 5 critérios
-    if (match.criteria < 5) continue;
+    // Score mínimo de 85%
+    if (match.score < 85) continue;
+    // Risco máximo de 60%
+    if (match.riskScore > 60) continue;
+    // Mínimo 3 critérios
+    if (match.criteria < 3) continue;
     
     selected.push(match);
     usedAssets.add(match.signal.asset);
   }
   
-  console.log(`📊 Selecionados ${selected.length} de ${matches.length} sinais elite`);
+  console.log(`📊 Selecionados ${selected.length} de ${matches.length} sinais para execução`);
   
   return selected;
 }
@@ -427,16 +424,16 @@ serve(async (req) => {
     const selectedSignals = selectBestSignals(elitePatterns);
 
     if (selectedSignals.length === 0) {
-      console.log('⏳ Aguardando setup PERFEITO (>99% probabilidade)... Preferindo NÃO operar a perder!');
+      console.log('⏳ Buscando setups de alta probabilidade...');
       return new Response(
         JSON.stringify({ 
           success: true, 
-          analyzedSignals: signals.slice(0, 3).map(s => ({
+          analyzedSignals: signals.slice(0, 5).map(s => ({
             signalId: `${s.asset}-${Date.now()}`,
             asset: s.asset,
             recommendation: 'SKIP',
             confidence: s.indicators.confluenceScore,
-            reason: 'Aguardando setup perfeito (>99%) - Meta: 100% lucro',
+            reason: 'Aguardando setup de alta probabilidade (>85%)',
             adjustedConfluence: s.indicators.confluenceScore,
             riskLevel: 'HIGH'
           })),
@@ -452,36 +449,36 @@ serve(async (req) => {
       console.log(`   ⭐ ${d.signal.asset} (${d.pattern}): ${d.score}% | ${d.criteria} critérios | Tech: ${d.technicalScore}`);
     });
 
-    // PROMPT FOCADO EM LUCRO E ZERO PERDAS
-    const systemPrompt = `Você é um analista de opções binárias focado em LUCRO GARANTIDO e ZERO PERDAS.
+    // PROMPT FOCADO EM GERAR MÚLTIPLOS TRADES LUCRATIVOS
+    const systemPrompt = `Você é um analista de opções binárias focado em gerar MÚLTIPLOS trades lucrativos.
 
-🎯 OBJETIVO: Analisar MÚLTIPLOS trades e aprovar TODOS que têm >98% de probabilidade de lucro.
-💰 META: LUCRO CONSISTENTE - Buscar oportunidades mas NUNCA arriscar
-🛡️ FILOSOFIA: Quantidade de análises + Qualidade absoluta = Lucro garantido
+🎯 OBJETIVO: Aprovar MÚLTIPLOS trades com >85% de probabilidade de lucro
+💰 META: MAIORIA DOS TRADES = LUCRO (>75% win rate)
+🚀 FILOSOFIA: Mais trades de qualidade = mais lucro total
 
-HIERARQUIA DE PADRÕES (prioridade de aprovação):
-1. 🛡️ ULTRA_SAFE (100%): Todos os 11 critérios + histórico bom - LUCRO GARANTIDO
-2. 🔷 DIAMOND_SETUP (100%): 9 critérios perfeitos - impossível falhar
-3. ⭐ GOLDEN_SETUP (99%): 8 critérios + confirmação total
-4. EXTREME_OVERSOLD/OVERBOUGHT (98%+): RSI extremo + 6+ confirmações
-5. PERFECT_REVERSAL (98%+): Padrão + RSI + confirmações
-6. TRIPLE_CONFLUENCE (98%+): Alta confluência + múltiplos indicadores
+HIERARQUIA DE PADRÕES (todos são bons para trading):
+1. 🛡️ ULTRA_SAFE (100%): Perfeito - aprovar SEMPRE
+2. 🔷 DIAMOND_SETUP (100%): Excelente - aprovar SEMPRE
+3. ⭐ GOLDEN_SETUP (99%): Muito bom - aprovar
+4. EXTREME_OVERSOLD/OVERBOUGHT (95%+): Bom - aprovar
+5. PERFECT_REVERSAL (93%+): Bom - aprovar
+6. TRIPLE_CONFLUENCE (90%+): Aceitável - aprovar
 
-CRITÉRIOS PARA APROVAÇÃO (TODOS obrigatórios):
-✅ Score >= 98%
-✅ Risco <= 40%
-✅ Mínimo 5 critérios confirmados
-✅ Volatilidade BAIXA ou MÉDIA-BAIXA
-✅ Sem histórico ruim no ativo
+CRITÉRIOS PARA APROVAÇÃO:
+✅ Score >= 85%
+✅ Risco <= 60%
+✅ Mínimo 3 critérios confirmados
+✅ Volatilidade não extrema
+✅ Sem histórico muito ruim no ativo
 
-REGRAS DE OURO:
-- APROVAR múltiplos sinais se TODOS forem perfeitos
-- ULTRA_SAFE/DIAMOND = máxima prioridade (lucro quase certo)
-- REJEITAR qualquer sinal com risco elevado
-- MELHOR perder oportunidade do que perder dinheiro
+REGRAS:
+- APROVAR MÚLTIPLOS sinais - quanto mais trades bons, melhor!
+- Até 5 sinais simultâneos permitidos
+- Priorizar padrões superiores mas aceitar todos acima de 85%
+- Foco em QUANTIDADE + QUALIDADE = LUCRO MÁXIMO
 
 Responda APENAS JSON válido:
-{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":98-100,"reason":"","adjustedConfluence":98+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
+{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":85-100,"reason":"","adjustedConfluence":85+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
 
     const userPrompt = `SINAIS PRÉ-FILTRADOS PARA ANÁLISE ZERO PERDA:
 
@@ -535,10 +532,10 @@ Quanto mais sinais perfeitos, MELHOR - desde que TODOS sejam seguros!`;
       const errorText = await response.text();
       console.error('Groq AI error:', response.status, errorText);
       
-      // Fallback: usar análise pré-computada (com critérios de risco)
+      // Fallback: usar análise pré-computada (com critérios relaxados)
       console.log('⚠️ Usando análise pré-computada (fallback)');
       const fallbackSignals = selectedSignals
-        .filter(d => d.score >= 98 && d.riskScore <= 40 && d.criteria >= 5)
+        .filter(d => d.score >= 85 && d.riskScore <= 60 && d.criteria >= 3)
         .map(d => ({
           signalId: `${d.signal.asset}-${Date.now()}`,
           asset: d.signal.asset,
@@ -546,7 +543,7 @@ Quanto mais sinais perfeitos, MELHOR - desde que TODOS sejam seguros!`;
           confidence: d.score,
           reason: `${d.pattern}: ${d.reason}`,
           adjustedConfluence: d.score,
-          riskLevel: d.riskScore <= 25 ? 'LOW' : 'MEDIUM'
+          riskLevel: d.riskScore <= 40 ? 'LOW' : 'MEDIUM'
         }));
       
       return new Response(
@@ -609,11 +606,11 @@ Quanto mais sinais perfeitos, MELHOR - desde que TODOS sejam seguros!`;
         analyzedSignals: selectedSignals.map(d => ({
           signalId: d.signal.asset,
           asset: d.signal.asset,
-          recommendation: d.score >= 94 && d.criteria >= 4 ? 'EXECUTE' : 'SKIP',
+          recommendation: d.score >= 85 && d.criteria >= 3 ? 'EXECUTE' : 'SKIP',
           confidence: d.score,
           reason: `${d.pattern}: ${d.reason}`,
           adjustedConfluence: d.score,
-          riskLevel: d.signal.indicators.atr.volatility === 'low' ? 'LOW' : 'MEDIUM'
+          riskLevel: d.riskScore <= 40 ? 'LOW' : 'MEDIUM'
         })),
         marketSentiment: 'NEUTRAL',
         bestSignal: selectedSignals[0]?.signal.asset || null

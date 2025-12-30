@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,29 +36,114 @@ interface AnalysisRequest {
   }[];
 }
 
-// ============= ESTRATÉGIA DATA-DRIVEN PROFIT =============
-// Baseada em análise de dados reais dos últimos 7 dias:
-// - TOP 3 ativos: GBP/JPY (67.9%), ETH/USD (62.5%), AUD/CAD (59.1%)
-// - Win rate alvo: >70% (foco em qualidade)
-// - Filosofia: APENAS operar ativos com histórico COMPROVADO de lucro
+interface AssetPerformance {
+  asset: string;
+  wins: number;
+  losses: number;
+  winRate: number;
+  profit: number;
+  trades: number;
+}
 
-// ============= ATIVOS BASEADOS EM DADOS REAIS (últimos 7 dias) =============
-// Ativos LUCRATIVOS (win rate >60%):
-// - GBP/JPY: 67.9% | +$731 | 28 trades
-// - ETH/USD: 62.5% | +$260 | 16 trades
-// - AUD/CAD: 59.1% | +$533 | 44 trades (próximo do limite)
+// ============= ESTRATÉGIA DATA-DRIVEN PROFIT (DINÂMICA) =============
+// Os ativos são atualizados AUTOMATICAMENTE baseado na performance real
+// - Busca dados dos últimos 7 dias do banco de dados
+// - Ativos com win rate >60% = PREFERIDOS
+// - Ativos com win rate <55% ou prejuízo = EVITAR
+// - Atualização em tempo real a cada análise
 
-const PREFERRED_ASSETS = ['GBP/JPY', 'ETH/USD', 'AUD/CAD'];
+// Função para buscar performance dos ativos em tempo real
+async function fetchAssetPerformance(): Promise<{ preferred: string[], avoid: string[], allPerformance: AssetPerformance[] }> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.log('⚠️ Supabase não configurado, usando lista padrão');
+      return { preferred: [], avoid: [], allPerformance: [] };
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Buscar resultados dos últimos 7 dias
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const { data: results, error } = await supabase
+      .from('operation_results')
+      .select('asset, result, profit')
+      .gte('created_at', sevenDaysAgo.toISOString())
+      .eq('is_ai_analyzed', true);
+    
+    if (error || !results || results.length === 0) {
+      console.log('⚠️ Sem dados históricos, usando análise técnica pura');
+      return { preferred: [], avoid: [], allPerformance: [] };
+    }
+    
+    // Agregar por ativo
+    const assetStats: Record<string, { wins: number; losses: number; profit: number }> = {};
+    
+    for (const r of results) {
+      if (!assetStats[r.asset]) {
+        assetStats[r.asset] = { wins: 0, losses: 0, profit: 0 };
+      }
+      if (r.result === 'win') assetStats[r.asset].wins++;
+      else if (r.result === 'loss') assetStats[r.asset].losses++;
+      assetStats[r.asset].profit += r.profit || 0;
+    }
+    
+    // Calcular performance e classificar
+    const allPerformance: AssetPerformance[] = [];
+    const preferred: string[] = [];
+    const avoid: string[] = [];
+    
+    for (const [asset, stats] of Object.entries(assetStats)) {
+      const total = stats.wins + stats.losses;
+      if (total < 3) continue; // Mínimo 3 trades para análise
+      
+      const winRate = (stats.wins / total) * 100;
+      
+      allPerformance.push({
+        asset,
+        wins: stats.wins,
+        losses: stats.losses,
+        winRate: Math.round(winRate * 10) / 10,
+        profit: stats.profit,
+        trades: total
+      });
+      
+      // Classificação dinâmica
+      if (winRate >= 60 && stats.profit > 0) {
+        preferred.push(asset);
+      } else if (winRate < 55 || stats.profit < 0) {
+        avoid.push(asset);
+      }
+    }
+    
+    // Ordenar performance por win rate
+    allPerformance.sort((a, b) => b.winRate - a.winRate);
+    
+    console.log('📊 Performance atualizada em tempo real:');
+    console.log(`   ✅ PREFERIDOS (>60% win): ${preferred.join(', ') || 'nenhum'}`);
+    console.log(`   ❌ EVITAR (<55% ou prejuízo): ${avoid.join(', ') || 'nenhum'}`);
+    
+    if (allPerformance.length > 0) {
+      console.log('   📈 TOP 3 ativos:');
+      allPerformance.slice(0, 3).forEach((a, i) => {
+        console.log(`      ${i + 1}. ${a.asset}: ${a.winRate}% | ${a.trades} trades | $${a.profit}`);
+      });
+    }
+    
+    return { preferred, avoid, allPerformance };
+  } catch (e) {
+    console.error('Erro ao buscar performance:', e);
+    return { preferred: [], avoid: [], allPerformance: [] };
+  }
+}
 
-// Ativos a EVITAR (win rate <55% ou prejuízo):
-// - AUD/USD: 43.9% | -$858
-// - EUR/USD: 47.6% | -$1205
-// - GBP/USD: 50.4% | -$515
-// - BTC/USD: 33.3% | -$228
-// - EUR/GBP: 29.4% | -$672
-// - EUR/USD-OTC: 27.3% | -$544
-
-const AVOID_ASSETS = ['AUD/USD', 'EUR/USD', 'GBP/USD', 'BTC/USD', 'EUR/GBP', 'EUR/JPY', 'USD/CAD', 'USD/JPY', 'GBP/JPY', 'EUR/USD-OTC', 'EUR/GBP-OTC'];
+// Fallback estático (usado apenas se DB falhar)
+const FALLBACK_PREFERRED = ['GBP/JPY', 'ETH/USD', 'AUD/CAD'];
+const FALLBACK_AVOID = ['BTC/USD', 'EUR/GBP', 'EUR/USD-OTC'];
 
 type PatternType = 
   | 'EXTREME_OVERSOLD' 
@@ -164,15 +250,15 @@ function calculateTechnicalScore(s: SignalData): number {
 }
 
 // Calcular score de risco (quanto menor, melhor) - OTIMIZADO COM DADOS HISTÓRICOS
-function calculateRiskScore(s: SignalData, badAssets: string[]): number {
+function calculateRiskScore(s: SignalData, badAssets: string[], preferredAssets: string[], avoidAssets: string[]): number {
   let risk = 30; // Base mais baixo para ativos preferidos
   
   // Ativos com histórico ruim = risco muito alto
   if (badAssets.includes(s.asset)) risk += 40;
-  if (AVOID_ASSETS.includes(s.asset)) risk += 25;
+  if (avoidAssets.includes(s.asset)) risk += 25;
   
   // Ativos preferidos = risco reduzido
-  if (PREFERRED_ASSETS.includes(s.asset)) risk -= 15;
+  if (preferredAssets.includes(s.asset)) risk -= 15;
   
   // Volatilidade
   if (s.indicators.atr.volatility === 'high') risk += 30;
@@ -205,7 +291,7 @@ function calculateRiskScore(s: SignalData, badAssets: string[]): number {
   return Math.max(0, Math.min(risk, 100));
 }
 
-function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAssets: string[]): PatternMatch[] {
+function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAssets: string[], preferredAssets: string[], avoidAssets: string[]): PatternMatch[] {
   const matches: PatternMatch[] = [];
   
   console.log(`🔍 Analisando ${signals.length} sinais em busca de trades perfeitos...`);
@@ -218,7 +304,7 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
     }
     
     // REJEITAR ativos a evitar (baseado em dados históricos)
-    if (AVOID_ASSETS.includes(s.asset) && !goodAssets.includes(s.asset)) {
+    if (avoidAssets.includes(s.asset) && !goodAssets.includes(s.asset)) {
       console.log(`❌ ${s.asset}: Ativo a evitar (histórico negativo)`);
       continue;
     }
@@ -234,7 +320,7 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
     const pricePos = s.indicators.supportResistance?.pricePosition || '';
     const hasPattern = s.indicators.reversalPattern;
     const maTrend = s.indicators.movingAverages?.trend || '';
-    const isPreferredAsset = PREFERRED_ASSETS.includes(s.asset);
+    const isPreferredAsset = preferredAssets.includes(s.asset);
     
     // REJEITAR volatilidade alta (ZERO tolerância)
     if (vol === 'high') {
@@ -250,7 +336,7 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
     }
     
     const technicalScore = calculateTechnicalScore(s);
-    const riskScore = calculateRiskScore(s, badAssets);
+    const riskScore = calculateRiskScore(s, badAssets, preferredAssets, avoidAssets);
     const confidenceMultiplier = goodAssets.includes(s.asset) ? 1.08 : 1.0;
     
     let criteriaCount = 0;
@@ -383,12 +469,12 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
   return matches;
 }
 
-function selectBestSignals(matches: PatternMatch[]): PatternMatch[] {
+function selectBestSignals(matches: PatternMatch[], preferredAssets: string[]): PatternMatch[] {
   // Ordenar por: ativo preferido, risco, score, critérios
   const sorted = matches.sort((a, b) => {
     // Ativos preferidos têm prioridade
-    const aPreferred = PREFERRED_ASSETS.includes(a.signal.asset);
-    const bPreferred = PREFERRED_ASSETS.includes(b.signal.asset);
+    const aPreferred = preferredAssets.includes(a.signal.asset);
+    const bPreferred = preferredAssets.includes(b.signal.asset);
     if (aPreferred && !bPreferred) return -1;
     if (bPreferred && !aPreferred) return 1;
     
@@ -422,7 +508,7 @@ function selectBestSignals(matches: PatternMatch[]): PatternMatch[] {
     if (selected.length >= maxSignals) break;
     if (usedAssets.has(match.signal.asset)) continue;
     
-    const isPreferred = PREFERRED_ASSETS.includes(match.signal.asset);
+    const isPreferred = preferredAssets.includes(match.signal.asset);
     const minScore = isPreferred ? 90 : 95;
     const maxRisk = isPreferred ? 55 : 45;
     const minCriteria = isPreferred ? 3 : 4;
@@ -466,6 +552,13 @@ serve(async (req) => {
       );
     }
 
+    // ============= BUSCAR ATIVOS DINÂMICOS DO BANCO =============
+    const { preferred: dynamicPreferred, avoid: dynamicAvoid, allPerformance } = await fetchAssetPerformance();
+    
+    // Usar ativos dinâmicos ou fallback
+    const preferredAssets = dynamicPreferred.length > 0 ? dynamicPreferred : FALLBACK_PREFERRED;
+    const avoidAssets = dynamicAvoid.length > 0 ? dynamicAvoid : FALLBACK_AVOID;
+    
     // Lista de ativos a evitar (win rate < 60% - mais rigoroso)
     const badAssets = historicalResults?.filter(h => h.winRate < 60 && (h.wins + h.losses) >= 2).map(h => h.asset) || [];
     
@@ -475,12 +568,14 @@ serve(async (req) => {
     console.log(`📊 Analisando ${signals.length} sinais...`);
     console.log(`⚠️ Ativos ruins: ${badAssets.join(', ') || 'nenhum'}`);
     console.log(`✅ Ativos bons: ${goodAssets.join(', ') || 'nenhum'}`);
+    console.log(`🎯 Ativos PREFERIDOS (dinâmico): ${preferredAssets.join(', ')}`);
+    console.log(`🚫 Ativos a EVITAR (dinâmico): ${avoidAssets.join(', ')}`);
 
     // DETECTAR PADRÕES DE ELITE
-    const elitePatterns = detectElitePatterns(signals, badAssets, goodAssets);
+    const elitePatterns = detectElitePatterns(signals, badAssets, goodAssets, preferredAssets, avoidAssets);
     
     // SELECIONAR OS MELHORES
-    const selectedSignals = selectBestSignals(elitePatterns);
+    const selectedSignals = selectBestSignals(elitePatterns, preferredAssets);
 
     if (selectedSignals.length === 0) {
       console.log('⏳ Buscando setups de alta probabilidade...');
@@ -612,7 +707,7 @@ APROVAR mais trades em ativos com bom histórico!`;
       console.log('⚠️ Usando análise pré-computada (fallback) - PROFIT MASTER');
       const fallbackSignals = selectedSignals
         .filter(d => {
-          const isPreferred = PREFERRED_ASSETS.includes(d.signal.asset);
+          const isPreferred = preferredAssets.includes(d.signal.asset);
           const minScore = isPreferred ? 90 : 95;
           const maxRisk = isPreferred ? 55 : 45;
           const minCriteria = isPreferred ? 3 : 4;
@@ -686,7 +781,7 @@ APROVAR mais trades em ativos com bom histórico!`;
       // Usar análise pré-computada (PROFIT MASTER)
       analysis = {
         analyzedSignals: selectedSignals.map(d => {
-          const isPreferred = PREFERRED_ASSETS.includes(d.signal.asset);
+          const isPreferred = preferredAssets.includes(d.signal.asset);
           const minScore = isPreferred ? 90 : 95;
           const maxRisk = isPreferred ? 55 : 45;
           const minCriteria = isPreferred ? 3 : 4;

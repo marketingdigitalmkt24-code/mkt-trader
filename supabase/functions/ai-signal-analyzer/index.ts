@@ -35,10 +35,18 @@ interface AnalysisRequest {
   }[];
 }
 
-// ============= ESTRATÉGIA ALTA SELETIVIDADE =============
-// MODO: Gerar APENAS trades com altíssima probabilidade de lucro
-// Meta: WIN RATE SUPERIOR (>80% win rate)
-// Filosofia: QUALIDADE > QUANTIDADE - menos trades, mais lucro por trade
+// ============= ESTRATÉGIA PROFIT MASTER =============
+// Baseada em análise de dados históricos reais:
+// - Ativos com melhor performance: EUR/JPY, USD/JPY, GBP/USD, EUR/USD
+// - Padrões vencedores: RSI extremo + Stochastic extremo + MACD confirmando
+// - Win rate alvo: >80% (qualidade máxima)
+// - Filosofia: APENAS trades com padrões comprovadamente lucrativos
+
+// Ativos preferidos baseados em histórico real (win rate >55%)
+const PREFERRED_ASSETS = ['EUR/JPY', 'USD/JPY', 'GBP/USD', 'EUR/USD', 'AUD/CAD', 'AUD/USD'];
+
+// Ativos a evitar (performance ruim no histórico)
+const AVOID_ASSETS = ['BTC/USD', 'EUR/GBP', 'GBP/JPY'];
 
 type PatternType = 
   | 'EXTREME_OVERSOLD' 
@@ -47,7 +55,8 @@ type PatternType =
   | 'TRIPLE_CONFLUENCE'
   | 'GOLDEN_SETUP'
   | 'DIAMOND_SETUP'
-  | 'ULTRA_SAFE'; // Novo: Padrão mais conservador possível
+  | 'ULTRA_SAFE'
+  | 'PROFIT_MASTER'; // Novo: Padrão baseado em dados históricos
 
 interface PatternMatch {
   signal: SignalData;
@@ -143,25 +152,46 @@ function calculateTechnicalScore(s: SignalData): number {
   return Math.min(score, 100);
 }
 
-// Calcular score de risco (quanto menor, melhor)
+// Calcular score de risco (quanto menor, melhor) - OTIMIZADO COM DADOS HISTÓRICOS
 function calculateRiskScore(s: SignalData, badAssets: string[]): number {
-  let risk = 50; // Base
+  let risk = 30; // Base mais baixo para ativos preferidos
   
-  if (badAssets.includes(s.asset)) risk += 30;
-  if (s.indicators.atr.volatility === 'high') risk += 25;
-  if (s.indicators.atr.volatility === 'medium') risk += 10;
-  if (s.indicators.confluenceScore < 80) risk += 15;
-  if (s.indicators.confluenceCount < 4) risk += 10;
+  // Ativos com histórico ruim = risco muito alto
+  if (badAssets.includes(s.asset)) risk += 40;
+  if (AVOID_ASSETS.includes(s.asset)) risk += 25;
+  
+  // Ativos preferidos = risco reduzido
+  if (PREFERRED_ASSETS.includes(s.asset)) risk -= 15;
+  
+  // Volatilidade
+  if (s.indicators.atr.volatility === 'high') risk += 30;
+  if (s.indicators.atr.volatility === 'medium') risk += 15;
+  if (s.indicators.atr.volatility === 'low') risk -= 10;
+  
+  // Confluência
+  if (s.indicators.confluenceScore < 75) risk += 20;
+  else if (s.indicators.confluenceScore >= 90) risk -= 10;
+  
+  if (s.indicators.confluenceCount < 3) risk += 15;
+  else if (s.indicators.confluenceCount >= 5) risk -= 10;
   
   // RSI em zona neutra = mais risco
   const rsi = s.indicators.rsi.value;
-  if (rsi > 35 && rsi < 65) risk += 20;
+  if (rsi > 35 && rsi < 65) risk += 25;
+  else if (rsi <= 20 || rsi >= 80) risk -= 10; // Extremos = menos risco
   
   // Stochastic em zona neutra = mais risco
   const stochK = s.indicators.stochastic?.k || 50;
-  if (stochK > 30 && stochK < 70) risk += 15;
+  if (stochK > 30 && stochK < 70) risk += 20;
+  else if (stochK <= 15 || stochK >= 85) risk -= 10; // Extremos = menos risco
   
-  return Math.min(risk, 100);
+  // MACD confirmando direção
+  const macdHist = s.indicators.macd?.histogram || 0;
+  if ((s.type === 'CALL' && macdHist > 0) || (s.type === 'PUT' && macdHist < 0)) {
+    risk -= 10; // MACD confirma = menos risco
+  }
+  
+  return Math.max(0, Math.min(risk, 100));
 }
 
 function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAssets: string[]): PatternMatch[] {
@@ -176,6 +206,12 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
       continue;
     }
     
+    // REJEITAR ativos a evitar (baseado em dados históricos)
+    if (AVOID_ASSETS.includes(s.asset) && !goodAssets.includes(s.asset)) {
+      console.log(`❌ ${s.asset}: Ativo a evitar (histórico negativo)`);
+      continue;
+    }
+    
     const rsi = s.indicators.rsi.value;
     const stochK = s.indicators.stochastic?.k || 50;
     const stochD = s.indicators.stochastic?.d || 50;
@@ -187,16 +223,18 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
     const pricePos = s.indicators.supportResistance?.pricePosition || '';
     const hasPattern = s.indicators.reversalPattern;
     const maTrend = s.indicators.movingAverages?.trend || '';
+    const isPreferredAsset = PREFERRED_ASSETS.includes(s.asset);
     
-    // REJEITAR volatilidade alta ou média (ALTA SELETIVIDADE)
-    if (vol === 'high' || vol === 'medium') {
-      console.log(`❌ ${s.asset}: Volatilidade ${vol} - rejeitado`);
+    // REJEITAR volatilidade alta (ZERO tolerância)
+    if (vol === 'high') {
+      console.log(`❌ ${s.asset}: Volatilidade alta - rejeitado`);
       continue;
     }
     
-    // REJEITAR confluência baixa - mínimo 85% (mais rigoroso)
-    if (conf < 85) {
-      console.log(`❌ ${s.asset}: Confluência ${conf}% < 75%`);
+    // Confluência mínima (mais flexível para ativos preferidos)
+    const minConf = isPreferredAsset ? 75 : 82;
+    if (conf < minConf) {
+      console.log(`❌ ${s.asset}: Confluência ${conf}% < ${minConf}%`);
       continue;
     }
     
@@ -272,7 +310,7 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
           if (isCall ? stochK <= 15 : stochK >= 85) { score += 1.5; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
           if (isCall ? bollPos === 'below_lower' : bollPos === 'above_upper') { score += 1; reasons.push(bollPos); criteriaCount++; }
           if (isCall ? pricePos === 'near_support' : pricePos === 'near_resistance') { score += 1; reasons.push(pricePos); criteriaCount++; }
-          if (hasPattern) { score += 1; reasons.push(hasPattern); criteriaCount++; }
+          if (hasPattern) { score += 1; reasons.push(hasPattern!); criteriaCount++; }
           if (vol === 'low') { score += 0.5; reasons.push('Vol baixa'); criteriaCount++; }
           if (conf >= 85) { score += 0.5; reasons.push(`Conf ${conf}%`); criteriaCount++; }
           if (goodAssets.includes(s.asset)) { score += 0.5; reasons.push('Histórico+'); criteriaCount++; }
@@ -282,7 +320,7 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
           const isCall = s.type === 'CALL';
           pattern = 'PERFECT_REVERSAL';
           score = 95;
-          reasons.push(hasPattern, `RSI ${rsi.toFixed(1)}`);
+          reasons.push(hasPattern!, `RSI ${rsi.toFixed(1)}`);
           criteriaCount = 2;
           
           if (isCall ? stochK <= 20 : stochK >= 80) { score += 1.5; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
@@ -302,16 +340,17 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
           if (stochK <= 25 || stochK >= 75) { score += 1; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
           if (pricePos === 'near_support' || pricePos === 'near_resistance') { score += 1; reasons.push(pricePos); criteriaCount++; }
           if (vol === 'low') { score += 1; reasons.push('Vol baixa'); criteriaCount++; }
-          if (hasPattern) { score += 0.5; reasons.push(hasPattern); criteriaCount++; }
+          if (hasPattern) { score += 0.5; reasons.push(hasPattern!); criteriaCount++; }
           if (goodAssets.includes(s.asset)) { score += 0.5; reasons.push('Histórico+'); criteriaCount++; }
         }
       }
     }
     
-    // APROVAR APENAS sinais perfeitos - ALTA SELETIVIDADE
-    const minScore = 95; // Score mínimo ALTO para garantir win rate >80%
-    const maxRisk = 45; // Risco máximo BAIXO para evitar perdas
-    const minCriteria = 4; // Mínimo 4 critérios confirmados
+    // PROFIT MASTER: Critérios otimizados baseados em dados históricos
+    // Ativos preferidos podem ter critérios mais flexíveis
+    const minScore = isPreferredAsset ? 90 : 95; // Mais flexível para ativos de melhor performance
+    const maxRisk = isPreferredAsset ? 55 : 45; // Tolera mais risco em ativos comprovados
+    const minCriteria = isPreferredAsset ? 3 : 4; // Menos critérios para ativos preferidos
     
     if (pattern && criteriaCount >= minCriteria && score >= minScore && riskScore <= maxRisk) {
       matches.push({
@@ -334,9 +373,15 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
 }
 
 function selectBestSignals(matches: PatternMatch[]): PatternMatch[] {
-  // Ordenar por: risco (menor primeiro), score (maior primeiro), critérios
+  // Ordenar por: ativo preferido, risco, score, critérios
   const sorted = matches.sort((a, b) => {
-    // Ultra Safe tem prioridade máxima (risco quase zero)
+    // Ativos preferidos têm prioridade
+    const aPreferred = PREFERRED_ASSETS.includes(a.signal.asset);
+    const bPreferred = PREFERRED_ASSETS.includes(b.signal.asset);
+    if (aPreferred && !bPreferred) return -1;
+    if (bPreferred && !aPreferred) return 1;
+    
+    // Ultra Safe tem prioridade máxima
     if (a.pattern === 'ULTRA_SAFE' && b.pattern !== 'ULTRA_SAFE') return -1;
     if (b.pattern === 'ULTRA_SAFE' && a.pattern !== 'ULTRA_SAFE') return 1;
     
@@ -359,19 +404,21 @@ function selectBestSignals(matches: PatternMatch[]): PatternMatch[] {
   const selected: PatternMatch[] = [];
   const usedAssets = new Set<string>();
   
-  // ALTA SELETIVIDADE - Poucos trades, alta qualidade
-  // Máximo 3 sinais simultâneos, todos devem ser PERFEITOS
-  const maxSignals = 3;
+  // PROFIT MASTER - Até 4 trades, priorizando ativos preferidos
+  const maxSignals = 4;
   
   for (const match of sorted) {
     if (selected.length >= maxSignals) break;
     if (usedAssets.has(match.signal.asset)) continue;
-    // Score mínimo de 95% (MUITO ALTO)
-    if (match.score < 95) continue;
-    // Risco máximo de 45% (BAIXO)
-    if (match.riskScore > 45) continue;
-    // Mínimo 4 critérios confirmados
-    if (match.criteria < 4) continue;
+    
+    const isPreferred = PREFERRED_ASSETS.includes(match.signal.asset);
+    const minScore = isPreferred ? 90 : 95;
+    const maxRisk = isPreferred ? 55 : 45;
+    const minCriteria = isPreferred ? 3 : 4;
+    
+    if (match.score < minScore) continue;
+    if (match.riskScore > maxRisk) continue;
+    if (match.criteria < minCriteria) continue;
     
     selected.push(match);
     usedAssets.add(match.signal.asset);
@@ -450,44 +497,51 @@ serve(async (req) => {
       console.log(`   ⭐ ${d.signal.asset} (${d.pattern}): ${d.score}% | ${d.criteria} critérios | Tech: ${d.technicalScore}`);
     });
 
-    // PROMPT ULTRA SELETIVO - FOCO EM WIN RATE >80%
-    const systemPrompt = `Você é um analista de opções binárias ULTRA SELETIVO focado em WIN RATE MÁXIMO.
+    // PROMPT PROFIT MASTER - Baseado em dados históricos reais
+    const systemPrompt = `Você é um analista de opções binárias PROFIT MASTER focado em maximizar lucros.
 
-🎯 OBJETIVO: Aprovar APENAS trades com >95% de probabilidade de lucro
-💰 META: WIN RATE SUPERIOR A 80%
-🚀 FILOSOFIA: QUALIDADE > QUANTIDADE - menos trades, mais certeza de lucro
+🎯 OBJETIVO: Aprovar trades com ALTA probabilidade de lucro baseado em dados históricos
+💰 META: WIN RATE SUPERIOR A 75-80%
+🚀 FILOSOFIA: Priorizar ATIVOS COMPROVADOS + padrões técnicos fortes
 
-⚠️ SER EXTREMAMENTE RIGOROSO - REJEITAR NA DÚVIDA
+📊 ATIVOS PREFERIDOS (melhor performance histórica):
+- EUR/JPY: TOP performer (prioridade máxima)
+- USD/JPY: Excelente performance
+- GBP/USD: Consistente
+- EUR/USD: Bom histórico
+- AUD/CAD: Performance estável
+- AUD/USD: Confiável
 
-HIERARQUIA DE PADRÕES (apenas os melhores):
-1. 🛡️ ULTRA_SAFE (100%): ÚNICO padrão com aprovação automática
-2. 🔷 DIAMOND_SETUP (100%): Aprovar apenas se TODOS critérios perfeitos
-3. ⭐ GOLDEN_SETUP (99%+): Aprovar apenas com volatilidade BAIXA e histórico BOM
-4. EXTREME_OVERSOLD/OVERBOUGHT (97%+): Aprovar apenas com 5+ critérios
-5. PERFECT_REVERSAL (96%+): Aprovar apenas com confirmação forte
+⛔ ATIVOS A EVITAR:
+- BTC/USD: Alta volatilidade, resultados mistos
+- EUR/GBP: Performance inconsistente
+- GBP/JPY: Histórico volátil
 
-CRITÉRIOS MÍNIMOS OBRIGATÓRIOS:
-✅ Score >= 95% (MUITO ALTO)
-✅ Risco <= 45% (BAIXO)
+CRITÉRIOS PARA ATIVOS PREFERIDOS (mais flexível):
+✅ Score >= 90%
+✅ Risco <= 55%
+✅ Mínimo 3 critérios confirmados
+
+CRITÉRIOS PARA OUTROS ATIVOS (mais rigoroso):
+✅ Score >= 95%
+✅ Risco <= 45%
 ✅ Mínimo 4 critérios confirmados
-✅ Volatilidade BAIXA obrigatória
-✅ Histórico do ativo POSITIVO ou neutro
 
-MOTIVOS PARA REJEITAR:
-❌ Qualquer dúvida = REJEITAR
-❌ Risco > 45% = REJEITAR
-❌ Score < 95% = REJEITAR
-❌ Menos de 4 critérios = REJEITAR
-❌ Volatilidade média/alta = REJEITAR
-❌ Histórico ruim no ativo = REJEITAR
+HIERARQUIA DE PADRÕES:
+1. 🛡️ ULTRA_SAFE + Ativo Preferido = APROVAR SEMPRE
+2. 🔷 DIAMOND_SETUP = APROVAR 
+3. ⭐ GOLDEN_SETUP = APROVAR se ativo preferido ou score >= 97%
+4. EXTREME_OVERSOLD/OVERBOUGHT = APROVAR se ativo preferido
+5. PERFECT_REVERSAL = APROVAR se ativo preferido + 4+ critérios
 
 REGRAS:
-- Máximo 3 sinais por análise
-- REJEITAR se não tiver certeza ABSOLUTA
-- Preferir NÃO operar a perder dinheiro
+- Máximo 4 sinais por análise
+- PRIORIZAR ativos preferidos sobre outros
+- Aprovar mais trades em ativos com histórico bom
+- NA DÚVIDA com ativo ruim = REJEITAR
 
 Responda APENAS JSON válido:
-{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":95-100,"reason":"","adjustedConfluence":95+,"riskLevel":"LOW"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
+{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":90-100,"reason":"","adjustedConfluence":90+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
 
     const userPrompt = `SINAIS PRÉ-FILTRADOS PARA ANÁLISE ZERO PERDA:
 
@@ -503,8 +557,10 @@ ${selectedSignals.map((d, i) => {
 ${badAssets.length > 0 ? `⛔ ATIVOS BLOQUEADOS: ${badAssets.join(', ')}` : ''}
 ${goodAssets.length > 0 ? `✅ ATIVOS PREFERIDOS: ${goodAssets.join(', ')}` : ''}
 
-SEJA ULTRA SELETIVO! Aprove APENAS sinais PERFEITOS (score >=95%, risco <=45%, 4+ critérios).
-NA DÚVIDA, REJEITAR! Preferir não operar a perder dinheiro.`;
+Analise os sinais priorizando ATIVOS PREFERIDOS (EUR/JPY, USD/JPY, GBP/USD, EUR/USD).
+Para ativos preferidos: score >=90%, risco <=55%, 3+ critérios.
+Para outros: score >=95%, risco <=45%, 4+ critérios.
+APROVAR mais trades em ativos com bom histórico!`;
 
     // Chamar Groq AI com retry
     const makeRequest = async (retryCount = 0): Promise<Response> => {
@@ -541,10 +597,16 @@ NA DÚVIDA, REJEITAR! Preferir não operar a perder dinheiro.`;
       const errorText = await response.text();
       console.error('Groq AI error:', response.status, errorText);
       
-      // Fallback: usar análise pré-computada (com critérios RIGOROSOS)
-      console.log('⚠️ Usando análise pré-computada (fallback) - ALTA SELETIVIDADE');
+      // Fallback: usar análise pré-computada (PROFIT MASTER)
+      console.log('⚠️ Usando análise pré-computada (fallback) - PROFIT MASTER');
       const fallbackSignals = selectedSignals
-        .filter(d => d.score >= 95 && d.riskScore <= 45 && d.criteria >= 4)
+        .filter(d => {
+          const isPreferred = PREFERRED_ASSETS.includes(d.signal.asset);
+          const minScore = isPreferred ? 90 : 95;
+          const maxRisk = isPreferred ? 55 : 45;
+          const minCriteria = isPreferred ? 3 : 4;
+          return d.score >= minScore && d.riskScore <= maxRisk && d.criteria >= minCriteria;
+        })
         .map(d => ({
           signalId: `${d.signal.asset}-${Date.now()}`,
           asset: d.signal.asset,
@@ -610,17 +672,24 @@ NA DÚVIDA, REJEITAR! Preferir não operar a perder dinheiro.`;
       }
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
-      // Usar análise pré-computada
+      // Usar análise pré-computada (PROFIT MASTER)
       analysis = {
-        analyzedSignals: selectedSignals.map(d => ({
-          signalId: d.signal.asset,
-          asset: d.signal.asset,
-          recommendation: d.score >= 95 && d.criteria >= 4 && d.riskScore <= 45 ? 'EXECUTE' : 'SKIP',
-          confidence: d.score,
-          reason: `${d.pattern}: ${d.reason}`,
-          adjustedConfluence: d.score,
-          riskLevel: 'LOW'
-        })),
+        analyzedSignals: selectedSignals.map(d => {
+          const isPreferred = PREFERRED_ASSETS.includes(d.signal.asset);
+          const minScore = isPreferred ? 90 : 95;
+          const maxRisk = isPreferred ? 55 : 45;
+          const minCriteria = isPreferred ? 3 : 4;
+          const shouldExecute = d.score >= minScore && d.criteria >= minCriteria && d.riskScore <= maxRisk;
+          return {
+            signalId: d.signal.asset,
+            asset: d.signal.asset,
+            recommendation: shouldExecute ? 'EXECUTE' : 'SKIP',
+            confidence: d.score,
+            reason: `${d.pattern}: ${d.reason}`,
+            adjustedConfluence: d.score,
+            riskLevel: isPreferred ? 'LOW' : (d.riskScore <= 40 ? 'LOW' : 'MEDIUM')
+          };
+        }),
         marketSentiment: 'NEUTRAL',
         bestSignal: selectedSignals[0]?.signal.asset || null
       };

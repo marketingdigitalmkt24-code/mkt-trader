@@ -603,70 +603,60 @@ serve(async (req) => {
       console.log(`   ⭐ ${d.signal.asset} (${d.pattern}): ${d.score}% | ${d.criteria} critérios | Tech: ${d.technicalScore}`);
     });
 
-    // PROMPT PROFIT MASTER - Baseado em dados históricos reais
-    const systemPrompt = `Você é um analista de opções binárias PROFIT MASTER focado em maximizar lucros.
+    // PROMPT DATA-DRIVEN - Baseado em performance REAL do banco de dados
+    const preferredList = preferredAssets.length > 0 ? preferredAssets.join(', ') : 'nenhum identificado';
+    const avoidList = avoidAssets.length > 0 ? avoidAssets.join(', ') : 'nenhum identificado';
+    
+    const systemPrompt = `Você é um analista de opções binárias DATA-DRIVEN focado em maximizar lucros.
 
-🎯 OBJETIVO: Aprovar trades com ALTA probabilidade de lucro baseado em dados históricos
-💰 META: WIN RATE SUPERIOR A 75-80%
-🚀 FILOSOFIA: Priorizar ATIVOS COMPROVADOS + padrões técnicos fortes
+🎯 OBJETIVO: Aprovar trades APENAS em ativos com performance COMPROVADA nos últimos 7 dias
+💰 META: WIN RATE SUPERIOR A 70%
+🚀 FILOSOFIA: DADOS REAIS > Teoria
 
-📊 ATIVOS PREFERIDOS (melhor performance histórica):
-- EUR/JPY: TOP performer (prioridade máxima)
-- USD/JPY: Excelente performance
-- GBP/USD: Consistente
-- EUR/USD: Bom histórico
-- AUD/CAD: Performance estável
-- AUD/USD: Confiável
+📊 ATIVOS PREFERIDOS (win rate >60% nos últimos 7 dias):
+${preferredList}
 
-⛔ ATIVOS A EVITAR:
-- BTC/USD: Alta volatilidade, resultados mistos
-- EUR/GBP: Performance inconsistente
-- GBP/JPY: Histórico volátil
+⛔ ATIVOS A EVITAR (win rate <55% ou prejuízo):
+${avoidList}
 
-CRITÉRIOS PARA ATIVOS PREFERIDOS (mais flexível):
-✅ Score >= 90%
-✅ Risco <= 55%
-✅ Mínimo 3 critérios confirmados
+REGRAS CRÍTICAS:
+1. ✅ Ativos PREFERIDOS com score >=85% e risco <=50% = EXECUTE
+2. ✅ Ativos PREFERIDOS com padrão forte (ULTRA_SAFE, DIAMOND_SETUP, TRIPLE_CONFLUENCE) = EXECUTE
+3. ❌ Ativos da lista EVITAR = SEMPRE SKIP (independente do score)
+4. ❌ Ativos neutros (não na lista preferida) = SKIP (precisamos de histórico)
 
-CRITÉRIOS PARA OUTROS ATIVOS (mais rigoroso):
-✅ Score >= 95%
-✅ Risco <= 45%
-✅ Mínimo 4 critérios confirmados
+HIERARQUIA DE APROVAÇÃO:
+1. ULTRA_SAFE + Preferido = EXECUTE SEMPRE
+2. DIAMOND_SETUP + Preferido = EXECUTE
+3. TRIPLE_CONFLUENCE + Preferido = EXECUTE
+4. GOLDEN_SETUP + Preferido + Score >=90% = EXECUTE
+5. PERFECT_REVERSAL + Preferido + 5+ critérios = EXECUTE
 
-HIERARQUIA DE PADRÕES:
-1. 🛡️ ULTRA_SAFE + Ativo Preferido = APROVAR SEMPRE
-2. 🔷 DIAMOND_SETUP = APROVAR 
-3. ⭐ GOLDEN_SETUP = APROVAR se ativo preferido ou score >= 97%
-4. EXTREME_OVERSOLD/OVERBOUGHT = APROVAR se ativo preferido
-5. PERFECT_REVERSAL = APROVAR se ativo preferido + 4+ critérios
-
-REGRAS:
-- Máximo 4 sinais por análise
-- PRIORIZAR ativos preferidos sobre outros
-- Aprovar mais trades em ativos com histórico bom
-- NA DÚVIDA com ativo ruim = REJEITAR
+IMPORTANTE: Se o ativo NÃO está na lista PREFERIDOS, NÃO EXECUTE.
 
 Responda APENAS JSON válido:
-{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":90-100,"reason":"","adjustedConfluence":90+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
+{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":85-100,"reason":"","adjustedConfluence":85+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
 
-    const userPrompt = `SINAIS PRÉ-FILTRADOS PARA ANÁLISE ZERO PERDA:
+    const userPrompt = `ANÁLISE DATA-DRIVEN - Aprovar APENAS ativos com performance comprovada:
 
+📊 ATIVOS COM MELHOR WIN RATE (últimos 7 dias):
+${preferredAssets.map((a, i) => `${i + 1}. ${a}`).join('\n') || 'Nenhum com >60% win rate'}
+
+🚫 ATIVOS BLOQUEADOS (baixa performance):
+${avoidAssets.join(', ') || 'Nenhum'}
+
+SINAIS PARA ANÁLISE:
 ${selectedSignals.map((d, i) => {
   const s = d.signal;
-  return `${i + 1}. ${s.asset} ${s.type} | ${d.pattern}
+  const isPreferred = preferredAssets.includes(s.asset);
+  const isBlocked = avoidAssets.includes(s.asset);
+  return `${i + 1}. ${s.asset} ${s.type} | ${d.pattern} ${isPreferred ? '✅ PREFERIDO' : isBlocked ? '❌ BLOQUEADO' : '⚠️ NEUTRO'}
    Score: ${d.score}% | Risco: ${d.riskScore}% | Critérios: ${d.criteria}
-   RSI: ${s.indicators.rsi.value.toFixed(1)} | StochK: ${s.indicators.stochastic?.k?.toFixed(1) || 'N/A'}
-   Volatilidade: ${s.indicators.atr.volatility} | Confluência: ${s.indicators.confluenceScore}%
-   Análise: ${d.reason}`;
+   RSI: ${s.indicators.rsi.value.toFixed(1)} | Volatilidade: ${s.indicators.atr.volatility}`;
 }).join('\n\n')}
 
-${badAssets.length > 0 ? `⛔ ATIVOS BLOQUEADOS: ${badAssets.join(', ')}` : ''}
-${goodAssets.length > 0 ? `✅ ATIVOS PREFERIDOS: ${goodAssets.join(', ')}` : ''}
-
-Analise os sinais priorizando ATIVOS PREFERIDOS (EUR/JPY, USD/JPY, GBP/USD, EUR/USD).
-Para ativos preferidos: score >=90%, risco <=55%, 3+ critérios.
-Para outros: score >=95%, risco <=45%, 4+ critérios.
-APROVAR mais trades em ativos com bom histórico!`;
+REGRA: Aprovar APENAS ativos marcados como ✅ PREFERIDO com score >=85%.
+Rejeitar todos os outros.`;
 
     // Chamar Groq AI com retry
     const makeRequest = async (retryCount = 0): Promise<Response> => {
@@ -704,21 +694,21 @@ APROVAR mais trades em ativos com bom histórico!`;
       console.error('Groq AI error:', response.status, errorText);
       
       // Fallback: usar análise pré-computada (PROFIT MASTER)
-      console.log('⚠️ Usando análise pré-computada (fallback) - PROFIT MASTER');
+      console.log('⚠️ Usando análise pré-computada (fallback) - DATA-DRIVEN');
       const fallbackSignals = selectedSignals
         .filter(d => {
+          // DATA-DRIVEN: Só executa ativos PREFERIDOS
           const isPreferred = preferredAssets.includes(d.signal.asset);
-          const minScore = isPreferred ? 90 : 95;
-          const maxRisk = isPreferred ? 55 : 45;
-          const minCriteria = isPreferred ? 3 : 4;
-          return d.score >= minScore && d.riskScore <= maxRisk && d.criteria >= minCriteria;
+          const isBlocked = avoidAssets.includes(d.signal.asset);
+          if (isBlocked || !isPreferred) return false;
+          return d.score >= 85 && d.riskScore <= 50;
         })
         .map(d => ({
           signalId: `${d.signal.asset}-${Date.now()}`,
           asset: d.signal.asset,
           recommendation: 'EXECUTE',
           confidence: d.score,
-          reason: `${d.pattern}: ${d.reason}`,
+          reason: `${d.pattern}: Ativo preferido com performance comprovada`,
           adjustedConfluence: d.score,
           riskLevel: 'LOW'
         }));
@@ -778,26 +768,25 @@ APROVAR mais trades em ativos com bom histórico!`;
       }
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
-      // Usar análise pré-computada (PROFIT MASTER)
+      // Usar análise DATA-DRIVEN como fallback
       analysis = {
         analyzedSignals: selectedSignals.map(d => {
           const isPreferred = preferredAssets.includes(d.signal.asset);
-          const minScore = isPreferred ? 90 : 95;
-          const maxRisk = isPreferred ? 55 : 45;
-          const minCriteria = isPreferred ? 3 : 4;
-          const shouldExecute = d.score >= minScore && d.criteria >= minCriteria && d.riskScore <= maxRisk;
+          const isBlocked = avoidAssets.includes(d.signal.asset);
+          // DATA-DRIVEN: Só executa ativos PREFERIDOS e não bloqueados
+          const shouldExecute = isPreferred && !isBlocked && d.score >= 85 && d.riskScore <= 50;
           return {
             signalId: d.signal.asset,
             asset: d.signal.asset,
             recommendation: shouldExecute ? 'EXECUTE' : 'SKIP',
             confidence: d.score,
-            reason: `${d.pattern}: ${d.reason}`,
+            reason: shouldExecute ? `${d.pattern}: Ativo preferido` : 'Ativo sem performance comprovada',
             adjustedConfluence: d.score,
-            riskLevel: isPreferred ? 'LOW' : (d.riskScore <= 40 ? 'LOW' : 'MEDIUM')
+            riskLevel: isPreferred ? 'LOW' : 'HIGH'
           };
         }),
         marketSentiment: 'NEUTRAL',
-        bestSignal: selectedSignals[0]?.signal.asset || null
+        bestSignal: selectedSignals.find(d => preferredAssets.includes(d.signal.asset))?.signal.asset || null
       };
     }
 

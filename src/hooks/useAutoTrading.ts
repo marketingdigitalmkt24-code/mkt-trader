@@ -338,10 +338,10 @@ export function useAutoTrading() {
     });
   }, [user?.id, saveToDatabase]);
 
-  // Always use 1 minute expiration for IQ Option trades
+  // Always use 1.5 minute (90 seconds) expiration for IQ Option trades
   const getExpirationFromTimeframe = (_timeframe: string): number => {
-    // Force 1 minute expiration for all trades regardless of signal timeframe
-    return 1;
+    // Force 1.5 minute expiration for all trades regardless of signal timeframe
+    return 1.5;
   };
 
   // Helper to delay execution

@@ -19,6 +19,7 @@ const ClientDashboard = () => {
     isPlacingTrade,
     isAnalyzingAI,
     lastTradeResult,
+    reversalOpportunity,
     resetDailyTrades,
   } = useAutoTrading();
 
@@ -189,6 +190,7 @@ const ClientDashboard = () => {
                   defaultOpen={true}
                   currentBalance={balance}
                   dailyProfit={dailyProfit}
+                  reversalOpportunity={reversalOpportunity}
                 />
               </CardContent>
             </Card>

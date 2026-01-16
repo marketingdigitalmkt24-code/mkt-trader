@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
-import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X, TrendingUp, Brain, Sparkles } from 'lucide-react';
+import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X, TrendingUp, Brain, Sparkles, RefreshCw } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
@@ -26,6 +26,9 @@ interface AutoTradingConfig {
   useScaledEntries: boolean;
   scaledEntriesCount: number;
   scaledEntriesDelay: number;
+  // Reversal strategy settings
+  useReversalStrategy: boolean;
+  reversalMinPriceChange: number; // Minimum price change % for reversal
 }
 
 interface AutoTradingCardProps {
@@ -37,9 +40,10 @@ interface AutoTradingCardProps {
   defaultOpen?: boolean;
   currentBalance?: number;
   dailyProfit?: number;
+  reversalOpportunity?: { asset: string; direction: string; confidence: number } | null;
 }
 
-export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyzingAI = false, lastTradeResult, defaultOpen = false, currentBalance = 0, dailyProfit = 0 }: AutoTradingCardProps) {
+export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyzingAI = false, lastTradeResult, defaultOpen = false, currentBalance = 0, dailyProfit = 0, reversalOpportunity = null }: AutoTradingCardProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [localConfig, setLocalConfig] = useState(config);
   const [hasChanges, setHasChanges] = useState(false);
@@ -264,6 +268,54 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
               <p className="text-xs text-muted-foreground">
                 A IA analisa padrões técnicos e histórico para prever os melhores sinais.
                 <span className="text-purple-400 font-medium"> Quando ativa, substitui o filtro de confluência.</span>
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Reversal Strategy */}
+        <div className="space-y-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 text-blue-500" />
+              <span className="font-medium">Estratégia de Reversão</span>
+              <Badge variant="outline" className="text-xs bg-blue-500/20">
+                <Sparkles className="w-3 h-3 mr-1" />
+                Novo
+              </Badge>
+            </Label>
+            <Switch
+              checked={localConfig.useReversalStrategy ?? false}
+              onCheckedChange={(useReversalStrategy) => handleLocalChange({ useReversalStrategy })}
+            />
+          </div>
+          
+          {(localConfig.useReversalStrategy ?? false) && (
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">
+                Movimento mínimo: {localConfig.reversalMinPriceChange ?? 0.3}%
+              </Label>
+              <Slider
+                value={[localConfig.reversalMinPriceChange ?? 0.3]}
+                onValueChange={([value]) => handleLocalChange({ reversalMinPriceChange: value })}
+                min={0.1}
+                max={1.0}
+                step={0.1}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Quando um trade PUT está ganhando (preço caiu {localConfig.reversalMinPriceChange ?? 0.3}%), 
+                o sistema executa automaticamente um CALL para capturar a reversão.
+                <span className="text-blue-400 font-medium"> Aumenta chances de lucro duplo!</span>
+              </p>
+            </div>
+          )}
+
+          {reversalOpportunity && (
+            <div className="p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg animate-pulse">
+              <p className="text-sm text-blue-400 font-medium flex items-center gap-2">
+                <RefreshCw className="w-4 h-4" />
+                🔄 Reversão detectada: {reversalOpportunity.asset} {reversalOpportunity.direction} ({reversalOpportunity.confidence}%)
               </p>
             </div>
           )}

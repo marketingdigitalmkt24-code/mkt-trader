@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAISignalAnalyzer } from '@/hooks/useAISignalAnalyzer';
 import { getCachedAssets } from '@/hooks/useAvailableAssets';
 import { useAuth } from '@/contexts/AuthContext';
+import { useReversalStrategy } from '@/hooks/useReversalStrategy';
 
 const STORAGE_KEY = 'autotrading_config';
 const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
@@ -26,6 +27,9 @@ interface AutoTradingConfig {
   useScaledEntries: boolean;
   scaledEntriesCount: number; // Number of entries per asset (2-5)
   scaledEntriesDelay: number; // Delay between entries in seconds (5-30)
+  // Reversal strategy settings
+  useReversalStrategy: boolean;
+  reversalMinPriceChange: number; // Minimum price change % for reversal
 }
 
 interface TradeResult {
@@ -49,12 +53,15 @@ const DEFAULT_CONFIG: AutoTradingConfig = {
   useScaledEntries: false,
   scaledEntriesCount: 3,
   scaledEntriesDelay: 10,
+  useReversalStrategy: false,
+  reversalMinPriceChange: 0.3,
 };
 
 export function useAutoTrading() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { analyzeSignals, filterByAIRecommendation, isAnalyzing, error: aiError } = useAISignalAnalyzer();
+  const reversalStrategy = useReversalStrategy();
   const processedSignals = useRef<Set<string>>(new Set());
   const lastAIErrorShown = useRef<number>(0);
   const AI_ERROR_COOLDOWN = 60000; // Only show AI error toast once per minute
@@ -62,6 +69,7 @@ export function useAutoTrading() {
   const activeAssetTrades = useRef<Set<string>>(new Set()); // Track assets with active trades
   const settingsLoaded = useRef(false);
   const isSavingToDb = useRef(false);
+  const [reversalOpportunity, setReversalOpportunity] = useState<{ asset: string; direction: string; confidence: number } | null>(null);
   
   const [config, setConfig] = useState<AutoTradingConfig>(() => {
     // Load from localStorage initially for fast startup
@@ -122,6 +130,8 @@ export function useAutoTrading() {
             useScaledEntries: config.useScaledEntries,
             scaledEntriesCount: config.scaledEntriesCount,
             scaledEntriesDelay: config.scaledEntriesDelay,
+            useReversalStrategy: config.useReversalStrategy,
+            reversalMinPriceChange: config.reversalMinPriceChange,
           };
           
           setConfig(prev => ({ ...prev, ...dbConfig }));
@@ -733,13 +743,41 @@ export function useAutoTrading() {
     
     // Execute all trades simultaneously
     await placeTradesSimultaneously(signalsToTrade);
-  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.dailyLimitEnabled, config.profitTargetType, config.profitTargetValue, config.useAIAnalysis, config.aiMinConfidence, placeTradesSimultaneously, analyzeSignals, filterByAIRecommendation, toast]);
+    
+    // Check for reversal opportunities if strategy is enabled
+    if (config.useReversalStrategy) {
+      const opportunities = await reversalStrategy.checkReversalOpportunities();
+      if (opportunities.length > 0) {
+        const best = opportunities[0];
+        setReversalOpportunity({
+          asset: best.originalTrade.asset,
+          direction: best.reversalDirection,
+          confidence: best.confidence,
+        });
+        
+        // Execute reversal if confidence is high enough
+        if (best.confidence >= 70) {
+          console.log(`🔄 Executando reversão automática: ${best.originalTrade.asset} ${best.reversalDirection}`);
+          const result = await reversalStrategy.executeReversal(best, config.amount, config.useAIAnalysis);
+          if (result.success) {
+            setConfig(prev => ({
+              ...prev,
+              todayTrades: prev.todayTrades + 1,
+            }));
+          }
+        }
+      } else {
+        setReversalOpportunity(null);
+      }
+    }
+  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.dailyLimitEnabled, config.profitTargetType, config.profitTargetValue, config.useAIAnalysis, config.aiMinConfidence, config.useReversalStrategy, config.amount, placeTradesSimultaneously, analyzeSignals, filterByAIRecommendation, reversalStrategy, toast]);
 
   const resetDailyTrades = useCallback(() => {
     setConfig(prev => ({ ...prev, todayTrades: 0 }));
     processedSignals.current.clear();
     tradingInProgress.current.clear();
-  }, []);
+    reversalStrategy.resetDailyCounters();
+  }, [reversalStrategy]);
 
   return {
     config,
@@ -748,6 +786,7 @@ export function useAutoTrading() {
     isAnalyzingAI: isAnalyzing,
     lastTradeResult,
     activeTradesCount,
+    reversalOpportunity,
     placeTrade,
     checkAndAutoTrade,
     resetDailyTrades,

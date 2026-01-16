@@ -20,7 +20,6 @@ const Admin = () => {
     updateConfig: updateAutoTradingConfig,
     isPlacingTrade,
     lastTradeResult,
-    reversalOpportunity,
     resetDailyTrades,
   } = useAutoTrading();
 
@@ -197,7 +196,6 @@ const Admin = () => {
                   isPlacingTrade={isPlacingTrade}
                   lastTradeResult={lastTradeResult}
                   defaultOpen={true}
-                  reversalOpportunity={reversalOpportunity}
                 />
               </CardContent>
             </Card>

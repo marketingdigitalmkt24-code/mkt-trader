@@ -30,6 +30,8 @@ interface AutoTradingConfig {
   // Reversal strategy settings
   useReversalStrategy: boolean;
   reversalMinPriceChange: number; // Minimum price change % for reversal
+  // Signal inversion strategy
+  useSignalInversion: boolean; // Invert signal direction when duplicate asset detected
 }
 
 interface TradeResult {
@@ -55,6 +57,7 @@ const DEFAULT_CONFIG: AutoTradingConfig = {
   scaledEntriesDelay: 10,
   useReversalStrategy: false,
   reversalMinPriceChange: 0.3,
+  useSignalInversion: false,
 };
 
 export function useAutoTrading() {
@@ -132,6 +135,7 @@ export function useAutoTrading() {
             scaledEntriesDelay: config.scaledEntriesDelay,
             useReversalStrategy: config.useReversalStrategy,
             reversalMinPriceChange: config.reversalMinPriceChange,
+            useSignalInversion: config.useSignalInversion,
           };
           
           setConfig(prev => ({ ...prev, ...dbConfig }));
@@ -245,6 +249,46 @@ export function useAutoTrading() {
     }
   }, []);
 
+  // Get the last trade direction for an asset (for signal inversion)
+  const getLastTradeDirection = useCallback(async (asset: string, timeframe: string): Promise<string | null> => {
+    try {
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('operation_results')
+        .select('direction, timeframe')
+        .ilike('asset', asset)
+        .eq('timeframe', timeframe)
+        .gte('created_at', thirtyMinutesAgo)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (error || !data) return null;
+      return data.direction; // 'call' or 'put'
+    } catch (err) {
+      console.error(`Failed to get last trade direction for ${asset}:`, err);
+      return null;
+    }
+  }, []);
+
+  // Count trades on same asset with same timeframe in recent history
+  const countRecentTradesOnAsset = useCallback(async (asset: string, timeframe: string): Promise<number> => {
+    try {
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { count } = await supabase
+        .from('operation_results')
+        .select('id', { count: 'exact', head: true })
+        .ilike('asset', asset)
+        .eq('timeframe', timeframe)
+        .gte('created_at', thirtyMinutesAgo);
+      
+      return count ?? 0;
+    } catch (err) {
+      console.error(`Failed to count trades for ${asset}:`, err);
+      return 0;
+    }
+  }, []);
+
   // Periodically check for pending results
   useEffect(() => {
     const checkPendingResults = async () => {
@@ -310,20 +354,42 @@ export function useAutoTrading() {
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   // Place a single trade via Edge Function (server-side)
-  const placeSingleTrade = useCallback(async (signal: TradingSignal, entryNumber?: number): Promise<TradeResult> => {
+  const placeSingleTrade = useCallback(async (signal: TradingSignal, entryNumber?: number, forceInvert?: boolean): Promise<TradeResult> => {
     const startTime = Date.now();
     const entryLabel = entryNumber ? ` [Entrada ${entryNumber}]` : '';
     
     try {
       const expiration = getExpirationFromTimeframe(signal.timeframe);
       
-      console.log(`🎯 [${signal.asset}]${entryLabel} Placing trade via Edge Function: ${signal.type} $${config.amount}`);
+      // Determine if we should invert the signal direction
+      let finalDirection = signal.type.toLowerCase();
+      let wasInverted = false;
+      
+      if (config.useSignalInversion || forceInvert) {
+        // Check how many recent trades on same asset/timeframe
+        const recentTradeCount = await countRecentTradesOnAsset(signal.asset, signal.timeframe);
+        
+        if (recentTradeCount > 0) {
+          // Get last trade direction
+          const lastDirection = await getLastTradeDirection(signal.asset, signal.timeframe);
+          
+          if (lastDirection) {
+            // Invert: if last was 'call', new is 'put' and vice versa
+            finalDirection = lastDirection === 'call' ? 'put' : 'call';
+            wasInverted = true;
+            console.log(`🔄 [${signal.asset}]${entryLabel} SINAL INVERTIDO: ${signal.type} → ${finalDirection.toUpperCase()} (${recentTradeCount} trades recentes no ativo)`);
+          }
+        }
+      }
+      
+      const directionLabel = wasInverted ? `${finalDirection.toUpperCase()} (invertido)` : signal.type;
+      console.log(`🎯 [${signal.asset}]${entryLabel} Placing trade via Edge Function: ${directionLabel} $${config.amount}`);
       
       // Call Edge Function directly - no need for frontend WebSocket connection
       const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
         body: {
           asset: signal.asset,
-          direction: signal.type.toLowerCase(),
+          direction: finalDirection,
           amount: config.amount,
           expiration: expiration,
           signalId: `${signal.id}${entryNumber ? `-${entryNumber}` : ''}`,
@@ -342,7 +408,8 @@ export function useAutoTrading() {
       }
 
       if (data?.success) {
-        console.log(`✅ [${signal.asset}]${entryLabel} Trade executed successfully, ID: ${data.tradeId}`);
+        const invertedMsg = wasInverted ? ' (invertido)' : '';
+        console.log(`✅ [${signal.asset}]${entryLabel} Trade executed successfully${invertedMsg}, ID: ${data.tradeId}`);
         return { signal, success: true, tradeId: data.tradeId };
       } else {
         console.error(`❌ [${signal.asset}]${entryLabel} Trade failed:`, data?.error);
@@ -353,7 +420,7 @@ export function useAutoTrading() {
       console.error(`❌ [${signal.asset}]${entryLabel} Trade error after ${elapsed}ms:`, err);
       return { signal, success: false, error: String(err) };
     }
-  }, [config.amount, config.useAIAnalysis]);
+  }, [config.amount, config.useAIAnalysis, config.useSignalInversion, countRecentTradesOnAsset, getLastTradeDirection]);
 
   // Place scaled entries - multiple entries on the same asset with delay
   const placeScaledEntries = useCallback(async (signal: TradingSignal): Promise<TradeResult[]> => {

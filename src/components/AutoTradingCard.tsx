@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Slider } from './ui/slider';
-import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X, TrendingUp, Brain, Sparkles, RefreshCw } from 'lucide-react';
+import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X, TrendingUp, Brain, Sparkles, RefreshCw, ArrowLeftRight } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
@@ -29,6 +29,8 @@ interface AutoTradingConfig {
   // Reversal strategy settings
   useReversalStrategy: boolean;
   reversalMinPriceChange: number; // Minimum price change % for reversal
+  // Signal inversion strategy
+  useSignalInversion: boolean;
 }
 
 interface AutoTradingCardProps {
@@ -319,6 +321,30 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
               </p>
             </div>
           )}
+        </div>
+
+        {/* Signal Inversion Strategy */}
+        <div className="space-y-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2">
+              <ArrowLeftRight className="w-4 h-4 text-amber-500" />
+              <span className="font-medium">Inversão de Sinal</span>
+              <Badge variant="outline" className="text-xs bg-amber-500/20">
+                <Sparkles className="w-3 h-3 mr-1" />
+                Novo
+              </Badge>
+            </Label>
+            <Switch
+              checked={localConfig.useSignalInversion ?? false}
+              onCheckedChange={(useSignalInversion) => handleLocalChange({ useSignalInversion })}
+            />
+          </div>
+          
+          <p className="text-xs text-muted-foreground">
+            Quando ativado, se o sistema detectar trades recentes no mesmo ativo e timeframe, 
+            inverte automaticamente a direção: PUT → CALL ou CALL → PUT.
+            <span className="text-amber-400 font-medium"> Aumenta diversificação e reduz exposição unidirecional!</span>
+          </p>
         </div>
 
         {/* Profit Target */}

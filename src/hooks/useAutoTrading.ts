@@ -338,16 +338,10 @@ export function useAutoTrading() {
     });
   }, [user?.id, saveToDatabase]);
 
-  // Map timeframe to expiration in minutes
-  const getExpirationFromTimeframe = (timeframe: string): number => {
-    switch (timeframe) {
-      case 'M1': return 1;
-      case 'M5': return 5;
-      case 'M15': return 15;
-      case 'M30': return 30;
-      case 'H1': return 60;
-      default: return 5; // Default to 5 minutes
-    }
+  // Always use 1 minute expiration for IQ Option trades
+  const getExpirationFromTimeframe = (_timeframe: string): number => {
+    // Force 1 minute expiration for all trades regardless of signal timeframe
+    return 1;
   };
 
   // Helper to delay execution

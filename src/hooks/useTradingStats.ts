@@ -53,8 +53,9 @@ export function useTradingStats() {
 
       const { data: results, error } = await supabase
         .from('operation_results')
-        .select('result, profit, entry_price')
+        .select('result, profit, entry_price, is_ai_analyzed')
         .gte('created_at', startDate.toISOString())
+        .eq('is_ai_analyzed', true)
         .order('created_at', { ascending: true });
 
       if (error) throw error;

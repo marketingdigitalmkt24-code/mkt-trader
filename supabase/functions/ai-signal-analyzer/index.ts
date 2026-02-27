@@ -45,13 +45,13 @@ interface AssetPerformance {
   trades: number;
 }
 
-// ============= ESTRATÉGIA PROFIT-FIRST (ADAPTATIVA) =============
-// MODO ADAPTATIVO: Ajusta critérios baseado em dados disponíveis
-// - Com dados suficientes (>10 trades): usa análise DATA-DRIVEN
-// - Sem dados suficientes: usa análise TÉCNICA PURA
-// - Ativos com win rate >60% = PREFERIDOS (critérios relaxados)
-// - Ativos com win rate <45% E prejuízo = EVITAR ESTRITAMENTE
-// - Ativos neutros = usar análise técnica rigorosa
+// ============= ESTRATÉGIA FAST PROFIT (AGRESSIVA) =============
+// FOCO: Operações rápidas em M1/M5 com alta taxa de acerto
+// MODO ADAPTATIVO:
+// - Com dados suficientes (>5 trades): DATA-DRIVEN (prioriza ativos lucrativos)
+// - Sem dados: TÉCNICA AGRESSIVA (executa setups bons em qualquer ativo)
+// - Critérios calibrados para MAIS entradas mantendo qualidade
+// - Prioridade: M1 para lucro rápido
 
 // Função para buscar performance dos ativos em tempo real
 async function fetchAssetPerformance(): Promise<{ preferred: string[], avoid: string[], allPerformance: AssetPerformance[], hasSufficientData: boolean }> {
@@ -83,7 +83,7 @@ async function fetchAssetPerformance(): Promise<{ preferred: string[], avoid: st
     
     // Verificar se há dados suficientes para análise DATA-DRIVEN
     const totalTrades = results.length;
-    const hasSufficientData = totalTrades >= 10; // Mínimo 10 trades para confiar nos dados
+    const hasSufficientData = totalTrades >= 5; // Mínimo 5 trades para começar a usar dados
     
     console.log(`📊 Total de trades nos últimos 7 dias: ${totalTrades}`);
     
@@ -110,7 +110,7 @@ async function fetchAssetPerformance(): Promise<{ preferred: string[], avoid: st
     
     for (const [asset, stats] of Object.entries(assetStats)) {
       const total = stats.wins + stats.losses;
-      if (total < 2) continue; // Mínimo 2 trades para análise (mais flexível)
+      if (total < 1) continue; // Mínimo 1 trade para começar a classificar
       
       const winRate = (stats.wins / total) * 100;
       
@@ -123,10 +123,10 @@ async function fetchAssetPerformance(): Promise<{ preferred: string[], avoid: st
         trades: total
       });
       
-      // Classificação dinâmica - MAIS RIGOROSO para evitar, MAIS FLEXÍVEL para preferir
-      if (winRate >= 55 && stats.profit >= 0) { // Relaxado de 60% para 55%
+      // Classificação dinâmica - AGRESSIVO para preferir, RIGOROSO para evitar
+      if (winRate >= 50 && stats.profit >= 0) { // 50%+ win rate = preferido
         preferred.push(asset);
-      } else if (winRate < 45 && stats.profit < -100) { // Só evita se MUITO ruim
+      } else if (winRate < 35 && stats.profit < -50 && total >= 3) { // Só evita se MUITO ruim com 3+ trades
         avoid.push(asset);
       }
     }
@@ -341,12 +341,12 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
       continue;
     }
     
-    // Confluência mínima - MAIS FLEXÍVEL quando não há dados históricos
-    // Com dados: preferidos=75%, outros=82%
-    // Sem dados (técnica pura): todos=78% (permite mais oportunidades baseado apenas em técnica)
+    // Confluência mínima - MAIS AGRESSIVO para operações rápidas
+    // Com dados: preferidos=70%, outros=75%
+    // Sem dados (técnica agressiva): todos=70% (permite mais oportunidades)
     const minConf = hasSufficientData 
-      ? (isPreferredAsset ? 75 : 82)
-      : 78; // Modo técnica pura: confluência razoável para todos
+      ? (isPreferredAsset ? 70 : 75)
+      : 70; // Modo agressivo: confluência razoável para todos
     
     if (conf < minConf) {
       console.log(`❌ ${s.asset}: Confluência ${conf}% < ${minConf}%`);
@@ -384,28 +384,28 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
     }
     // ========== DIAMOND SETUP (100% ASSERTIVIDADE) ==========
     else {
-      const isDiamondCall = rsi <= 15 && stochK <= 15 && stochK > stochD &&
+      const isDiamondCall = rsi <= 20 && stochK <= 20 && stochK > stochD &&
                             bollPos === 'below_lower' && pricePos === 'near_support' && 
                             hasPattern && vol === 'low' && s.type === 'CALL' && 
                             macdHist > 0 && maTrend !== 'bearish';
-      const isDiamondPut = rsi >= 85 && stochK >= 85 && stochK < stochD &&
+      const isDiamondPut = rsi >= 80 && stochK >= 80 && stochK < stochD &&
                            bollPos === 'above_upper' && pricePos === 'near_resistance' && 
                            hasPattern && vol === 'low' && s.type === 'PUT' && 
                            macdHist < 0 && maTrend !== 'bullish';
       
       if (isDiamondCall || isDiamondPut) {
         pattern = 'DIAMOND_SETUP';
-        score = 100;
+        score = 98;
         criteriaCount = 9;
         reasons.push('🔷 DIAMOND', `RSI ${rsi.toFixed(1)}`, `Stoch ${stochK.toFixed(1)}`, 
                      bollPos, pricePos, hasPattern!, 'Vol baixa', 'MACD OK', 'MA OK');
       }
       // ========== GOLDEN SETUP ==========
       else {
-        const isGoldenCall = rsi <= 18 && stochK <= 18 && pricePos === 'near_support' && 
-                             hasPattern && vol === 'low' && s.type === 'CALL' && macdHist > 0 && conf >= 85;
-        const isGoldenPut = rsi >= 82 && stochK >= 82 && pricePos === 'near_resistance' && 
-                            hasPattern && vol === 'low' && s.type === 'PUT' && macdHist < 0 && conf >= 85;
+        const isGoldenCall = rsi <= 22 && stochK <= 22 && pricePos === 'near_support' && 
+                             hasPattern && vol === 'low' && s.type === 'CALL' && macdHist > 0 && conf >= 80;
+        const isGoldenPut = rsi >= 78 && stochK >= 78 && pricePos === 'near_resistance' && 
+                            hasPattern && vol === 'low' && s.type === 'PUT' && macdHist < 0 && conf >= 80;
         
         if (isGoldenCall || isGoldenPut) {
           pattern = 'GOLDEN_SETUP';
@@ -415,14 +415,14 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
                        pricePos, hasPattern!, 'Vol baixa', 'MACD OK', `Conf ${conf}%`);
         }
         // ========== EXTREME OVERSOLD/OVERBOUGHT ==========
-        else if ((rsi <= 15 && s.type === 'CALL') || (rsi >= 85 && s.type === 'PUT')) {
+        else if ((rsi <= 20 && s.type === 'CALL') || (rsi >= 80 && s.type === 'PUT')) {
           const isCall = s.type === 'CALL';
           pattern = isCall ? 'EXTREME_OVERSOLD' : 'EXTREME_OVERBOUGHT';
           score = 96;
           reasons.push(`RSI extremo ${rsi.toFixed(1)}`);
           criteriaCount = 1;
           
-          if (isCall ? stochK <= 15 : stochK >= 85) { score += 1.5; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
+          if (isCall ? stochK <= 20 : stochK >= 80) { score += 1.5; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
           if (isCall ? bollPos === 'below_lower' : bollPos === 'above_upper') { score += 1; reasons.push(bollPos); criteriaCount++; }
           if (isCall ? pricePos === 'near_support' : pricePos === 'near_resistance') { score += 1; reasons.push(pricePos); criteriaCount++; }
           if (hasPattern) { score += 1; reasons.push(hasPattern!); criteriaCount++; }
@@ -431,21 +431,21 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
           if (goodAssets.includes(s.asset)) { score += 0.5; reasons.push('Histórico+'); criteriaCount++; }
         }
         // ========== PERFECT REVERSAL ==========
-        else if (hasPattern && ((rsi <= 20 && s.type === 'CALL') || (rsi >= 80 && s.type === 'PUT'))) {
+        else if (hasPattern && ((rsi <= 25 && s.type === 'CALL') || (rsi >= 75 && s.type === 'PUT'))) {
           const isCall = s.type === 'CALL';
           pattern = 'PERFECT_REVERSAL';
           score = 95;
           reasons.push(hasPattern!, `RSI ${rsi.toFixed(1)}`);
           criteriaCount = 2;
           
-          if (isCall ? stochK <= 20 : stochK >= 80) { score += 1.5; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
+          if (isCall ? stochK <= 25 : stochK >= 75) { score += 1.5; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
           if (isCall ? pricePos === 'near_support' : pricePos === 'near_resistance') { score += 1.5; reasons.push(pricePos); criteriaCount++; }
           if (vol === 'low') { score += 1; reasons.push('Vol baixa'); criteriaCount++; }
           if (conf >= 85) { score += 1; reasons.push(`Conf ${conf}%`); criteriaCount++; }
           if (goodAssets.includes(s.asset)) { score += 0.5; reasons.push('Histórico+'); criteriaCount++; }
         }
         // ========== TRIPLE CONFLUENCE ==========
-        else if (conf >= 90 && confCount >= 6) {
+        else if (conf >= 85 && confCount >= 5) {
           pattern = 'TRIPLE_CONFLUENCE';
           score = 95;
           reasons.push(`Conf ${conf}%`, `${confCount} indicadores`);
@@ -461,24 +461,21 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
       }
     }
     
-    // PROFIT-FIRST ADAPTATIVO: Critérios dependem do modo
-    // Com dados históricos: usa preferência de ativos
-    // Sem dados: usa análise técnica pura com critérios mais rigorosos
+    // FAST PROFIT: Critérios mais agressivos para mais entradas
     let minScore: number;
     let maxRisk: number;
     let minCriteria: number;
     
     if (hasSufficientData) {
       // Modo DATA-DRIVEN: ativos preferidos têm vantagem
-      minScore = isPreferredAsset ? 88 : 93;
-      maxRisk = isPreferredAsset ? 55 : 48;
-      minCriteria = isPreferredAsset ? 3 : 4;
+      minScore = isPreferredAsset ? 85 : 90;
+      maxRisk = isPreferredAsset ? 60 : 52;
+      minCriteria = isPreferredAsset ? 2 : 3;
     } else {
-      // Modo TÉCNICA PURA: todos os ativos avaliados igualmente
-      // Critérios baseados puramente na qualidade do setup técnico
-      minScore = 90; // Score técnico mínimo
-      maxRisk = 50; // Risco máximo tolerável
-      minCriteria = 4; // Mínimo de confirmações
+      // Modo TÉCNICA AGRESSIVA: critérios relaxados para gerar trades
+      minScore = 85; // Score técnico mínimo (era 90)
+      maxRisk = 55; // Risco máximo (era 50)
+      minCriteria = 3; // Mínimo de confirmações (era 4)
     }
     
     if (pattern && criteriaCount >= minCriteria && score >= minScore && riskScore <= maxRisk) {
@@ -535,8 +532,8 @@ function selectBestSignals(matches: PatternMatch[], preferredAssets: string[], h
   const selected: PatternMatch[] = [];
   const usedAssets = new Set<string>();
   
-  // PROFIT-FIRST - Até 4 trades
-  const maxSignals = 4;
+  // FAST PROFIT - Até 6 trades simultâneos
+  const maxSignals = 6;
   
   for (const match of sorted) {
     if (selected.length >= maxSignals) break;
@@ -550,14 +547,14 @@ function selectBestSignals(matches: PatternMatch[], preferredAssets: string[], h
     let minCriteria: number;
     
     if (hasSufficientData) {
-      minScore = isPreferred ? 88 : 93;
-      maxRisk = isPreferred ? 55 : 48;
-      minCriteria = isPreferred ? 3 : 4;
+      minScore = isPreferred ? 85 : 90;
+      maxRisk = isPreferred ? 60 : 52;
+      minCriteria = isPreferred ? 2 : 3;
     } else {
-      // Modo técnica pura: critérios iguais para todos
-      minScore = 90;
-      maxRisk = 50;
-      minCriteria = 4;
+      // Modo técnica agressiva: critérios mais relaxados
+      minScore = 85;
+      maxRisk = 55;
+      minCriteria = 3;
     }
     
     if (match.score < minScore) continue;
@@ -656,47 +653,46 @@ serve(async (req) => {
     const avoidList = avoidAssets.length > 0 ? avoidAssets.join(', ') : 'nenhum bloqueado';
     
     const systemPrompt = hasSufficientData 
-      ? `Você é um analista de opções binárias DATA-DRIVEN focado em maximizar lucros.
+      ? `Você é um trader agressivo de opções binárias focado em LUCRO RÁPIDO.
 
-🎯 OBJETIVO: Aprovar trades em ativos com performance comprovada OU setups técnicos excepcionais
-💰 META: WIN RATE SUPERIOR A 65%
-🚀 MODO: DATA-DRIVEN (dados históricos disponíveis)
+🎯 OBJETIVO: Executar o MÁXIMO de trades lucrativos possível
+💰 META: LUCRO RÁPIDO em M1/M5
+🚀 MODO: DATA-DRIVEN + AGRESSIVO
 
-📊 ATIVOS PREFERIDOS (win rate >55% nos últimos 7 dias):
+📊 ATIVOS PREFERIDOS (win rate >50%):
 ${preferredList}
 
-⛔ ATIVOS A EVITAR (win rate <45% e prejuízo):
+⛔ ATIVOS A EVITAR (péssimo histórico):
 ${avoidList}
 
 REGRAS:
-1. ✅ Ativos PREFERIDOS com score >=85% = EXECUTE
-2. ✅ Padrões ULTRA_SAFE, DIAMOND_SETUP, TRIPLE_CONFLUENCE = EXECUTE (qualquer ativo não bloqueado)
-3. ❌ Ativos da lista EVITAR = SEMPRE SKIP
-4. ⚠️ Ativos neutros com score >=92% = EXECUTE (setup técnico forte)
+1. ✅ Ativos PREFERIDOS com score >=82% = EXECUTE IMEDIATAMENTE
+2. ✅ Qualquer padrão DIAMOND, GOLDEN, EXTREME = EXECUTE
+3. ✅ Ativos neutros com score >=88% = EXECUTE
+4. ❌ APENAS ativos da lista EVITAR = SKIP
+5. 🎯 PRIORIZE M1 para lucro rápido
+6. ⚡ SEJA AGRESSIVO - mais trades = mais lucro
 
 Responda APENAS JSON válido:
-{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":85-100,"reason":"","adjustedConfluence":85+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`
-      : `Você é um analista de opções binárias focado em ANÁLISE TÉCNICA PURA.
+{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":80-100,"reason":"","adjustedConfluence":80+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`
+      : `Você é um trader agressivo de opções binárias focado em LUCRO RÁPIDO.
 
-🎯 OBJETIVO: Aprovar trades baseado EXCLUSIVAMENTE em qualidade técnica do setup
-💰 META: WIN RATE SUPERIOR A 60%
-🚀 MODO: TÉCNICA PURA (sem histórico suficiente para análise de ativos)
+🎯 OBJETIVO: Executar trades com boa qualidade técnica
+💰 META: LUCRO RÁPIDO em M1/M5
+🚀 MODO: TÉCNICA AGRESSIVA (construindo histórico)
 
-⚠️ IMPORTANTE: Não há dados históricos suficientes. Avalie APENAS:
-- Qualidade do padrão técnico
-- Score de confluência (>90% preferível)
-- Nível de risco (LOW preferível)
-- Volatilidade (baixa = melhor)
+⚠️ IMPORTANTE: Estamos construindo histórico. Seja AGRESSIVO em aprovar trades com boa técnica.
 
 REGRAS:
-1. ✅ Padrões ULTRA_SAFE, DIAMOND_SETUP = EXECUTE
-2. ✅ Score >=90% + Risco <=50% + Volatilidade baixa = EXECUTE
-3. ✅ TRIPLE_CONFLUENCE com 6+ critérios = EXECUTE
-4. ❌ Volatilidade alta = SEMPRE SKIP
-5. ❌ Score <88% = SKIP
+1. ✅ Padrões DIAMOND, GOLDEN, EXTREME = EXECUTE SEMPRE
+2. ✅ Score >=85% + Volatilidade NÃO alta = EXECUTE
+3. ✅ PERFECT_REVERSAL com 3+ critérios = EXECUTE
+4. ✅ TRIPLE_CONFLUENCE = EXECUTE
+5. ❌ APENAS volatilidade alta = SKIP
+6. ⚡ PRIORIZE M1 para lucro rápido
 
 Responda APENAS JSON válido:
-{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":85-100,"reason":"","adjustedConfluence":85+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
+{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":80-100,"reason":"","adjustedConfluence":80+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
 
     const userPrompt = hasSufficientData 
       ? `ANÁLISE DATA-DRIVEN - Aprovar ativos com performance comprovada:
@@ -778,12 +774,12 @@ REGRA: Aprovar setups com score >=90%, risco <=50%, volatilidade baixa/média.`;
           if (isBlocked) return false;
           
           if (hasSufficientData) {
-            // Modo DATA-DRIVEN: preferidos ou score muito alto
-            return (isPreferred && d.score >= 85 && d.riskScore <= 55) || 
-                   (d.score >= 92 && d.riskScore <= 45);
+            // Modo DATA-DRIVEN: preferidos ou score bom
+            return (isPreferred && d.score >= 82 && d.riskScore <= 60) || 
+                   (d.score >= 88 && d.riskScore <= 52);
           } else {
-            // Modo TÉCNICA PURA: aceita qualquer ativo com bom setup
-            return d.score >= 90 && d.riskScore <= 50;
+            // Modo TÉCNICA AGRESSIVA: aceita setups com boa qualidade
+            return d.score >= 85 && d.riskScore <= 55;
           }
         })
         .map(d => ({
@@ -856,20 +852,20 @@ REGRA: Aprovar setups com score >=90%, risco <=50%, volatilidade baixa/média.`;
         analyzedSignals: selectedSignals.map(d => {
           const isPreferred = preferredAssets.includes(d.signal.asset);
           const isBlocked = avoidAssets.includes(d.signal.asset);
-          // DATA-DRIVEN: Só executa ativos PREFERIDOS e não bloqueados
-          const shouldExecute = isPreferred && !isBlocked && d.score >= 85 && d.riskScore <= 50;
+          // AGRESSIVO: Executa se não bloqueado e score bom
+          const shouldExecute = !isBlocked && d.score >= 85 && d.riskScore <= 55;
           return {
             signalId: d.signal.asset,
             asset: d.signal.asset,
             recommendation: shouldExecute ? 'EXECUTE' : 'SKIP',
             confidence: d.score,
-            reason: shouldExecute ? `${d.pattern}: Ativo preferido` : 'Ativo sem performance comprovada',
+            reason: shouldExecute ? `${d.pattern}: Setup técnico forte` : 'Risco elevado',
             adjustedConfluence: d.score,
-            riskLevel: isPreferred ? 'LOW' : 'HIGH'
+            riskLevel: d.riskScore <= 40 ? 'LOW' : 'MEDIUM'
           };
         }),
         marketSentiment: 'NEUTRAL',
-        bestSignal: selectedSignals.find(d => preferredAssets.includes(d.signal.asset))?.signal.asset || null
+        bestSignal: selectedSignals[0]?.signal.asset || null
       };
     }
 

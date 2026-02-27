@@ -723,6 +723,25 @@ export function useAutoTrading() {
     
     console.log(`🔍 Sinais após deduplicação: ${eligibleSignals.length} ativos únicos (de ${rawEligibleSignals.length} sinais totais)`);
 
+    // LOCK IMEDIATO: Marcar ativos como "em processamento" ANTES da análise IA
+    // Isso previne que outro ciclo processe o mesmo ativo enquanto a IA analisa
+    const lockedAssets: string[] = [];
+    eligibleSignals = eligibleSignals.filter(signal => {
+      const assetKey = signal.asset.toUpperCase();
+      if (activeAssetTrades.current.has(assetKey)) {
+        console.log(`🔒 [${signal.asset}] Já travado por outro ciclo - ignorando`);
+        return false;
+      }
+      activeAssetTrades.current.add(assetKey);
+      lockedAssets.push(assetKey);
+      return true;
+    });
+
+    // Se nenhum sinal sobrou após lock, liberar e sair
+    if (eligibleSignals.length === 0) {
+      lockedAssets.forEach(a => activeAssetTrades.current.delete(a));
+    }
+
     if (eligibleSignals.length === 0) {
       const activeCount = activeAssetTrades.current.size;
       const openCount = openAssetSymbols.size;
@@ -753,6 +772,15 @@ export function useAutoTrading() {
             config.aiMinConfidence
           );
           
+          // Liberar locks dos ativos rejeitados pela IA
+          const approvedAssets = new Set(aiApprovedSignals.map(s => s.asset.toUpperCase()));
+          lockedAssets.forEach(a => {
+            if (!approvedAssets.has(a)) {
+              activeAssetTrades.current.delete(a);
+              console.log(`🔓 [${a}] Lock liberado - rejeitado pela IA`);
+            }
+          });
+
           if (aiApprovedSignals.length === 0) {
             console.log('🤖 AI rejected all signals - waiting for better opportunity');
             
@@ -793,6 +821,13 @@ export function useAutoTrading() {
         eligibleSignals = eligibleSignals.filter(
           s => s.indicators.confluenceScore >= config.minConfluence
         );
+        // Liberar locks dos ativos filtrados
+        const remainingAssets = new Set(eligibleSignals.map(s => s.asset.toUpperCase()));
+        lockedAssets.forEach(a => {
+          if (!remainingAssets.has(a)) {
+            activeAssetTrades.current.delete(a);
+          }
+        });
       }
     }
 

@@ -5,6 +5,7 @@ import { TimeframeFilter } from '@/components/TimeframeFilter';
 import { AssetRanking } from '@/components/AssetRanking';
 import { BankManagementCard } from '@/components/BankManagementCard';
 import { MarketStatusCard } from '@/components/MarketStatusCard';
+import { AILearningCard } from '@/components/AILearningCard';
 import { SignalHistorySection } from '@/components/SignalHistorySection';
 import { AIStatusIndicator } from '@/components/AIStatusIndicator';
 import { mockAssetPerformance } from '@/data/mockData';
@@ -137,6 +138,7 @@ const Index = () => {
 
           {/* Sidebar - Stats & Management */}
           <div className="space-y-4 sm:space-y-6">
+            <AILearningCard />
             <BankManagementCard />
             <AssetRanking assets={mockAssetPerformance} />
             <MarketStatusCard 

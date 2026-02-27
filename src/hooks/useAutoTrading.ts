@@ -252,19 +252,20 @@ export function useAutoTrading() {
   // Load active trades from database on mount and periodically refresh
   const refreshActiveAssetTrades = useCallback(async () => {
     try {
-      // Get all trades from last 60 minutes (any result - not just pending)
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      // Get all pending trades from last 30 minutes (active trades)
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
       const { data: activeOps } = await supabase
         .from('operation_results')
         .select('asset, result')
-        .gte('created_at', oneHourAgo);
+        .eq('result', 'pending')
+        .gte('created_at', thirtyMinutesAgo);
       
       if (activeOps) {
         activeAssetTrades.current.clear();
         activeOps.forEach(op => {
           activeAssetTrades.current.add(op.asset.toUpperCase());
         });
-        console.log(`📊 Ativos bloqueados (última 1h): ${Array.from(activeAssetTrades.current).join(', ') || 'nenhum'}`);
+        console.log(`📊 Active trades on assets: ${Array.from(activeAssetTrades.current).join(', ') || 'none'}`);
       }
     } catch (err) {
       console.error('Failed to refresh active asset trades:', err);
@@ -274,21 +275,18 @@ export function useAutoTrading() {
   // Check if asset has active trade in database (real-time check)
   const hasActiveTradeForAsset = useCallback(async (asset: string): Promise<boolean> => {
     try {
-      // Check any trade for this asset in the last 60 minutes (not just pending)
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const { count } = await supabase
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data, count } = await supabase
         .from('operation_results')
         .select('id', { count: 'exact', head: true })
+        .eq('result', 'pending')
         .ilike('asset', asset)
-        .gte('created_at', oneHourAgo);
+        .gte('created_at', thirtyMinutesAgo);
       
-      if ((count ?? 0) > 0) {
-        console.log(`⏸️ [${asset}] Já operado na última hora - bloqueado`);
-      }
       return (count ?? 0) > 0;
     } catch (err) {
       console.error(`Failed to check active trade for ${asset}:`, err);
-      return true;
+      return true; // Assume there's an active trade on error to be safe
     }
   }, []);
 

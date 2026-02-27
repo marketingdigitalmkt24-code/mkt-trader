@@ -45,144 +45,338 @@ interface AssetPerformance {
   trades: number;
 }
 
-// ============= ESTRATÉGIA FAST PROFIT (AGRESSIVA) =============
-// FOCO: Operações rápidas em M1/M5 com alta taxa de acerto
-// MODO ADAPTATIVO:
-// - Com dados suficientes (>5 trades): DATA-DRIVEN (prioriza ativos lucrativos)
-// - Sem dados: TÉCNICA AGRESSIVA (executa setups bons em qualquer ativo)
-// - Critérios calibrados para MAIS entradas mantendo qualidade
-// - Prioridade: M1 para lucro rápido
+// ============= LEARNING ENGINE: Aprendizado com operações passadas =============
 
-// Função para buscar performance dos ativos em tempo real
-async function fetchAssetPerformance(): Promise<{ preferred: string[], avoid: string[], allPerformance: AssetPerformance[], hasSufficientData: boolean }> {
+interface LearnedPattern {
+  // Performance por ativo
+  assetPerformance: Map<string, AssetPerformance>;
+  // Performance por direção (CALL/PUT) por ativo
+  directionPerformance: Map<string, { callWinRate: number; putWinRate: number; callTrades: number; putTrades: number }>;
+  // Horários mais lucrativos (hora UTC)
+  hourlyPerformance: Map<number, { wins: number; losses: number; profit: number }>;
+  // Performance por timeframe
+  timeframePerformance: Map<string, { wins: number; losses: number; profit: number }>;
+  // Sequências de loss por ativo (para evitar overtrading em ativos perdedores)
+  recentLossStreaks: Map<string, number>;
+  // Lucro total e métricas gerais
+  totalProfit: number;
+  totalTrades: number;
+  overallWinRate: number;
+  bestHours: number[];
+  worstHours: number[];
+  hasSufficientData: boolean;
+}
+
+async function buildLearningModel(): Promise<LearnedPattern> {
+  const model: LearnedPattern = {
+    assetPerformance: new Map(),
+    directionPerformance: new Map(),
+    hourlyPerformance: new Map(),
+    timeframePerformance: new Map(),
+    recentLossStreaks: new Map(),
+    totalProfit: 0,
+    totalTrades: 0,
+    overallWinRate: 50,
+    bestHours: [],
+    worstHours: [],
+    hasSufficientData: false,
+  };
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!supabaseUrl || !supabaseKey) {
-      console.log('⚠️ Supabase não configurado, usando ANÁLISE TÉCNICA PURA');
-      return { preferred: [], avoid: [], allPerformance: [], hasSufficientData: false };
-    }
-    
+    if (!supabaseUrl || !supabaseKey) return model;
+
     const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Buscar resultados dos últimos 7 dias
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
+
+    // Buscar resultados dos últimos 14 dias para aprendizado mais robusto
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
     const { data: results, error } = await supabase
       .from('operation_results')
-      .select('asset, result, profit')
-      .gte('created_at', sevenDaysAgo.toISOString())
-      .eq('is_ai_analyzed', true);
-    
+      .select('asset, result, profit, direction, timeframe, created_at')
+      .gte('created_at', fourteenDaysAgo.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(500);
+
     if (error || !results || results.length === 0) {
-      console.log('⚠️ Sem dados históricos, usando ANÁLISE TÉCNICA PURA');
-      return { preferred: [], avoid: [], allPerformance: [], hasSufficientData: false };
+      console.log('📚 Sem dados para aprendizado');
+      return model;
     }
-    
-    // Verificar se há dados suficientes para análise DATA-DRIVEN
-    const totalTrades = results.length;
-    const hasSufficientData = totalTrades >= 5; // Mínimo 5 trades para começar a usar dados
-    
-    console.log(`📊 Total de trades nos últimos 7 dias: ${totalTrades}`);
-    
-    if (!hasSufficientData) {
-      console.log('⚠️ Dados insuficientes (<10 trades), usando ANÁLISE TÉCNICA PURA');
-    }
-    
-    // Agregar por ativo
+
+    model.totalTrades = results.length;
+    model.hasSufficientData = results.length >= 5;
+
+    console.log(`📚 LEARNING ENGINE: Analisando ${results.length} operações dos últimos 14 dias`);
+
+    // ===== 1. Performance por ATIVO =====
     const assetStats: Record<string, { wins: number; losses: number; profit: number }> = {};
-    
+    // ===== 2. Performance por DIREÇÃO por ativo =====
+    const dirStats: Record<string, { callWins: number; callLosses: number; putWins: number; putLosses: number }> = {};
+    // ===== 3. Performance por HORA =====
+    const hourStats: Record<number, { wins: number; losses: number; profit: number }> = {};
+    // ===== 4. Performance por TIMEFRAME =====
+    const tfStats: Record<string, { wins: number; losses: number; profit: number }> = {};
+    // ===== 5. Sequência recente de losses por ativo =====
+    const recentByAsset: Record<string, string[]> = {};
+
+    let totalWins = 0;
+    let totalLosses = 0;
+
     for (const r of results) {
-      if (!assetStats[r.asset]) {
-        assetStats[r.asset] = { wins: 0, losses: 0, profit: 0 };
+      const isWin = r.result === 'win';
+      const isLoss = r.result === 'loss';
+      const profit = r.profit || 0;
+
+      model.totalProfit += profit;
+      if (isWin) totalWins++;
+      if (isLoss) totalLosses++;
+
+      // Asset performance
+      if (!assetStats[r.asset]) assetStats[r.asset] = { wins: 0, losses: 0, profit: 0 };
+      if (isWin) assetStats[r.asset].wins++;
+      if (isLoss) assetStats[r.asset].losses++;
+      assetStats[r.asset].profit += profit;
+
+      // Direction performance
+      if (!dirStats[r.asset]) dirStats[r.asset] = { callWins: 0, callLosses: 0, putWins: 0, putLosses: 0 };
+      if (r.direction === 'call' || r.direction === 'CALL') {
+        if (isWin) dirStats[r.asset].callWins++;
+        if (isLoss) dirStats[r.asset].callLosses++;
+      } else {
+        if (isWin) dirStats[r.asset].putWins++;
+        if (isLoss) dirStats[r.asset].putLosses++;
       }
-      if (r.result === 'win') assetStats[r.asset].wins++;
-      else if (r.result === 'loss') assetStats[r.asset].losses++;
-      assetStats[r.asset].profit += r.profit || 0;
+
+      // Hourly performance
+      const hour = new Date(r.created_at).getUTCHours();
+      if (!hourStats[hour]) hourStats[hour] = { wins: 0, losses: 0, profit: 0 };
+      if (isWin) hourStats[hour].wins++;
+      if (isLoss) hourStats[hour].losses++;
+      hourStats[hour].profit += profit;
+
+      // Timeframe performance
+      const tf = r.timeframe || 'M1';
+      if (!tfStats[tf]) tfStats[tf] = { wins: 0, losses: 0, profit: 0 };
+      if (isWin) tfStats[tf].wins++;
+      if (isLoss) tfStats[tf].losses++;
+      tfStats[tf].profit += profit;
+
+      // Recent results by asset (para detectar loss streaks)
+      if (!recentByAsset[r.asset]) recentByAsset[r.asset] = [];
+      if (recentByAsset[r.asset].length < 5) {
+        recentByAsset[r.asset].push(r.result);
+      }
     }
-    
-    // Calcular performance e classificar
-    const allPerformance: AssetPerformance[] = [];
-    const preferred: string[] = [];
-    const avoid: string[] = [];
-    
+
+    // Processar asset performance
     for (const [asset, stats] of Object.entries(assetStats)) {
       const total = stats.wins + stats.losses;
-      if (total < 1) continue; // Mínimo 1 trade para começar a classificar
-      
-      const winRate = (stats.wins / total) * 100;
-      
-      allPerformance.push({
+      if (total < 1) continue;
+      model.assetPerformance.set(asset, {
         asset,
         wins: stats.wins,
         losses: stats.losses,
-        winRate: Math.round(winRate * 10) / 10,
-        profit: stats.profit,
-        trades: total
+        winRate: Math.round((stats.wins / total) * 1000) / 10,
+        profit: Math.round(stats.profit * 100) / 100,
+        trades: total,
       });
-      
-      // Classificação dinâmica - AGRESSIVO para preferir, RIGOROSO para evitar
-      if (winRate >= 50 && stats.profit >= 0) { // 50%+ win rate = preferido
-        preferred.push(asset);
-      } else if (winRate < 35 && stats.profit < -50 && total >= 3) { // Só evita se MUITO ruim com 3+ trades
-        avoid.push(asset);
+    }
+
+    // Processar direction performance
+    for (const [asset, ds] of Object.entries(dirStats)) {
+      const callTotal = ds.callWins + ds.callLosses;
+      const putTotal = ds.putWins + ds.putLosses;
+      model.directionPerformance.set(asset, {
+        callWinRate: callTotal > 0 ? Math.round((ds.callWins / callTotal) * 1000) / 10 : 50,
+        putWinRate: putTotal > 0 ? Math.round((ds.putWins / putTotal) * 1000) / 10 : 50,
+        callTrades: callTotal,
+        putTrades: putTotal,
+      });
+    }
+
+    // Processar hourly performance
+    for (const [hourStr, hs] of Object.entries(hourStats)) {
+      const hour = parseInt(hourStr);
+      const total = hs.wins + hs.losses;
+      model.hourlyPerformance.set(hour, hs);
+      if (total >= 3) {
+        const winRate = (hs.wins / total) * 100;
+        if (winRate >= 60 && hs.profit > 0) model.bestHours.push(hour);
+        if (winRate < 40 && hs.profit < 0) model.worstHours.push(hour);
       }
     }
+
+    // Processar timeframe performance
+    for (const [tf, ts] of Object.entries(tfStats)) {
+      model.timeframePerformance.set(tf, ts);
+    }
+
+    // Processar loss streaks
+    for (const [asset, recent] of Object.entries(recentByAsset)) {
+      let streak = 0;
+      for (const r of recent) {
+        if (r === 'loss') streak++;
+        else break;
+      }
+      if (streak >= 2) model.recentLossStreaks.set(asset, streak);
+    }
+
+    model.overallWinRate = totalWins + totalLosses > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 1000) / 10 : 50;
+
+    // ===== LOGGING DO APRENDIZADO =====
+    console.log(`\n🧠 ===== MODELO DE APRENDIZADO =====`);
+    console.log(`   📊 Total: ${model.totalTrades} trades | Win Rate: ${model.overallWinRate}% | Lucro: $${model.totalProfit.toFixed(2)}`);
     
-    // Ordenar performance por win rate
-    allPerformance.sort((a, b) => b.winRate - a.winRate);
-    
-    console.log('📊 Performance atualizada em tempo real:');
-    console.log(`   ✅ PREFERIDOS (>55% win): ${preferred.join(', ') || 'nenhum'}`);
-    console.log(`   ❌ EVITAR ESTRITAMENTE (<45% + prejuízo): ${avoid.join(', ') || 'nenhum'}`);
-    console.log(`   📈 Modo: ${hasSufficientData ? 'DATA-DRIVEN' : 'TÉCNICA PURA'}`);
-    
-    if (allPerformance.length > 0) {
-      console.log('   📈 TOP 3 ativos:');
-      allPerformance.slice(0, 3).forEach((a, i) => {
-        console.log(`      ${i + 1}. ${a.asset}: ${a.winRate}% | ${a.trades} trades | $${a.profit}`);
+    // Top ativos
+    const sortedAssets = Array.from(model.assetPerformance.values()).sort((a, b) => b.profit - a.profit);
+    if (sortedAssets.length > 0) {
+      console.log(`   🏆 TOP ATIVOS (por lucro):`);
+      sortedAssets.slice(0, 5).forEach((a, i) => {
+        const dir = model.directionPerformance.get(a.asset);
+        const dirInfo = dir ? ` | CALL: ${dir.callWinRate}% (${dir.callTrades}) | PUT: ${dir.putWinRate}% (${dir.putTrades})` : '';
+        console.log(`      ${i + 1}. ${a.asset}: WR ${a.winRate}% | ${a.trades} trades | $${a.profit}${dirInfo}`);
       });
     }
-    
-    return { preferred, avoid, allPerformance, hasSufficientData };
+
+    // Piores ativos
+    const worstAssets = sortedAssets.filter(a => a.profit < 0 && a.trades >= 2);
+    if (worstAssets.length > 0) {
+      console.log(`   ⛔ PIORES ATIVOS:`);
+      worstAssets.forEach(a => console.log(`      ❌ ${a.asset}: WR ${a.winRate}% | $${a.profit}`));
+    }
+
+    if (model.bestHours.length > 0) console.log(`   ⏰ MELHORES HORÁRIOS (UTC): ${model.bestHours.join('h, ')}h`);
+    if (model.worstHours.length > 0) console.log(`   🚫 PIORES HORÁRIOS (UTC): ${model.worstHours.join('h, ')}h`);
+
+    // Timeframe
+    model.timeframePerformance.forEach((ts, tf) => {
+      const total = ts.wins + ts.losses;
+      if (total >= 2) {
+        const wr = Math.round((ts.wins / total) * 100);
+        console.log(`   📏 ${tf}: WR ${wr}% | ${total} trades | $${ts.profit.toFixed(2)}`);
+      }
+    });
+
+    // Loss streaks
+    model.recentLossStreaks.forEach((streak, asset) => {
+      console.log(`   ⚠️ ${asset}: ${streak} losses consecutivos recentes`);
+    });
+
+    console.log(`🧠 ================================\n`);
+
+    return model;
   } catch (e) {
-    console.error('Erro ao buscar performance:', e);
-    return { preferred: [], avoid: [], allPerformance: [], hasSufficientData: false };
+    console.error('Erro no Learning Engine:', e);
+    return model;
   }
 }
 
-// Fallback estático (usado apenas se DB falhar)
-const FALLBACK_PREFERRED = ['GBP/JPY', 'ETH/USD', 'AUD/CAD'];
-const FALLBACK_AVOID = ['BTC/USD', 'EUR/GBP', 'EUR/USD-OTC'];
+// ============= SCORING BASEADO EM APRENDIZADO =============
 
-type PatternType = 
-  | 'EXTREME_OVERSOLD' 
-  | 'EXTREME_OVERBOUGHT' 
-  | 'PERFECT_REVERSAL' 
-  | 'TRIPLE_CONFLUENCE'
-  | 'GOLDEN_SETUP'
-  | 'DIAMOND_SETUP'
-  | 'ULTRA_SAFE'
-  | 'PROFIT_MASTER'; // Novo: Padrão baseado em dados históricos
-
-interface PatternMatch {
-  signal: SignalData;
-  pattern: PatternType;
+function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
   score: number;
-  reason: string;
-  criteria: number;
-  technicalScore: number;
-  confidenceMultiplier: number;
-  riskScore: number; // Novo: Score de risco (menor = melhor)
+  adjustments: string[];
+  shouldSkip: boolean;
+  skipReason?: string;
+} {
+  let score = 0;
+  const adjustments: string[] = [];
+  const currentHour = new Date().getUTCHours();
+
+  // 1. ATIVO COM HISTÓRICO TERRÍVEL → BLOQUEAR
+  const assetPerf = model.assetPerformance.get(s.asset);
+  if (assetPerf && assetPerf.trades >= 3 && assetPerf.winRate < 35 && assetPerf.profit < -50) {
+    return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico péssimo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
+  }
+
+  // 2. LOSS STREAK RECENTE → BLOQUEAR
+  const lossStreak = model.recentLossStreaks.get(s.asset) || 0;
+  if (lossStreak >= 3) {
+    return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
+  }
+
+  // 3. HORÁRIO PÉSSIMO → BLOQUEAR
+  if (model.worstHours.includes(currentHour)) {
+    const hourData = model.hourlyPerformance.get(currentHour);
+    if (hourData) {
+      const total = hourData.wins + hourData.losses;
+      const wr = Math.round((hourData.wins / total) * 100);
+      return { score: 0, adjustments: [`HORÁRIO RUIM: ${currentHour}h UTC (WR: ${wr}%)`], shouldSkip: true, skipReason: `Horário ${currentHour}h desfavorável` };
+    }
+  }
+
+  // ===== BONIFICAÇÕES =====
+
+  // 4. Ativo com bom histórico
+  if (assetPerf) {
+    if (assetPerf.winRate >= 60 && assetPerf.profit > 0) {
+      score += 15;
+      adjustments.push(`ATIVO TOP: WR ${assetPerf.winRate}% | $${assetPerf.profit}`);
+    } else if (assetPerf.winRate >= 50 && assetPerf.profit >= 0) {
+      score += 8;
+      adjustments.push(`ATIVO BOM: WR ${assetPerf.winRate}%`);
+    } else if (assetPerf.winRate < 45 && assetPerf.trades >= 3) {
+      score -= 10;
+      adjustments.push(`ATIVO FRACO: WR ${assetPerf.winRate}%`);
+    }
+  }
+
+  // 5. Direção com melhor taxa de acerto para este ativo
+  const dirPerf = model.directionPerformance.get(s.asset);
+  if (dirPerf) {
+    const dirType = s.type;
+    const dirWinRate = dirType === 'CALL' ? dirPerf.callWinRate : dirPerf.putWinRate;
+    const dirTrades = dirType === 'CALL' ? dirPerf.callTrades : dirPerf.putTrades;
+    const otherWinRate = dirType === 'CALL' ? dirPerf.putWinRate : dirPerf.callWinRate;
+
+    if (dirTrades >= 2) {
+      if (dirWinRate >= 65) {
+        score += 12;
+        adjustments.push(`DIREÇÃO FORTE: ${dirType} WR ${dirWinRate}%`);
+      } else if (dirWinRate < 35 && dirTrades >= 3) {
+        score -= 15;
+        adjustments.push(`DIREÇÃO FRACA: ${dirType} WR ${dirWinRate}% (${otherWinRate === 'CALL' ? 'PUT' : 'CALL'} é melhor)`);
+      }
+    }
+  }
+
+  // 6. Horário favorável
+  if (model.bestHours.includes(currentHour)) {
+    score += 10;
+    adjustments.push(`HORÁRIO TOP: ${currentHour}h UTC`);
+  }
+
+  // 7. Timeframe com melhor performance
+  const tfPerf = model.timeframePerformance.get(s.timeframe);
+  if (tfPerf) {
+    const total = tfPerf.wins + tfPerf.losses;
+    if (total >= 3) {
+      const wr = (tfPerf.wins / total) * 100;
+      if (wr >= 60 && tfPerf.profit > 0) {
+        score += 8;
+        adjustments.push(`TIMEFRAME BOM: ${s.timeframe} WR ${Math.round(wr)}%`);
+      } else if (wr < 40 && tfPerf.profit < 0) {
+        score -= 8;
+        adjustments.push(`TIMEFRAME RUIM: ${s.timeframe} WR ${Math.round(wr)}%`);
+      }
+    }
+  }
+
+  // 8. Loss streak leve (2 losses) = cautela
+  if (lossStreak === 2) {
+    score -= 5;
+    adjustments.push(`CAUTELA: 2 losses recentes`);
+  }
+
+  return { score, adjustments, shouldSkip: false };
 }
 
-// ============= ANÁLISE TÉCNICA AVANÇADA =============
+// ============= ANÁLISE TÉCNICA =============
 
 function calculateTechnicalScore(s: SignalData): number {
-  let score = 50; // Base score
-  
+  let score = 50;
   const rsi = s.indicators.rsi.value;
   const stochK = s.indicators.stochastic?.k || 50;
   const stochD = s.indicators.stochastic?.d || 50;
@@ -192,135 +386,123 @@ function calculateTechnicalScore(s: SignalData): number {
   const conf = s.indicators.confluenceScore;
   const pricePos = s.indicators.supportResistance?.pricePosition || '';
   const maTrend = s.indicators.movingAverages?.trend || '';
-  
-  // === RSI EXTREMO (0-20 pontos) ===
+
+  // RSI
   if (s.type === 'CALL') {
-    if (rsi <= 15) score += 20;
-    else if (rsi <= 20) score += 15;
-    else if (rsi <= 25) score += 10;
-    else if (rsi <= 30) score += 5;
+    if (rsi <= 15) score += 20; else if (rsi <= 20) score += 15; else if (rsi <= 25) score += 10; else if (rsi <= 30) score += 5;
   } else {
-    if (rsi >= 85) score += 20;
-    else if (rsi >= 80) score += 15;
-    else if (rsi >= 75) score += 10;
-    else if (rsi >= 70) score += 5;
+    if (rsi >= 85) score += 20; else if (rsi >= 80) score += 15; else if (rsi >= 75) score += 10; else if (rsi >= 70) score += 5;
   }
-  
-  // === STOCHASTIC EXTREMO + CRUZAMENTO (0-15 pontos) ===
+
+  // Stochastic
   if (s.type === 'CALL') {
-    if (stochK <= 15 && stochK > stochD) score += 15; // Extremo + reversão
-    else if (stochK <= 20) score += 10;
-    else if (stochK <= 30) score += 5;
+    if (stochK <= 15 && stochK > stochD) score += 15; else if (stochK <= 20) score += 10; else if (stochK <= 30) score += 5;
   } else {
-    if (stochK >= 85 && stochK < stochD) score += 15; // Extremo + reversão
-    else if (stochK >= 80) score += 10;
-    else if (stochK >= 70) score += 5;
+    if (stochK >= 85 && stochK < stochD) score += 15; else if (stochK >= 80) score += 10; else if (stochK >= 70) score += 5;
   }
-  
-  // === BOLLINGER BANDS (0-10 pontos) ===
+
+  // Bollinger
   if (s.type === 'CALL' && bollPos === 'below_lower') score += 10;
   else if (s.type === 'PUT' && bollPos === 'above_upper') score += 10;
   else if (bollPos === 'near_lower' || bollPos === 'near_upper') score += 5;
-  
-  // === MACD CONFIRMAÇÃO (0-10 pontos) ===
-  if (s.type === 'CALL' && macdHist > 0) score += 10; // Momento positivo
-  else if (s.type === 'PUT' && macdHist < 0) score += 10; // Momento negativo
-  else if (Math.abs(macdHist) < 0.001) score += 3; // Neutro, pode reverter
-  
-  // === SUPORTE/RESISTÊNCIA (0-10 pontos) ===
+
+  // MACD
+  if (s.type === 'CALL' && macdHist > 0) score += 10;
+  else if (s.type === 'PUT' && macdHist < 0) score += 10;
+
+  // Support/Resistance
   if (s.type === 'CALL' && pricePos === 'near_support') score += 10;
   else if (s.type === 'PUT' && pricePos === 'near_resistance') score += 10;
-  
-  // === TENDÊNCIA DAS MÉDIAS (0-8 pontos) ===
+
+  // MA Trend
   if (s.type === 'CALL' && maTrend === 'bullish') score += 8;
   else if (s.type === 'PUT' && maTrend === 'bearish') score += 8;
-  else if (maTrend === 'neutral') score += 3; // Pode reverter
-  
-  // === VOLATILIDADE (0-7 pontos) ===
-  if (vol === 'low') score += 7; // Mais previsível
-  else if (vol === 'medium') score += 4;
-  // Alta volatilidade não adiciona pontos
-  
-  // === CONFLUÊNCIA (0-10 pontos) ===
-  if (conf >= 90) score += 10;
-  else if (conf >= 80) score += 7;
-  else if (conf >= 70) score += 4;
-  
-  // === PADRÃO DE REVERSÃO (0-10 pontos) ===
+
+  // Volatility
+  if (vol === 'low') score += 7; else if (vol === 'medium') score += 4;
+
+  // Confluence
+  if (conf >= 90) score += 10; else if (conf >= 80) score += 7; else if (conf >= 70) score += 4;
+
+  // Reversal pattern
   if (s.indicators.reversalPattern) {
-    const pattern = s.indicators.reversalPattern.toLowerCase();
-    if (pattern.includes('hammer') || pattern.includes('engulfing') || pattern.includes('morning')) {
-      score += 10; // Padrões fortes
-    } else if (pattern.includes('doji') || pattern.includes('pin')) {
-      score += 7; // Padrões médios
-    } else {
-      score += 5; // Outros padrões
-    }
+    const p = s.indicators.reversalPattern.toLowerCase();
+    if (p.includes('hammer') || p.includes('engulfing') || p.includes('morning')) score += 10;
+    else if (p.includes('doji') || p.includes('pin')) score += 7;
+    else score += 5;
   }
-  
+
   return Math.min(score, 100);
 }
 
-// Calcular score de risco (quanto menor, melhor) - OTIMIZADO COM DADOS HISTÓRICOS
-function calculateRiskScore(s: SignalData, badAssets: string[], preferredAssets: string[], avoidAssets: string[]): number {
-  let risk = 30; // Base mais baixo para ativos preferidos
-  
-  // Ativos com histórico ruim = risco muito alto
-  if (badAssets.includes(s.asset)) risk += 40;
-  if (avoidAssets.includes(s.asset)) risk += 25;
-  
-  // Ativos preferidos = risco reduzido
-  if (preferredAssets.includes(s.asset)) risk -= 15;
-  
-  // Volatilidade
+function calculateRiskScore(s: SignalData): number {
+  let risk = 30;
   if (s.indicators.atr.volatility === 'high') risk += 30;
   if (s.indicators.atr.volatility === 'medium') risk += 15;
   if (s.indicators.atr.volatility === 'low') risk -= 10;
-  
-  // Confluência
   if (s.indicators.confluenceScore < 75) risk += 20;
   else if (s.indicators.confluenceScore >= 90) risk -= 10;
-  
   if (s.indicators.confluenceCount < 3) risk += 15;
   else if (s.indicators.confluenceCount >= 5) risk -= 10;
-  
-  // RSI em zona neutra = mais risco
+
   const rsi = s.indicators.rsi.value;
   if (rsi > 35 && rsi < 65) risk += 25;
-  else if (rsi <= 20 || rsi >= 80) risk -= 10; // Extremos = menos risco
-  
-  // Stochastic em zona neutra = mais risco
+  else if (rsi <= 20 || rsi >= 80) risk -= 10;
+
   const stochK = s.indicators.stochastic?.k || 50;
   if (stochK > 30 && stochK < 70) risk += 20;
-  else if (stochK <= 15 || stochK >= 85) risk -= 10; // Extremos = menos risco
-  
-  // MACD confirmando direção
+  else if (stochK <= 15 || stochK >= 85) risk -= 10;
+
   const macdHist = s.indicators.macd?.histogram || 0;
-  if ((s.type === 'CALL' && macdHist > 0) || (s.type === 'PUT' && macdHist < 0)) {
-    risk -= 10; // MACD confirma = menos risco
-  }
-  
+  if ((s.type === 'CALL' && macdHist > 0) || (s.type === 'PUT' && macdHist < 0)) risk -= 10;
+
   return Math.max(0, Math.min(risk, 100));
 }
 
-function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAssets: string[], preferredAssets: string[], avoidAssets: string[], hasSufficientData: boolean): PatternMatch[] {
+// ============= PATTERN DETECTION =============
+
+type PatternType = 'EXTREME_OVERSOLD' | 'EXTREME_OVERBOUGHT' | 'PERFECT_REVERSAL' | 'TRIPLE_CONFLUENCE' | 'GOLDEN_SETUP' | 'DIAMOND_SETUP' | 'ULTRA_SAFE' | 'PROFIT_MASTER';
+
+interface PatternMatch {
+  signal: SignalData;
+  pattern: PatternType;
+  score: number;
+  reason: string;
+  criteria: number;
+  technicalScore: number;
+  riskScore: number;
+  learnedScore: number;
+  learnedAdjustments: string[];
+}
+
+function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMatch[] {
   const matches: PatternMatch[] = [];
-  
-  const mode = hasSufficientData ? 'DATA-DRIVEN' : 'TÉCNICA PURA';
-  console.log(`🔍 Analisando ${signals.length} sinais (MODO: ${mode})...`);
-  
+
   for (const s of signals) {
-    // REJEITAR ativos com histórico ruim ESTRITAMENTE (apenas se temos dados)
-    if (hasSufficientData && badAssets.includes(s.asset)) {
-      console.log(`❌ ${s.asset}: Histórico ruim`);
+    // APRENDIZADO: verificar se deve pular este sinal
+    const learned = calculateLearnedScore(s, model);
+    if (model.hasSufficientData && learned.shouldSkip) {
+      console.log(`🧠 SKIP ${s.asset}: ${learned.skipReason}`);
       continue;
     }
-    
-    // REJEITAR ativos a evitar (apenas se temos dados E o ativo tem histórico ruim comprovado)
-    if (hasSufficientData && avoidAssets.includes(s.asset)) {
-      console.log(`❌ ${s.asset}: Ativo a evitar (histórico negativo)`);
+
+    // Rejeitar volatilidade alta
+    if (s.indicators.atr.volatility === 'high') {
+      console.log(`❌ ${s.asset}: Volatilidade alta`);
       continue;
     }
+
+    // Confluência mínima (relaxado se ativo é TOP no aprendizado)
+    const assetPerf = model.assetPerformance.get(s.asset);
+    const isTopAsset = assetPerf && assetPerf.winRate >= 60 && assetPerf.profit > 0;
+    const minConf = isTopAsset ? 65 : 70;
+    if (s.indicators.confluenceScore < minConf) {
+      console.log(`❌ ${s.asset}: Confluência ${s.indicators.confluenceScore}% < ${minConf}%`);
+      continue;
+    }
+
+    const technicalScore = calculateTechnicalScore(s);
+    const riskScore = calculateRiskScore(s);
     
     const rsi = s.indicators.rsi.value;
     const stochK = s.indicators.stochastic?.k || 50;
@@ -333,242 +515,148 @@ function detectElitePatterns(signals: SignalData[], badAssets: string[], goodAss
     const pricePos = s.indicators.supportResistance?.pricePosition || '';
     const hasPattern = s.indicators.reversalPattern;
     const maTrend = s.indicators.movingAverages?.trend || '';
-    const isPreferredAsset = preferredAssets.includes(s.asset);
-    
-    // REJEITAR volatilidade alta (ZERO tolerância)
-    if (vol === 'high') {
-      console.log(`❌ ${s.asset}: Volatilidade alta - rejeitado`);
-      continue;
-    }
-    
-    // Confluência mínima - MAIS AGRESSIVO para operações rápidas
-    // Com dados: preferidos=70%, outros=75%
-    // Sem dados (técnica agressiva): todos=70% (permite mais oportunidades)
-    const minConf = hasSufficientData 
-      ? (isPreferredAsset ? 70 : 75)
-      : 70; // Modo agressivo: confluência razoável para todos
-    
-    if (conf < minConf) {
-      console.log(`❌ ${s.asset}: Confluência ${conf}% < ${minConf}%`);
-      continue;
-    }
-    
-    const technicalScore = calculateTechnicalScore(s);
-    const riskScore = calculateRiskScore(s, badAssets, preferredAssets, avoidAssets);
-    const confidenceMultiplier = goodAssets.includes(s.asset) ? 1.08 : 1.0;
-    
-    let criteriaCount = 0;
-    let score = technicalScore;
-    const reasons: string[] = [];
+
     let pattern: PatternType | null = null;
-    
-    // ========== ULTRA_SAFE: O MAIS CONSERVADOR ==========
-    // Todos os indicadores alinhados + histórico bom + volatilidade baixa
-    const isUltraSafeCall = rsi <= 20 && stochK <= 20 && stochK > stochD &&
-                           bollPos === 'below_lower' && pricePos === 'near_support' && 
-                           hasPattern && vol === 'low' && s.type === 'CALL' && 
-                           macdHist > 0 && maTrend !== 'bearish' && conf >= 90 &&
-                           goodAssets.includes(s.asset);
-    const isUltraSafePut = rsi >= 80 && stochK >= 80 && stochK < stochD &&
-                          bollPos === 'above_upper' && pricePos === 'near_resistance' && 
-                          hasPattern && vol === 'low' && s.type === 'PUT' && 
-                          macdHist < 0 && maTrend !== 'bullish' && conf >= 90 &&
-                          goodAssets.includes(s.asset);
-    
-    if (isUltraSafeCall || isUltraSafePut) {
-      pattern = 'ULTRA_SAFE';
-      score = 100;
-      criteriaCount = 11;
-      reasons.push('🛡️ ULTRA SAFE', `RSI ${rsi.toFixed(1)}`, `Stoch ${stochK.toFixed(1)}`, 
-                   bollPos, pricePos, hasPattern!, 'Vol baixa', 'MACD OK', 'MA OK', `Conf ${conf}%`, 'Histórico+');
+    let score = technicalScore;
+    let criteriaCount = 0;
+    const reasons: string[] = [];
+
+    // ========== PROFIT_MASTER: Baseado em aprendizado ==========
+    if (model.hasSufficientData && isTopAsset && learned.score >= 20) {
+      pattern = 'PROFIT_MASTER';
+      score = Math.min(technicalScore + learned.score, 100);
+      criteriaCount = 5;
+      reasons.push(`🧠 PROFIT_MASTER`, `WR ${assetPerf!.winRate}%`, `$${assetPerf!.profit}`, ...learned.adjustments.slice(0, 3));
     }
-    // ========== DIAMOND SETUP (100% ASSERTIVIDADE) ==========
+    // ========== DIAMOND SETUP ==========
     else {
       const isDiamondCall = rsi <= 20 && stochK <= 20 && stochK > stochD &&
-                            bollPos === 'below_lower' && pricePos === 'near_support' && 
-                            hasPattern && vol === 'low' && s.type === 'CALL' && 
-                            macdHist > 0 && maTrend !== 'bearish';
+        bollPos === 'below_lower' && pricePos === 'near_support' &&
+        hasPattern && vol === 'low' && s.type === 'CALL' && macdHist > 0;
       const isDiamondPut = rsi >= 80 && stochK >= 80 && stochK < stochD &&
-                           bollPos === 'above_upper' && pricePos === 'near_resistance' && 
-                           hasPattern && vol === 'low' && s.type === 'PUT' && 
-                           macdHist < 0 && maTrend !== 'bullish';
-      
+        bollPos === 'above_upper' && pricePos === 'near_resistance' &&
+        hasPattern && vol === 'low' && s.type === 'PUT' && macdHist < 0;
+
       if (isDiamondCall || isDiamondPut) {
         pattern = 'DIAMOND_SETUP';
         score = 98;
         criteriaCount = 9;
-        reasons.push('🔷 DIAMOND', `RSI ${rsi.toFixed(1)}`, `Stoch ${stochK.toFixed(1)}`, 
-                     bollPos, pricePos, hasPattern!, 'Vol baixa', 'MACD OK', 'MA OK');
+        reasons.push('🔷 DIAMOND', `RSI ${rsi.toFixed(1)}`, `Stoch ${stochK.toFixed(1)}`, bollPos, pricePos);
       }
       // ========== GOLDEN SETUP ==========
       else {
-        const isGoldenCall = rsi <= 22 && stochK <= 22 && pricePos === 'near_support' && 
-                             hasPattern && vol === 'low' && s.type === 'CALL' && macdHist > 0 && conf >= 80;
-        const isGoldenPut = rsi >= 78 && stochK >= 78 && pricePos === 'near_resistance' && 
-                            hasPattern && vol === 'low' && s.type === 'PUT' && macdHist < 0 && conf >= 80;
-        
+        const isGoldenCall = rsi <= 22 && stochK <= 22 && pricePos === 'near_support' &&
+          hasPattern && vol === 'low' && s.type === 'CALL' && macdHist > 0 && conf >= 80;
+        const isGoldenPut = rsi >= 78 && stochK >= 78 && pricePos === 'near_resistance' &&
+          hasPattern && vol === 'low' && s.type === 'PUT' && macdHist < 0 && conf >= 80;
+
         if (isGoldenCall || isGoldenPut) {
           pattern = 'GOLDEN_SETUP';
           score = 99;
           criteriaCount = 8;
-          reasons.push('⭐ GOLDEN', `RSI ${rsi.toFixed(1)}`, `Stoch ${stochK.toFixed(1)}`, 
-                       pricePos, hasPattern!, 'Vol baixa', 'MACD OK', `Conf ${conf}%`);
+          reasons.push('⭐ GOLDEN', `RSI ${rsi.toFixed(1)}`, pricePos, `Conf ${conf}%`);
         }
         // ========== EXTREME OVERSOLD/OVERBOUGHT ==========
         else if ((rsi <= 20 && s.type === 'CALL') || (rsi >= 80 && s.type === 'PUT')) {
-          const isCall = s.type === 'CALL';
-          pattern = isCall ? 'EXTREME_OVERSOLD' : 'EXTREME_OVERBOUGHT';
+          pattern = s.type === 'CALL' ? 'EXTREME_OVERSOLD' : 'EXTREME_OVERBOUGHT';
           score = 96;
-          reasons.push(`RSI extremo ${rsi.toFixed(1)}`);
           criteriaCount = 1;
-          
-          if (isCall ? stochK <= 20 : stochK >= 80) { score += 1.5; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
-          if (isCall ? bollPos === 'below_lower' : bollPos === 'above_upper') { score += 1; reasons.push(bollPos); criteriaCount++; }
-          if (isCall ? pricePos === 'near_support' : pricePos === 'near_resistance') { score += 1; reasons.push(pricePos); criteriaCount++; }
-          if (hasPattern) { score += 1; reasons.push(hasPattern!); criteriaCount++; }
-          if (vol === 'low') { score += 0.5; reasons.push('Vol baixa'); criteriaCount++; }
-          if (conf >= 85) { score += 0.5; reasons.push(`Conf ${conf}%`); criteriaCount++; }
-          if (goodAssets.includes(s.asset)) { score += 0.5; reasons.push('Histórico+'); criteriaCount++; }
+          reasons.push(`RSI extremo ${rsi.toFixed(1)}`);
+          if (s.type === 'CALL' ? stochK <= 20 : stochK >= 80) { score += 1.5; criteriaCount++; }
+          if (s.type === 'CALL' ? bollPos === 'below_lower' : bollPos === 'above_upper') { score += 1; criteriaCount++; }
+          if (s.type === 'CALL' ? pricePos === 'near_support' : pricePos === 'near_resistance') { score += 1; criteriaCount++; }
+          if (hasPattern) { score += 1; criteriaCount++; }
+          if (vol === 'low') { score += 0.5; criteriaCount++; }
         }
         // ========== PERFECT REVERSAL ==========
         else if (hasPattern && ((rsi <= 25 && s.type === 'CALL') || (rsi >= 75 && s.type === 'PUT'))) {
-          const isCall = s.type === 'CALL';
           pattern = 'PERFECT_REVERSAL';
           score = 95;
-          reasons.push(hasPattern!, `RSI ${rsi.toFixed(1)}`);
           criteriaCount = 2;
-          
-          if (isCall ? stochK <= 25 : stochK >= 75) { score += 1.5; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
-          if (isCall ? pricePos === 'near_support' : pricePos === 'near_resistance') { score += 1.5; reasons.push(pricePos); criteriaCount++; }
-          if (vol === 'low') { score += 1; reasons.push('Vol baixa'); criteriaCount++; }
-          if (conf >= 85) { score += 1; reasons.push(`Conf ${conf}%`); criteriaCount++; }
-          if (goodAssets.includes(s.asset)) { score += 0.5; reasons.push('Histórico+'); criteriaCount++; }
+          reasons.push(hasPattern!, `RSI ${rsi.toFixed(1)}`);
+          if (s.type === 'CALL' ? stochK <= 25 : stochK >= 75) { score += 1.5; criteriaCount++; }
+          if (s.type === 'CALL' ? pricePos === 'near_support' : pricePos === 'near_resistance') { score += 1.5; criteriaCount++; }
+          if (vol === 'low') { score += 1; criteriaCount++; }
         }
         // ========== TRIPLE CONFLUENCE ==========
         else if (conf >= 85 && confCount >= 5) {
           pattern = 'TRIPLE_CONFLUENCE';
           score = 95;
-          reasons.push(`Conf ${conf}%`, `${confCount} indicadores`);
           criteriaCount = 2;
-          
-          if (rsi <= 25 || rsi >= 75) { score += 1.5; reasons.push(`RSI ${rsi.toFixed(1)}`); criteriaCount++; }
-          if (stochK <= 25 || stochK >= 75) { score += 1; reasons.push(`Stoch ${stochK.toFixed(1)}`); criteriaCount++; }
-          if (pricePos === 'near_support' || pricePos === 'near_resistance') { score += 1; reasons.push(pricePos); criteriaCount++; }
-          if (vol === 'low') { score += 1; reasons.push('Vol baixa'); criteriaCount++; }
-          if (hasPattern) { score += 0.5; reasons.push(hasPattern!); criteriaCount++; }
-          if (goodAssets.includes(s.asset)) { score += 0.5; reasons.push('Histórico+'); criteriaCount++; }
+          reasons.push(`Conf ${conf}%`, `${confCount} indicadores`);
+          if (rsi <= 25 || rsi >= 75) { score += 1.5; criteriaCount++; }
+          if (stochK <= 25 || stochK >= 75) { score += 1; criteriaCount++; }
+          if (vol === 'low') { score += 1; criteriaCount++; }
         }
       }
     }
-    
-    // FAST PROFIT: Critérios mais agressivos para mais entradas
-    let minScore: number;
-    let maxRisk: number;
-    let minCriteria: number;
-    
-    if (hasSufficientData) {
-      // Modo DATA-DRIVEN: ativos preferidos têm vantagem
-      minScore = isPreferredAsset ? 85 : 90;
-      maxRisk = isPreferredAsset ? 60 : 52;
-      minCriteria = isPreferredAsset ? 2 : 3;
-    } else {
-      // Modo TÉCNICA AGRESSIVA: critérios relaxados para gerar trades
-      minScore = 85; // Score técnico mínimo (era 90)
-      maxRisk = 55; // Risco máximo (era 50)
-      minCriteria = 3; // Mínimo de confirmações (era 4)
-    }
-    
-    if (pattern && criteriaCount >= minCriteria && score >= minScore && riskScore <= maxRisk) {
+
+    if (!pattern) continue;
+
+    // APLICAR APRENDIZADO AO SCORE FINAL
+    const finalScore = Math.min(Math.round(score + (model.hasSufficientData ? learned.score * 0.5 : 0)), 100);
+    const finalRisk = Math.max(0, riskScore + (model.hasSufficientData && learned.score < 0 ? 10 : 0));
+
+    // Critérios adaptativos
+    const minScore = isTopAsset ? 82 : (model.hasSufficientData ? 88 : 85);
+    const maxRisk = isTopAsset ? 65 : (model.hasSufficientData ? 55 : 55);
+    const minCriteria = isTopAsset ? 2 : 3;
+
+    if (finalScore >= minScore && finalRisk <= maxRisk && criteriaCount >= minCriteria) {
       matches.push({
         signal: s,
         pattern,
-        score: Math.min(Math.round(score * confidenceMultiplier), 100),
-        reason: reasons.join(' | '),
+        score: finalScore,
+        reason: [...reasons, ...learned.adjustments].join(' | '),
         criteria: criteriaCount,
         technicalScore,
-        confidenceMultiplier,
-        riskScore
+        riskScore: finalRisk,
+        learnedScore: learned.score,
+        learnedAdjustments: learned.adjustments,
       });
-      console.log(`✅ ${s.asset} (${pattern}): Score ${score.toFixed(1)}% | Risco ${riskScore}% | Critérios ${criteriaCount}`);
+      console.log(`✅ ${s.asset} (${pattern}): Score ${finalScore}% | Risco ${finalRisk}% | Aprendizado: ${learned.score > 0 ? '+' : ''}${learned.score}`);
     } else if (pattern) {
-      console.log(`⚠️ ${s.asset} (${pattern}): Score ${score.toFixed(1)}% | Risco ${riskScore}% | Critérios ${criteriaCount} - Não aprovado`);
+      console.log(`⚠️ ${s.asset} (${pattern}): Score ${finalScore}% | Risco ${finalRisk}% - Não aprovado`);
     }
   }
-  
+
   return matches;
 }
 
-function selectBestSignals(matches: PatternMatch[], preferredAssets: string[], hasSufficientData: boolean): PatternMatch[] {
-  // Ordenar por: padrão elite, risco, score, critérios
+function selectBestSignals(matches: PatternMatch[], model: LearnedPattern): PatternMatch[] {
   const sorted = matches.sort((a, b) => {
-    // Quando há dados suficientes, ativos preferidos têm prioridade
-    if (hasSufficientData) {
-      const aPreferred = preferredAssets.includes(a.signal.asset);
-      const bPreferred = preferredAssets.includes(b.signal.asset);
-      if (aPreferred && !bPreferred) return -1;
-      if (bPreferred && !aPreferred) return 1;
-    }
-    
-    // Ultra Safe tem prioridade máxima
-    if (a.pattern === 'ULTRA_SAFE' && b.pattern !== 'ULTRA_SAFE') return -1;
-    if (b.pattern === 'ULTRA_SAFE' && a.pattern !== 'ULTRA_SAFE') return 1;
-    
-    // Diamond setup tem segunda prioridade
+    // PROFIT_MASTER tem prioridade (aprendizado)
+    if (a.pattern === 'PROFIT_MASTER' && b.pattern !== 'PROFIT_MASTER') return -1;
+    if (b.pattern === 'PROFIT_MASTER' && a.pattern !== 'PROFIT_MASTER') return 1;
+    // Diamond > Golden > Others
     if (a.pattern === 'DIAMOND_SETUP' && b.pattern !== 'DIAMOND_SETUP') return -1;
     if (b.pattern === 'DIAMOND_SETUP' && a.pattern !== 'DIAMOND_SETUP') return 1;
-    
-    // Golden setup tem terceira prioridade
     if (a.pattern === 'GOLDEN_SETUP' && b.pattern !== 'GOLDEN_SETUP') return -1;
     if (b.pattern === 'GOLDEN_SETUP' && a.pattern !== 'GOLDEN_SETUP') return 1;
-    
-    // Depois por risco (menor é melhor)
+    // Learned score bonus
+    if (a.learnedScore !== b.learnedScore) return b.learnedScore - a.learnedScore;
+    // Risk
     if (a.riskScore !== b.riskScore) return a.riskScore - b.riskScore;
-    // Depois por score (maior é melhor)
-    if (b.score !== a.score) return b.score - a.score;
-    // Depois por critérios
-    return b.criteria - a.criteria;
+    // Score
+    return b.score - a.score;
   });
-  
+
   const selected: PatternMatch[] = [];
   const usedAssets = new Set<string>();
-  
-  // FAST PROFIT - Até 6 trades simultâneos
   const maxSignals = 6;
-  
+
   for (const match of sorted) {
     if (selected.length >= maxSignals) break;
     if (usedAssets.has(match.signal.asset)) continue;
-    
-    const isPreferred = preferredAssets.includes(match.signal.asset);
-    
-    // Critérios adaptativos
-    let minScore: number;
-    let maxRisk: number;
-    let minCriteria: number;
-    
-    if (hasSufficientData) {
-      minScore = isPreferred ? 85 : 90;
-      maxRisk = isPreferred ? 60 : 52;
-      minCriteria = isPreferred ? 2 : 3;
-    } else {
-      // Modo técnica agressiva: critérios mais relaxados
-      minScore = 85;
-      maxRisk = 55;
-      minCriteria = 3;
-    }
-    
-    if (match.score < minScore) continue;
-    if (match.riskScore > maxRisk) continue;
-    if (match.criteria < minCriteria) continue;
-    
     selected.push(match);
     usedAssets.add(match.signal.asset);
   }
-  
+
   console.log(`📊 Selecionados ${selected.length} de ${matches.length} sinais para execução`);
-  
   return selected;
 }
+
+// ============= MAIN HANDLER =============
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -578,61 +666,37 @@ serve(async (req) => {
   try {
     const { signals, historicalResults }: AnalysisRequest = await req.json();
 
-    // Usar Groq AI
     const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
-    if (!GROQ_API_KEY) {
-      console.error('GROQ_API_KEY not configured');
-      throw new Error('Groq AI service not configured');
-    }
+    if (!GROQ_API_KEY) throw new Error('Groq AI service not configured');
 
     if (!signals || signals.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          analyzedSignals: [],
-          message: 'No signals to analyze' 
-        }),
+        JSON.stringify({ success: true, analyzedSignals: [], message: 'No signals to analyze' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // ============= BUSCAR ATIVOS DINÂMICOS DO BANCO =============
-    const { preferred: dynamicPreferred, avoid: dynamicAvoid, allPerformance, hasSufficientData } = await fetchAssetPerformance();
-    
-    // Usar ativos dinâmicos (sem fallback fixo - permite qualquer ativo quando não há dados)
-    const preferredAssets = dynamicPreferred;
-    const avoidAssets = dynamicAvoid;
-    
-    // Lista de ativos a evitar (win rate < 45% E prejuízo - mais específico)
-    const badAssets = historicalResults?.filter(h => h.winRate < 45 && (h.wins + h.losses) >= 3).map(h => h.asset) || [];
-    
-    // Lista de ativos bons (win rate > 65% com pelo menos 3 trades)
-    const goodAssets = historicalResults?.filter(h => h.winRate >= 65 && (h.wins + h.losses) >= 3).map(h => h.asset) || [];
+    // ===== LEARNING ENGINE: Construir modelo de aprendizado =====
+    const model = await buildLearningModel();
 
-    const mode = hasSufficientData ? 'DATA-DRIVEN' : 'TÉCNICA PURA';
-    console.log(`📊 Analisando ${signals.length} sinais (MODO: ${mode})...`);
-    console.log(`⚠️ Ativos ruins: ${badAssets.join(', ') || 'nenhum'}`);
-    console.log(`✅ Ativos bons: ${goodAssets.join(', ') || 'nenhum'}`);
-    console.log(`🎯 Ativos PREFERIDOS: ${preferredAssets.join(', ') || 'usando análise técnica'}`);
-    console.log(`🚫 Ativos a EVITAR: ${avoidAssets.join(', ') || 'nenhum bloqueado'}`);
+    const mode = model.hasSufficientData ? 'LEARNED' : 'TÉCNICA PURA';
+    console.log(`\n📊 Analisando ${signals.length} sinais (MODO: ${mode})...`);
 
-    // DETECTAR PADRÕES DE ELITE (passa hasSufficientData para ajustar critérios)
-    const elitePatterns = detectElitePatterns(signals, badAssets, goodAssets, preferredAssets, avoidAssets, hasSufficientData);
-    
-    // SELECIONAR OS MELHORES (passa hasSufficientData para ajustar critérios)
-    const selectedSignals = selectBestSignals(elitePatterns, preferredAssets, hasSufficientData);
+    // Detectar padrões usando aprendizado
+    const elitePatterns = detectPatterns(signals, model);
+    const selectedSignals = selectBestSignals(elitePatterns, model);
 
     if (selectedSignals.length === 0) {
-      console.log('⏳ Buscando setups de alta probabilidade...');
+      console.log('⏳ Nenhum setup aprovado pelo modelo de aprendizado...');
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           analyzedSignals: signals.slice(0, 5).map(s => ({
             signalId: `${s.asset}-${Date.now()}`,
             asset: s.asset,
             recommendation: 'SKIP',
             confidence: s.indicators.confluenceScore,
-            reason: 'Aguardando setup de alta probabilidade (>85%)',
+            reason: 'Aguardando setup aprovado pelo modelo de aprendizado',
             adjustedConfluence: s.indicators.confluenceScore,
             riskLevel: 'HIGH'
           })),
@@ -643,92 +707,55 @@ serve(async (req) => {
       );
     }
 
-    console.log(`🎯 ${selectedSignals.length} sinal(is) ELITE encontrado(s)!`);
-    selectedSignals.forEach(d => {
-      console.log(`   ⭐ ${d.signal.asset} (${d.pattern}): ${d.score}% | ${d.criteria} critérios | Tech: ${d.technicalScore}`);
-    });
+    console.log(`🎯 ${selectedSignals.length} sinal(is) aprovado(s) pelo modelo!`);
 
-    // PROMPT ADAPTATIVO - Ajusta regras baseado na disponibilidade de dados
-    const preferredList = preferredAssets.length > 0 ? preferredAssets.join(', ') : 'nenhum (usando análise técnica)';
-    const avoidList = avoidAssets.length > 0 ? avoidAssets.join(', ') : 'nenhum bloqueado';
-    
-    const systemPrompt = hasSufficientData 
-      ? `Você é um trader agressivo de opções binárias focado em LUCRO RÁPIDO.
+    // ===== PROMPT COM CONTEXTO DE APRENDIZADO =====
+    const learningSummary = model.hasSufficientData ? `
+📊 DADOS DE APRENDIZADO (últimos 14 dias):
+- Win Rate geral: ${model.overallWinRate}%
+- Total trades: ${model.totalTrades}
+- Lucro total: $${model.totalProfit.toFixed(2)}
+${model.bestHours.length > 0 ? `- Melhores horários: ${model.bestHours.join('h, ')}h UTC` : ''}
+${model.worstHours.length > 0 ? `- Piores horários: ${model.worstHours.join('h, ')}h UTC` : ''}
+` : '⚠️ Dados insuficientes - usando análise técnica pura';
 
-🎯 OBJETIVO: Executar o MÁXIMO de trades lucrativos possível
-💰 META: LUCRO RÁPIDO em M1/M5
-🚀 MODO: DATA-DRIVEN + AGRESSIVO
+    const preferredAssets = Array.from(model.assetPerformance.values())
+      .filter(a => a.winRate >= 50 && a.profit >= 0)
+      .map(a => a.asset);
+    const avoidAssets = Array.from(model.assetPerformance.values())
+      .filter(a => a.winRate < 35 && a.profit < -50 && a.trades >= 3)
+      .map(a => a.asset);
 
-📊 ATIVOS PREFERIDOS (win rate >50%):
-${preferredList}
+    const systemPrompt = `Você é um trader de opções binárias que APRENDE com resultados passados para maximizar lucro.
 
-⛔ ATIVOS A EVITAR (péssimo histórico):
-${avoidList}
+🧠 MODO: ${mode} - Decisões baseadas em dados reais de performance
+${learningSummary}
 
-REGRAS:
-1. ✅ Ativos PREFERIDOS com score >=82% = EXECUTE IMEDIATAMENTE
-2. ✅ Qualquer padrão DIAMOND, GOLDEN, EXTREME = EXECUTE
-3. ✅ Ativos neutros com score >=88% = EXECUTE
-4. ❌ APENAS ativos da lista EVITAR = SKIP
-5. 🎯 PRIORIZE M1 para lucro rápido
-6. ⚡ SEJA AGRESSIVO - mais trades = mais lucro
-
-Responda APENAS JSON válido:
-{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":80-100,"reason":"","adjustedConfluence":80+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`
-      : `Você é um trader agressivo de opções binárias focado em LUCRO RÁPIDO.
-
-🎯 OBJETIVO: Executar trades com boa qualidade técnica
-💰 META: LUCRO RÁPIDO em M1/M5
-🚀 MODO: TÉCNICA AGRESSIVA (construindo histórico)
-
-⚠️ IMPORTANTE: Estamos construindo histórico. Seja AGRESSIVO em aprovar trades com boa técnica.
-
-REGRAS:
-1. ✅ Padrões DIAMOND, GOLDEN, EXTREME = EXECUTE SEMPRE
-2. ✅ Score >=85% + Volatilidade NÃO alta = EXECUTE
-3. ✅ PERFECT_REVERSAL com 3+ critérios = EXECUTE
-4. ✅ TRIPLE_CONFLUENCE = EXECUTE
-5. ❌ APENAS volatilidade alta = SKIP
-6. ⚡ PRIORIZE M1 para lucro rápido
+REGRAS BASEADAS EM APRENDIZADO:
+1. ✅ Padrão PROFIT_MASTER (aprendizado aprovou) = EXECUTE
+2. ✅ DIAMOND/GOLDEN em ativo com bom histórico = EXECUTE
+3. ✅ Ativo TOP + score >=82% = EXECUTE
+4. ❌ Ativo com WR <35% e prejuízo = SKIP
+5. ❌ Horário com histórico ruim = SKIP
+6. ❌ 3+ losses consecutivos no ativo = SKIP
+7. ⚡ Priorize ativos e direções com melhor win rate histórico
 
 Responda APENAS JSON válido:
-{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":80-100,"reason":"","adjustedConfluence":80+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name","totalApproved":N}`;
+{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":80-100,"reason":"","adjustedConfluence":80+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name"}`;
 
-    const userPrompt = hasSufficientData 
-      ? `ANÁLISE DATA-DRIVEN - Aprovar ativos com performance comprovada:
+    const userPrompt = `SINAIS PRÉ-FILTRADOS PELO MODELO DE APRENDIZADO:
 
-📊 ATIVOS PREFERIDOS (últimos 7 dias):
-${preferredAssets.map((a, i) => `${i + 1}. ${a}`).join('\n') || 'Nenhum identificado'}
-
-🚫 ATIVOS BLOQUEADOS:
-${avoidAssets.join(', ') || 'Nenhum'}
-
-SINAIS PARA ANÁLISE:
 ${selectedSignals.map((d, i) => {
   const s = d.signal;
-  const isPreferred = preferredAssets.includes(s.asset);
-  const isBlocked = avoidAssets.includes(s.asset);
-  const status = isPreferred ? '✅ PREFERIDO' : isBlocked ? '❌ BLOQUEADO' : '⚠️ NEUTRO';
-  return `${i + 1}. ${s.asset} ${s.type} | ${d.pattern} ${status}
-   Score: ${d.score}% | Risco: ${d.riskScore}% | Critérios: ${d.criteria}
-   RSI: ${s.indicators.rsi.value.toFixed(1)} | Volatilidade: ${s.indicators.atr.volatility}`;
-}).join('\n\n')}`
-      : `ANÁLISE TÉCNICA PURA - Avaliar qualidade dos setups:
-
-⚠️ SEM HISTÓRICO SUFICIENTE - Usar apenas análise técnica
-
-SINAIS PARA ANÁLISE:
-${selectedSignals.map((d, i) => {
-  const s = d.signal;
+  const dirPerf = model.directionPerformance.get(s.asset);
+  const dirInfo = dirPerf ? `${s.type} WR: ${s.type === 'CALL' ? dirPerf.callWinRate : dirPerf.putWinRate}%` : '';
   return `${i + 1}. ${s.asset} ${s.type} | ${d.pattern}
-   Score: ${d.score}% | Risco: ${d.riskScore}% | Critérios: ${d.criteria}
-   RSI: ${s.indicators.rsi.value.toFixed(1)} | Volatilidade: ${s.indicators.atr.volatility}
-   Padrão: ${s.indicators.reversalPattern || 'N/A'}`;
-}).join('\n\n')}
+   Score: ${d.score}% | Risco: ${d.riskScore}% | Aprendizado: ${d.learnedScore > 0 ? '+' : ''}${d.learnedScore}
+   ${dirInfo}
+   Ajustes: ${d.learnedAdjustments.join(', ') || 'N/A'}`;
+}).join('\n\n')}`;
 
-REGRA: Aprovar setups com score >=90%, risco <=50%, volatilidade baixa/média.`;
-
-    // Chamar Groq AI com retry
+    // Chamar Groq AI
     const makeRequest = async (retryCount = 0): Promise<Response> => {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -746,67 +773,38 @@ REGRA: Aprovar setups com score >=90%, risco <=50%, volatilidade baixa/média.`;
           max_tokens: 1000,
         }),
       });
-      
+
       if (response.status === 429 && retryCount < 3) {
         const delay = (retryCount + 1) * 3000;
         console.log(`Rate limited, retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
         return makeRequest(retryCount + 1);
       }
-      
+
       return response;
     };
 
     const response = await makeRequest();
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Groq AI error:', response.status, errorText);
-      
-      // Fallback: usar análise pré-computada (ADAPTATIVO)
-      console.log(`⚠️ Usando análise pré-computada (fallback) - MODO: ${hasSufficientData ? 'DATA-DRIVEN' : 'TÉCNICA PURA'}`);
-      const fallbackSignals = selectedSignals
-        .filter(d => {
-          const isPreferred = preferredAssets.includes(d.signal.asset);
-          const isBlocked = avoidAssets.includes(d.signal.asset);
-          
-          // Se bloqueado, sempre rejeita
-          if (isBlocked) return false;
-          
-          if (hasSufficientData) {
-            // Modo DATA-DRIVEN: preferidos ou score bom
-            return (isPreferred && d.score >= 82 && d.riskScore <= 60) || 
-                   (d.score >= 88 && d.riskScore <= 52);
-          } else {
-            // Modo TÉCNICA AGRESSIVA: aceita setups com boa qualidade
-            return d.score >= 85 && d.riskScore <= 55;
-          }
-        })
-        .map(d => ({
-          signalId: `${d.signal.asset}-${Date.now()}`,
-          asset: d.signal.asset,
-          recommendation: 'EXECUTE',
-          confidence: d.score,
-          reason: `${d.pattern}: ${hasSufficientData ? 'Performance comprovada' : 'Setup técnico forte'}`,
-          adjustedConfluence: d.score,
-          riskLevel: 'LOW'
-        }));
-      
+      console.error('Groq AI error:', response.status);
+      // Fallback: usar análise pré-computada
+      const fallbackSignals = selectedSignals.map(d => ({
+        signalId: `${d.signal.asset}-${Date.now()}`,
+        asset: d.signal.asset,
+        recommendation: 'EXECUTE',
+        confidence: d.score,
+        reason: `${d.pattern}: ${d.learnedAdjustments[0] || 'Setup técnico forte'}`,
+        adjustedConfluence: d.score,
+        riskLevel: d.riskScore <= 40 ? 'LOW' : 'MEDIUM'
+      }));
+
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           success: true,
-          analyzedSignals: fallbackSignals.length > 0 ? fallbackSignals : selectedSignals.map(d => ({
-            signalId: `${d.signal.asset}-${Date.now()}`,
-            asset: d.signal.asset,
-            recommendation: 'SKIP',
-            confidence: d.score,
-            reason: `Risco elevado (${d.riskScore}%) - aguardando condições ideais`,
-            adjustedConfluence: d.score,
-            riskLevel: 'HIGH'
-          })),
+          analyzedSignals: fallbackSignals,
           marketSentiment: 'NEUTRAL',
           bestSignal: fallbackSignals[0]?.asset || null,
-          totalApproved: fallbackSignals.length
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -815,89 +813,59 @@ REGRA: Aprovar setups com score >=90%, risco <=50%, volatilidade baixa/média.`;
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
 
-    if (!content) {
-      console.error('No content in AI response');
-      throw new Error('No response from AI');
-    }
+    if (!content) throw new Error('No response from AI');
 
     console.log('AI Response:', content);
 
     let analysis;
     try {
-      let jsonStr = content;
       const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        jsonStr = jsonMatch[0];
-      }
-      
+      const jsonStr = jsonMatch ? jsonMatch[0] : content;
       try {
         analysis = JSON.parse(jsonStr);
       } catch {
-        // Tentar corrigir JSON malformado
         let fixed = jsonStr;
-        const openBrackets = (fixed.match(/\[/g) || []).length;
-        const closeBrackets = (fixed.match(/\]/g) || []).length;
-        const openBraces = (fixed.match(/\{/g) || []).length;
-        const closeBraces = (fixed.match(/\}/g) || []).length;
-        
-        fixed += ']'.repeat(Math.max(0, openBrackets - closeBrackets));
-        fixed += '}'.repeat(Math.max(0, openBraces - closeBraces));
-        
+        fixed += ']'.repeat(Math.max(0, (fixed.match(/\[/g) || []).length - (fixed.match(/\]/g) || []).length));
+        fixed += '}'.repeat(Math.max(0, (fixed.match(/\{/g) || []).length - (fixed.match(/\}/g) || []).length));
         analysis = JSON.parse(fixed);
       }
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
-      // Usar análise DATA-DRIVEN como fallback
+    } catch {
+      console.error('Failed to parse AI response, using pre-computed analysis');
       analysis = {
-        analyzedSignals: selectedSignals.map(d => {
-          const isPreferred = preferredAssets.includes(d.signal.asset);
-          const isBlocked = avoidAssets.includes(d.signal.asset);
-          // AGRESSIVO: Executa se não bloqueado e score bom
-          const shouldExecute = !isBlocked && d.score >= 85 && d.riskScore <= 55;
-          return {
-            signalId: d.signal.asset,
-            asset: d.signal.asset,
-            recommendation: shouldExecute ? 'EXECUTE' : 'SKIP',
-            confidence: d.score,
-            reason: shouldExecute ? `${d.pattern}: Setup técnico forte` : 'Risco elevado',
-            adjustedConfluence: d.score,
-            riskLevel: d.riskScore <= 40 ? 'LOW' : 'MEDIUM'
-          };
-        }),
+        analyzedSignals: selectedSignals.map(d => ({
+          signalId: d.signal.asset,
+          asset: d.signal.asset,
+          recommendation: d.score >= 85 && d.riskScore <= 55 ? 'EXECUTE' : 'SKIP',
+          confidence: d.score,
+          reason: `${d.pattern}: ${d.learnedAdjustments[0] || 'Setup técnico'}`,
+          adjustedConfluence: d.score,
+          riskLevel: d.riskScore <= 40 ? 'LOW' : 'MEDIUM'
+        })),
         marketSentiment: 'NEUTRAL',
         bestSignal: selectedSignals[0]?.signal.asset || null
       };
     }
 
     const executeSignals = analysis.analyzedSignals?.filter((a: any) => a.recommendation === 'EXECUTE') || [];
-    
-    console.log(`⭐ ${executeSignals.length} sinal(is) ELITE aprovado(s) pela IA`);
+    console.log(`⭐ ${executeSignals.length} sinal(is) aprovado(s) pela IA + Aprendizado`);
 
     // Mapear todos os sinais
     const allSignalAnalysis = signals.map(s => {
       const aiResult = analysis.analyzedSignals?.find((a: any) => a.asset === s.asset);
       if (aiResult) return aiResult;
-      
       return {
         signalId: `${s.asset}-${Date.now()}`,
         asset: s.asset,
         recommendation: 'SKIP',
         confidence: s.indicators.confluenceScore,
-        reason: 'Não atende critérios elite',
+        reason: 'Não aprovado pelo modelo de aprendizado',
         adjustedConfluence: s.indicators.confluenceScore,
         riskLevel: 'HIGH'
       };
     });
 
-    console.log('✅ Análise completa:', JSON.stringify({ 
-      bestSignal: analysis.bestSignal, 
-      sentiment: analysis.marketSentiment,
-      executeCount: executeSignals.length,
-      patterns: selectedSignals.map((d: PatternMatch) => d.pattern)
-    }));
-
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
         analyzedSignals: allSignalAnalysis,
         marketSentiment: analysis.marketSentiment || 'NEUTRAL',
@@ -909,8 +877,8 @@ REGRA: Aprovar setups com score >=90%, risco <=50%, volatilidade baixa/média.`;
   } catch (error) {
     console.error('Error in AI signal analyzer:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
+      JSON.stringify({
+        success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
         analyzedSignals: []
       }),

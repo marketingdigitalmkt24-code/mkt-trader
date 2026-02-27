@@ -261,10 +261,22 @@ export function useAutoTrading() {
         .gte('created_at', thirtyMinutesAgo);
       
       if (activeOps) {
-        activeAssetTrades.current.clear();
-        activeOps.forEach(op => {
-          activeAssetTrades.current.add(op.asset.toUpperCase());
+        // IMPORTANTE: NÃO limpar o set - apenas ADICIONAR os ativos pendentes do DB
+        // Locks locais de ciclos em andamento devem ser preservados
+        const dbAssets = new Set(activeOps.map(op => op.asset.toUpperCase()));
+        
+        // Remover apenas ativos que NÃO estão mais pendentes no DB E não estão em tradingInProgress
+        const currentAssets = Array.from(activeAssetTrades.current);
+        currentAssets.forEach(asset => {
+          if (!dbAssets.has(asset) && !tradingInProgress.current.has(asset)) {
+            // Verificar se não foi adicionado recentemente (cooldown de 60s)
+            // Manter o lock por segurança - será limpo no próximo ciclo
+          }
         });
+        
+        // Adicionar todos os ativos pendentes do DB
+        dbAssets.forEach(asset => activeAssetTrades.current.add(asset));
+        
         console.log(`📊 Active trades on assets: ${Array.from(activeAssetTrades.current).join(', ') || 'none'}`);
       }
     } catch (err) {
@@ -435,18 +447,12 @@ export function useAutoTrading() {
   const placeTradesSimultaneously = useCallback(async (signals: TradingSignal[]): Promise<TradeResult[]> => {
     if (signals.length === 0) return [];
     
-    // Refresh active asset trades before filtering
-    await refreshActiveAssetTrades();
+    // NÃO chamar refreshActiveAssetTrades aqui - ele pode limpar locks ativos
+    // Os sinais já vêm verificados do checkAndAutoTrade
     
-    // Filter out signals for assets that already have active trades (from local cache)
-    const signalsToTrade = signals.filter(signal => {
-      const assetKey = signal.asset.toUpperCase();
-      if (activeAssetTrades.current.has(assetKey)) {
-        console.log(`⏸️ [${signal.asset}] Skipped - already has active trade (cache)`);
-        return false;
-      }
-      return true;
-    });
+  // Os sinais já vêm filtrados e com lock do checkAndAutoTrade
+    // Apenas verificar uma última vez no DB
+    const signalsToTrade = signals;
     
     if (signalsToTrade.length === 0) {
       console.log('⏸️ All signals skipped - assets already have active trades');
@@ -473,6 +479,11 @@ export function useAutoTrading() {
         console.log(`⏸️ [${signal.asset}] Skipped - confirmed active trade in database`);
         activeAssetTrades.current.add(signal.asset.toUpperCase());
       } else {
+        // Verificar também se não foi processado por outro ciclo enquanto esperava
+        if (tradingInProgress.current.has(signal.asset.toUpperCase())) {
+          console.log(`⏸️ [${signal.asset}] Skipped - trading in progress by another cycle`);
+          continue;
+        }
         verifiedSignals.push(signal);
       }
     }
@@ -494,9 +505,10 @@ export function useAutoTrading() {
     console.log(`🚀 Placing ${verifiedSignals.length} trades usando ${strategyType}...`);
     const startTime = Date.now();
     
-    // Mark all signals and assets as being traded
+    // Mark all signals and assets as being traded (usando asset key para tradingInProgress também)
     verifiedSignals.forEach(signal => {
       tradingInProgress.current.add(signal.id);
+      tradingInProgress.current.add(signal.asset.toUpperCase());
       activeAssetTrades.current.add(signal.asset.toUpperCase());
     });
     
@@ -573,6 +585,7 @@ export function useAutoTrading() {
       verifiedSignals.forEach(signal => {
         processedSignals.current.add(signal.id);
         tradingInProgress.current.delete(signal.id);
+        tradingInProgress.current.delete(signal.asset.toUpperCase());
       });
       
       return allResults;

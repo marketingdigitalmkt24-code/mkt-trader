@@ -65,6 +65,9 @@ export function useAutoTrading() {
   const isSavingToDb = useRef(false);
   const iqOptionConnected = useRef(false);
   const lastIQCheckTime = useRef<number>(0);
+  const isCheckingAutoTrade = useRef(false); // MUTEX para evitar execuções concorrentes
+  const assetCooldowns = useRef<Map<string, number>>(new Map()); // Cooldown por ativo
+  const ASSET_COOLDOWN_MS = 90000; // 90 segundos de cooldown por ativo após trade
   
   const [config, setConfig] = useState<AutoTradingConfig>(() => {
     // Load from localStorage initially for fast startup
@@ -607,6 +610,14 @@ export function useAutoTrading() {
 
   // Check and auto trade with profit target support and AI analysis
   const checkAndAutoTrade = useCallback(async (signals: TradingSignal[], currentDailyProfit?: number, currentBalance?: number) => {
+    // MUTEX: Impedir execuções concorrentes
+    if (isCheckingAutoTrade.current) {
+      console.log('🔒 checkAndAutoTrade já em execução - ignorando chamada concorrente');
+      return;
+    }
+    isCheckingAutoTrade.current = true;
+    
+    try {
     if (!config.enabled) {
       console.log('⏸️ Auto trading desabilitado no config');
       return;
@@ -693,6 +704,13 @@ export function useAutoTrading() {
       
       if (hasActiveTrade) {
         return false; // Skip assets with active trades
+      }
+      
+      // Check cooldown - evitar re-entrada no mesmo ativo muito rápido
+      const lastTradeTime = assetCooldowns.current.get(assetKey);
+      if (lastTradeTime && (Date.now() - lastTradeTime) < ASSET_COOLDOWN_MS) {
+        console.log(`⏳ [${signal.asset}] Em cooldown (${Math.round((ASSET_COOLDOWN_MS - (Date.now() - lastTradeTime)) / 1000)}s restantes)`);
+        return false;
       }
       
       // Check if this asset is currently available for trading from IQ Option
@@ -857,6 +875,16 @@ export function useAutoTrading() {
     
     // Execute all trades simultaneously
     await placeTradesSimultaneously(signalsToTrade);
+    
+    // Registrar cooldown para os ativos que foram tradados
+    const now = Date.now();
+    signalsToTrade.forEach(s => {
+      assetCooldowns.current.set(s.asset.toUpperCase(), now);
+    });
+    
+    } finally {
+      isCheckingAutoTrade.current = false;
+    }
   }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.dailyLimitEnabled, config.profitTargetType, config.profitTargetValue, config.aiMinConfidence, placeTradesSimultaneously, analyzeSignals, filterByAIRecommendation, checkIQOptionConnection, toast]);
 
   const resetDailyTrades = useCallback(() => {

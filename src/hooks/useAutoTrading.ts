@@ -91,6 +91,7 @@ export function useAutoTrading() {
 
   // Load settings from database when user is available
   useEffect(() => {
+    console.log(`🔐 Auth state: user=${user?.id ? 'logged in' : 'NOT logged in'}, settingsLoaded=${settingsLoaded.current}`);
     if (!user?.id || settingsLoaded.current) return;
 
     const loadFromDatabase = async () => {
@@ -539,7 +540,11 @@ export function useAutoTrading() {
 
   // Check and auto trade with profit target support and AI analysis
   const checkAndAutoTrade = useCallback(async (signals: TradingSignal[], currentDailyProfit?: number, currentBalance?: number) => {
-    if (!config.enabled) return;
+    if (!config.enabled) {
+      console.log('⏸️ Auto trading desabilitado no config');
+      return;
+    }
+    console.log(`🟢 Auto trading ATIVO | IA: ${config.useAIAnalysis} | Min conf: ${config.aiMinConfidence}% | Trades hoje: ${config.todayTrades}/${config.maxDailyTrades}`);
     
     // Check if profit target is reached
     if (config.profitTargetType !== 'none' && config.profitTargetValue > 0 && currentDailyProfit !== undefined) {

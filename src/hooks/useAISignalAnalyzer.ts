@@ -211,78 +211,71 @@ export function useAISignalAnalyzer() {
   const filterByAIRecommendation = useCallback((
     signals: TradingSignal[],
     analysis: AIAnalysisResult,
-    minConfidence: number = 94 // Mínimo ALTO para máxima assertividade
+    minConfidence: number = 75 // Ajustado para FAST PROFIT
   ): TradingSignal[] => {
     // Check if we're in fallback mode (AI unavailable)
     const isFallbackMode = analysis.analyzedSignals.some(a => a.reason?.includes('Fallback') || a.reason?.includes('fallback'));
     
-    // DEDUPLICAÇÃO RIGOROSA: Apenas 1 sinal por asset
+    // DEDUPLICAÇÃO: Apenas 1 sinal por asset
     const seenAssets = new Set<string>();
     const uniqueSignals = signals.filter(signal => {
       const assetKey = signal.asset.toUpperCase();
-      if (seenAssets.has(assetKey)) {
-        return false;
-      }
+      if (seenAssets.has(assetKey)) return false;
       seenAssets.add(assetKey);
       return true;
     });
     
-    // LÓGICA PROFIT-FIRST: Poucos sinais, máxima assertividade
+    // FAST PROFIT: Filtros relaxados para mais operações
     const eligibleSignals = uniqueSignals.filter(signal => {
       const aiAnalysis = analysis.analyzedSignals.find(
         a => a.asset.toUpperCase() === signal.asset.toUpperCase() || a.signalId === signal.id
       );
 
-      if (!aiAnalysis) return false;
-
-      // Fallback mode: critérios rigorosos
-      if (isFallbackMode) {
-        return (
-          aiAnalysis.recommendation === 'EXECUTE' &&
-          aiAnalysis.confidence >= 90 &&
-          aiAnalysis.adjustedConfluence >= 88
-        );
+      if (!aiAnalysis) {
+        console.log(`   ⚠️ ${signal.asset}: Sem análise IA encontrada`);
+        return false;
       }
 
-      // Verificar se é um padrão GOLDEN_SETUP (prioridade máxima)
+      // Fallback mode: critérios moderados
+      if (isFallbackMode) {
+        const pass = aiAnalysis.recommendation === 'EXECUTE' && aiAnalysis.confidence >= 80;
+        if (!pass) console.log(`   ❌ ${signal.asset}: Fallback rejeitou (conf: ${aiAnalysis.confidence}%)`);
+        return pass;
+      }
+
+      // Modo normal FAST PROFIT: mais permissivo
       const isGoldenSetup = aiAnalysis.reason?.includes('GOLDEN');
-      
-      // Modo normal: MUITO rigoroso (>94% confiança)
-      // GOLDEN_SETUP pode ter risco MEDIUM também
       const acceptableRisk = isGoldenSetup 
-        ? (aiAnalysis.riskLevel === 'LOW' || aiAnalysis.riskLevel === 'MEDIUM')
-        : aiAnalysis.riskLevel === 'LOW';
+        ? (aiAnalysis.riskLevel !== 'HIGH')
+        : (aiAnalysis.riskLevel === 'LOW' || aiAnalysis.riskLevel === 'MEDIUM');
       
-      return (
+      const pass = (
         aiAnalysis.recommendation === 'EXECUTE' &&
         aiAnalysis.confidence >= minConfidence &&
         acceptableRisk &&
-        aiAnalysis.adjustedConfluence >= 94
+        aiAnalysis.adjustedConfluence >= 80
       );
+      
+      if (!pass) {
+        console.log(`   ❌ ${signal.asset}: Rejeitado (rec: ${aiAnalysis.recommendation}, conf: ${aiAnalysis.confidence}%, adj: ${aiAnalysis.adjustedConfluence}%, risk: ${aiAnalysis.riskLevel})`);
+      }
+      
+      return pass;
     });
     
-    // Ordenar por confiança e padrão (GOLDEN primeiro)
+    // Ordenar por confiança
     const sorted = eligibleSignals.sort((a, b) => {
       const aAnalysis = analysis.analyzedSignals.find(an => an.asset.toUpperCase() === a.asset.toUpperCase());
       const bAnalysis = analysis.analyzedSignals.find(an => an.asset.toUpperCase() === b.asset.toUpperCase());
-      
-      // GOLDEN_SETUP tem prioridade
       const aIsGolden = aAnalysis?.reason?.includes('GOLDEN') ? 1 : 0;
       const bIsGolden = bAnalysis?.reason?.includes('GOLDEN') ? 1 : 0;
       if (bIsGolden !== aIsGolden) return bIsGolden - aIsGolden;
-      
-      // Depois por confiança
       return (bAnalysis?.confidence || 0) - (aAnalysis?.confidence || 0);
     });
     
-    // MÁXIMO 2-3 SINAIS DE ATIVOS DIFERENTES (qualidade > quantidade)
-    const hasGoldenSetup = sorted.some(s => {
-      const analysis2 = analysis.analyzedSignals.find(a => a.asset.toUpperCase() === s.asset.toUpperCase());
-      return analysis2?.reason?.includes('GOLDEN');
-    });
-    const maxSignals = isFallbackMode ? 1 : (hasGoldenSetup ? 2 : 3);
+    // FAST PROFIT: até 4 sinais simultâneos
+    const maxSignals = isFallbackMode ? 2 : 4;
     
-    // Garantir que não há ativos duplicados na seleção final
     const finalSelection: TradingSignal[] = [];
     const finalAssets = new Set<string>();
     
@@ -295,14 +288,13 @@ export function useAISignalAnalyzer() {
     }
     
     if (finalSelection.length > 0) {
-      console.log(`⭐ ${finalSelection.length} sinal(is) PROFIT-FIRST selecionado(s) (ativos únicos):`);
+      console.log(`⭐ ${finalSelection.length} sinal(is) FAST PROFIT aprovado(s):`);
       finalSelection.forEach(s => {
-        const analysis2 = analysis.analyzedSignals.find(a => a.asset.toUpperCase() === s.asset.toUpperCase());
-        const pattern = analysis2?.reason?.split(':')[0] || 'ELITE';
-        console.log(`   🎯 ${s.asset}: ${analysis2?.confidence}% | ${pattern}`);
+        const a = analysis.analyzedSignals.find(an => an.asset.toUpperCase() === s.asset.toUpperCase());
+        console.log(`   🎯 ${s.asset}: ${a?.confidence}% | ${a?.reason}`);
       });
     } else {
-      console.log('⏳ Aguardando setup elite (>94%)...');
+      console.log(`⏳ Nenhum sinal aprovado (min: ${minConfidence}%, adj: 80%)`);
     }
     
     return finalSelection;

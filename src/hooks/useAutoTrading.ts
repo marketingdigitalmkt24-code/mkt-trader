@@ -7,6 +7,7 @@ import { getCachedAssets } from '@/hooks/useAvailableAssets';
 import { useAuth } from '@/contexts/AuthContext';
 
 const STORAGE_KEY = 'autotrading_config';
+const IQ_CONNECTION_CHECK_INTERVAL = 60000; // Check IQ Option connection every 60s
 const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
 
 interface AutoTradingConfig {
@@ -57,11 +58,13 @@ export function useAutoTrading() {
   const { analyzeSignals, filterByAIRecommendation, isAnalyzing, error: aiError } = useAISignalAnalyzer();
   const processedSignals = useRef<Set<string>>(new Set());
   const lastAIErrorShown = useRef<number>(0);
-  const AI_ERROR_COOLDOWN = 60000; // Only show AI error toast once per minute
+  const AI_ERROR_COOLDOWN = 60000;
   const tradingInProgress = useRef<Set<string>>(new Set());
-  const activeAssetTrades = useRef<Set<string>>(new Set()); // Track assets with active trades
+  const activeAssetTrades = useRef<Set<string>>(new Set());
   const settingsLoaded = useRef(false);
   const isSavingToDb = useRef(false);
+  const iqOptionConnected = useRef(false);
+  const lastIQCheckTime = useRef<number>(0);
   
   const [config, setConfig] = useState<AutoTradingConfig>(() => {
     // Load from localStorage initially for fast startup
@@ -89,18 +92,67 @@ export function useAutoTrading() {
   const lastCheckResultsTime = useRef<number>(0);
   const CHECK_RESULTS_INTERVAL = 30000; // 30 seconds
 
-  // Load settings from database when user is available
+  // Check if IQ Option is connected (has active config with recent connection)
+  const checkIQOptionConnection = useCallback(async (): Promise<boolean> => {
+    const now = Date.now();
+    if (now - lastIQCheckTime.current < IQ_CONNECTION_CHECK_INTERVAL && iqOptionConnected.current) {
+      return iqOptionConnected.current;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('iqoption_config')
+        .select('last_connected_at')
+        .eq('is_active', true)
+        .order('last_connected_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (error || !data?.last_connected_at) {
+        console.log('❌ IQ Option NÃO conectada - auto trading bloqueado');
+        iqOptionConnected.current = false;
+        lastIQCheckTime.current = now;
+        return false;
+      }
+      
+      // Check if last connection was within the last 5 minutes
+      const lastConnected = new Date(data.last_connected_at);
+      const fiveMinutesAgo = new Date(now - 5 * 60 * 1000);
+      const isRecent = lastConnected > fiveMinutesAgo;
+      
+      iqOptionConnected.current = isRecent;
+      lastIQCheckTime.current = now;
+      
+      if (isRecent) {
+        console.log('✅ IQ Option conectada - auto trading liberado');
+      } else {
+        console.log(`⚠️ IQ Option última conexão: ${lastConnected.toISOString()} (muito antiga)`);
+      }
+      
+      return isRecent;
+    } catch (err) {
+      console.error('Error checking IQ Option connection:', err);
+      iqOptionConnected.current = false;
+      return false;
+    }
+  }, []);
+
+  // Load settings from database - works without auth (public RLS policy)
   useEffect(() => {
-    console.log(`🔐 Auth state: user=${user?.id ? 'logged in' : 'NOT logged in'}, settingsLoaded=${settingsLoaded.current}`);
-    if (!user?.id || settingsLoaded.current) return;
+    if (settingsLoaded.current) return;
 
     const loadFromDatabase = async () => {
       try {
-        const { data, error } = await supabase
+        // If logged in, load user-specific settings
+        let query = supabase
           .from('user_trading_settings')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle();
+          .select('*');
+        
+        if (user?.id) {
+          query = query.eq('user_id', user.id);
+        }
+        
+        const { data, error } = await query.order('updated_at', { ascending: false }).limit(1).maybeSingle();
 
         if (error) {
           console.error('Error loading settings from DB:', error);
@@ -114,11 +166,10 @@ export function useAutoTrading() {
             minConfluence: data.min_confluence,
             maxDailyTrades: data.max_daily_trades,
             dailyLimitEnabled: data.daily_limit_enabled ?? true,
-            useAIAnalysis: data.use_ai_analysis,
+            useAIAnalysis: true, // FORÇAR IA SEMPRE LIGADA
             aiMinConfidence: data.ai_min_confidence,
             profitTargetType: data.profit_target_type as 'none' | 'percentage' | 'value',
             profitTargetValue: Number(data.profit_target_value),
-            // Keep local values for these
             todayTrades: config.todayTrades,
             useScaledEntries: config.useScaledEntries,
             scaledEntriesCount: config.scaledEntriesCount,
@@ -127,7 +178,7 @@ export function useAutoTrading() {
           
           setConfig(prev => ({ ...prev, ...dbConfig }));
           localStorage.setItem(STORAGE_KEY, JSON.stringify(dbConfig));
-          console.log('✅ Settings loaded from database');
+          console.log('✅ Settings loaded from database (AI FORÇADA)', dbConfig.enabled ? '🟢 ATIVO' : '⏸️ DESATIVADO');
         }
         
         settingsLoaded.current = true;
@@ -137,7 +188,10 @@ export function useAutoTrading() {
     };
 
     loadFromDatabase();
-  }, [user?.id]);
+    
+    // Also check IQ Option connection on mount
+    checkIQOptionConnection();
+  }, [user?.id, checkIQOptionConnection]);
 
   // Save settings to database when config changes
   const saveToDatabase = useCallback(async (newConfig: AutoTradingConfig) => {
@@ -544,7 +598,15 @@ export function useAutoTrading() {
       console.log('⏸️ Auto trading desabilitado no config');
       return;
     }
-    console.log(`🟢 Auto trading ATIVO | IA: ${config.useAIAnalysis} | Min conf: ${config.aiMinConfidence}% | Trades hoje: ${config.todayTrades}/${config.maxDailyTrades}`);
+    
+    // VERIFICAR CONEXÃO IQ OPTION - obrigatório para operar
+    const iqConnected = await checkIQOptionConnection();
+    if (!iqConnected) {
+      console.log('🚫 Auto trading BLOQUEADO: IQ Option não conectada. Conecte primeiro no painel admin.');
+      return;
+    }
+    
+    console.log(`🟢 Auto trading ATIVO + IQ CONECTADA | IA: FORÇADA | Min conf: ${config.aiMinConfidence}% | Trades hoje: ${config.todayTrades}/${config.maxDailyTrades}`);
     
     // Check if profit target is reached
     if (config.profitTargetType !== 'none' && config.profitTargetValue > 0 && currentDailyProfit !== undefined) {
@@ -636,14 +698,23 @@ export function useAutoTrading() {
       }
     });
     
-    // STEP 2: CRITICAL - Deduplicate by asset (keep only highest confluence per asset)
+    // STEP 2: Deduplicate by asset - PREFER M1 (fast operations) over M5/M15
     const assetSignalMap = new Map<string, TradingSignal>();
     rawEligibleSignals.forEach(signal => {
       const assetKey = signal.asset.toUpperCase();
       const existing = assetSignalMap.get(assetKey);
       
-      if (!existing || signal.indicators.confluenceScore > existing.indicators.confluenceScore) {
+      if (!existing) {
         assetSignalMap.set(assetKey, signal);
+      } else {
+        // Prefer M1 timeframe for fast profit operations
+        const currentIsFaster = signal.timeframe === 'M1' && existing.timeframe !== 'M1';
+        const sameTimeframeBetterScore = signal.timeframe === existing.timeframe && 
+          signal.indicators.confluenceScore > existing.indicators.confluenceScore;
+        
+        if (currentIsFaster || sameTimeframeBetterScore) {
+          assetSignalMap.set(assetKey, signal);
+        }
       }
     });
     
@@ -667,8 +738,8 @@ export function useAutoTrading() {
     console.log(`🎯 ${eligibleSignals.length} sinais elegíveis (${activeCount} ativos com trades ativos)`);
 
 
-    // If AI analysis is enabled, filter signals through AI
-    if (config.useAIAnalysis && eligibleSignals.length > 0) {
+    // SEMPRE usar IA para análise (forçado)
+    if (eligibleSignals.length > 0) {
       console.log('🤖 Running AI analysis on eligible signals...');
       
       try {
@@ -738,7 +809,7 @@ export function useAutoTrading() {
     
     // Execute all trades simultaneously
     await placeTradesSimultaneously(signalsToTrade);
-  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.dailyLimitEnabled, config.profitTargetType, config.profitTargetValue, config.useAIAnalysis, config.aiMinConfidence, placeTradesSimultaneously, analyzeSignals, filterByAIRecommendation, toast]);
+  }, [config.enabled, config.minConfluence, config.todayTrades, config.maxDailyTrades, config.dailyLimitEnabled, config.profitTargetType, config.profitTargetValue, config.aiMinConfidence, placeTradesSimultaneously, analyzeSignals, filterByAIRecommendation, checkIQOptionConnection, toast]);
 
   const resetDailyTrades = useCallback(() => {
     setConfig(prev => ({ ...prev, todayTrades: 0 }));

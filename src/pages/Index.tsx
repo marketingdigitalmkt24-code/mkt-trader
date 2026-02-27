@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { QuickStats } from '@/components/QuickStats';
 import { TimeframeFilter } from '@/components/TimeframeFilter';
-import { HotSignalsSection } from '@/components/HotSignalsSection';
 import { AllSignalsSection } from '@/components/AllSignalsSection';
 import { AssetRanking } from '@/components/AssetRanking';
 import { BankManagementCard } from '@/components/BankManagementCard';
@@ -29,10 +28,6 @@ const Index = () => {
     isLoading, 
     isSearching, 
     marketStatus,
-    waitingMessage,
-    dailySignalsCount,
-    maxDailySignals,
-    registerLoss
   } = useAutoSignals();
 
   const {
@@ -136,14 +131,6 @@ const Index = () => {
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
           {/* Main Content - Signals */}
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-            <HotSignalsSection 
-              signals={filteredSignals} 
-              waitingMessage={waitingMessage}
-              dailySignalsCount={dailySignalsCount}
-              maxDailySignals={maxDailySignals}
-            />
-            
-            {/* Histórico de Resultados - Apenas Auto Trading */}
             <SignalHistorySection 
               history={history}
               onClearHistory={clearHistory}

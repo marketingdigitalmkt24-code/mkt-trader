@@ -7,9 +7,7 @@ interface AllSignalsSectionProps {
 }
 
 export function AllSignalsSection({ signals }: AllSignalsSectionProps) {
-  const otherSignals = signals.filter((s) => !s.isHot);
-
-  if (otherSignals.length === 0) return null;
+  if (signals.length === 0) return null;
 
   return (
     <section className="mb-8">
@@ -19,16 +17,16 @@ export function AllSignalsSection({ signals }: AllSignalsSectionProps) {
         </div>
         <div>
           <h2 className="text-lg font-semibold text-foreground">
-            Outros Sinais
+            Sinais Ativos
           </h2>
           <p className="text-sm text-muted-foreground">
-            Sinais moderados - aguarde melhores condições
+            {signals.length} {signals.length === 1 ? 'sinal' : 'sinais'} detectados
           </p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {otherSignals.map((signal) => (
+        {signals.map((signal) => (
           <SignalCard key={signal.id} signal={signal} />
         ))}
       </div>

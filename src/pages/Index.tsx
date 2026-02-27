@@ -2,14 +2,12 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { QuickStats } from '@/components/QuickStats';
 import { TimeframeFilter } from '@/components/TimeframeFilter';
-import { AllSignalsSection } from '@/components/AllSignalsSection';
 import { AssetRanking } from '@/components/AssetRanking';
 import { BankManagementCard } from '@/components/BankManagementCard';
-import { SafetyFiltersCard } from '@/components/SafetyFiltersCard';
 import { MarketStatusCard } from '@/components/MarketStatusCard';
 import { SignalHistorySection } from '@/components/SignalHistorySection';
 import { AIStatusIndicator } from '@/components/AIStatusIndicator';
-import { mockAssetPerformance, safetyFilters } from '@/data/mockData';
+import { mockAssetPerformance } from '@/data/mockData';
 import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
 import { useSignalResults } from '@/hooks/useSignalResults';
@@ -135,19 +133,16 @@ const Index = () => {
               history={history}
               onClearHistory={clearHistory}
             />
-            
-            <AllSignalsSection signals={filteredSignals} />
           </div>
 
           {/* Sidebar - Stats & Management */}
           <div className="space-y-4 sm:space-y-6">
+            <BankManagementCard />
+            <AssetRanking assets={mockAssetPerformance} />
             <MarketStatusCard 
               otcOpen={marketStatus.otcOpen} 
               forexOpen={marketStatus.forexOpen} 
             />
-            <BankManagementCard />
-            <AssetRanking assets={mockAssetPerformance} />
-            <SafetyFiltersCard filters={safetyFilters} />
           </div>
         </div>
       </main>

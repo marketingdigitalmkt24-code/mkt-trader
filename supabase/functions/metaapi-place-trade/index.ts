@@ -22,6 +22,10 @@ async function safeFetch(url: string, options: RequestInit = {}): Promise<Respon
   }
 }
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 interface TradeRequest {
   asset: string;
   direction: 'call' | 'put' | 'CALL' | 'PUT';
@@ -66,7 +70,7 @@ serve(async (req) => {
     console.log(`🔄 MT5 Trade Request: ${asset} ${direction} | Signal: ${signalId} | AccountID: ${METAAPI_ACCOUNT_ID}`);
 
     // Step 1: Get account region from provisioning API
-    let region = 'new-york'; // default
+    let region = 'new-york';
     try {
       const accountRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}`, {
         headers: { 'auth-token': METAAPI_TOKEN },
@@ -75,17 +79,15 @@ serve(async (req) => {
         const accountData = await accountRes.json();
         region = accountData.region || 'new-york';
         console.log(`📍 Account region: ${region} | State: ${accountData.state} | Connection: ${accountData.connectionStatus}`);
-      } else {
-        const errText = await accountRes.text();
-        console.log(`⚠️ Could not get account region [${accountRes.status}]: ${errText}, using default: ${region}`);
       }
     } catch (e) {
       console.log(`⚠️ Region lookup failed, using default: ${region}`);
     }
 
-    // Step 2: Build correct trade URL with region
     const tradeApiUrl = `https://mt-client-api-v1.${region}.agiliumtrade.ai`;
-    
+    const baseUrl = `${tradeApiUrl}/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
+    const authHeaders = { 'auth-token': METAAPI_TOKEN };
+
     // Map asset symbol to MT5 format
     let mt5Symbol = asset.replace('/', '').replace('-OTC', 'otc').replace(' ', '');
     const symbolMap: Record<string, string> = {
@@ -101,17 +103,40 @@ serve(async (req) => {
       mt5Symbol = symbolMap[mt5Symbol];
     }
 
+    // ===== Step 2: Check for existing open positions on this symbol =====
+    try {
+      const positionsRes = await safeFetch(`${baseUrl}/positions`, {
+        headers: authHeaders,
+      });
+      if (positionsRes.ok) {
+        const positions = await positionsRes.json();
+        const activeForSymbol = positions.filter((p: any) => p.symbol === mt5Symbol);
+        if (activeForSymbol.length > 0) {
+          console.log(`⛔ Symbol ${mt5Symbol} already has ${activeForSymbol.length} active position(s). Skipping trade.`);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `Já existe posição aberta para ${mt5Symbol}. Aguardando fechamento.`,
+              skipped: true,
+              activePositions: activeForSymbol.length,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    } catch (e) {
+      console.log(`⚠️ Could not check open positions, proceeding with trade`);
+    }
+
+    // ===== Step 3: Place the trade =====
     const dir = direction.toUpperCase();
     const actionType = dir === 'CALL' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL';
     const volume = metaConfig.volume || 0.01;
-    const tpPercent = metaConfig.take_profit_pips || 10; // stored as %, e.g. 10 = 10%
-
-    // Calculate TP in currency: investment amount * percentage
-    // For MT5, the "investment" is approximated by the trade amount passed in the request
-    const investmentAmount = body.amount || 1; // fallback $1
+    const tpPercent = metaConfig.take_profit_pips || 10;
+    const investmentAmount = body.amount || 1;
     const tpCurrency = investmentAmount * (tpPercent / 100);
 
-    const tradeUrl = `${tradeApiUrl}/users/current/accounts/${METAAPI_ACCOUNT_ID}/trade`;
+    const tradeUrl = `${baseUrl}/trade`;
     const tradeBody: Record<string, any> = {
       actionType,
       symbol: mt5Symbol,
@@ -119,7 +144,6 @@ serve(async (req) => {
       comment: `S${(signalId || '').slice(0, 8)}|${confluenceScore || 0}`,
     };
 
-    // Add Take Profit using currency amount (% of investment)
     if (tpPercent > 0 && tpCurrency > 0) {
       tradeBody.takeProfit = tpCurrency;
       tradeBody.takeProfitUnits = 'RELATIVE_CURRENCY';
@@ -131,10 +155,7 @@ serve(async (req) => {
 
     const tradeRes = await safeFetch(tradeUrl, {
       method: 'POST',
-      headers: {
-        'auth-token': METAAPI_TOKEN,
-        'Content-Type': 'application/json',
-      },
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify(tradeBody),
     });
 
@@ -153,15 +174,66 @@ serve(async (req) => {
     }
 
     console.log(`✅ MT5 Trade executed: ${JSON.stringify(tradeResult)}`);
+    const positionId = tradeResult.positionId;
+
+    // ===== Step 4: Monitor position every 1 second until closed (max 120s) =====
+    let positionClosed = false;
+    let finalProfit = 0;
+    const maxMonitorSeconds = 120;
+
+    if (positionId) {
+      console.log(`👁️ Monitoring position ${positionId} every 1s...`);
+      for (let i = 0; i < maxMonitorSeconds; i++) {
+        await sleep(1000);
+        try {
+          const posRes = await safeFetch(`${baseUrl}/positions/${positionId}`, {
+            headers: authHeaders,
+          });
+          if (posRes.status === 404) {
+            // Position no longer exists = closed
+            console.log(`✅ Position ${positionId} closed after ${i + 1}s`);
+            positionClosed = true;
+
+            // Try to get the deal from history
+            try {
+              const historyRes = await safeFetch(
+                `${baseUrl}/history-deals-by-position/${positionId}`,
+                { headers: authHeaders }
+              );
+              if (historyRes.ok) {
+                const deals = await historyRes.json();
+                finalProfit = deals.reduce((sum: number, d: any) => sum + (d.profit || 0), 0);
+                console.log(`💰 Position profit: $${finalProfit.toFixed(2)}`);
+              }
+            } catch (_) { /* ignore */ }
+            break;
+          } else if (posRes.ok) {
+            const posData = await posRes.json();
+            const unrealizedProfit = posData.unrealizedProfit || posData.profit || 0;
+            if (i % 10 === 0) {
+              console.log(`⏳ Position ${positionId} still open | Unrealized P/L: $${unrealizedProfit.toFixed(2)} (${i + 1}s)`);
+            }
+          }
+        } catch (e) {
+          // Network error, continue monitoring
+        }
+      }
+
+      if (!positionClosed) {
+        console.log(`⏰ Monitoring timeout (${maxMonitorSeconds}s). Position ${positionId} still open.`);
+      }
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
         orderId: tradeResult.orderId,
-        positionId: tradeResult.positionId,
+        positionId,
         symbol: mt5Symbol,
         direction: dir,
         volume,
+        positionClosed,
+        finalProfit,
         tradeResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

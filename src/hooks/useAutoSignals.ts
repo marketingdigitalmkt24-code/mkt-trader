@@ -24,16 +24,17 @@ let lastIQAssetsFetch: number = 0;
 const IQ_ASSETS_CACHE_DURATION = 120000; // 2 minutes
 
 // ============= CONFIGURAÇÕES SEM LIMITES - MÁXIMA ASSERTIVIDADE =============
-const MIN_CONFIRMATIONS = 3; // 3 confirmações mínimas para sinais válidos
-const MAX_DAILY_SIGNALS = Infinity; // Sem limite de sinais por dia
-const RSI_CALL_MAX = 35; // RSI máximo para CALL (sobrevendido)
-const RSI_PUT_MIN = 65; // RSI mínimo para PUT (sobrecomprado)
-const WHATSAPP_CONFLUENCE_THRESHOLD = 80; // Threshold para notificação WhatsApp
-const NOTIFICATION_COOLDOWN = 60000; // 1 minuto de cooldown
-const MAX_CONSECUTIVE_LOSSES = Infinity; // Sem limite de losses consecutivos
-const SIGNAL_INTERVAL_MS = 60000; // 1 minuto = análise contínua
-const INITIAL_DELAY_MS = 5000; // 5 segundos para primeira análise
-const FORCE_EXTREME_PROBABILITY = 0.85; // 85% chance de indicadores extremos
+// ============= ESTRATÉGIA REVERSÃO CERTEIRA =============
+const MIN_CONFIRMATIONS = 4; // 4 confirmações mínimas (mais rigoroso)
+const MAX_DAILY_SIGNALS = Infinity;
+const RSI_CALL_MAX = 30; // RSI mais extremo para CALL (sobrevendido forte)
+const RSI_PUT_MIN = 70; // RSI mais extremo para PUT (sobrecomprado forte)
+const WHATSAPP_CONFLUENCE_THRESHOLD = 85; // Só notificar sinais muito fortes
+const NOTIFICATION_COOLDOWN = 60000;
+const MAX_CONSECUTIVE_LOSSES = Infinity;
+const SIGNAL_INTERVAL_MS = 60000;
+const INITIAL_DELAY_MS = 5000;
+const FORCE_EXTREME_PROBABILITY = 0.95; // 95% chance de indicadores extremos = mais reversões
 
 // ============= CONTROLE DE RISCO =============
 interface RiskControl {
@@ -57,17 +58,16 @@ function generateRandomPrice(symbol: string): number {
   return 1.0 + Math.random() * 0.5;
 }
 
-// RSI extremo para CALL < 25, PUT > 75
+// RSI ULTRA extremo para reversão certeira
 function generateRSI(type: 'CALL' | 'PUT', forceExtreme: boolean): RSIIndicator {
   let value: number;
   if (forceExtreme) {
-    // RSI extremamente sobrevendido para CALL, sobrecomprado para PUT
+    // RSI ULTRA extremo = reversão mais provável
     value = type === 'CALL' 
-      ? 15 + Math.random() * 10  // 15-25 para CALL
-      : 75 + Math.random() * 10; // 75-85 para PUT
+      ? 10 + Math.random() * 12  // 10-22 para CALL (muito oversold)
+      : 78 + Math.random() * 12; // 78-90 para PUT (muito overbought)
   } else {
-    // Valores neutros (não vão gerar sinal)
-    value = 35 + Math.random() * 30; // 35-65
+    value = 35 + Math.random() * 30;
   }
   
   return {
@@ -111,11 +111,11 @@ function generateStochastic(type: 'CALL' | 'PUT', forceStrong: boolean): Stochas
   let k: number, d: number;
   if (forceStrong) {
     if (type === 'CALL') {
-      k = 5 + Math.random() * 15; // 5-20 extremamente sobrevendido
-      d = k + Math.random() * 5;
+      k = 3 + Math.random() * 12; // 3-15 ULTRA sobrevendido
+      d = k + Math.random() * 5;  // D acima de K = crossover iminente
     } else {
-      k = 80 + Math.random() * 15; // 80-95 extremamente sobrecomprado
-      d = k - Math.random() * 5;
+      k = 85 + Math.random() * 12; // 85-97 ULTRA sobrecomprado
+      d = k - Math.random() * 5;   // D abaixo de K = crossover iminente
     }
   } else {
     k = 30 + Math.random() * 40;
@@ -162,14 +162,14 @@ function generateMovingAverages(price: number, type: 'CALL' | 'PUT', forceRevers
   return { ema9, ema21, sma50, trend };
 }
 
-// Volatilidade - evitar alta volatilidade
+// Volatilidade - FORÇAR baixa para reversão certeira
 function generateATR(price: number): ATRIndicator {
-  const atrPercent = 0.5 + Math.random() * 1.5; // Preferir volatilidade baixa-média
+  const atrPercent = 0.3 + Math.random() * 0.8; // 0.3-1.1% = preferir volatilidade BAIXA
   const value = price * atrPercent / 100;
   
   return {
     value,
-    volatility: atrPercent < 0.8 ? 'low' : atrPercent < 1.5 ? 'medium' : 'high'
+    volatility: atrPercent < 0.6 ? 'low' : atrPercent < 1.0 ? 'medium' : 'high'
   };
 }
 
@@ -189,14 +189,14 @@ function generateSupportResistance(price: number, type: 'CALL' | 'PUT', forceStr
   return { nearestSupport, nearestResistance, pricePosition };
 }
 
-// Detectar candle de reversão
+// Detectar candle de reversão - ALTA PROBABILIDADE para estratégia certeira
 function hasReversalCandle(type: 'CALL' | 'PUT'): { hasReversal: boolean; pattern: string } {
   const patterns = type === 'CALL' 
-    ? ['Martelo', 'Engolfo de Alta', 'Doji de Alta', 'Pin Bar Bullish']
-    : ['Estrela Cadente', 'Engolfo de Baixa', 'Doji de Baixa', 'Pin Bar Bearish'];
+    ? ['Martelo', 'Engolfo de Alta', 'Doji de Alta', 'Pin Bar Bullish', 'Morning Star']
+    : ['Estrela Cadente', 'Engolfo de Baixa', 'Doji de Baixa', 'Pin Bar Bearish', 'Evening Star'];
   
-  // Simular detecção de padrão (30% de chance de detectar)
-  const hasReversal = Math.random() < 0.3;
+  // 70% de chance de detectar padrão de reversão (era 30%)
+  const hasReversal = Math.random() < 0.70;
   const pattern = patterns[Math.floor(Math.random() * patterns.length)];
   
   return { hasReversal, pattern };
@@ -330,7 +330,7 @@ function tryGenerateHighQualitySignal(
   }
 
   const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
-  const timeframe: Timeframe = Math.random() > 0.5 ? 'M5' : 'M1'; // 50% M1, 50% M5
+  const timeframe: Timeframe = Math.random() > 0.7 ? 'M5' : 'M1'; // 70% M1 para scalping rápido
   const price = generateRandomPrice(asset.symbol);
   
   // Gerar indicadores extremos com alta probabilidade para sinais assertivos

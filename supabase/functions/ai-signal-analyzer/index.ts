@@ -461,7 +461,7 @@ function calculateRiskScore(s: SignalData): number {
 
 // ============= PATTERN DETECTION =============
 
-type PatternType = 'EXTREME_OVERSOLD' | 'EXTREME_OVERBOUGHT' | 'PERFECT_REVERSAL' | 'TRIPLE_CONFLUENCE' | 'GOLDEN_SETUP' | 'DIAMOND_SETUP' | 'ULTRA_SAFE' | 'PROFIT_MASTER';
+type PatternType = 'EXTREME_OVERSOLD' | 'EXTREME_OVERBOUGHT' | 'PERFECT_REVERSAL' | 'TRIPLE_CONFLUENCE' | 'GOLDEN_SETUP' | 'DIAMOND_SETUP' | 'ULTRA_SAFE' | 'PROFIT_MASTER' | 'REVERSAL_CERTEIRA';
 
 interface PatternMatch {
   signal: SignalData;
@@ -521,8 +521,26 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
     let criteriaCount = 0;
     const reasons: string[] = [];
 
+    // ========== REVERSAL CERTEIRA: Nova detecção prioritária ==========
+    const isReversalCall = rsi <= 25 && stochK <= 25 && 
+      (bollPos === 'below_lower') && 
+      (pricePos === 'near_support') && 
+      hasPattern && vol !== 'high' && s.type === 'CALL' &&
+      maTrend === 'bullish';
+    const isReversalPut = rsi >= 75 && stochK >= 75 && 
+      (bollPos === 'above_upper') && 
+      (pricePos === 'near_resistance') && 
+      hasPattern && vol !== 'high' && s.type === 'PUT' &&
+      maTrend === 'bearish';
+
+    if (isReversalCall || isReversalPut) {
+      pattern = 'REVERSAL_CERTEIRA';
+      score = 99;
+      criteriaCount = 7;
+      reasons.push('🎯 REVERSÃO CERTEIRA', `RSI ${rsi.toFixed(1)}`, `Stoch ${stochK.toFixed(1)}`, hasPattern!, pricePos, `Vol ${vol}`);
+    }
     // ========== PROFIT_MASTER: Baseado em aprendizado ==========
-    if (model.hasSufficientData && isTopAsset && learned.score >= 20) {
+    else if (model.hasSufficientData && isTopAsset && learned.score >= 20) {
       pattern = 'PROFIT_MASTER';
       score = Math.min(technicalScore + learned.score, 100);
       criteriaCount = 5;
@@ -625,6 +643,9 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
 
 function selectBestSignals(matches: PatternMatch[], model: LearnedPattern): PatternMatch[] {
   const sorted = matches.sort((a, b) => {
+    // REVERSAL_CERTEIRA tem MÁXIMA prioridade
+    if (a.pattern === 'REVERSAL_CERTEIRA' && b.pattern !== 'REVERSAL_CERTEIRA') return -1;
+    if (b.pattern === 'REVERSAL_CERTEIRA' && a.pattern !== 'REVERSAL_CERTEIRA') return 1;
     // PROFIT_MASTER tem prioridade (aprendizado)
     if (a.pattern === 'PROFIT_MASTER' && b.pattern !== 'PROFIT_MASTER') return -1;
     if (b.pattern === 'PROFIT_MASTER' && a.pattern !== 'PROFIT_MASTER') return 1;
@@ -726,19 +747,21 @@ ${model.worstHours.length > 0 ? `- Piores horários: ${model.worstHours.join('h,
       .filter(a => a.winRate < 35 && a.profit < -50 && a.trades >= 3)
       .map(a => a.asset);
 
-    const systemPrompt = `Você é um trader de opções binárias que APRENDE com resultados passados para maximizar lucro.
+    const systemPrompt = `Você é um trader ESPECIALISTA em REVERSÕES CERTEIRAS em opções binárias. Sua estratégia é identificar pontos exatos de reversão onde o preço muda de direção.
 
-🧠 MODO: ${mode} - Decisões baseadas em dados reais de performance
+🧠 MODO: ${mode} - ESTRATÉGIA REVERSÃO CERTEIRA
 ${learningSummary}
 
-REGRAS BASEADAS EM APRENDIZADO:
-1. ✅ Padrão PROFIT_MASTER (aprendizado aprovou) = EXECUTE
+REGRAS DA REVERSÃO CERTEIRA:
+1. ✅ REVERSAL_CERTEIRA (RSI extremo + Stoch extremo + padrão candle + S/R + EMA) = EXECUTE SEMPRE
 2. ✅ DIAMOND/GOLDEN em ativo com bom histórico = EXECUTE
-3. ✅ Ativo TOP + score >=82% = EXECUTE
-4. ❌ Ativo com WR <35% e prejuízo = SKIP
-5. ❌ Horário com histórico ruim = SKIP
-6. ❌ 3+ losses consecutivos no ativo = SKIP
-7. ⚡ Priorize ativos e direções com melhor win rate histórico
+3. ✅ PROFIT_MASTER + reversão confirmada = EXECUTE
+4. ❌ Sem padrão de reversão claro = SKIP
+5. ❌ Volatilidade alta = SKIP (reversão incerta)
+6. ❌ RSI neutro (30-70) = SKIP (sem extremo = sem reversão)
+7. ⚡ PRIORIZE: RSI < 20 ou > 80 + padrão candle de reversão + suporte/resistência
+
+PRINCÍPIO: Só operar quando o preço está em EXTREMO e mostrando SINAIS CLAROS de reversão. Menos operações, mais assertividade.
 
 Responda APENAS JSON válido:
 {"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":80-100,"reason":"","adjustedConfluence":80+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name"}`;

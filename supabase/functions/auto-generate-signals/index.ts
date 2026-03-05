@@ -676,6 +676,7 @@ serve(async (req) => {
           timeframe: bestSignal.timeframe,
         },
         whatsappSent,
+        iqSent,
         mt5Sent,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

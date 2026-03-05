@@ -699,178 +699,40 @@ export function useAutoSignals() {
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSearching, setIsSearching] = useState(true);
-  const [waitingMessage, setWaitingMessage] = useState<string | null>('Aguardando oportunidade de ALTA QUALIDADE');
+  const [isSearching, setIsSearching] = useState(false);
   const [marketStatus, setMarketStatus] = useState<MarketStatus>({
     otcOpen: isOTCMarketOpen(),
     forexOpen: isForexMarketOpen(),
     cryptoOpen: true,
   });
-  
-  const notifiedAssets = useRef<Map<string, number>>(new Map());
-  const riskControl = useRef<RiskControl>(loadRiskControl());
-
-  // No longer persist to localStorage - we use Supabase now
-
-  // Persist risk control to localStorage
-  useEffect(() => {
-    const today = new Date().toDateString();
-    localStorage.setItem(RISK_CONTROL_STORAGE_KEY, JSON.stringify({
-      date: today,
-      control: riskControl.current
-    }));
-  });
-
-  // Reset diário à meia-noite
-  useEffect(() => {
-    const checkDailyReset = () => {
-      const now = new Date();
-      if (now.getHours() === 0 && now.getMinutes() === 0) {
-        riskControl.current = {
-          dailySignalsCount: 0,
-          consecutiveLosses: 0,
-          lastLossTime: null,
-          isPaused: false,
-          pauseReason: null,
-        };
-        notifiedAssets.current.clear();
-        setSignals([]);
-        setWaitingMessage('Aguardando oportunidade de ALTA QUALIDADE');
-        localStorage.removeItem(RISK_CONTROL_STORAGE_KEY);
-      }
-    };
-
-    const interval = setInterval(checkDailyReset, 60000);
-    return () => clearInterval(interval);
-  }, []);
 
   const registerLoss = useCallback(() => {
-    riskControl.current.consecutiveLosses++;
-    riskControl.current.lastLossTime = Date.now();
-    
-    if (riskControl.current.consecutiveLosses >= MAX_CONSECUTIVE_LOSSES) {
-      riskControl.current.isPaused = true;
-      riskControl.current.pauseReason = 'Mercado sem condições ideais no momento';
-      setWaitingMessage('⚠️ Sistema pausado: 2 losses seguidos detectados');
-    }
+    // No-op - server handles everything
   }, []);
 
-  // Análise de mercado em intervalos longos (5 minutos)
-  const analyzeMarket = useCallback(async () => {
-    // Não analisar se já atingiu limite diário
-    if (riskControl.current.dailySignalsCount >= MAX_DAILY_SIGNALS) {
-      setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
-      return;
-    }
-
-    if (riskControl.current.isPaused) {
-      return;
-    }
-
-    setIsSearching(true);
-    
-    setMarketStatus({
-      otcOpen: isOTCMarketOpen(),
-      forexOpen: isForexMarketOpen(),
-      cryptoOpen: true,
-    });
-    
-    // Fetch available assets from IQ Option
-    const availableAssets = await fetchIQOptionAssets();
-    console.log(`📊 Using ${availableAssets.length} available assets for signal generation`);
-    
-    const { signals: newSignals, message } = generateSignals(riskControl.current, availableAssets);
-    
-    if (newSignals.length > 0) {
-      // Salvar sinais no banco de dados primeiro
-      for (const signal of newSignals) {
-        await saveSignalToDB(signal);
-      }
-      
-      setSignals(prev => [...prev, ...newSignals].slice(-MAX_DAILY_SIGNALS));
-      setLastUpdate(new Date());
-      setWaitingMessage(null);
-      
-      // Atualizar contador diário
-      riskControl.current.dailySignalsCount += newSignals.length;
-      
-      // Enviar notificações WhatsApp para sinais de alta qualidade
-      for (const signal of newSignals) {
-        if (signal.indicators.confluenceScore >= WHATSAPP_CONFLUENCE_THRESHOLD) {
-          const lastNotified = notifiedAssets.current.get(signal.asset);
-          const now = Date.now();
-          
-          if (!lastNotified || (now - lastNotified) > NOTIFICATION_COOLDOWN) {
-            const sent = await sendWhatsAppNotification(signal);
-            if (sent) {
-              notifiedAssets.current.set(signal.asset, now);
-            }
-          }
-        }
-      }
-
-      // Se atingiu limite, mostrar mensagem
-      if (riskControl.current.dailySignalsCount >= MAX_DAILY_SIGNALS) {
-        setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
-      }
-    } else if (!waitingMessage?.includes('Limite')) {
-      setWaitingMessage(message);
-    }
-    
-    setIsSearching(false);
-  }, [waitingMessage]);
-
-  // Análise inicial - carregar sinais do banco de dados
+  // Carregar sinais existentes do banco ao montar
   useEffect(() => {
     const loadSignals = async () => {
       setIsLoading(true);
       
-      // Carregar sinais do Supabase
       const dbSignals = await loadSignalsFromDB();
-      
-      // O contador é SEMPRE baseado nos sinais reais do banco
-      const actualDailyCount = dbSignals.length;
-      
-      // Carregar apenas consecutiveLosses e isPaused do localStorage
-      const storedRisk = loadRiskControl();
-      
-      // Restaurar estado do risk control mantendo apenas dados de losses
-      riskControl.current = {
-        dailySignalsCount: actualDailyCount, // SEMPRE do banco
-        consecutiveLosses: storedRisk.consecutiveLosses,
-        lastLossTime: storedRisk.lastLossTime,
-        isPaused: storedRisk.isPaused,
-        pauseReason: storedRisk.pauseReason,
-      };
-      
-      console.log(`📊 Loaded ${actualDailyCount} signals from database, limit: ${MAX_DAILY_SIGNALS}`);
+      console.log(`📊 Loaded ${dbSignals.length} signals from database (read-only mode)`);
       
       if (dbSignals.length > 0) {
         setSignals(dbSignals);
-        setWaitingMessage(null);
         setLastUpdate(new Date(dbSignals[0].timestamp));
-      } else {
-        // Se não há sinais, garantir que está buscando
-        setWaitingMessage('Aguardando oportunidade de ALTA QUALIDADE');
-      }
-      
-      // Verificar se atingiu limite
-      if (actualDailyCount >= MAX_DAILY_SIGNALS) {
-        setWaitingMessage(`Limite diário atingido (${MAX_DAILY_SIGNALS} sinais)`);
       }
       
       setIsLoading(false);
-      setIsSearching(false);
     };
     
     loadSignals();
   }, []);
 
-  // Realtime subscription para sinais - sincronizar entre navegadores
+  // Realtime subscription - ÚNICA forma de receber novos sinais
   useEffect(() => {
-    console.log('📡 Setting up realtime subscription for trading_signals');
+    console.log('📡 Setting up realtime subscription for trading_signals (read-only client)');
     
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const channel = supabase
       .channel('trading-signals-realtime')
       .on(
@@ -881,7 +743,7 @@ export function useAutoSignals() {
           table: 'trading_signals',
         },
         (payload) => {
-          console.log('📊 New signal received:', payload.new);
+          console.log('📊 New signal received from server:', payload.new);
           
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const s = payload.new as any;
@@ -904,14 +766,12 @@ export function useAutoSignals() {
           };
           
           setSignals(prev => {
-            // Evitar duplicatas
             if (prev.some(sig => sig.id === newSignal.id)) {
               return prev;
             }
-            return [newSignal, ...prev].slice(0, MAX_DAILY_SIGNALS);
+            return [newSignal, ...prev];
           });
           setLastUpdate(new Date());
-          setWaitingMessage(null);
         }
       )
       .subscribe((status) => {
@@ -919,14 +779,9 @@ export function useAutoSignals() {
       });
 
     return () => {
-      console.log('🔕 Removing trading signals subscription');
       supabase.removeChannel(channel);
     };
   }, []);
-
-  // NÃO gerar sinais no cliente ao carregar/atualizar a página
-  // O servidor (cron a cada minuto) é o ÚNICO responsável por gerar sinais
-  // O cliente apenas RECEBE sinais via Realtime subscription acima
 
   // Atualizar status do mercado a cada minuto
   useEffect(() => {
@@ -946,11 +801,11 @@ export function useAutoSignals() {
     lastUpdate,
     isLoading,
     isSearching,
-    refreshSignals: analyzeMarket,
+    refreshSignals: () => {}, // No-op - server generates signals
     marketStatus,
-    waitingMessage,
+    waitingMessage: signals.length === 0 ? 'Aguardando sinais do servidor...' : null,
     registerLoss,
-    dailySignalsCount: riskControl.current.dailySignalsCount,
+    dailySignalsCount: signals.length,
     maxDailySignals: MAX_DAILY_SIGNALS,
   };
 }

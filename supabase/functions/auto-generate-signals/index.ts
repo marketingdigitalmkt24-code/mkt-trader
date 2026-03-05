@@ -567,6 +567,41 @@ serve(async (req) => {
       }
     }
 
+    // ============= COPY TRADE TO MT5 VIA METAAPI =============
+    let mt5Sent = false;
+    try {
+      const metaApiToken = Deno.env.get('METAAPI_TOKEN');
+      const metaApiAccountId = Deno.env.get('METAAPI_ACCOUNT_ID');
+      
+      if (metaApiToken && metaApiAccountId) {
+        console.log(`📡 Enviando trade para MT5: ${bestSignal.asset} ${bestSignal.type}`);
+        
+        const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
+          body: {
+            asset: bestSignal.asset,
+            direction: bestSignal.type.toLowerCase(),
+            amount: 100, // Default amount, can be configured
+            expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
+            signalId: bestSignal.id,
+            confluenceScore: bestSignal.indicators.confluenceScore,
+          },
+        });
+
+        if (mt5Error) {
+          console.error('❌ MT5 MetaAPI error:', mt5Error);
+        } else if (mt5Data?.success) {
+          mt5Sent = true;
+          console.log(`✅ MT5 Trade executado: ${mt5Data.symbol} ${mt5Data.direction} | Order: ${mt5Data.orderId}`);
+        } else {
+          console.error(`❌ MT5 Trade falhou: ${mt5Data?.error}`);
+        }
+      } else {
+        console.log('⏭️ MetaAPI não configurado, pulando copy trade MT5');
+      }
+    } catch (e) {
+      console.error('❌ MT5 copy trade failed:', e);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -578,6 +613,7 @@ serve(async (req) => {
           timeframe: bestSignal.timeframe,
         },
         whatsappSent,
+        mt5Sent,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

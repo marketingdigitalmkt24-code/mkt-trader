@@ -41,13 +41,16 @@ const Admin = () => {
   const losses = dailyStats?.losses ?? 0;
   const winRate = todayTrades > 0 ? Math.round((wins / todayTrades) * 100) : 0;
 
-  // MT5 Position Monitor - polls every 1 second
+  // MT5 Position Monitor - polls every 3 seconds
   const [mt5OpenPositions, setMt5OpenPositions] = useState<any[]>([]);
   const [mt5ClosedCount, setMt5ClosedCount] = useState(0);
   const mt5MonitorRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMonitoringRef = useRef(false);
 
   useEffect(() => {
     const monitorMt5 = async () => {
+      if (isMonitoringRef.current) return; // prevent concurrent calls
+      isMonitoringRef.current = true;
       try {
         const { data, error } = await supabase.functions.invoke('metaapi-monitor-positions');
         if (data && !error) {
@@ -56,15 +59,20 @@ const Admin = () => {
             setMt5ClosedCount(prev => prev + data.closedCount);
             console.log(`🎯 MT5 Monitor: fechou ${data.closedCount} posição(ões) por TP`);
           }
+          if (data.totalOpen > 0) {
+            console.log(`👁️ MT5: ${data.totalOpen} posições abertas | TP alvo: $${data.tpTarget}`);
+          }
         }
       } catch (e) {
         // silent
+      } finally {
+        isMonitoringRef.current = false;
       }
     };
 
-    // Start polling every 1 second
+    // Start polling every 3 seconds
     monitorMt5();
-    mt5MonitorRef.current = setInterval(monitorMt5, 1000);
+    mt5MonitorRef.current = setInterval(monitorMt5, 3000);
 
     return () => {
       if (mt5MonitorRef.current) clearInterval(mt5MonitorRef.current);

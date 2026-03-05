@@ -924,27 +924,9 @@ export function useAutoSignals() {
     };
   }, []);
 
-  // Análise automática a cada 6 minutos (10 sinais por hora)
-  useEffect(() => {
-    // Primeira análise após 15 segundos de página carregada
-    const initialTimeout = setTimeout(() => {
-      if (riskControl.current.dailySignalsCount < MAX_DAILY_SIGNALS && !riskControl.current.isPaused) {
-        analyzeMarket();
-      }
-    }, INITIAL_DELAY_MS);
-
-    // Depois a cada 6 minutos para gerar ~10 sinais por hora
-    const interval = setInterval(() => {
-      if (riskControl.current.dailySignalsCount < MAX_DAILY_SIGNALS && !riskControl.current.isPaused) {
-        analyzeMarket();
-      }
-    }, SIGNAL_INTERVAL_MS);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, [analyzeMarket]);
+  // NÃO gerar sinais no cliente ao carregar/atualizar a página
+  // O servidor (cron a cada minuto) é o ÚNICO responsável por gerar sinais
+  // O cliente apenas RECEBE sinais via Realtime subscription acima
 
   // Atualizar status do mercado a cada minuto
   useEffect(() => {

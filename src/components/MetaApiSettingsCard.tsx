@@ -209,14 +209,14 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       </div>
 
       {/* Connected Account Info */}
-      {config.account_id && (
-        <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
+      {config.account_id && config.connection_status === 'connected' && (
+        <div className="p-3 rounded-lg bg-call/5 border border-call/20">
           <div className="flex items-center gap-2 mb-1">
-            <MonitorSmartphone className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Conta Conectada</span>
+            <MonitorSmartphone className="w-4 h-4 text-call" />
+            <span className="text-sm font-medium text-call">Conta Conectada</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Account ID: <code className="text-foreground">{config.account_id.slice(0, 12)}...</code>
+            {config.account_name} • ID: <code className="text-foreground">{config.account_id.slice(0, 12)}...</code>
           </p>
         </div>
       )}

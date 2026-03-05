@@ -153,25 +153,37 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 5000));
     }
 
-    // Check final status
+    // Poll for connection status (up to 30s)
     let connectionStatus = 'connecting';
-    try {
-      const statusRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${accountId}`, {
-        headers: { 'auth-token': METAAPI_TOKEN },
-      });
+    const maxAttempts = 6;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const statusRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${accountId}`, {
+          headers: { 'auth-token': METAAPI_TOKEN },
+        });
 
-      if (statusRes.ok) {
-        const statusData = await statusRes.json();
-        connectionStatus = statusData.connectionStatus === 'CONNECTED' ? 'connected' : 
-                          statusData.connectionStatus?.toLowerCase() || 'connecting';
-        accountName = statusData.name || accountName;
-        console.log(`📊 Final: State=${statusData.state} | Connection=${statusData.connectionStatus} | AccountID=${accountId}`);
-      } else {
-        const errText = await statusRes.text();
-        console.error(`❌ Status check [${statusRes.status}]: ${errText}`);
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          const rawStatus = statusData.connectionStatus || '';
+          connectionStatus = rawStatus === 'CONNECTED' ? 'connected' : rawStatus.toLowerCase() || 'connecting';
+          accountName = statusData.name || accountName;
+          console.log(`📊 Attempt ${attempt}/${maxAttempts}: State=${statusData.state} | Connection=${rawStatus}`);
+          
+          if (connectionStatus === 'connected') {
+            console.log('✅ Conexão estabelecida!');
+            break;
+          }
+        } else {
+          const errText = await statusRes.text();
+          console.error(`❌ Status check [${statusRes.status}]: ${errText}`);
+        }
+      } catch (e) {
+        console.log(`⚠️ Status check attempt ${attempt} failed:`, e);
       }
-    } catch (e) {
-      console.log('⚠️ Status check failed:', e);
+      
+      if (attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, 5000));
+      }
     }
 
     // Update DB

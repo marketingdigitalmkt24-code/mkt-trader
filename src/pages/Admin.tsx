@@ -1,8 +1,9 @@
-import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut, Users } from 'lucide-react';
+import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut, Users, MonitorSmartphone } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
+import { MetaApiSettingsCard } from '@/components/MetaApiSettingsCard';
 import { UserManagementCard } from '@/components/UserManagementCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
@@ -212,6 +213,21 @@ const Admin = () => {
             <Card className="border-call/20">
               <CardContent className="pt-6">
                 <IQOptionSettingsCard defaultOpen={true} />
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* MT5 MetaAPI Section */}
+          <section>
+            <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <MonitorSmartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500" />
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-foreground">MT5 MetaAPI</h2>
+            </div>
+            <Card className="border-blue-500/20">
+              <CardContent className="pt-6">
+                <MetaApiSettingsCard defaultOpen={true} />
               </CardContent>
             </Card>
           </section>

@@ -574,26 +574,44 @@ serve(async (req) => {
       const metaApiAccountId = Deno.env.get('METAAPI_ACCOUNT_ID');
       
       if (metaApiToken && metaApiAccountId) {
-        console.log(`📡 Enviando trade para MT5: ${bestSignal.asset} ${bestSignal.type}`);
-        
-        const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
-          body: {
-            asset: bestSignal.asset,
-            direction: bestSignal.type.toLowerCase(),
-            amount: 100, // Default amount, can be configured
-            expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
-            signalId: bestSignal.id,
-            confluenceScore: bestSignal.indicators.confluenceScore,
-          },
-        });
+        // Read volume from metaapi_config
+        let tradeVolume = 100;
+        try {
+          const { data: metaConfig } = await supabase
+            .from('metaapi_config')
+            .select('volume, is_active')
+            .limit(1)
+            .maybeSingle();
+          
+          if (metaConfig && !metaConfig.is_active) {
+            console.log('⏭️ MetaAPI desativado na configuração');
+          } else {
+            if (metaConfig?.volume) tradeVolume = metaConfig.volume * 10000; // Convert lots to amount
+            
+            console.log(`📡 Enviando trade para MT5: ${bestSignal.asset} ${bestSignal.type} | Volume: ${metaConfig?.volume || 0.01} lotes`);
+            
+            const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
+              body: {
+                asset: bestSignal.asset,
+                direction: bestSignal.type.toLowerCase(),
+                amount: tradeVolume,
+                expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
+                signalId: bestSignal.id,
+                confluenceScore: bestSignal.indicators.confluenceScore,
+              },
+            });
 
-        if (mt5Error) {
-          console.error('❌ MT5 MetaAPI error:', mt5Error);
-        } else if (mt5Data?.success) {
-          mt5Sent = true;
-          console.log(`✅ MT5 Trade executado: ${mt5Data.symbol} ${mt5Data.direction} | Order: ${mt5Data.orderId}`);
-        } else {
-          console.error(`❌ MT5 Trade falhou: ${mt5Data?.error}`);
+            if (mt5Error) {
+              console.error('❌ MT5 MetaAPI error:', mt5Error);
+            } else if (mt5Data?.success) {
+              mt5Sent = true;
+              console.log(`✅ MT5 Trade executado: ${mt5Data.symbol} ${mt5Data.direction} | Order: ${mt5Data.orderId}`);
+            } else {
+              console.error(`❌ MT5 Trade falhou: ${mt5Data?.error}`);
+            }
+          }
+        } catch (configErr) {
+          console.error('❌ Erro ao ler config MetaAPI:', configErr);
         }
       } else {
         console.log('⏭️ MetaAPI não configurado, pulando copy trade MT5');

@@ -1,0 +1,1 @@
+ALTER TABLE public.metaapi_config ADD COLUMN IF NOT EXISTS take_profit_pips numeric NOT NULL DEFAULT 10;

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Check, X, Wifi, WifiOff, Eye, EyeOff, MonitorSmartphone } from 'lucide-react';
+import { Loader2, Check, X, Wifi, WifiOff, Eye, EyeOff, MonitorSmartphone, Target } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface MetaApiConfig {
@@ -19,6 +19,7 @@ interface MetaApiConfig {
   mt5_login: string;
   mt5_password: string;
   mt5_server: string;
+  take_profit_pips: number;
 }
 
 export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
@@ -32,6 +33,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
     mt5_login: '',
     mt5_password: '',
     mt5_server: '',
+    take_profit_pips: 10,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -63,6 +65,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
           mt5_login: data.mt5_login || '',
           mt5_password: data.mt5_password || '',
           mt5_server: data.mt5_server || '',
+          take_profit_pips: (data as any).take_profit_pips ?? 10,
         });
       }
     } catch (e) {
@@ -89,6 +92,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         mt5_login: config.mt5_login,
         mt5_password: config.mt5_password,
         mt5_server: config.mt5_server,
+        take_profit_pips: config.take_profit_pips,
         updated_at: new Date().toISOString(),
       };
 
@@ -126,7 +130,6 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       return;
     }
 
-    // Save first if not saved
     if (!config.id) {
       await handleSave();
     }
@@ -149,13 +152,12 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       if (data?.success) {
         setConfig(prev => ({
           ...prev,
-          account_id: data.accountId,
+          account_id: data.accountId || prev.account_id,
           account_name: data.accountName || prev.account_name,
           connection_status: data.connectionStatus || 'connecting',
         }));
         toast.success(`✅ ${data.message}`);
         
-        // If still connecting, poll DB every 10s until connected
         if (data.connectionStatus !== 'connected') {
           const pollInterval = setInterval(async () => {
             const { data: refreshed } = await supabase
@@ -177,7 +179,6 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
               }
             }
           }, 10000);
-          // Stop polling after 2 minutes
           setTimeout(() => clearInterval(pollInterval), 120000);
         } else {
           setTimeout(loadConfig, 2000);
@@ -199,7 +200,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       case 'connected':
         return <Badge className="bg-call/20 text-call border-call/30"><Wifi className="w-3 h-3 mr-1" /> Conectado</Badge>;
       case 'connecting':
-        return <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Conectando...</Badge>;
+        return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Conectando...</Badge>;
       case 'disconnected':
         return <Badge variant="secondary"><WifiOff className="w-3 h-3 mr-1" /> Desconectado</Badge>;
       case 'error':
@@ -266,10 +267,9 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
             {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground">Obtenha em metaapi.cloud → Tokens</p>
       </div>
 
-      {/* Separator */}
+      {/* MT5 Account Data */}
       <div className="border-t border-border/50 pt-4">
         <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
           <MonitorSmartphone className="w-4 h-4" />
@@ -277,20 +277,30 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </h4>
       </div>
 
-      {/* MT5 Login */}
-      <div className="space-y-2">
-        <Label htmlFor="mt5-login">Login (ID da Conta)</Label>
-        <Input
-          id="mt5-login"
-          value={config.mt5_login}
-          onChange={(e) => setConfig(prev => ({ ...prev, mt5_login: e.target.value }))}
-          placeholder="Ex: 51234567"
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="mt5-login">Login (ID)</Label>
+          <Input
+            id="mt5-login"
+            value={config.mt5_login}
+            onChange={(e) => setConfig(prev => ({ ...prev, mt5_login: e.target.value }))}
+            placeholder="51234567"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="mt5-server">Servidor</Label>
+          <Input
+            id="mt5-server"
+            value={config.mt5_server}
+            onChange={(e) => setConfig(prev => ({ ...prev, mt5_server: e.target.value }))}
+            placeholder="XMGlobal-MT5"
+          />
+        </div>
       </div>
 
-      {/* MT5 Password */}
       <div className="space-y-2">
-        <Label htmlFor="mt5-password">Senha da Conta MT5</Label>
+        <Label htmlFor="mt5-password">Senha MT5</Label>
         <div className="relative">
           <Input
             id="mt5-password"
@@ -310,31 +320,41 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </div>
       </div>
 
-      {/* MT5 Server */}
-      <div className="space-y-2">
-        <Label htmlFor="mt5-server">Servidor MT5</Label>
-        <Input
-          id="mt5-server"
-          value={config.mt5_server}
-          onChange={(e) => setConfig(prev => ({ ...prev, mt5_server: e.target.value }))}
-          placeholder="Ex: Exness-MT5Real, ICMarketsSC-Demo"
-        />
-        <p className="text-xs text-muted-foreground">Nome exato do servidor como aparece no MT5</p>
+      {/* Trading Settings */}
+      <div className="border-t border-border/50 pt-4">
+        <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <Target className="w-4 h-4" />
+          Configurações de Trade
+        </h4>
       </div>
 
-      {/* Volume */}
-      <div className="space-y-2">
-        <Label htmlFor="mt5-volume">Volume (Lotes)</Label>
-        <Input
-          id="mt5-volume"
-          type="number"
-          step="0.01"
-          min="0.01"
-          value={config.volume}
-          onChange={(e) => setConfig(prev => ({ ...prev, volume: parseFloat(e.target.value) || 0.01 }))}
-          placeholder="0.01"
-        />
-        <p className="text-xs text-muted-foreground">Volume para cada operação copiada</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="mt5-volume">Volume (Lotes)</Label>
+          <Input
+            id="mt5-volume"
+            type="number"
+            step="0.01"
+            min="0.01"
+            value={config.volume}
+            onChange={(e) => setConfig(prev => ({ ...prev, volume: parseFloat(e.target.value) || 0.01 }))}
+            placeholder="0.01"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="mt5-tp">Take Profit (Pips)</Label>
+          <Input
+            id="mt5-tp"
+            type="number"
+            step="1"
+            min="0"
+            value={config.take_profit_pips}
+            onChange={(e) => setConfig(prev => ({ ...prev, take_profit_pips: parseFloat(e.target.value) || 0 }))}
+            placeholder="10"
+          />
+          <p className="text-xs text-muted-foreground">0 = sem TP automático</p>
+        </div>
       </div>
 
       {/* Buttons */}

@@ -85,6 +85,7 @@ export type Database = {
           mt5_login: string | null
           mt5_password: string | null
           mt5_server: string | null
+          take_profit_pips: number
           token: string
           updated_at: string
           volume: number
@@ -99,6 +100,7 @@ export type Database = {
           mt5_login?: string | null
           mt5_password?: string | null
           mt5_server?: string | null
+          take_profit_pips?: number
           token: string
           updated_at?: string
           volume?: number
@@ -113,6 +115,7 @@ export type Database = {
           mt5_login?: string | null
           mt5_password?: string | null
           mt5_server?: string | null
+          take_profit_pips?: number
           token?: string
           updated_at?: string
           volume?: number

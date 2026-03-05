@@ -104,14 +104,22 @@ serve(async (req) => {
     const dir = direction.toUpperCase();
     const actionType = dir === 'CALL' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL';
     const volume = metaConfig.volume || 0.01;
+    const tpPips = metaConfig.take_profit_pips || 10;
 
     const tradeUrl = `${tradeApiUrl}/users/current/accounts/${METAAPI_ACCOUNT_ID}/trade`;
-    const tradeBody = {
+    const tradeBody: Record<string, any> = {
       actionType,
       symbol: mt5Symbol,
       volume,
       comment: `S${(signalId || '').slice(0, 8)}|${confluenceScore || 0}`,
     };
+
+    // Add Take Profit using relative pips
+    if (tpPips > 0) {
+      tradeBody.takeProfit = tpPips;
+      tradeBody.takeProfitUnits = 'RELATIVE_PIPS';
+      console.log(`🎯 Take Profit: ${tpPips} pips (relative)`);
+    }
 
     console.log(`📤 Sending trade to MT5: ${tradeUrl}`);
     console.log(`📤 Trade body: ${JSON.stringify(tradeBody)}`);

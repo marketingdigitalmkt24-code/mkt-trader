@@ -22,9 +22,8 @@ async function safeFetch(url: string, options: RequestInit = {}): Promise<Respon
   }
 }
 
-function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+
+interface TradeRequest {
 
 interface TradeRequest {
   asset: string;
@@ -172,93 +171,15 @@ serve(async (req) => {
     }
 
     console.log(`✅ MT5 Trade executed: ${JSON.stringify(tradeResult)}`);
-    const positionId = tradeResult.positionId;
-
-    // ===== Step 4: Monitor position every 1 second until closed or TP hit (max 110s) =====
-    let positionClosed = false;
-    let finalProfit = 0;
-    let closedByTP = false;
-    const maxMonitorSeconds = 110; // leave margin for edge function timeout
-
-    if (positionId) {
-      console.log(`👁️ Monitoring position ${positionId} every 1s | TP target: $${tpCurrency.toFixed(2)}`);
-      for (let i = 0; i < maxMonitorSeconds; i++) {
-        await sleep(1000);
-        try {
-          const posRes = await safeFetch(`${baseUrl}/positions/${positionId}`, {
-            headers: authHeaders,
-          });
-          if (posRes.status === 404) {
-            console.log(`✅ Position ${positionId} closed externally after ${i + 1}s`);
-            positionClosed = true;
-            try {
-              const historyRes = await safeFetch(
-                `${baseUrl}/history-deals-by-position/${positionId}`,
-                { headers: authHeaders }
-              );
-              if (historyRes.ok) {
-                const deals = await historyRes.json();
-                finalProfit = deals.reduce((sum: number, d: any) => sum + (d.profit || 0), 0);
-                console.log(`💰 Position profit: $${finalProfit.toFixed(2)}`);
-              }
-            } catch (_) { /* ignore */ }
-            break;
-          } else if (posRes.ok) {
-            const posData = await posRes.json();
-            const unrealizedProfit = posData.unrealizedProfit ?? posData.profit ?? 0;
-            
-            // Log every 5 seconds
-            if (i % 5 === 0) {
-              console.log(`⏳ Pos ${positionId} | P/L: $${unrealizedProfit.toFixed(2)} / Target: $${tpCurrency.toFixed(2)} (${i + 1}s)`);
-            }
-
-            // ===== CLOSE MANUALLY when profit >= target =====
-            if (tpCurrency > 0 && unrealizedProfit >= tpCurrency) {
-              console.log(`🎯 TP atingido! P/L: $${unrealizedProfit.toFixed(2)} >= $${tpCurrency.toFixed(2)}. Fechando posição...`);
-              try {
-                const closeRes = await safeFetch(`${baseUrl}/trade`, {
-                  method: 'POST',
-                  headers: { ...authHeaders, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    actionType: 'POSITION_CLOSE_ID',
-                    positionId: positionId,
-                  }),
-                });
-                const closeResult = await closeRes.json();
-                if (closeRes.ok) {
-                  console.log(`✅ Position ${positionId} fechada com sucesso! Lucro: $${unrealizedProfit.toFixed(2)}`);
-                  positionClosed = true;
-                  closedByTP = true;
-                  finalProfit = unrealizedProfit;
-                } else {
-                  console.error(`❌ Erro ao fechar posição: ${JSON.stringify(closeResult)}`);
-                }
-              } catch (closeErr) {
-                console.error(`❌ Erro de rede ao fechar posição: ${closeErr}`);
-              }
-              break;
-            }
-          }
-        } catch (e) {
-          // Network error, continue monitoring
-        }
-      }
-
-      if (!positionClosed) {
-        console.log(`⏰ Monitoring timeout (${maxMonitorSeconds}s). Position ${positionId} still open.`);
-      }
-    }
 
     return new Response(
       JSON.stringify({
         success: true,
         orderId: tradeResult.orderId,
-        positionId,
+        positionId: tradeResult.positionId,
         symbol: mt5Symbol,
         direction: dir,
         volume,
-        positionClosed,
-        closedByTP,
         tradeResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

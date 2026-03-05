@@ -1,4 +1,5 @@
-import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut, Users, MonitorSmartphone, Zap } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut, Users, MonitorSmartphone, Zap, Eye } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
@@ -8,6 +9,7 @@ import { UserManagementCard } from '@/components/UserManagementCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,6 +40,36 @@ const Admin = () => {
   const wins = dailyStats?.wins ?? 0;
   const losses = dailyStats?.losses ?? 0;
   const winRate = todayTrades > 0 ? Math.round((wins / todayTrades) * 100) : 0;
+
+  // MT5 Position Monitor - polls every 1 second
+  const [mt5OpenPositions, setMt5OpenPositions] = useState<any[]>([]);
+  const [mt5ClosedCount, setMt5ClosedCount] = useState(0);
+  const mt5MonitorRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const monitorMt5 = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('metaapi-monitor-positions');
+        if (data && !error) {
+          setMt5OpenPositions(data.openPositions || []);
+          if (data.closedCount > 0) {
+            setMt5ClosedCount(prev => prev + data.closedCount);
+            console.log(`🎯 MT5 Monitor: fechou ${data.closedCount} posição(ões) por TP`);
+          }
+        }
+      } catch (e) {
+        // silent
+      }
+    };
+
+    // Start polling every 1 second
+    monitorMt5();
+    mt5MonitorRef.current = setInterval(monitorMt5, 1000);
+
+    return () => {
+      if (mt5MonitorRef.current) clearInterval(mt5MonitorRef.current);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await signOut();

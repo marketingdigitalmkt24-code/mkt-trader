@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.metaapi-place-trade]
 verify_jwt = false
+
+[functions.metaapi-connect]
+verify_jwt = false

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,7 @@ interface TradeRequest {
   asset: string;
   direction: 'call' | 'put' | 'CALL' | 'PUT';
   amount: number;
-  expiration: number; // minutes
+  expiration: number;
   signalId?: string;
   confluenceScore?: number;
 }
@@ -22,14 +23,28 @@ serve(async (req) => {
   }
 
   try {
-    const METAAPI_TOKEN = Deno.env.get('METAAPI_TOKEN');
-    const METAAPI_ACCOUNT_ID = Deno.env.get('METAAPI_ACCOUNT_ID');
+    // Read config from DB
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
 
-    if (!METAAPI_TOKEN) {
-      throw new Error('METAAPI_TOKEN não configurado');
+    const { data: metaConfig } = await supabase
+      .from('metaapi_config')
+      .select('*')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (!metaConfig) {
+      throw new Error('MetaAPI não configurado ou desativado');
     }
-    if (!METAAPI_ACCOUNT_ID) {
-      throw new Error('METAAPI_ACCOUNT_ID não configurado');
+
+    const METAAPI_TOKEN = metaConfig.token;
+    const METAAPI_ACCOUNT_ID = metaConfig.account_id;
+
+    if (!METAAPI_TOKEN || !METAAPI_ACCOUNT_ID) {
+      throw new Error('Token ou Account ID MetaAPI não configurados');
     }
 
     const body: TradeRequest = await req.json();
@@ -57,8 +72,8 @@ serve(async (req) => {
     const dir = direction.toUpperCase();
     const actionType = dir === 'CALL' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL';
     
-    // Volume in lots (amount in USD / 100000 for forex, simplified)
-    const volume = Math.max(0.01, Math.round((amount / 100) * 100) / 100);
+    // Use volume from config
+    const volume = metaConfig.volume || 0.01;
 
     // Calculate SL/TP based on expiration
     // For binary-style: we use a tight SL/TP

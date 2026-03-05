@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.ai-signal-analyzer]
 verify_jwt = false
+
+[functions.auto-generate-signals]
+verify_jwt = false

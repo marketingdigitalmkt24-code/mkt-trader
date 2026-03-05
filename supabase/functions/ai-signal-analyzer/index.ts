@@ -486,16 +486,16 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
       continue;
     }
 
-    // Rejeitar volatilidade alta
-    if (s.indicators.atr.volatility === 'high') {
-      console.log(`❌ ${s.asset}: Volatilidade alta`);
+    // Rejeitar volatilidade alta ou média
+    if (s.indicators.atr.volatility === 'high' || s.indicators.atr.volatility === 'medium') {
+      console.log(`❌ ${s.asset}: Volatilidade ${s.indicators.atr.volatility} (apenas low aceito)`);
       continue;
     }
 
-    // Confluência mínima (relaxado se ativo é TOP no aprendizado)
+    // Confluência mínima RIGOROSA
     const assetPerf = model.assetPerformance.get(s.asset);
     const isTopAsset = assetPerf && assetPerf.winRate >= 60 && assetPerf.profit > 0;
-    const minConf = isTopAsset ? 65 : 70;
+    const minConf = isTopAsset ? 75 : 83; // Mais rigoroso (era 65/70)
     if (s.indicators.confluenceScore < minConf) {
       console.log(`❌ ${s.asset}: Confluência ${s.indicators.confluenceScore}% < ${minConf}%`);
       continue;
@@ -615,10 +615,10 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
     const finalScore = Math.min(Math.round(score + (model.hasSufficientData ? learned.score * 0.5 : 0)), 100);
     const finalRisk = Math.max(0, riskScore + (model.hasSufficientData && learned.score < 0 ? 10 : 0));
 
-    // Critérios adaptativos
-    const minScore = isTopAsset ? 82 : (model.hasSufficientData ? 88 : 85);
-    const maxRisk = isTopAsset ? 65 : (model.hasSufficientData ? 55 : 55);
-    const minCriteria = isTopAsset ? 2 : 3;
+    // Critérios adaptativos - MAIS RIGOROSOS
+    const minScore = isTopAsset ? 88 : (model.hasSufficientData ? 92 : 90);
+    const maxRisk = isTopAsset ? 50 : (model.hasSufficientData ? 45 : 45);
+    const minCriteria = isTopAsset ? 3 : 4;
 
     if (finalScore >= minScore && finalRisk <= maxRisk && criteriaCount >= minCriteria) {
       matches.push({

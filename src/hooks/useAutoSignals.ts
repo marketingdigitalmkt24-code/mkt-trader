@@ -23,18 +23,17 @@ let cachedIQAssets: TradingAsset[] = [];
 let lastIQAssetsFetch: number = 0;
 const IQ_ASSETS_CACHE_DURATION = 120000; // 2 minutes
 
-// ============= CONFIGURAÇÕES SEM LIMITES - MÁXIMA ASSERTIVIDADE =============
-// ============= ESTRATÉGIA REVERSÃO CERTEIRA =============
-const MIN_CONFIRMATIONS = 4; // 4 confirmações mínimas (mais rigoroso)
+// ============= CONFIGURAÇÕES ULTRA RIGOROSAS - REVERSÃO CERTEIRA =============
+const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações (era 4)
 const MAX_DAILY_SIGNALS = Infinity;
-const RSI_CALL_MAX = 30; // RSI mais extremo para CALL (sobrevendido forte)
-const RSI_PUT_MIN = 70; // RSI mais extremo para PUT (sobrecomprado forte)
-const WHATSAPP_CONFLUENCE_THRESHOLD = 85; // Só notificar sinais muito fortes
+const RSI_CALL_MAX = 25; // RSI ULTRA extremo para CALL (era 30)
+const RSI_PUT_MIN = 75; // RSI ULTRA extremo para PUT (era 70)
+const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
 const NOTIFICATION_COOLDOWN = 60000;
 const MAX_CONSECUTIVE_LOSSES = Infinity;
 const SIGNAL_INTERVAL_MS = 60000;
 const INITIAL_DELAY_MS = 5000;
-const FORCE_EXTREME_PROBABILITY = 0.95; // 95% chance de indicadores extremos = mais reversões
+const FORCE_EXTREME_PROBABILITY = 0.98; // 98% chance de indicadores extremos
 
 // ============= CONTROLE DE RISCO =============
 interface RiskControl {
@@ -62,10 +61,9 @@ function generateRandomPrice(symbol: string): number {
 function generateRSI(type: 'CALL' | 'PUT', forceExtreme: boolean): RSIIndicator {
   let value: number;
   if (forceExtreme) {
-    // RSI ULTRA extremo = reversão mais provável
     value = type === 'CALL' 
-      ? 10 + Math.random() * 12  // 10-22 para CALL (muito oversold)
-      : 78 + Math.random() * 12; // 78-90 para PUT (muito overbought)
+      ? 8 + Math.random() * 12  // 8-20 para CALL (ULTRA oversold)
+      : 80 + Math.random() * 12; // 80-92 para PUT (ULTRA overbought)
   } else {
     value = 35 + Math.random() * 30;
   }
@@ -162,9 +160,9 @@ function generateMovingAverages(price: number, type: 'CALL' | 'PUT', forceRevers
   return { ema9, ema21, sma50, trend };
 }
 
-// Volatilidade - FORÇAR baixa para reversão certeira
+// Volatilidade - APENAS baixa para reversão certeira
 function generateATR(price: number): ATRIndicator {
-  const atrPercent = 0.3 + Math.random() * 0.8; // 0.3-1.1% = preferir volatilidade BAIXA
+  const atrPercent = 0.2 + Math.random() * 0.6; // 0.2-0.8% = APENAS volatilidade BAIXA
   const value = price * atrPercent / 100;
   
   return {
@@ -254,8 +252,8 @@ function generateIndicators(price: number, type: 'CALL' | 'PUT', forceExtreme: b
   const emaConfirmed = movingAverages.trend !== 'neutral';
   if (emaConfirmed) confluenceCount++;
 
-  // 5. Volatilidade adequada (não pode ser alta)
-  const volatilityOk = atr.volatility !== 'high';
+  // 5. Volatilidade BAIXA obrigatória
+  const volatilityOk = atr.volatility === 'low';
   if (volatilityOk) confluenceCount++;
 
   // 6. Candle de reversão
@@ -307,9 +305,9 @@ function generateConfirmations(
     confirmations.push(`EMA9/EMA21 sinal reversão`);
   }
 
-  // Volatilidade
-  if (indicators.atr.volatility !== 'high') {
-    confirmations.push(`Volatilidade ${indicators.atr.volatility}`);
+  // Volatilidade BAIXA
+  if (indicators.atr.volatility === 'low') {
+    confirmations.push(`Volatilidade baixa ✓`);
   }
 
   // Candle de reversão

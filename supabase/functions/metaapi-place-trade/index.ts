@@ -145,9 +145,7 @@ serve(async (req) => {
     };
 
     if (tpPercent > 0 && tpCurrency > 0) {
-      tradeBody.takeProfit = tpCurrency;
-      tradeBody.takeProfitUnits = 'RELATIVE_CURRENCY';
-      console.log(`🎯 Take Profit: $${tpCurrency.toFixed(2)} (${tpPercent}% de $${investmentAmount})`);
+      console.log(`🎯 Take Profit alvo: $${tpCurrency.toFixed(2)} (${tpPercent}% de $${investmentAmount}) — será fechado manualmente ao atingir`);
     }
 
     console.log(`📤 Sending trade to MT5: ${tradeUrl}`);
@@ -176,13 +174,14 @@ serve(async (req) => {
     console.log(`✅ MT5 Trade executed: ${JSON.stringify(tradeResult)}`);
     const positionId = tradeResult.positionId;
 
-    // ===== Step 4: Monitor position every 1 second until closed (max 120s) =====
+    // ===== Step 4: Monitor position every 1 second until closed or TP hit (max 110s) =====
     let positionClosed = false;
     let finalProfit = 0;
-    const maxMonitorSeconds = 120;
+    let closedByTP = false;
+    const maxMonitorSeconds = 110; // leave margin for edge function timeout
 
     if (positionId) {
-      console.log(`👁️ Monitoring position ${positionId} every 1s...`);
+      console.log(`👁️ Monitoring position ${positionId} every 1s | TP target: $${tpCurrency.toFixed(2)}`);
       for (let i = 0; i < maxMonitorSeconds; i++) {
         await sleep(1000);
         try {
@@ -190,11 +189,8 @@ serve(async (req) => {
             headers: authHeaders,
           });
           if (posRes.status === 404) {
-            // Position no longer exists = closed
-            console.log(`✅ Position ${positionId} closed after ${i + 1}s`);
+            console.log(`✅ Position ${positionId} closed externally after ${i + 1}s`);
             positionClosed = true;
-
-            // Try to get the deal from history
             try {
               const historyRes = await safeFetch(
                 `${baseUrl}/history-deals-by-position/${positionId}`,
@@ -209,9 +205,38 @@ serve(async (req) => {
             break;
           } else if (posRes.ok) {
             const posData = await posRes.json();
-            const unrealizedProfit = posData.unrealizedProfit || posData.profit || 0;
-            if (i % 10 === 0) {
-              console.log(`⏳ Position ${positionId} still open | Unrealized P/L: $${unrealizedProfit.toFixed(2)} (${i + 1}s)`);
+            const unrealizedProfit = posData.unrealizedProfit ?? posData.profit ?? 0;
+            
+            // Log every 5 seconds
+            if (i % 5 === 0) {
+              console.log(`⏳ Pos ${positionId} | P/L: $${unrealizedProfit.toFixed(2)} / Target: $${tpCurrency.toFixed(2)} (${i + 1}s)`);
+            }
+
+            // ===== CLOSE MANUALLY when profit >= target =====
+            if (tpCurrency > 0 && unrealizedProfit >= tpCurrency) {
+              console.log(`🎯 TP atingido! P/L: $${unrealizedProfit.toFixed(2)} >= $${tpCurrency.toFixed(2)}. Fechando posição...`);
+              try {
+                const closeRes = await safeFetch(`${baseUrl}/trade`, {
+                  method: 'POST',
+                  headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    actionType: 'POSITION_CLOSE_ID',
+                    positionId: positionId,
+                  }),
+                });
+                const closeResult = await closeRes.json();
+                if (closeRes.ok) {
+                  console.log(`✅ Position ${positionId} fechada com sucesso! Lucro: $${unrealizedProfit.toFixed(2)}`);
+                  positionClosed = true;
+                  closedByTP = true;
+                  finalProfit = unrealizedProfit;
+                } else {
+                  console.error(`❌ Erro ao fechar posição: ${JSON.stringify(closeResult)}`);
+                }
+              } catch (closeErr) {
+                console.error(`❌ Erro de rede ao fechar posição: ${closeErr}`);
+              }
+              break;
             }
           }
         } catch (e) {
@@ -233,7 +258,7 @@ serve(async (req) => {
         direction: dir,
         volume,
         positionClosed,
-        finalProfit,
+        closedByTP,
         tradeResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

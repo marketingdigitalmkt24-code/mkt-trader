@@ -74,6 +74,42 @@ export type Database = {
         }
         Relationships: []
       }
+      metaapi_config: {
+        Row: {
+          account_id: string
+          account_name: string | null
+          connection_status: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          token: string
+          updated_at: string
+          volume: number
+        }
+        Insert: {
+          account_id: string
+          account_name?: string | null
+          connection_status?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          token: string
+          updated_at?: string
+          volume?: number
+        }
+        Update: {
+          account_id?: string
+          account_name?: string | null
+          connection_status?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          token?: string
+          updated_at?: string
+          volume?: number
+        }
+        Relationships: []
+      }
       operation_results: {
         Row: {
           asset: string

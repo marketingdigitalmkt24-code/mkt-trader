@@ -567,10 +567,57 @@ serve(async (req) => {
       }
     }
 
+    // ============= COPY TRADE TO IQ OPTION =============
+    let iqSent = false;
+    try {
+      const { data: iqConfig } = await supabase
+        .from('iqoption_config')
+        .select('*')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (iqConfig) {
+        console.log(`📡 Enviando trade para IQ Option: ${bestSignal.asset} ${bestSignal.type}`);
+        
+        // Load trade settings
+        const { data: tradeSettings } = await supabase
+          .from('user_trading_settings')
+          .select('trade_amount')
+          .limit(1)
+          .maybeSingle();
+        
+        const tradeAmount = tradeSettings?.trade_amount || 1;
+
+        const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
+          body: {
+            asset: bestSignal.asset,
+            direction: bestSignal.type.toLowerCase(),
+            amount: tradeAmount,
+            expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
+            signalId: bestSignal.id,
+            userId: iqConfig.user_id,
+          },
+        });
+
+        if (iqError) {
+          console.error('❌ IQ Option error:', iqError);
+        } else if (iqData?.success) {
+          iqSent = true;
+          console.log(`✅ IQ Option Trade executado: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.id}`);
+        } else {
+          console.error(`❌ IQ Option Trade falhou: ${iqData?.error}`);
+        }
+      } else {
+        console.log('⏭️ IQ Option não configurado ou desativado');
+      }
+    } catch (e) {
+      console.error('❌ IQ Option trade failed:', e);
+    }
+
     // ============= COPY TRADE TO MT5 VIA METAAPI =============
     let mt5Sent = false;
     try {
-      // Read config from DB directly - don't rely on env vars
       const { data: metaConfig } = await supabase
         .from('metaapi_config')
         .select('token, account_id, volume, is_active')
@@ -583,13 +630,22 @@ serve(async (req) => {
       } else if (!metaConfig.account_id) {
         console.log('⏭️ MetaAPI sem account_id configurado - conecte o MT5 primeiro');
       } else {
+        // Load trade settings for investment amount
+        const { data: tradeSettings } = await supabase
+          .from('user_trading_settings')
+          .select('trade_amount')
+          .limit(1)
+          .maybeSingle();
+        
+        const tradeAmount = tradeSettings?.trade_amount || 1;
+
         console.log(`📡 Enviando trade para MT5: ${bestSignal.asset} ${bestSignal.type} | Volume: ${metaConfig.volume || 0.01} lotes | AccountID: ${metaConfig.account_id}`);
         
         const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
           body: {
             asset: bestSignal.asset,
             direction: bestSignal.type.toLowerCase(),
-            amount: (metaConfig.volume || 0.01) * 10000,
+            amount: tradeAmount,
             expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
             signalId: bestSignal.id,
             confluenceScore: bestSignal.indicators.confluenceScore,
@@ -620,6 +676,7 @@ serve(async (req) => {
           timeframe: bestSignal.timeframe,
         },
         whatsappSent,
+        iqSent,
         mt5Sent,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

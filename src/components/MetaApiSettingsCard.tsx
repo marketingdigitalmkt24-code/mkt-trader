@@ -151,12 +151,37 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
           ...prev,
           account_id: data.accountId,
           account_name: data.accountName || prev.account_name,
-          connection_status: data.connectionStatus === 'connected' ? 'connected' : 'connecting',
+          connection_status: data.connectionStatus || 'connecting',
         }));
         toast.success(`✅ ${data.message}`);
         
-        // Reload config from DB
-        setTimeout(loadConfig, 2000);
+        // If still connecting, poll DB every 10s until connected
+        if (data.connectionStatus !== 'connected') {
+          const pollInterval = setInterval(async () => {
+            const { data: refreshed } = await supabase
+              .from('metaapi_config')
+              .select('connection_status, account_name, account_id')
+              .eq('id', config.id!)
+              .maybeSingle();
+            
+            if (refreshed) {
+              setConfig(prev => ({
+                ...prev,
+                connection_status: refreshed.connection_status || prev.connection_status,
+                account_name: refreshed.account_name || prev.account_name,
+                account_id: refreshed.account_id || prev.account_id,
+              }));
+              if (refreshed.connection_status === 'connected') {
+                clearInterval(pollInterval);
+                toast.success('✅ MT5 conectado com sucesso!');
+              }
+            }
+          }, 10000);
+          // Stop polling after 2 minutes
+          setTimeout(() => clearInterval(pollInterval), 120000);
+        } else {
+          setTimeout(loadConfig, 2000);
+        }
       } else {
         setConfig(prev => ({ ...prev, connection_status: 'error' }));
         toast.error(`❌ ${data?.error || 'Falha ao conectar'}`);

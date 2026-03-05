@@ -343,7 +343,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="mt5-tp">Take Profit (Pips)</Label>
+          <Label htmlFor="mt5-tp">Take Profit (% do investimento)</Label>
           <Input
             id="mt5-tp"
             type="number"
@@ -353,7 +353,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
             onChange={(e) => setConfig(prev => ({ ...prev, take_profit_pips: parseFloat(e.target.value) || 0 }))}
             placeholder="10"
           />
-          <p className="text-xs text-muted-foreground">0 = sem TP automático</p>
+          <p className="text-xs text-muted-foreground">Ex: 10 = fecha com 10% de lucro sobre o valor investido. 0 = sem TP automático</p>
         </div>
       </div>
 

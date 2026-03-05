@@ -104,7 +104,12 @@ serve(async (req) => {
     const dir = direction.toUpperCase();
     const actionType = dir === 'CALL' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL';
     const volume = metaConfig.volume || 0.01;
-    const tpPips = metaConfig.take_profit_pips || 10;
+    const tpPercent = metaConfig.take_profit_pips || 10; // stored as %, e.g. 10 = 10%
+
+    // Calculate TP in currency: investment amount * percentage
+    // For MT5, the "investment" is approximated by the trade amount passed in the request
+    const investmentAmount = body.amount || 1; // fallback $1
+    const tpCurrency = investmentAmount * (tpPercent / 100);
 
     const tradeUrl = `${tradeApiUrl}/users/current/accounts/${METAAPI_ACCOUNT_ID}/trade`;
     const tradeBody: Record<string, any> = {
@@ -114,11 +119,11 @@ serve(async (req) => {
       comment: `S${(signalId || '').slice(0, 8)}|${confluenceScore || 0}`,
     };
 
-    // Add Take Profit using relative pips
-    if (tpPips > 0) {
-      tradeBody.takeProfit = tpPips;
-      tradeBody.takeProfitUnits = 'RELATIVE_PIPS';
-      console.log(`🎯 Take Profit: ${tpPips} pips (relative)`);
+    // Add Take Profit using currency amount (% of investment)
+    if (tpPercent > 0 && tpCurrency > 0) {
+      tradeBody.takeProfit = tpCurrency;
+      tradeBody.takeProfitUnits = 'RELATIVE_CURRENCY';
+      console.log(`🎯 Take Profit: $${tpCurrency.toFixed(2)} (${tpPercent}% de $${investmentAmount})`);
     }
 
     console.log(`📤 Sending trade to MT5: ${tradeUrl}`);

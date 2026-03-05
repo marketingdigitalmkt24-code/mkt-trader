@@ -52,12 +52,20 @@ serve(async (req) => {
         const accounts = await listRes.json();
         console.log(`📋 ${accounts.length} contas na MetaAPI`);
         
+        // Log first account structure to debug field names
+        if (accounts.length > 0) {
+          const sample = accounts[0];
+          console.log(`🔍 Campos da conta: ${JSON.stringify(Object.keys(sample))}`);
+          console.log(`🔍 Primeira conta: id=${sample.id} _id=${sample._id} login=${sample.login} name=${sample.name}`);
+        }
+        
         existingAccount = accounts.find((a: any) => 
           String(a.login) === String(mt5Login)
         );
         
         if (existingAccount) {
-          console.log(`✅ Conta existente: ID=${existingAccount.id} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
+          const accId = existingAccount._id || existingAccount.id;
+          console.log(`✅ Conta existente: ID=${accId} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
         }
       } else {
         const err = await listRes.text();
@@ -71,7 +79,7 @@ serve(async (req) => {
     let accountName: string;
 
     if (existingAccount) {
-      accountId = existingAccount.id;
+      accountId = existingAccount._id || existingAccount.id;
       accountName = existingAccount.name || `MT5-${mt5Login}`;
 
       // Update password

@@ -8,6 +8,25 @@ const corsHeaders = {
 
 const PROVISIONING_URL = 'https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai';
 
+async function metaApiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  try {
+    return await fetch(url, options);
+  } catch (e: any) {
+    if (e.message?.includes('certificate') || e.message?.includes('tls') || e.message?.includes('ssl') || e.message?.includes('peer')) {
+      console.log('⚠️ TLS error, retrying with custom HTTP client...');
+      try {
+        // @ts-ignore - Deno API
+        const client = Deno.createHttpClient({ caCerts: [] });
+        return await fetch(url, { ...options, client } as any);
+      } catch (e2) {
+        console.error('❌ Custom client also failed:', e2);
+        throw e;
+      }
+    }
+    throw e;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -25,124 +44,144 @@ serve(async (req) => {
 
     console.log(`🔐 Provisionando conta MT5: Login ${mt5Login} | Server: ${mt5Server}`);
 
-    // Step 1: Create/provision account on MetaAPI
-    const createRes = await fetch(`${PROVISIONING_URL}/users/current/accounts`, {
-      method: 'POST',
-      headers: {
-        'auth-token': METAAPI_TOKEN,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        login: mt5Login,
-        password: mt5Password,
-        name: `MT5-${mt5Login}`,
-        server: mt5Server,
-        platform: 'mt5',
-        magic: 0,
-        type: 'cloud-g2',
-      }),
+    // Step 1: Check if account already exists
+    console.log('📡 Buscando contas existentes...');
+    const listRes = await metaApiFetch(`${PROVISIONING_URL}/users/current/accounts`, {
+      headers: { 'auth-token': METAAPI_TOKEN },
     });
 
-    const createData = await createRes.json();
-
-    if (!createRes.ok) {
-      console.error(`❌ MetaAPI provision failed [${createRes.status}]:`, JSON.stringify(createData));
+    let existingAccount = null;
+    if (listRes.ok) {
+      const accounts = await listRes.json();
+      console.log(`📋 ${accounts.length} contas encontradas na MetaAPI`);
+      existingAccount = accounts.find((a: any) => 
+        String(a.login) === String(mt5Login) && a.server === mt5Server
+      );
       
-      // If account already exists, try to find it
-      if (createRes.status === 409 || (createData.message && createData.message.includes('already'))) {
-        console.log('📡 Conta já existe, buscando...');
-        
-        const listRes = await fetch(`${PROVISIONING_URL}/users/current/accounts`, {
+      if (existingAccount) {
+        console.log(`✅ Conta existente encontrada: ${existingAccount.id} | State: ${existingAccount.state} | Connection: ${existingAccount.connectionStatus}`);
+      }
+    } else {
+      const errText = await listRes.text();
+      console.error(`⚠️ Erro ao listar contas [${listRes.status}]: ${errText}`);
+    }
+
+    let accountId: string;
+    let accountName: string;
+
+    if (existingAccount) {
+      accountId = existingAccount.id;
+      accountName = existingAccount.name || `MT5-${mt5Login}`;
+      
+      // Update password if needed
+      try {
+        console.log('🔄 Atualizando credenciais da conta...');
+        const updateRes = await metaApiFetch(`${PROVISIONING_URL}/users/current/accounts/${accountId}`, {
+          method: 'PUT',
+          headers: {
+            'auth-token': METAAPI_TOKEN,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            password: mt5Password,
+          }),
+        });
+        if (updateRes.ok) {
+          console.log('✅ Credenciais atualizadas');
+        } else {
+          const updateErr = await updateRes.text();
+          console.log(`⚠️ Update response [${updateRes.status}]: ${updateErr}`);
+        }
+      } catch (e) {
+        console.log('⚠️ Falha ao atualizar credenciais:', e);
+      }
+
+      // Deploy if needed
+      if (existingAccount.state !== 'DEPLOYED') {
+        console.log('📡 Fazendo deploy da conta...');
+        const deployRes = await metaApiFetch(`${PROVISIONING_URL}/users/current/accounts/${accountId}/deploy`, {
+          method: 'POST',
           headers: { 'auth-token': METAAPI_TOKEN },
         });
-        
-        if (listRes.ok) {
-          const accounts = await listRes.json();
-          const existing = accounts.find((a: any) => 
-            a.login === mt5Login || a.login === String(mt5Login)
-          );
-          
-          if (existing) {
-            console.log(`✅ Conta encontrada: ${existing.id} | ${existing.name}`);
-            
-            // Deploy if needed
-            if (existing.state !== 'DEPLOYED') {
-              await fetch(`${PROVISIONING_URL}/users/current/accounts/${existing.id}/deploy`, {
-                method: 'POST',
-                headers: { 'auth-token': METAAPI_TOKEN },
-              });
-              console.log('📡 Deploy solicitado');
-            }
-
-            // Update DB
-            const supabase = createClient(
-              Deno.env.get('SUPABASE_URL')!,
-              Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-            );
-
-            if (configId) {
-              await supabase.from('metaapi_config').update({
-                account_id: existing.id,
-                account_name: existing.name || `MT5-${mt5Login}`,
-                connection_status: existing.connectionStatus === 'CONNECTED' ? 'connected' : 'connecting',
-                mt5_login: mt5Login,
-                mt5_password: mt5Password,
-                mt5_server: mt5Server,
-                updated_at: new Date().toISOString(),
-              }).eq('id', configId);
-            }
-
-            return new Response(JSON.stringify({
-              success: true,
-              accountId: existing.id,
-              accountName: existing.name,
-              state: existing.state,
-              connectionStatus: existing.connectionStatus,
-              message: 'Conta existente reconectada',
-            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-          }
+        if (deployRes.ok) {
+          console.log('✅ Deploy solicitado');
+        } else {
+          const deployErr = await deployRes.text();
+          console.log(`⚠️ Deploy response [${deployRes.status}]: ${deployErr}`);
         }
-        
-        throw new Error(createData.message || 'Conta já existe mas não foi possível localizar');
+        // Wait for deploy
+        await new Promise(r => setTimeout(r, 5000));
       }
-      
-      throw new Error(createData.message || `Erro ao provisionar: ${createRes.status}`);
-    }
-
-    const accountId = createData.id;
-    console.log(`✅ Conta provisionada: ${accountId}`);
-
-    // Step 2: Deploy the account
-    const deployRes = await fetch(`${PROVISIONING_URL}/users/current/accounts/${accountId}/deploy`, {
-      method: 'POST',
-      headers: { 'auth-token': METAAPI_TOKEN },
-    });
-
-    if (!deployRes.ok) {
-      const deployText = await deployRes.text();
-      console.error(`⚠️ Deploy warning [${deployRes.status}]: ${deployText}`);
     } else {
-      console.log('📡 Deploy iniciado');
+      // Create new account
+      console.log('🆕 Criando nova conta na MetaAPI...');
+      const createRes = await metaApiFetch(`${PROVISIONING_URL}/users/current/accounts`, {
+        method: 'POST',
+        headers: {
+          'auth-token': METAAPI_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          login: String(mt5Login),
+          password: mt5Password,
+          name: `MT5-${mt5Login}`,
+          server: mt5Server,
+          platform: 'mt5',
+          type: 'cloud-g2',
+          magic: 0,
+        }),
+      });
+
+      const createData = await createRes.json();
+      console.log(`📋 Create response [${createRes.status}]:`, JSON.stringify(createData));
+
+      if (!createRes.ok) {
+        throw new Error(createData.message || `Erro ao criar conta: ${createRes.status}`);
+      }
+
+      accountId = createData.id;
+      accountName = `MT5-${mt5Login}`;
+      console.log(`✅ Conta criada: ${accountId}`);
+
+      // Deploy
+      console.log('📡 Fazendo deploy...');
+      await new Promise(r => setTimeout(r, 2000));
+      
+      const deployRes = await metaApiFetch(`${PROVISIONING_URL}/users/current/accounts/${accountId}/deploy`, {
+        method: 'POST',
+        headers: { 'auth-token': METAAPI_TOKEN },
+      });
+      
+      if (deployRes.ok) {
+        console.log('✅ Deploy solicitado');
+      } else {
+        const deployErr = await deployRes.text();
+        console.log(`⚠️ Deploy [${deployRes.status}]: ${deployErr}`);
+      }
+
+      // Wait for deploy
+      await new Promise(r => setTimeout(r, 5000));
     }
 
-    // Step 3: Wait briefly and check status
-    await new Promise(r => setTimeout(r, 3000));
-
-    const statusRes = await fetch(`${PROVISIONING_URL}/users/current/accounts/${accountId}`, {
-      headers: { 'auth-token': METAAPI_TOKEN },
-    });
-
+    // Check final status
     let connectionStatus = 'connecting';
-    let accountName = `MT5-${mt5Login}`;
-    
-    if (statusRes.ok) {
-      const statusData = await statusRes.json();
-      connectionStatus = statusData.connectionStatus === 'CONNECTED' ? 'connected' : statusData.connectionStatus?.toLowerCase() || 'connecting';
-      accountName = statusData.name || accountName;
-      console.log(`📊 Status: ${statusData.state} | Connection: ${statusData.connectionStatus}`);
+    try {
+      const statusRes = await metaApiFetch(`${PROVISIONING_URL}/users/current/accounts/${accountId}`, {
+        headers: { 'auth-token': METAAPI_TOKEN },
+      });
+
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        connectionStatus = statusData.connectionStatus === 'CONNECTED' ? 'connected' : 
+                          statusData.connectionStatus?.toLowerCase() || 'connecting';
+        accountName = statusData.name || accountName;
+        console.log(`📊 Final status: State=${statusData.state} | Connection=${statusData.connectionStatus}`);
+      }
+    } catch (e) {
+      console.log('⚠️ Status check failed:', e);
     }
 
-    // Step 4: Update DB with account ID
+    // Update DB
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -153,22 +192,20 @@ serve(async (req) => {
         account_id: accountId,
         account_name: accountName,
         connection_status: connectionStatus,
-        mt5_login: mt5Login,
+        mt5_login: String(mt5Login),
         mt5_password: mt5Password,
         mt5_server: mt5Server,
         updated_at: new Date().toISOString(),
       }).eq('id', configId);
+      console.log('💾 Config atualizada no banco');
     }
-
-    // Update secrets for edge functions
-    // The account_id is now stored in DB and read by auto-generate-signals
 
     return new Response(JSON.stringify({
       success: true,
       accountId,
       accountName,
       connectionStatus,
-      message: 'Conta MT5 conectada com sucesso via MetaAPI',
+      message: existingAccount ? 'Conta existente reconectada' : 'Conta MT5 conectada com sucesso',
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error: unknown) {

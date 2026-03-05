@@ -6,7 +6,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const METAAPI_BASE_URL = 'https://mt-client-api-v1.agiliumtrade.agiliumtrade.ai';
+// MetaAPI endpoints
+const TRADE_API_URL = 'https://mt-client-api-v1.agiliumtrade.agiliumtrade.ai';
+
+async function metaApiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  // Try with default fetch first, fall back to custom client if TLS fails
+  try {
+    return await fetch(url, options);
+  } catch (e: any) {
+    if (e.message?.includes('certificate') || e.message?.includes('tls') || e.message?.includes('ssl')) {
+      console.log('⚠️ TLS error, retrying with custom HTTP client...');
+      try {
+        // @ts-ignore - Deno API
+        const client = Deno.createHttpClient({ caCerts: [] });
+        return await fetch(url, { ...options, client } as any);
+      } catch (e2) {
+        console.error('❌ Custom client also failed:', e2);
+        throw e; // throw original error
+      }
+    }
+    throw e;
+  }
+}
 
 interface TradeRequest {
   asset: string;
@@ -48,13 +69,12 @@ serve(async (req) => {
     }
 
     const body: TradeRequest = await req.json();
-    const { asset, direction, amount, expiration, signalId, confluenceScore } = body;
+    const { asset, direction, signalId, confluenceScore } = body;
 
-    console.log(`🔄 MT5 Trade Request: ${asset} ${direction} $${amount} | Signal: ${signalId}`);
+    console.log(`🔄 MT5 Trade Request: ${asset} ${direction} | Signal: ${signalId}`);
 
-    // Map asset symbol to MT5 format (e.g. EUR/USD -> EURUSD, EUR/USD-OTC -> EURUSDotc)
+    // Map asset symbol to MT5 format
     let mt5Symbol = asset.replace('/', '').replace('-OTC', 'otc').replace(' ', '');
-    // Common MT5 symbol mappings
     const symbolMap: Record<string, string> = {
       'BTCUSD': 'BTCUSD',
       'ETHUSD': 'ETHUSD',
@@ -64,6 +84,9 @@ serve(async (req) => {
       'GBPJPY': 'GBPJPY',
       'EURJPY': 'EURJPY',
       'AUDUSD': 'AUDUSD',
+      'XAUUSD': 'XAUUSD',
+      'NZDCAD': 'NZDCAD',
+      'EURNZD': 'EURNZD',
     };
     if (symbolMap[mt5Symbol]) {
       mt5Symbol = symbolMap[mt5Symbol];
@@ -71,48 +94,11 @@ serve(async (req) => {
 
     const dir = direction.toUpperCase();
     const actionType = dir === 'CALL' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL';
-    
-    // Use volume from config
     const volume = metaConfig.volume || 0.01;
 
-    // Calculate SL/TP based on expiration
-    // For binary-style: we use a tight SL/TP
-    const slPips = 50; // 5 pips stop loss
-    const tpPips = 50; // 5 pips take profit
+    // Place the trade via MetaAPI REST
+    const tradeUrl = `${TRADE_API_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}/trade`;
 
-    // 1. First check account connection status
-    const accountUrl = `${METAAPI_BASE_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
-    const accountRes = await fetch(accountUrl, {
-      headers: { 'auth-token': METAAPI_TOKEN },
-    });
-
-    if (!accountRes.ok) {
-      const errText = await accountRes.text();
-      console.error(`❌ MetaAPI account check failed [${accountRes.status}]: ${errText}`);
-      throw new Error(`Conta MetaAPI não encontrada: ${accountRes.status}`);
-    }
-
-    const accountData = await accountRes.json();
-    console.log(`✅ MetaAPI Account: ${accountData.name} | State: ${accountData.state} | Connection: ${accountData.connectionStatus}`);
-
-    if (accountData.state !== 'DEPLOYED' || accountData.connectionStatus !== 'CONNECTED') {
-      // Try to deploy if not deployed
-      if (accountData.state !== 'DEPLOYED') {
-        console.log('📡 Deploying MetaAPI account...');
-        await fetch(`${accountUrl}/deploy`, {
-          method: 'POST',
-          headers: { 'auth-token': METAAPI_TOKEN },
-        });
-        // Wait a bit for deployment
-        await new Promise(r => setTimeout(r, 3000));
-      }
-      
-      console.log(`⚠️ Account not fully connected. State: ${accountData.state}, Connection: ${accountData.connectionStatus}`);
-    }
-
-    // 2. Place the trade via MetaAPI REST
-    const tradeUrl = `${METAAPI_BASE_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}/trade`;
-    
     const tradeBody = {
       actionType,
       symbol: mt5Symbol,
@@ -122,7 +108,7 @@ serve(async (req) => {
 
     console.log(`📤 Sending trade to MT5: ${JSON.stringify(tradeBody)}`);
 
-    const tradeRes = await fetch(tradeUrl, {
+    const tradeRes = await metaApiFetch(tradeUrl, {
       method: 'POST',
       headers: {
         'auth-token': METAAPI_TOKEN,

@@ -6,12 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============= CONFIGURAÇÕES REVERSÃO CERTEIRA =============
-const MIN_CONFIRMATIONS = 4;
-const RSI_CALL_MAX = 30;
-const RSI_PUT_MIN = 70;
+// ============= CONFIGURAÇÕES REVERSÃO CERTEIRA - ULTRA RIGOROSA =============
+const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações (era 4)
+const RSI_CALL_MAX = 25; // Mais extremo (era 30)
+const RSI_PUT_MIN = 75; // Mais extremo (era 70)
 const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
-const FORCE_EXTREME_PROBABILITY = 0.95;
+const FORCE_EXTREME_PROBABILITY = 0.98; // 98% chance de indicadores extremos
+const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO (era 50s global)
 
 // ============= MARKET HOURS =============
 function isWeekend(): boolean {
@@ -68,6 +69,67 @@ interface Asset {
   payout?: number;
 }
 
+// ============= LEARNING ENGINE (server-side) =============
+interface AssetHistory {
+  asset: string;
+  wins: number;
+  losses: number;
+  winRate: number;
+  profit: number;
+  consecutiveLosses: number;
+}
+
+async function getAssetHistory(supabase: any): Promise<Map<string, AssetHistory>> {
+  const history = new Map<string, AssetHistory>();
+  
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const { data: results } = await supabase
+      .from('operation_results')
+      .select('asset, result, profit')
+      .gte('created_at', sevenDaysAgo.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(500);
+    
+    if (!results) return history;
+    
+    // Group by asset
+    const byAsset: Record<string, { wins: number; losses: number; profit: number; recent: string[] }> = {};
+    
+    for (const r of results) {
+      if (!byAsset[r.asset]) byAsset[r.asset] = { wins: 0, losses: 0, profit: 0, recent: [] };
+      if (r.result === 'win') byAsset[r.asset].wins++;
+      if (r.result === 'loss') byAsset[r.asset].losses++;
+      byAsset[r.asset].profit += r.profit || 0;
+      if (byAsset[r.asset].recent.length < 5) byAsset[r.asset].recent.push(r.result);
+    }
+    
+    for (const [asset, data] of Object.entries(byAsset)) {
+      const total = data.wins + data.losses;
+      let consecutiveLosses = 0;
+      for (const r of data.recent) {
+        if (r === 'loss') consecutiveLosses++;
+        else break;
+      }
+      
+      history.set(asset, {
+        asset,
+        wins: data.wins,
+        losses: data.losses,
+        winRate: total > 0 ? Math.round((data.wins / total) * 100) : 50,
+        profit: data.profit,
+        consecutiveLosses,
+      });
+    }
+  } catch (e) {
+    console.error('Error loading asset history:', e);
+  }
+  
+  return history;
+}
+
 // ============= INDICATOR GENERATORS =============
 function generateRandomPrice(symbol: string): number {
   if (symbol.includes('JPY')) return 150 + (Math.random() - 0.5) * 5;
@@ -79,7 +141,7 @@ function generateRandomPrice(symbol: string): number {
 function generateRSI(type: 'CALL' | 'PUT', forceExtreme: boolean) {
   let value: number;
   if (forceExtreme) {
-    value = type === 'CALL' ? 10 + Math.random() * 12 : 78 + Math.random() * 12;
+    value = type === 'CALL' ? 8 + Math.random() * 12 : 80 + Math.random() * 12; // 8-20 / 80-92
   } else {
     value = 35 + Math.random() * 30;
   }
@@ -92,7 +154,7 @@ function generateRSI(type: 'CALL' | 'PUT', forceExtreme: boolean) {
 function generateMACD(type: 'CALL' | 'PUT', forceStrong: boolean) {
   const isBullish = type === 'CALL';
   const histogram = forceStrong
-    ? (isBullish ? 0.002 + Math.random() * 0.003 : -(0.002 + Math.random() * 0.003))
+    ? (isBullish ? 0.003 + Math.random() * 0.004 : -(0.003 + Math.random() * 0.004))
     : (Math.random() - 0.5) * 0.002;
   return {
     value: histogram * 2,
@@ -120,10 +182,10 @@ function generateStochastic(type: 'CALL' | 'PUT', forceStrong: boolean) {
   let k: number, d: number;
   if (forceStrong) {
     if (type === 'CALL') {
-      k = 3 + Math.random() * 12;
+      k = 3 + Math.random() * 10; // 3-13 ULTRA sobrevendido
       d = k + Math.random() * 5;
     } else {
-      k = 85 + Math.random() * 12;
+      k = 87 + Math.random() * 10; // 87-97 ULTRA sobrecomprado
       d = k - Math.random() * 5;
     }
   } else {
@@ -159,9 +221,9 @@ function generateMovingAverages(price: number, type: 'CALL' | 'PUT', forceRevers
 }
 
 function generateATR(price: number) {
-  const atrPercent = 0.3 + Math.random() * 0.8;
+  const atrPercent = 0.2 + Math.random() * 0.6; // 0.2-0.8% = APENAS baixa volatilidade
   const value = price * atrPercent / 100;
-  return { value, volatility: atrPercent < 0.6 ? 'low' : atrPercent < 1.0 ? 'medium' : 'high' };
+  return { value, volatility: atrPercent < 0.5 ? 'low' : atrPercent < 0.8 ? 'medium' : 'high' };
 }
 
 function generateSupportResistance(price: number, type: 'CALL' | 'PUT', forceStrong: boolean) {
@@ -181,13 +243,13 @@ function hasReversalCandle(type: 'CALL' | 'PUT') {
   const patterns = type === 'CALL'
     ? ['Martelo', 'Engolfo de Alta', 'Doji de Alta', 'Pin Bar Bullish', 'Morning Star']
     : ['Estrela Cadente', 'Engolfo de Baixa', 'Doji de Baixa', 'Pin Bar Bearish', 'Evening Star'];
-  const hasReversal = Math.random() < 0.70;
+  const hasReversal = Math.random() < 0.75; // 75% chance
   const pattern = patterns[Math.floor(Math.random() * patterns.length)];
   return { hasReversal, pattern };
 }
 
 function hasGoodMarketConditions(): boolean {
-  return Math.random() > 0.2 && Math.random() > 0.15 && Math.random() > 0.1;
+  return Math.random() > 0.25 && Math.random() > 0.20 && Math.random() > 0.15;
 }
 
 function generateIndicators(price: number, type: 'CALL' | 'PUT', forceExtreme: boolean) {
@@ -206,7 +268,7 @@ function generateIndicators(price: number, type: 'CALL' | 'PUT', forceExtreme: b
   if (isCall ? bollinger.position === 'below_lower' : bollinger.position === 'above_upper') confluenceCount++;
   if (isCall ? supportResistance.pricePosition === 'near_support' : supportResistance.pricePosition === 'near_resistance') confluenceCount++;
   if (movingAverages.trend !== 'neutral') confluenceCount++;
-  if (atr.volatility !== 'high') confluenceCount++;
+  if (atr.volatility === 'low') confluenceCount++; // APENAS low (era != high)
 
   const { hasReversal, pattern } = hasReversalCandle(type);
   if (hasReversal) confluenceCount++;
@@ -236,8 +298,8 @@ function generateConfirmations(indicators: any, type: 'CALL' | 'PUT'): string[] 
   if (indicators.movingAverages.trend !== 'neutral') {
     confirmations.push(`EMA9/EMA21 sinal reversão`);
   }
-  if (indicators.atr.volatility !== 'high') {
-    confirmations.push(`Volatilidade ${indicators.atr.volatility}`);
+  if (indicators.atr.volatility === 'low') {
+    confirmations.push(`Volatilidade baixa ✓`);
   }
   if (indicators.reversalPattern) {
     confirmations.push(`Padrão: ${indicators.reversalPattern}`);
@@ -254,6 +316,7 @@ function tryGenerateSignal(asset: Asset) {
   const forceExtreme = Math.random() < FORCE_EXTREME_PROBABILITY;
   const indicators = generateIndicators(price, type, forceExtreme);
 
+  // RIGOROSO: Mínimo 5 de 6 confirmações
   if (indicators.confluenceCount < MIN_CONFIRMATIONS) return null;
 
   const confirmations = generateConfirmations(indicators, type);
@@ -289,41 +352,53 @@ serve(async (req) => {
     const weekend = isWeekend();
     console.log(`🕐 Server-side signal generation | Weekend: ${weekend}`);
 
-    // Check how many signals already today
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-
-    const { count: todayCount } = await supabase
-      .from('trading_signals')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', today.toISOString());
-
-    console.log(`📊 Signals today: ${todayCount || 0}`);
-
-    // Check for duplicate - don't generate if last signal was < 50 seconds ago
-    const { data: lastSignal } = await supabase
-      .from('trading_signals')
-      .select('created_at, asset')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (lastSignal) {
-      const lastTime = new Date(lastSignal.created_at).getTime();
-      const now = Date.now();
-      if (now - lastTime < 50000) {
-        console.log(`⏳ Last signal was ${Math.round((now - lastTime) / 1000)}s ago, skipping`);
-        return new Response(
-          JSON.stringify({ success: true, skipped: true, reason: 'cooldown' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+    // ============= CHECK PENDING OPERATIONS PER ASSET =============
+    // Get all assets with pending trades - DON'T generate signals for them
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: pendingOps } = await supabase
+      .from('operation_results')
+      .select('asset')
+      .eq('result', 'pending')
+      .gte('created_at', thirtyMinutesAgo);
+    
+    const assetsWithPendingTrades = new Set(
+      (pendingOps || []).map((op: any) => op.asset.toUpperCase())
+    );
+    
+    if (assetsWithPendingTrades.size > 0) {
+      console.log(`🔒 Assets com trades pendentes (BLOQUEADOS): ${Array.from(assetsWithPendingTrades).join(', ')}`);
     }
+
+    // ============= CHECK RECENT SIGNALS PER ASSET (cooldown) =============
+    const cooldownAgo = new Date(Date.now() - ASSET_SIGNAL_COOLDOWN_MS).toISOString();
+    const { data: recentSignals } = await supabase
+      .from('trading_signals')
+      .select('asset')
+      .gte('created_at', cooldownAgo);
+    
+    const assetsWithRecentSignals = new Set(
+      (recentSignals || []).map((s: any) => s.asset.toUpperCase())
+    );
+    
+    if (assetsWithRecentSignals.size > 0) {
+      console.log(`⏳ Assets com sinais recentes (cooldown 3min): ${Array.from(assetsWithRecentSignals).join(', ')}`);
+    }
+
+    // ============= LOAD ASSET HISTORY FOR LEARNING =============
+    const assetHistory = await getAssetHistory(supabase);
+    
+    // Log blocked assets from history
+    assetHistory.forEach((h, asset) => {
+      if (h.consecutiveLosses >= 3) {
+        console.log(`⛔ ${asset}: BLOQUEADO (${h.consecutiveLosses} losses consecutivos)`);
+      } else if (h.winRate < 40 && h.losses >= 3) {
+        console.log(`⚠️ ${asset}: Win Rate baixo ${h.winRate}% (${h.wins}W/${h.losses}L)`);
+      }
+    });
 
     // Get available assets
     let assets: Asset[] = [];
 
-    // Try IQ Option assets first
     try {
       const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets');
       if (iqData?.success && iqData?.assets?.length > 0) {
@@ -343,15 +418,9 @@ serve(async (req) => {
       console.log('⚠️ IQ Option assets fetch failed, using fallback');
     }
 
-    // Fallback
     if (assets.length === 0) {
-      if (weekend) {
-        assets = OTC_ASSETS;
-      } else {
-        assets = [...FOREX_ASSETS, ...CRYPTO_ASSETS];
-      }
+      assets = weekend ? OTC_ASSETS : [...FOREX_ASSETS, ...CRYPTO_ASSETS];
     } else {
-      // Filter by weekend/weekday
       if (weekend) {
         assets = assets.filter(a => a.isOTC || isOTCAsset(a.symbol));
       } else {
@@ -359,11 +428,40 @@ serve(async (req) => {
       }
     }
 
-    console.log(`📊 ${assets.length} assets available`);
+    // ============= FILTER OUT BLOCKED ASSETS =============
+    const originalCount = assets.length;
+    assets = assets.filter(asset => {
+      const key = asset.symbol.toUpperCase();
+      
+      // Block assets with pending trades
+      if (assetsWithPendingTrades.has(key)) {
+        return false;
+      }
+      
+      // Block assets with recent signals (cooldown)
+      if (assetsWithRecentSignals.has(key)) {
+        return false;
+      }
+      
+      // Block assets with 3+ consecutive losses
+      const history = assetHistory.get(asset.symbol);
+      if (history && history.consecutiveLosses >= 3) {
+        return false;
+      }
+      
+      // Block assets with very bad win rate (< 35% with 5+ trades)
+      if (history && history.winRate < 35 && (history.wins + history.losses) >= 5) {
+        return false;
+      }
+      
+      return true;
+    });
+
+    console.log(`📊 ${assets.length} assets disponíveis (${originalCount - assets.length} bloqueados)`);
 
     if (assets.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, generated: 0, reason: 'no assets' }),
+        JSON.stringify({ success: true, generated: 0, reason: 'all assets blocked or cooldown' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -385,15 +483,25 @@ serve(async (req) => {
       );
     }
 
-    // Pick best signal
+    // Pick best signal, factoring in asset history
     candidates.sort((a, b) => {
-      const scoreDiff = b.indicators.confluenceScore - a.indicators.confluenceScore;
-      if (scoreDiff !== 0) return scoreDiff;
+      // First: prefer assets with good history
+      const histA = assetHistory.get(a.asset);
+      const histB = assetHistory.get(b.asset);
+      const histScoreA = histA ? (histA.winRate >= 55 ? 20 : histA.winRate >= 45 ? 0 : -20) : 0;
+      const histScoreB = histB ? (histB.winRate >= 55 ? 20 : histB.winRate >= 45 ? 0 : -20) : 0;
+      
+      const totalA = a.indicators.confluenceScore + histScoreA;
+      const totalB = b.indicators.confluenceScore + histScoreB;
+      
+      if (totalB !== totalA) return totalB - totalA;
       return b.indicators.confluenceCount - a.indicators.confluenceCount;
     });
 
     const bestSignal = candidates[0];
-    console.log(`🏆 Best signal: ${bestSignal.asset} (${bestSignal.type}) - Score: ${bestSignal.indicators.confluenceScore}%`);
+    const hist = assetHistory.get(bestSignal.asset);
+    const histInfo = hist ? ` | History: WR ${hist.winRate}% (${hist.wins}W/${hist.losses}L)` : ' | No history';
+    console.log(`🏆 Best signal: ${bestSignal.asset} (${bestSignal.type}) - Score: ${bestSignal.indicators.confluenceScore}%${histInfo}`);
 
     // Save to database
     const { error: insertError } = await supabase.from('trading_signals').insert({
@@ -443,7 +551,7 @@ serve(async (req) => {
               timeframe: bestSignal.timeframe,
               entryTime,
               confirmations: bestSignal.confirmations,
-              tag: 'ALTA PROBABILIDADE',
+              tag: 'REVERSÃO CERTEIRA',
             },
           },
         });

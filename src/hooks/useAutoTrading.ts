@@ -67,7 +67,7 @@ export function useAutoTrading() {
   const lastIQCheckTime = useRef<number>(0);
   const isCheckingAutoTrade = useRef(false); // MUTEX para evitar execuções concorrentes
   const assetCooldowns = useRef<Map<string, number>>(new Map()); // Cooldown por ativo
-  const ASSET_COOLDOWN_MS = 90000; // 90 segundos de cooldown por ativo após trade
+  const ASSET_COOLDOWN_MS = 180000; // 180 segundos (3 min) de cooldown por ativo após trade
   
   const [config, setConfig] = useState<AutoTradingConfig>(() => {
     // Load from localStorage initially for fast startup

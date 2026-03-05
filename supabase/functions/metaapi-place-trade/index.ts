@@ -22,9 +22,6 @@ async function safeFetch(url: string, options: RequestInit = {}): Promise<Respon
   }
 }
 
-
-interface TradeRequest {
-
 interface TradeRequest {
   asset: string;
   direction: 'call' | 'put' | 'CALL' | 'PUT';

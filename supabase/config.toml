@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.metaapi-connect]
 verify_jwt = false
+
+[functions.metaapi-monitor-positions]
+verify_jwt = false

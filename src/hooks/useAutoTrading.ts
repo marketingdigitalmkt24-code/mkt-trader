@@ -94,6 +94,7 @@ export function useAutoTrading() {
   const [activeTradesCount, setActiveTradesCount] = useState(0);
   const lastCheckResultsTime = useRef<number>(0);
   const CHECK_RESULTS_INTERVAL = 30000; // 30 seconds
+  const initialSignalsMarked = useRef(false); // Flag to mark DB-loaded signals as processed
 
   // Check if IQ Option is connected (has active config with recent connection)
   const checkIQOptionConnection = useCallback(async (): Promise<boolean> => {

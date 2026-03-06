@@ -47,12 +47,8 @@ const Index = () => {
     resetDailyTrades,
   } = useAutoTrading();
 
-  // Auto trading: executar entrada quando sinal de alta probabilidade aparecer
-  useEffect(() => {
-    if (signals.length > 0) {
-      checkAndAutoTrade(signals);
-    }
-  }, [signals, checkAndAutoTrade]);
+  // Auto trading: DESABILITADO no cliente - servidor já executa trades via auto-generate-signals
+  // O cliente apenas exibe sinais recebidos via Realtime, sem executar trades duplicados
 
   // Filter signals by timeframe and market type
   const filteredSignals = signals.filter((s) => {

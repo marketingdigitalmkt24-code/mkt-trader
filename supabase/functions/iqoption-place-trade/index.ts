@@ -289,7 +289,9 @@ async function placeTradeFireAndForget(
             return;
           }
           
-          console.log(`✅ Found: "${matchedName}" -> ID: ${foundAsset.id}, Type: ${foundAsset.optionType === 1 ? 'BINARY' : 'TURBO'}`);
+          const hasTurbo = !!foundAsset.turboId;
+          const hasBinary = !!foundAsset.binaryId;
+          console.log(`✅ Found: "${matchedName}" -> Turbo:${foundAsset.turboId || 'N/A'}, Binary:${foundAsset.binaryId || 'N/A'}, Default:${foundAsset.id}(${foundAsset.optionType === 1 ? 'BIN' : 'TUR'})`);
           
           // Set balance
           ws.send(JSON.stringify({
@@ -302,27 +304,57 @@ async function placeTradeFireAndForget(
           const nextMinute = Math.ceil(now / 60) * 60;
           const expirationTime = nextMinute + (trade.expiration * 60);
           
-          console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} (ID:${foundAsset.id}) | $${trade.amount} | Type:${foundAsset.optionType} | Exp:${trade.expiration}min`);
+          // For M1 trades, prefer turbo. For longer, prefer binary.
+          const isShortTerm = trade.expiration <= 5;
+          let useId = foundAsset.id;
+          let useType = foundAsset.optionType;
+          
+          if (isShortTerm && hasTurbo) {
+            useId = foundAsset.turboId!;
+            useType = 3;
+          } else if (!isShortTerm && hasBinary) {
+            useId = foundAsset.binaryId!;
+            useType = 1;
+          }
+          
+          console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} | ID:${useId} | ${useType === 3 ? 'TURBO' : 'BINARY'} | $${trade.amount} | Exp:${trade.expiration}min`);
           
           tradePlaced = true;
+          let retryAttempted = false;
           
-          // Use correct option_type_id based on asset source
-          ws.send(JSON.stringify({
-            name: 'sendMessage',
-            msg: {
-              name: 'binary-options.open-option',
-              version: '1.0',
-              body: {
-                user_balance_id: balanceId,
-                active_id: foundAsset.id,
-                option_type_id: foundAsset.optionType, // FIXED: use correct type per asset
-                direction: trade.direction,
-                expired: expirationTime,
-                price: trade.amount,
-                profit_percent: 0,
+          function sendTradeMessage(activeId: number, optionTypeId: number) {
+            ws.send(JSON.stringify({
+              name: 'sendMessage',
+              msg: {
+                name: 'binary-options.open-option',
+                version: '1.0',
+                body: {
+                  user_balance_id: balanceId,
+                  active_id: activeId,
+                  option_type_id: optionTypeId,
+                  direction: trade.direction,
+                  expired: expirationTime,
+                  price: trade.amount,
+                  profit_percent: 0,
+                },
               },
-            },
-          }));
+            }));
+          }
+          
+          sendTradeMessage(useId, useType);
+          
+          // Auto-retry with alternative type after 5 seconds if no response
+          const retryTimeout = setTimeout(() => {
+            if (!tradeId && !retryAttempted) {
+              retryAttempted = true;
+              const altId = useType === 3 ? foundAsset.binaryId : foundAsset.turboId;
+              const altType = useType === 3 ? 1 : 3;
+              if (altId) {
+                console.log(`🔄 Retry with ${altType === 3 ? 'TURBO' : 'BINARY'} (ID:${altId})`);
+                sendTradeMessage(altId, altType);
+              }
+            }
+          }, 5000);
         }
         
         // Trade opened successfully
@@ -331,7 +363,6 @@ async function placeTradeFireAndForget(
           if (id) {
             tradeId = String(id);
             console.log(`✅ Trade placed! ID: ${tradeId}`);
-            // Don't wait for result - return immediately
             clearTimeout(timeout); ws.close();
             resolve({ success: true, tradeId });
             return;

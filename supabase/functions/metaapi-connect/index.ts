@@ -105,7 +105,7 @@ serve(async (req) => {
     let accountName: string;
 
     if (existingAccount) {
-      accountId = existingAccount._id || existingAccount.id;
+      accountId = existingAccount.id || existingAccount._id;
       accountName = existingAccount.name || `MT5-${mt5Login}`;
 
       // Update password

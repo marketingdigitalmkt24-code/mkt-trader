@@ -78,6 +78,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
     setIsSaving(true);
     try {
       const payload = {
+        token: config.token,
         account_id: config.account_id,
         account_name: config.account_name,
         is_active: config.is_active,

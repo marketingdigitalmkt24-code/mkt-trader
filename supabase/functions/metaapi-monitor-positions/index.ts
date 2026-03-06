@@ -173,9 +173,7 @@ serve(async (req) => {
         closedCount: closedPositions.length,
         closedPositions,
         openPositions: openPositions.filter(p => !closedPositions.find(c => c.id === p.id)),
-        tpTarget: parseFloat(tpCurrency.toFixed(2)),
         tpPercent,
-        investmentAmount,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

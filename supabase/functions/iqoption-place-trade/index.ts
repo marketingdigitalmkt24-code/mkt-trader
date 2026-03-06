@@ -184,9 +184,30 @@ async function placeTradeFireAndForget(
               
               const name = (assetInfo.name || '').toUpperCase();
               const numId = parseInt(id);
-              const asset: AssetInfo = { id: numId, optionType };
               
-              activeAssets[name] = asset;
+              // Merge with existing entry to keep both turbo and binary IDs
+              function setAsset(key: string) {
+                const existing = activeAssets[key];
+                if (existing) {
+                  // Update with new type info
+                  if (optionType === 3) existing.turboId = numId;
+                  else existing.binaryId = numId;
+                  // Prefer turbo for the main ID (better for short-term trades)
+                  if (optionType === 3) {
+                    existing.id = numId;
+                    existing.optionType = 3;
+                  }
+                } else {
+                  activeAssets[key] = { 
+                    id: numId, 
+                    optionType,
+                    turboId: optionType === 3 ? numId : undefined,
+                    binaryId: optionType === 1 ? numId : undefined,
+                  };
+                }
+              }
+              
+              setAsset(name);
               
               let baseName = name.startsWith('FRONT.') ? name.replace('FRONT.', '') : name;
               const isOTC = baseName.includes('-OTC');
@@ -197,20 +218,20 @@ async function placeTradeFireAndForget(
                 ? `${cleanName.slice(0, 3)}/${cleanName.slice(3)}` : null;
               
               if (isOTC) {
-                [`${cleanName}-OTC`, `${cleanName} OTC`, `${cleanName}OTC`].forEach(v => activeAssets[v] = asset);
+                [`${cleanName}-OTC`, `${cleanName} OTC`, `${cleanName}OTC`].forEach(v => setAsset(v));
                 if (withSlash) {
-                  [`${withSlash}-OTC`, `${withSlash} OTC`, `${withSlash}OTC`].forEach(v => activeAssets[v] = asset);
+                  [`${withSlash}-OTC`, `${withSlash} OTC`, `${withSlash}OTC`].forEach(v => setAsset(v));
                 }
               } else {
-                [cleanName, `${cleanName}-OP`].forEach(v => activeAssets[v] = asset);
+                [cleanName, `${cleanName}-OP`].forEach(v => setAsset(v));
                 if (withSlash) {
-                  [withSlash, `${withSlash}-OP`].forEach(v => activeAssets[v] = asset);
+                  [withSlash, `${withSlash}-OP`].forEach(v => setAsset(v));
                 }
               }
             }
           }
           
-          // Binary assets use option_type_id = 1, turbo uses 3
+          // Map binary first, then turbo (turbo updates existing entries)
           mapAssets(binary, 1);
           mapAssets(turbo, 3);
           

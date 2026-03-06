@@ -6,13 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============= CONFIGURAÇÕES REVERSÃO CERTEIRA - ULTRA RIGOROSA =============
-const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações (era 4)
-const RSI_CALL_MAX = 25; // Mais extremo (era 30)
-const RSI_PUT_MIN = 75; // Mais extremo (era 70)
+// ============= CONFIGURAÇÕES SCALPING M1 TURBO - ULTRA RIGOROSA =============
+const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações
+const RSI_CALL_MAX = 25; // Mais extremo
+const RSI_PUT_MIN = 75; // Mais extremo
 const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
+const IQ_MIN_CONFLUENCE_SCALPING = 90; // Confluência mínima para IQ Option Scalping
 const FORCE_EXTREME_PROBABILITY = 0.98; // 98% chance de indicadores extremos
-const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO (era 50s global)
+const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
 
 // ============= NEWS FILTER - Avoid trading during high-impact news =============
 interface NewsEvent {
@@ -406,7 +407,8 @@ function tryGenerateSignal(asset: Asset) {
   if (!hasGoodMarketConditions()) return null;
 
   const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
-  const timeframe = Math.random() > 0.7 ? 'M5' : 'M1';
+  // IQ Option Scalping: Force M1 for fast entries
+  const timeframe = 'M1';
   const price = generateRandomPrice(asset.symbol);
   const forceExtreme = Math.random() < FORCE_EXTREME_PROBABILITY;
   const indicators = generateIndicators(price, type, forceExtreme);
@@ -422,7 +424,7 @@ function tryGenerateSignal(asset: Asset) {
     asset: asset.symbol,
     assetIcon: asset.icon,
     timeframe,
-    expiration: timeframe === 'M1' ? '2 min' : '5 min',
+    expiration: '1 min',
     strength: 4,
     status: 'high_probability',
     confirmations,
@@ -751,69 +753,73 @@ serve(async (req) => {
         }
       }
 
-      // ============= COPY TRADE TO IQ OPTION =============
+      // ============= COPY TRADE TO IQ OPTION (SCALPING M1 TURBO) =============
       try {
-        const { data: iqConfig } = await supabase
-          .from('iqoption_config')
-          .select('*')
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle();
-
-        if (iqConfig) {
-          const { data: tradeSettings } = await supabase
-            .from('user_trading_settings')
-            .select('trade_amount, mt5_trade_amount')
+        // IQ Option Scalping: Only trade with 90%+ confluence
+        if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
+          console.log(`⏭️ IQ Scalping: Skipping ${bestSignal.asset} — confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% mínimo`);
+        } else {
+          const { data: iqConfig } = await supabase
+            .from('iqoption_config')
+            .select('*')
+            .eq('is_active', true)
             .limit(1)
             .maybeSingle();
-          
-          const iqTradeAmount = tradeSettings?.trade_amount || 1;
-          const expiration = bestSignal.timeframe === 'M1' ? 1 : 5;
 
-          console.log(`📡 IQ Option: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount}`);
-          
-          // Save to trade_queue for tracking
-          await supabase.from('trade_queue').insert({
-            asset: bestSignal.asset,
-            direction: bestSignal.type,
-            amount: iqTradeAmount,
-            expiration,
-            signal_id: bestSignal.id,
-            timeframe: bestSignal.timeframe,
-            confluence_score: bestSignal.indicators.confluenceScore,
-            status: 'executing',
-          });
+          if (iqConfig) {
+            const { data: tradeSettings } = await supabase
+              .from('user_trading_settings')
+              .select('trade_amount, mt5_trade_amount')
+              .limit(1)
+              .maybeSingle();
+            
+            const iqTradeAmount = tradeSettings?.trade_amount || 1;
+            // Scalping M1 Turbo: Always 1 min expiration
+            const expiration = 1;
 
-          // Call iqoption-place-trade (now faster with fire-and-forget)
-          const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
-            body: {
+            console.log(`📡 IQ Scalping Turbo: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount} | Exp: ${expiration}min | Score: ${bestSignal.indicators.confluenceScore}%`);
+            
+            // Save to trade_queue for tracking
+            await supabase.from('trade_queue').insert({
               asset: bestSignal.asset,
-              direction: bestSignal.type.toLowerCase(),
+              direction: bestSignal.type,
               amount: iqTradeAmount,
               expiration,
-              signalId: bestSignal.id,
-              isAutoTrade: true,
-              isAIAnalyzed: !!bestSignal.aiConfidence,
-              timeframe: bestSignal.timeframe,
-            },
-          });
+              signal_id: bestSignal.id,
+              timeframe: 'M1',
+              confluence_score: bestSignal.indicators.confluenceScore,
+              status: 'executing',
+            });
 
-          if (!iqError && iqData?.success) {
-            totalIQ++;
-            console.log(`✅ IQ Trade placed: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.tradeId}`);
-            
-            // Update queue status
-            await supabase.from('trade_queue')
-              .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
-              .eq('signal_id', bestSignal.id);
-          } else {
-            const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
-            console.error(`❌ IQ Trade falhou: ${errorMsg}`);
-            
-            // Update queue with error
-            await supabase.from('trade_queue')
-              .update({ status: 'failed', error: errorMsg })
-              .eq('signal_id', bestSignal.id);
+            // Call iqoption-place-trade
+            const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
+              body: {
+                asset: bestSignal.asset,
+                direction: bestSignal.type.toLowerCase(),
+                amount: iqTradeAmount,
+                expiration,
+                signalId: bestSignal.id,
+                isAutoTrade: true,
+                isAIAnalyzed: !!bestSignal.aiConfidence,
+                timeframe: 'M1',
+              },
+            });
+
+            if (!iqError && iqData?.success) {
+              totalIQ++;
+              console.log(`✅ IQ Scalping: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.tradeId} | 1min Turbo`);
+              
+              await supabase.from('trade_queue')
+                .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
+                .eq('signal_id', bestSignal.id);
+            } else {
+              const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
+              console.error(`❌ IQ Trade falhou: ${errorMsg}`);
+              
+              await supabase.from('trade_queue')
+                .update({ status: 'failed', error: errorMsg })
+                .eq('signal_id', bestSignal.id);
+            }
           }
         }
       } catch (e) {

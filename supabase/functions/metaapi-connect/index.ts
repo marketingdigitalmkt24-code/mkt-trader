@@ -92,6 +92,14 @@ serve(async (req) => {
         if (existingAccount) {
           const accId = existingAccount.id || existingAccount._id;
           console.log(`✅ Conta existente: ID=${accId} | _id=${existingAccount._id} | id=${existingAccount.id} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
+          
+          // Check for account replicas - MetaAPI requires trading through replicas, not primary accounts
+          if (existingAccount.accountReplicas && existingAccount.accountReplicas.length > 0) {
+            console.log(`🔗 Conta primária detectada com ${existingAccount.accountReplicas.length} réplica(s): ${JSON.stringify(existingAccount.accountReplicas)}`);
+          }
+          if (existingAccount.primaryReplica) {
+            console.log(`🔗 primaryReplica: ${JSON.stringify(existingAccount.primaryReplica)}`);
+          }
         }
       } else {
         const err = await listRes.text();

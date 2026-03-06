@@ -76,6 +76,7 @@ serve(async (req) => {
 
     // Get region
     let region = 'new-york';
+    let clientToken = METAAPI_TOKEN;
     try {
       const accountRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}`, {
         headers: { 'auth-token': METAAPI_TOKEN },
@@ -88,8 +89,21 @@ serve(async (req) => {
       }
     } catch (_) {}
 
+    // Get account-specific access token for Client API
+    try {
+      const tokenRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}/access-token`, {
+        headers: { 'auth-token': METAAPI_TOKEN },
+      });
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        if (tokenData.accessToken) {
+          clientToken = tokenData.accessToken;
+        }
+      } else { await tokenRes.text(); }
+    } catch (_) {}
+
     const baseUrl = `https://mt-client-api-v1.${region}.agiliumtrade.ai/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
-    const authHeaders = { 'auth-token': METAAPI_TOKEN };
+    const authHeaders = { 'auth-token': clientToken };
 
     // Spread advantage: ONLY for EURUSD (tightest spread ~1 pip)
     // EURUSD closes 15% earlier since spread cost is minimal — faster profit

@@ -90,8 +90,8 @@ serve(async (req) => {
         );
         
         if (existingAccount) {
-          const accId = existingAccount._id || existingAccount.id;
-          console.log(`✅ Conta existente: ID=${accId} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
+          const accId = existingAccount.id || existingAccount._id;
+          console.log(`✅ Conta existente: ID=${accId} | _id=${existingAccount._id} | id=${existingAccount.id} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
         }
       } else {
         const err = await listRes.text();
@@ -105,7 +105,7 @@ serve(async (req) => {
     let accountName: string;
 
     if (existingAccount) {
-      accountId = existingAccount._id || existingAccount.id;
+      accountId = existingAccount.id || existingAccount._id;
       accountName = existingAccount.name || `MT5-${mt5Login}`;
 
       // Update password

@@ -747,21 +747,35 @@ ${model.worstHours.length > 0 ? `- Piores horários: ${model.worstHours.join('h,
       .filter(a => a.winRate < 35 && a.profit < -50 && a.trades >= 3)
       .map(a => a.asset);
 
-    const systemPrompt = `Você é um trader ESPECIALISTA em REVERSÕES CERTEIRAS em opções binárias. Sua estratégia é identificar pontos exatos de reversão onde o preço muda de direção.
+    const systemPrompt = `Você é um trader ESPECIALISTA em REVERSÕES CERTEIRAS em opções binárias. Seu ÚNICO objetivo é LUCRO CONSISTENTE. Você aprende com cada operação passada para NUNCA repetir erros.
 
-🧠 MODO: ${mode} - ESTRATÉGIA REVERSÃO CERTEIRA
+🧠 MODO: ${mode} - ESTRATÉGIA REVERSÃO CERTEIRA - FOCO LUCRO
 ${learningSummary}
 
-REGRAS DA REVERSÃO CERTEIRA:
+${preferredAssets.length > 0 ? `✅ ATIVOS LUCRATIVOS (PRIORIZE): ${preferredAssets.join(', ')}` : ''}
+${avoidAssets.length > 0 ? `⛔ ATIVOS TÓXICOS (NUNCA OPERE): ${avoidAssets.join(', ')}` : ''}
+
+REGRAS ABSOLUTAS PARA LUCRO:
 1. ✅ REVERSAL_CERTEIRA (RSI extremo + Stoch extremo + padrão candle + S/R + EMA) = EXECUTE SEMPRE
 2. ✅ DIAMOND/GOLDEN em ativo com bom histórico = EXECUTE
 3. ✅ PROFIT_MASTER + reversão confirmada = EXECUTE
-4. ❌ Sem padrão de reversão claro = SKIP
-5. ❌ Volatilidade alta = SKIP (reversão incerta)
+4. ❌ Sem padrão de reversão claro = SKIP (proteger capital)
+5. ❌ Volatilidade alta ou média = SKIP (reversão incerta)
 6. ❌ RSI neutro (30-70) = SKIP (sem extremo = sem reversão)
-7. ⚡ PRIORIZE: RSI < 20 ou > 80 + padrão candle de reversão + suporte/resistência
+7. ❌ Ativo com Win Rate < 45% nos últimos 14 dias = SKIP SEMPRE
+8. ❌ Ativo com 2+ losses consecutivos recentes = SKIP (esperar reset)
+9. ❌ Horário com performance negativa histórica = SKIP
+10. ⚡ PRIORIZE: RSI < 20 ou > 80 + padrão candle de reversão + suporte/resistência
+11. 📰 NÃO OPERAR durante horários de notícias de alto impacto (NFP, FOMC, ECB, etc.)
 
-PRINCÍPIO: Só operar quando o preço está em EXTREMO e mostrando SINAIS CLAROS de reversão. Menos operações, mais assertividade.
+APRENDIZADO CONTÍNUO:
+- Analise o histórico de WR por ativo e direção antes de aprovar
+- Se um ativo tem WR alto em CALL mas baixo em PUT, só aprove CALL
+- Prefira ativos que já geraram lucro no passado
+- Rejeite qualquer setup que tenha padrão similar a operações perdedoras passadas
+- OBJETIVO: manter WR acima de 60% e lucro positivo SEMPRE
+
+PRINCÍPIO: MENOS operações, MAIS assertividade. Só operar quando TUDO confirma a reversão. Preservar capital é mais importante que operar.
 
 Responda APENAS JSON válido:
 {"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":80-100,"reason":"","adjustedConfluence":80+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name"}`;

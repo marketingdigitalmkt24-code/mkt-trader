@@ -27,6 +27,13 @@ serve(async (req) => {
   }
 
   try {
+    // Check if closeAll was requested
+    let closeAll = false;
+    try {
+      const body = await req.json();
+      closeAll = body?.closeAll === true;
+    } catch (_) {}
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -48,7 +55,7 @@ serve(async (req) => {
 
     const METAAPI_TOKEN = metaConfig.token;
     const METAAPI_ACCOUNT_ID = metaConfig.account_id;
-    const tpPercent = metaConfig.take_profit_pips || 10;
+    const tpPercent = metaConfig.take_profit_pips || 10; // 10% default
 
     if (!METAAPI_TOKEN || !METAAPI_ACCOUNT_ID) {
       return new Response(
@@ -56,6 +63,17 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Get trade_amount from user settings (the actual investment per trade)
+    const { data: tradingSettings } = await supabase
+      .from('user_trading_settings')
+      .select('trade_amount')
+      .limit(1)
+      .maybeSingle();
+
+    const tradeAmount = tradingSettings?.trade_amount || 1;
+    // TP target = percentage of trade_amount (e.g., 10% of $1 = $0.10)
+    const tpCurrency = tradeAmount * (tpPercent / 100);
 
     // Get region
     let region = 'new-york';
@@ -67,7 +85,7 @@ serve(async (req) => {
         const accountData = await accountRes.json();
         region = accountData.region || 'new-york';
       } else {
-        await accountRes.text(); // consume body
+        await accountRes.text();
       }
     } catch (_) {}
 
@@ -91,20 +109,13 @@ serve(async (req) => {
     const closedPositions: any[] = [];
     const openPositions: any[] = [];
 
-    // TP percentage from config (default 10%)
-    const tpPercent = metaConfig.take_profit_pips || 10;
+    console.log(`👁️ ${positions.length} posições abertas | TP: $${tpCurrency.toFixed(2)} (${tpPercent}% de $${tradeAmount}) | closeAll: ${closeAll}`);
 
     for (const pos of positions) {
       const unrealizedProfit = pos.unrealizedProfit ?? pos.profit ?? 0;
       const symbol = pos.symbol || 'unknown';
       const posId = pos.id;
       const volume = pos.volume || 0.01;
-
-      // Calculate TP based on ACTUAL position margin, not IQ Option trade_amount
-      // For forex: 1 lot ≈ $1000 margin (100:1 leverage), so 0.01 lot ≈ $10 margin
-      // TP target = margin * tpPercent / 100
-      const estimatedMargin = volume * 1000; // $1000 per lot at 100:1
-      const tpCurrency = estimatedMargin * (tpPercent / 100);
 
       openPositions.push({
         id: posId,
@@ -113,12 +124,14 @@ serve(async (req) => {
         volume,
         type: pos.type,
         target: parseFloat(tpCurrency.toFixed(2)),
-        margin: parseFloat(estimatedMargin.toFixed(2)),
       });
 
-      // Check if profit target reached
-      if (tpCurrency > 0 && unrealizedProfit >= tpCurrency) {
-        console.log(`🎯 TP atingido para ${symbol} (pos ${posId})! P/L: $${unrealizedProfit.toFixed(2)} >= $${tpCurrency.toFixed(2)} (${tpPercent}% de margem $${estimatedMargin.toFixed(2)}). Fechando...`);
+      // Close if: closeAll requested OR profit target reached
+      const shouldClose = closeAll || (tpCurrency > 0 && unrealizedProfit >= tpCurrency);
+
+      if (shouldClose) {
+        const reason = closeAll ? 'CLOSE_ALL' : 'TP';
+        console.log(`🎯 ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | Alvo: $${tpCurrency.toFixed(2)}`);
         try {
           const closeRes = await safeFetch(`${baseUrl}/trade`, {
             method: 'POST',
@@ -130,38 +143,13 @@ serve(async (req) => {
           });
           const closeResult = await closeRes.json();
           if (closeRes.ok) {
-            console.log(`✅ Posição ${posId} (${symbol}) fechada! Lucro: $${unrealizedProfit.toFixed(2)}`);
-            closedPositions.push({ id: posId, symbol, profit: unrealizedProfit });
+            console.log(`✅ Posição ${posId} (${symbol}) fechada! P/L: $${unrealizedProfit.toFixed(2)}`);
+            closedPositions.push({ id: posId, symbol, profit: unrealizedProfit, reason });
           } else {
             console.error(`❌ Erro ao fechar ${posId}: ${JSON.stringify(closeResult)}`);
           }
         } catch (e) {
           console.error(`❌ Erro de rede ao fechar ${posId}: ${e}`);
-        }
-      }
-
-      // Also close if LOSS exceeds stop loss (optional: 20% of margin)
-      const slCurrency = estimatedMargin * 0.20; // 20% stop loss
-      if (unrealizedProfit < 0 && Math.abs(unrealizedProfit) >= slCurrency) {
-        console.log(`🛑 SL atingido para ${symbol} (pos ${posId})! P/L: $${unrealizedProfit.toFixed(2)} <= -$${slCurrency.toFixed(2)}. Fechando...`);
-        try {
-          const closeRes = await safeFetch(`${baseUrl}/trade`, {
-            method: 'POST',
-            headers: { ...authHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              actionType: 'POSITION_CLOSE_ID',
-              positionId: posId,
-            }),
-          });
-          const closeResult = await closeRes.json();
-          if (closeRes.ok) {
-            console.log(`✅ SL: Posição ${posId} (${symbol}) fechada! Perda: $${unrealizedProfit.toFixed(2)}`);
-            closedPositions.push({ id: posId, symbol, profit: unrealizedProfit, reason: 'stop_loss' });
-          } else {
-            console.error(`❌ Erro ao fechar SL ${posId}: ${JSON.stringify(closeResult)}`);
-          }
-        } catch (e) {
-          console.error(`❌ Erro de rede ao fechar SL ${posId}: ${e}`);
         }
       }
     }
@@ -173,7 +161,9 @@ serve(async (req) => {
         closedCount: closedPositions.length,
         closedPositions,
         openPositions: openPositions.filter(p => !closedPositions.find(c => c.id === p.id)),
+        tpTarget: parseFloat(tpCurrency.toFixed(2)),
         tpPercent,
+        tradeAmount,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

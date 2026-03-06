@@ -820,42 +820,50 @@ serve(async (req) => {
         console.error('❌ IQ Option failed:', e);
       }
 
-      // ============= COPY TRADE TO MT5 VIA METAAPI =============
+      // ============= COPY TRADE TO MT5 VIA METAAPI (USD PAIRS ONLY) =============
       try {
-        const { data: metaConfig } = await supabase
-          .from('metaapi_config')
-          .select('token, account_id, volume, is_active')
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle();
+        // Only trade USD pairs on MT5
+        const assetNormalized = bestSignal.asset.replace('/', '').replace('-OTC', '').replace(' ', '').toUpperCase();
+        const isUsdPair = assetNormalized.includes('USD');
         
-        if (metaConfig && metaConfig.account_id) {
-          const { data: tradeSettings } = await supabase
-            .from('user_trading_settings')
-            .select('mt5_trade_amount')
+        if (!isUsdPair) {
+          console.log(`⏭️ MT5: Skipping ${bestSignal.asset} — not a USD pair`);
+        } else {
+          const { data: metaConfig } = await supabase
+            .from('metaapi_config')
+            .select('token, account_id, volume, is_active')
+            .eq('is_active', true)
             .limit(1)
             .maybeSingle();
           
-          const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
+          if (metaConfig && metaConfig.account_id) {
+            const { data: tradeSettings } = await supabase
+              .from('user_trading_settings')
+              .select('mt5_trade_amount')
+              .limit(1)
+              .maybeSingle();
+            
+            const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
 
-          console.log(`📡 MT5: ${bestSignal.asset} ${bestSignal.type} $${mt5TradeAmount} | Volume: ${metaConfig.volume || 0.01}`);
-          
-          const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
-            body: {
-              asset: bestSignal.asset,
-              direction: bestSignal.type.toLowerCase(),
-              amount: mt5TradeAmount,
-              expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
-              signalId: bestSignal.id,
-              confluenceScore: bestSignal.indicators.confluenceScore,
-            },
-          });
+            console.log(`📡 MT5: ${bestSignal.asset} ${bestSignal.type} $${mt5TradeAmount} | Volume: ${metaConfig.volume || 0.01}`);
+            
+            const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
+              body: {
+                asset: bestSignal.asset,
+                direction: bestSignal.type.toLowerCase(),
+                amount: mt5TradeAmount,
+                expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
+                signalId: bestSignal.id,
+                confluenceScore: bestSignal.indicators.confluenceScore,
+              },
+            });
 
-          if (!mt5Error && mt5Data?.success) {
-            totalMT5++;
-            console.log(`✅ MT5 Trade: ${mt5Data.symbol} ${mt5Data.direction}`);
-          } else {
-            console.error(`❌ MT5 Trade falhou: ${mt5Error?.message || mt5Data?.error}`);
+            if (!mt5Error && mt5Data?.success) {
+              totalMT5++;
+              console.log(`✅ MT5 Trade: ${mt5Data.symbol} ${mt5Data.direction}`);
+            } else {
+              console.error(`❌ MT5 Trade falhou: ${mt5Error?.message || mt5Data?.error}`);
+            }
           }
         }
       } catch (e) {

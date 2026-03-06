@@ -93,7 +93,7 @@ export function AIAnalysisStatusCard() {
             </div>
             <div>
               <h3 className="text-sm font-semibold">
-                {isActive ? 'IA Groq Analisando' : 'IA Groq Aguardando'}
+                {isActive ? 'IA Analisando' : 'IA Aguardando'}
               </h3>
               <p className="text-[10px] text-muted-foreground">
                 Último sinal: {getTimeSinceText()}

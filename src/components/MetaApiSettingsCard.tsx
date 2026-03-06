@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 interface MetaApiConfig {
   id?: string;
+  token: string;
   account_id: string;
   account_name: string;
   is_active: boolean;
@@ -23,6 +24,7 @@ interface MetaApiConfig {
 
 export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const [config, setConfig] = useState<MetaApiConfig>({
+    token: '',
     account_id: '',
     account_name: '',
     is_active: false,
@@ -53,6 +55,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       if (data) {
         setConfig({
           id: data.id,
+          token: data.token || '',
           account_id: data.account_id || '',
           account_name: data.account_name || '',
           is_active: data.is_active,
@@ -75,6 +78,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
     setIsSaving(true);
     try {
       const payload = {
+        token: config.token,
         account_id: config.account_id,
         account_name: config.account_name,
         is_active: config.is_active,
@@ -95,7 +99,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       } else {
         const { data, error } = await supabase
           .from('metaapi_config')
-          .insert({ ...payload, token: 'managed-by-env' })
+          .insert(payload)
           .select()
           .single();
         if (error) throw error;
@@ -232,6 +236,29 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
           </p>
         </div>
       )}
+
+      {/* Token MetaAPI Global */}
+      <div className="border-t border-border/50 pt-4 space-y-2">
+        <Label htmlFor="metaapi-token">Token MetaAPI (acesso global a todas as contas)</Label>
+        <div className="relative">
+          <Input
+            id="metaapi-token"
+            type={showPassword ? 'text' : 'password'}
+            value={config.token}
+            onChange={(e) => setConfig(prev => ({ ...prev, token: e.target.value }))}
+            placeholder="eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9..."
+            className="pr-10 font-mono text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">Token único que dá acesso a todas as contas MT5 cadastradas no MetaAPI</p>
+      </div>
 
       {/* MT5 Account Data */}
       <div className="border-t border-border/50 pt-4">

@@ -274,13 +274,13 @@ serve(async (req) => {
     }
 
     // Update DB
-    const supabase = createClient(
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
     if (configId) {
-      await supabase.from('metaapi_config').update({
+      await supabaseAdmin.from('metaapi_config').update({
         account_id: accountId,
         account_name: accountName,
         connection_status: connectionStatus,

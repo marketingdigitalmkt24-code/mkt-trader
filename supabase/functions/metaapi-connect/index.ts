@@ -33,8 +33,8 @@ serve(async (req) => {
 
     const { mt5Login, mt5Password, mt5Server, configId } = await req.json();
 
-    if (!mt5Login || !mt5Password || !mt5Server) {
-      throw new Error('Login, senha e servidor MT5 são obrigatórios');
+    if (!mt5Login || !mt5Password) {
+      throw new Error('Login e senha MT5 são obrigatórios');
     }
 
     console.log(`🔐 Conectando MT5: Login ${mt5Login} | Server: ${mt5Server}`);
@@ -125,7 +125,7 @@ serve(async (req) => {
           login: String(mt5Login),
           password: mt5Password,
           name: `MT5-${mt5Login}`,
-          server: mt5Server,
+          ...(mt5Server ? { server: mt5Server } : {}),
           platform: 'mt5',
           type: 'cloud-g2',
           magic: 0,

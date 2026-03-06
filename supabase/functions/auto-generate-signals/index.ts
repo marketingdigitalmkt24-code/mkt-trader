@@ -14,6 +14,101 @@ const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
 const FORCE_EXTREME_PROBABILITY = 0.98; // 98% chance de indicadores extremos
 const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO (era 50s global)
 
+// ============= NEWS FILTER - Avoid trading during high-impact news =============
+interface NewsEvent {
+  hour: number; // UTC hour
+  minute: number;
+  currencies: string[];
+  duration: number; // minutes to block before and after
+}
+
+// Major economic news schedule (recurring weekly patterns)
+// These are the most impactful events that cause extreme volatility
+function getHighImpactNewsWindows(): NewsEvent[] {
+  const now = new Date();
+  const utcDay = now.getUTCDay(); // 0=Sun, 1=Mon...
+  
+  const events: NewsEvent[] = [];
+  
+  // === DAILY HIGH-IMPACT TIMES ===
+  // US Session Open (NYSE) - high volatility
+  events.push({ hour: 13, minute: 30, currencies: ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'], duration: 15 });
+  // London Session Open
+  events.push({ hour: 7, minute: 0, currencies: ['GBP', 'EUR', 'CHF'], duration: 15 });
+  // London/NY Overlap - most volatile period
+  events.push({ hour: 12, minute: 0, currencies: ['USD', 'EUR', 'GBP'], duration: 10 });
+
+  // === WEEKLY PATTERNS ===
+  if (utcDay === 1) { // Monday
+    // Asian session open - gaps from weekend
+    events.push({ hour: 0, minute: 0, currencies: ['JPY', 'AUD', 'NZD'], duration: 30 });
+  }
+  if (utcDay === 3) { // Wednesday
+    // FOMC Minutes (usually 18:00 or 19:00 UTC)
+    events.push({ hour: 18, minute: 0, currencies: ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'], duration: 30 });
+    // ADP Employment (12:15 UTC)
+    events.push({ hour: 12, minute: 15, currencies: ['USD'], duration: 15 });
+  }
+  if (utcDay === 4) { // Thursday
+    // ECB Rate Decision (often 12:15-12:45 UTC)
+    events.push({ hour: 12, minute: 15, currencies: ['EUR', 'GBP', 'CHF'], duration: 30 });
+    // US Unemployment Claims (12:30 UTC)
+    events.push({ hour: 12, minute: 30, currencies: ['USD'], duration: 15 });
+  }
+  if (utcDay === 5) { // Friday
+    // US Non-Farm Payrolls (NFP) - MOST impactful event
+    events.push({ hour: 12, minute: 30, currencies: ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'], duration: 30 });
+  }
+  
+  // === COMMON DAILY NEWS TIMES ===
+  // US CPI/PPI/Retail Sales (usually 12:30 UTC)
+  events.push({ hour: 12, minute: 30, currencies: ['USD'], duration: 10 });
+  // BOJ decisions (around 3:00 UTC)
+  events.push({ hour: 3, minute: 0, currencies: ['JPY'], duration: 15 });
+  // RBA decisions (around 3:30 UTC on Tuesdays)
+  if (utcDay === 2) {
+    events.push({ hour: 3, minute: 30, currencies: ['AUD', 'NZD'], duration: 15 });
+  }
+
+  return events;
+}
+
+function isAssetAffectedByNews(assetSymbol: string): { affected: boolean; reason: string } {
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const utcMinute = now.getUTCMinutes();
+  const currentMinutes = utcHour * 60 + utcMinute;
+  
+  // Extract currencies from asset symbol (e.g., "EUR/USD" -> ["EUR", "USD"])
+  const currencies = assetSymbol.replace('-OTC', '').split('/').map(c => c.trim().toUpperCase());
+  
+  // Crypto is not affected by forex news
+  if (currencies.some(c => ['BTC', 'ETH', 'LTC', 'XRP'].includes(c))) {
+    return { affected: false, reason: '' };
+  }
+  
+  const newsEvents = getHighImpactNewsWindows();
+  
+  for (const event of newsEvents) {
+    const eventMinutes = event.hour * 60 + event.minute;
+    const windowStart = eventMinutes - event.duration;
+    const windowEnd = eventMinutes + event.duration;
+    
+    if (currentMinutes >= windowStart && currentMinutes <= windowEnd) {
+      // Check if any of the asset's currencies are affected
+      const affectedCurrency = currencies.find(c => event.currencies.includes(c));
+      if (affectedCurrency) {
+        return { 
+          affected: true, 
+          reason: `${affectedCurrency} afetado por notícia às ${event.hour}:${event.minute.toString().padStart(2, '0')} UTC` 
+        };
+      }
+    }
+  }
+  
+  return { affected: false, reason: '' };
+}
+
 // ============= MARKET HOURS =============
 function isWeekend(): boolean {
   const now = new Date();
@@ -454,6 +549,13 @@ serve(async (req) => {
         return false;
       }
       
+      // Block assets affected by high-impact news
+      const newsCheck = isAssetAffectedByNews(asset.symbol);
+      if (newsCheck.affected) {
+        console.log(`📰 ${asset.symbol}: BLOQUEADO por notícia - ${newsCheck.reason}`);
+        return false;
+      }
+      
       return true;
     });
 
@@ -483,8 +585,8 @@ serve(async (req) => {
       );
     }
 
-    // ============= ENVIAR TODOS OS CANDIDATOS PARA IA GROQ =============
-    console.log(`🤖 Enviando ${candidates.length} candidatos para análise IA Groq...`);
+    // ============= ENVIAR TODOS OS CANDIDATOS PARA IA =============
+    console.log(`🤖 Enviando ${candidates.length} candidatos para análise IA...`);
 
     // Preparar dados para o ai-signal-analyzer
     const signalDataForAI = candidates.map(s => ({
@@ -524,7 +626,7 @@ serve(async (req) => {
       console.log('⚠️ Erro ao buscar histórico para IA:', e);
     }
 
-    // Chamar ai-signal-analyzer (Groq AI)
+    // Chamar ai-signal-analyzer (IA)
     let aiApprovedSignals: any[] = [];
     try {
       const { data: aiData, error: aiError } = await supabase.functions.invoke('ai-signal-analyzer', {
@@ -538,7 +640,7 @@ serve(async (req) => {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
         const executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
-        console.log(`🧠 IA Groq: ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
+        console.log(`🧠 IA: ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
         
         // Mapear sinais aprovados pela IA de volta aos candidatos
         for (const approved of executeSignals) {
@@ -556,7 +658,7 @@ serve(async (req) => {
         }
       }
     } catch (e) {
-      console.error('❌ Falha ao chamar IA Groq:', e);
+      console.error('❌ Falha ao chamar IA:', e);
     }
 
     // FALLBACK: Se a IA falhar, usar o melhor candidato por confluência

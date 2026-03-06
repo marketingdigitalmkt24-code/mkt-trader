@@ -94,6 +94,7 @@ serve(async (req) => {
     // Loop mode: run for ~55 seconds checking every 3 seconds
     const maxIterations = loopMode ? 18 : 1; // 18 * 3s = 54s
     const allClosed: any[] = [];
+    let lastOpenPositions: any[] = [];
 
     for (let i = 0; i < maxIterations; i++) {
       if (i > 0) {
@@ -112,6 +113,16 @@ serve(async (req) => {
         }
 
         const positions = await positionsRes.json();
+
+        // Track open positions for response
+        lastOpenPositions = positions.map((pos: any) => ({
+          id: pos.id,
+          symbol: pos.symbol || 'unknown',
+          unrealizedProfit: parseFloat((pos.unrealizedProfit ?? pos.profit ?? 0).toFixed(2)),
+          volume: pos.volume || 0.01,
+          type: pos.type,
+          target: parseFloat(tpCurrency.toFixed(2)),
+        }));
 
         if (positions.length === 0) {
           if (loopMode) continue;
@@ -152,20 +163,25 @@ serve(async (req) => {
           }
         }
 
-        // If closeAll, only need one iteration
         if (closeAll) break;
       } catch (iterErr) {
         console.error(`❌ Erro na iteração ${i}: ${iterErr}`);
       }
     }
 
+    // Filter out closed positions from open list
+    const openPositions = lastOpenPositions.filter(p => !allClosed.find(c => c.id === p.id));
+
     return new Response(
       JSON.stringify({
         success: true,
+        totalOpen: openPositions.length,
         closedCount: allClosed.length,
         closedPositions: allClosed,
-        iterations: Math.min(maxIterations, maxIterations),
+        openPositions,
         tpTarget: parseFloat(tpCurrency.toFixed(2)),
+        tpPercent,
+        tradeAmount,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

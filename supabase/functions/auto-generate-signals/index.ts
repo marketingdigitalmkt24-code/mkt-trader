@@ -658,7 +658,7 @@ serve(async (req) => {
           .limit(1)
           .maybeSingle();
 
-      if (iqConfig) {
+        if (iqConfig) {
           const { data: tradeSettings } = await supabase
             .from('user_trading_settings')
             .select('trade_amount, mt5_trade_amount')
@@ -666,25 +666,52 @@ serve(async (req) => {
             .maybeSingle();
           
           const iqTradeAmount = tradeSettings?.trade_amount || 1;
+          const expiration = bestSignal.timeframe === 'M1' ? 1 : 5;
 
           console.log(`📡 IQ Option: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount}`);
           
+          // Save to trade_queue for tracking
+          await supabase.from('trade_queue').insert({
+            asset: bestSignal.asset,
+            direction: bestSignal.type,
+            amount: iqTradeAmount,
+            expiration,
+            signal_id: bestSignal.id,
+            timeframe: bestSignal.timeframe,
+            confluence_score: bestSignal.indicators.confluenceScore,
+            status: 'executing',
+          });
+
+          // Call iqoption-place-trade (now faster with fire-and-forget)
           const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
             body: {
               asset: bestSignal.asset,
               direction: bestSignal.type.toLowerCase(),
               amount: iqTradeAmount,
-              expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
+              expiration,
               signalId: bestSignal.id,
-              userId: iqConfig.user_id,
+              isAutoTrade: true,
+              isAIAnalyzed: !!bestSignal.aiConfidence,
+              timeframe: bestSignal.timeframe,
             },
           });
 
           if (!iqError && iqData?.success) {
             totalIQ++;
-            console.log(`✅ IQ Trade: ${bestSignal.asset} ${bestSignal.type}`);
+            console.log(`✅ IQ Trade placed: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.tradeId}`);
+            
+            // Update queue status
+            await supabase.from('trade_queue')
+              .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
+              .eq('signal_id', bestSignal.id);
           } else {
-            console.error(`❌ IQ Trade falhou: ${iqError?.message || iqData?.error}`);
+            const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
+            console.error(`❌ IQ Trade falhou: ${errorMsg}`);
+            
+            // Update queue with error
+            await supabase.from('trade_queue')
+              .update({ status: 'failed', error: errorMsg })
+              .eq('signal_id', bestSignal.id);
           }
         }
       } catch (e) {

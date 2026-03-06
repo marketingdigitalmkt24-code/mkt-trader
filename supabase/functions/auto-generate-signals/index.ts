@@ -529,6 +529,21 @@ serve(async (req) => {
     const originalCount = assets.length;
     assets = assets.filter(asset => {
       const key = asset.symbol.toUpperCase();
+      const isEurusd = asset.symbol === 'EUR/USD';
+      
+      // EURUSD: estratégia spread MT5 — NUNCA bloquear por losses/winrate da IQ Option
+      // Os resultados da IQ Option não refletem o desempenho no MT5
+      if (isEurusd) {
+        // Apenas bloquear se já tem trade pendente ou sinal recente (cooldown)
+        if (assetsWithPendingTrades.has(key)) {
+          return false;
+        }
+        if (assetsWithRecentSignals.has(key)) {
+          return false;
+        }
+        console.log(`🎯 EUR/USD: LIBERADO (estratégia spread MT5 - imune a bloqueios IQ)`);
+        return true;
+      }
       
       // Block assets with pending trades
       if (assetsWithPendingTrades.has(key)) {
@@ -540,21 +555,14 @@ serve(async (req) => {
         return false;
       }
       
-      // Block assets with consecutive losses
-      // EURUSD has spread advantage strategy - higher tolerance (5 losses)
+      // Block assets with 3+ consecutive losses
       const history = assetHistory.get(asset.symbol);
-      const isEurusd = asset.symbol === 'EUR/USD';
-      const maxConsecutiveLosses = isEurusd ? 5 : 3;
-      if (history && history.consecutiveLosses >= maxConsecutiveLosses) {
-        if (isEurusd) {
-          console.log(`⚠️ EUR/USD: ${history.consecutiveLosses} losses consecutivos (limite spread: ${maxConsecutiveLosses})`);
-        }
+      if (history && history.consecutiveLosses >= 3) {
         return false;
       }
       
-      // Block assets with very bad win rate - EURUSD more tolerant (spread advantage)
-      const minWinRate = isEurusd ? 25 : 35;
-      if (history && history.winRate < minWinRate && (history.wins + history.losses) >= 5) {
+      // Block assets with very bad win rate (< 35% with 5+ trades)
+      if (history && history.winRate < 35 && (history.wins + history.losses) >= 5) {
         return false;
       }
       

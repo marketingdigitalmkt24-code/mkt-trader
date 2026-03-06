@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 interface MetaApiConfig {
   id?: string;
+  token: string;
   account_id: string;
   account_name: string;
   is_active: boolean;

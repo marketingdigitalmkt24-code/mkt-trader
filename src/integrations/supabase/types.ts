@@ -264,6 +264,7 @@ export type Database = {
           max_consecutive_losses: number
           max_daily_trades: number
           min_confluence: number
+          mt5_trade_amount: number
           profit_target_type: string
           profit_target_value: number
           risk_per_trade: number
@@ -281,6 +282,7 @@ export type Database = {
           max_consecutive_losses?: number
           max_daily_trades?: number
           min_confluence?: number
+          mt5_trade_amount?: number
           profit_target_type?: string
           profit_target_value?: number
           risk_per_trade?: number
@@ -298,6 +300,7 @@ export type Database = {
           max_consecutive_losses?: number
           max_daily_trades?: number
           min_confluence?: number
+          mt5_trade_amount?: number
           profit_target_type?: string
           profit_target_value?: number
           risk_per_trade?: number

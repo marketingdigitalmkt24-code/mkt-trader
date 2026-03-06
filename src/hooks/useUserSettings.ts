@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 interface UserTradingSettings {
   autoTradingEnabled: boolean;
   tradeAmount: number;
+  mt5TradeAmount: number;
   minConfluence: number;
   maxDailyTrades: number;
   dailyLimitEnabled: boolean;
@@ -20,6 +21,7 @@ interface UserTradingSettings {
 const DEFAULT_SETTINGS: UserTradingSettings = {
   autoTradingEnabled: false,
   tradeAmount: 10,
+  mt5TradeAmount: 1,
   minConfluence: 95,
   maxDailyTrades: 3,
   dailyLimitEnabled: true,
@@ -62,6 +64,7 @@ export function useUserSettings() {
         setSettings({
           autoTradingEnabled: data.auto_trading_enabled,
           tradeAmount: Number(data.trade_amount),
+          mt5TradeAmount: Number((data as any).mt5_trade_amount ?? 1),
           minConfluence: data.min_confluence,
           maxDailyTrades: data.max_daily_trades,
           dailyLimitEnabled: data.daily_limit_enabled ?? true,
@@ -96,10 +99,11 @@ export function useUserSettings() {
       
       const mergedSettings = { ...settings, ...newSettings };
       
-      const dbData = {
+      const dbData: Record<string, any> = {
         user_id: user.id,
         auto_trading_enabled: mergedSettings.autoTradingEnabled,
         trade_amount: mergedSettings.tradeAmount,
+        mt5_trade_amount: mergedSettings.mt5TradeAmount,
         min_confluence: mergedSettings.minConfluence,
         max_daily_trades: mergedSettings.maxDailyTrades,
         daily_limit_enabled: mergedSettings.dailyLimitEnabled,
@@ -113,7 +117,7 @@ export function useUserSettings() {
 
       const { error } = await supabase
         .from('user_trading_settings')
-        .upsert(dbData, { onConflict: 'user_id' });
+        .upsert(dbData as any, { onConflict: 'user_id' });
 
       if (error) {
         console.error('Error saving settings:', error);

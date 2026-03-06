@@ -7,6 +7,7 @@ import { SignalHistorySection } from '@/components/SignalHistorySection';
 import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
 import { LiveOperationsCard } from '@/components/LiveOperationsCard';
 import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
+import { TradeQueueCard } from '@/components/TradeQueueCard';
 import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
 import { useSignalResults } from '@/hooks/useSignalResults';
@@ -65,10 +66,11 @@ const Index = () => {
           </div>
         )}
 
-        {/* Broker Connections + AI Status - Top Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        {/* Broker Connections + AI Status + Trade Queue - Top Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <BrokerConnectionsCard />
           <AIAnalysisStatusCard />
+          <TradeQueueCard />
         </div>
 
         {/* Filters Row */}

@@ -3,18 +3,18 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface TradeRequest {
   asset: string;
   direction: 'call' | 'put';
   amount: number;
-  expiration: number; // in minutes
+  expiration: number;
   signalId?: string;
   isAutoTrade?: boolean;
   isAIAnalyzed?: boolean;
-  timeframe?: string; // M1, M5, etc.
+  timeframe?: string;
 }
 
 interface IQOptionCredentials {
@@ -23,33 +23,17 @@ interface IQOptionCredentials {
   account_type: string;
 }
 
-interface TradeResult {
-  success: boolean;
-  tradeId?: string;
-  result?: 'win' | 'loss' | 'tie' | 'pending';
-  profit?: number;
-  exitPrice?: number;
-  error?: string;
-}
-
 // Multiple IQ Option API endpoints to try
 const IQ_OPTION_AUTH_URLS = [
   'https://auth.iqoption.com/api/v2/login',
   'https://api.iqoption.com/api/v2/login',
-  'https://iqoption.com/api/v2/login',
-];
-const IQ_OPTION_WS_URLS = [
-  'wss://iqoption.com/echo/websocket',
-  'wss://ws.iqoption.com/echo/websocket',
 ];
 const IQ_OPTION_WS_URL = 'wss://iqoption.com/echo/websocket';
 
-// Try HTTP login first
 async function tryHttpLogin(email: string, password: string): Promise<string | null> {
   for (const url of IQ_OPTION_AUTH_URLS) {
     try {
       console.log(`🔄 Attempting HTTP login: ${url}`);
-      
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
       
@@ -62,26 +46,17 @@ async function tryHttpLogin(email: string, password: string): Promise<string | n
           'Origin': 'https://iqoption.com',
           'Referer': 'https://iqoption.com/',
         },
-        body: new URLSearchParams({
-          identifier: email,
-          password: password,
-        }),
+        body: new URLSearchParams({ identifier: email, password }),
         signal: controller.signal,
       });
-
       clearTimeout(timeoutId);
       
       const data = await response.json();
-      console.log('Login response:', response.status, data?.code);
-      
       if (data?.code === 'success' && data?.ssid) {
         console.log('✅ HTTP login successful');
         return data.ssid;
       }
-      
-      if (data?.code === 'invalid') {
-        return null; // Wrong credentials, stop trying
-      }
+      if (data?.code === 'invalid') return null;
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       console.log(`❌ HTTP login failed for ${url}:`, msg);
@@ -90,444 +65,225 @@ async function tryHttpLogin(email: string, password: string): Promise<string | n
   return null;
 }
 
-// Fallback: WebSocket-only authentication
 async function tryWsLogin(email: string, password: string): Promise<string | null> {
-  for (const wsUrl of IQ_OPTION_WS_URLS) {
-    try {
-      console.log(`🔄 Attempting WS login: ${wsUrl}`);
-      
-      const ssid = await new Promise<string | null>((resolve) => {
-        const ws = new WebSocket(wsUrl);
-        let resolved = false;
-        
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            ws.close();
-            resolve(null);
+  try {
+    console.log(`🔄 Attempting WS login: ${IQ_OPTION_WS_URL}`);
+    const ssid = await new Promise<string | null>((resolve) => {
+      const ws = new WebSocket(IQ_OPTION_WS_URL);
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) { resolved = true; ws.close(); resolve(null); }
+      }, 12000);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ name: 'authenticate', msg: { email, password } }));
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.name === 'authenticated') {
+            clearTimeout(timeout); resolved = true; ws.close();
+            resolve(msg.msg?.ssid || `ws-auth-${Date.now()}`);
           }
-        }, 12000);
-
-        ws.onopen = () => {
-          console.log(`📡 WS connected to ${wsUrl}`);
-          ws.send(JSON.stringify({
-            name: 'authenticate',
-            msg: { email, password },
-          }));
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data);
-            
-            if (msg.name === 'authenticated') {
-              console.log('✅ WS authentication successful');
-              // Get SSID from authenticated message or request profile
-              const authSsid = msg.msg?.ssid || `ws-auth-${Date.now()}`;
-              clearTimeout(timeout);
-              resolved = true;
-              ws.close();
-              resolve(authSsid);
-            }
-            
-            if (msg.name === 'error' || msg.name === 'auth-error') {
-              console.log('❌ WS auth error:', msg.msg);
-              clearTimeout(timeout);
-              resolved = true;
-              ws.close();
-              resolve(null);
-            }
-          } catch { /* ignore parse errors */ }
-        };
-
-        ws.onerror = () => {
-          if (!resolved) {
-            resolved = true;
-            ws.close();
-            resolve(null);
+          if (msg.name === 'error' || msg.name === 'auth-error') {
+            clearTimeout(timeout); resolved = true; ws.close(); resolve(null);
           }
-        };
-
-        ws.onclose = () => {
-          clearTimeout(timeout);
-        };
-      });
-      
-      if (ssid) return ssid;
-    } catch (error) {
-      console.log(`❌ WS login failed for ${wsUrl}:`, error);
-    }
-  }
-  return null;
+        } catch { /* ignore */ }
+      };
+      ws.onerror = () => { if (!resolved) { resolved = true; ws.close(); resolve(null); } };
+      ws.onclose = () => { clearTimeout(timeout); };
+    });
+    return ssid;
+  } catch { return null; }
 }
 
 async function loginToIQOption(email: string, password: string): Promise<{ ssid: string | null; error: string | null }> {
-  // Try HTTP first
   let ssid = await tryHttpLogin(email, password);
+  if (ssid) return { ssid, error: null };
   
-  if (ssid) {
-    return { ssid, error: null };
-  }
-  
-  // Fallback to WebSocket authentication
   console.log('🔄 HTTP failed, trying WebSocket authentication...');
   ssid = await tryWsLogin(email, password);
-  
-  if (ssid) {
-    return { ssid, error: null };
-  }
+  if (ssid) return { ssid, error: null };
   
   return { ssid: null, error: 'Não foi possível conectar à IQ Option' };
 }
 
-async function placeTradeAndWaitResult(
+// Track asset type (binary vs turbo) for correct option_type_id
+interface AssetInfo {
+  id: number;
+  optionType: number; // 1 = binary, 3 = turbo
+}
+
+async function placeTradeFireAndForget(
   ssid: string, 
   accountType: string,
   trade: TradeRequest
-): Promise<TradeResult> {
+): Promise<{ success: boolean; tradeId?: string; error?: string }> {
   return new Promise((resolve) => {
-    console.log('Connecting to IQ Option WebSocket for trading...');
+    console.log('📡 Connecting to IQ Option WebSocket for trading...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
     
     let balanceId = 0;
     let tradeId: string | null = null;
-    let activeAssets: Record<string, number> = {};
+    const activeAssets: Record<string, AssetInfo> = {};
     let tradePlaced = false;
-    let resultReceived = false;
     
-    // Timeout for the entire operation (trade + wait for result)
-    const expirationMs = (trade.expiration + 1) * 60 * 1000; // expiration + 1 minute buffer
-    const maxTimeout = Math.min(expirationMs, 120000); // Max 2 minutes
-    
+    // Shorter timeout - we don't wait for result, just confirmation of placement
     const timeout = setTimeout(() => {
-      if (!resultReceived) {
-        console.log('Operation timeout, closing connection');
-        ws.close();
-        if (tradePlaced && tradeId) {
-          // Trade was placed but result not received - mark as pending
-          resolve({ success: true, tradeId, result: 'pending', profit: 0 });
-        } else {
-          resolve({ success: false, error: 'Trade timeout - asset may be closed' });
-        }
+      console.log('⏰ Trade placement timeout');
+      ws.close();
+      if (tradePlaced && tradeId) {
+        resolve({ success: true, tradeId });
+      } else if (tradePlaced) {
+        // Trade was sent but no confirmation - still might have worked
+        resolve({ success: true, tradeId: `pending_${Date.now()}` });
+      } else {
+        resolve({ success: false, error: 'Trade timeout - asset may be closed' });
       }
-    }, maxTimeout);
+    }, 30000); // 30s timeout (was 120s)
 
     ws.onopen = () => {
-      console.log('WebSocket connected, authenticating...');
-      ws.send(JSON.stringify({
-        name: 'ssid',
-        msg: ssid,
-      }));
+      console.log('🔗 WebSocket connected, authenticating...');
+      ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         
-        // Skip timeSync messages from logging
-        if (data.name !== 'timeSync') {
-          console.log('Received message:', data.name);
-        }
-        
         if (data.name === 'profile') {
-          console.log('Authenticated! Getting balance and assets...');
+          console.log('✅ Authenticated, getting assets...');
           
-          // Get balance based on account type
           const balances = data.msg.balances || [];
           for (const balance of balances) {
             if (accountType === 'PRACTICE' && balance.type === 4) {
-              balanceId = balance.id;
-              console.log('Using PRACTICE balance:', balanceId);
-              break;
+              balanceId = balance.id; break;
             } else if (accountType === 'REAL' && balance.type === 1) {
-              balanceId = balance.id;
-              console.log('Using REAL balance:', balanceId);
-              break;
+              balanceId = balance.id; break;
             }
           }
+          if (!balanceId && balances.length > 0) balanceId = balances[0].id;
           
-          if (!balanceId && balances.length > 0) {
-            balanceId = balances[0].id;
-            console.log('Using fallback balance:', balanceId);
-          }
-          
-          // Request available assets for binary options
           ws.send(JSON.stringify({
             name: 'sendMessage',
-            msg: {
-              name: 'get-initialization-data',
-              version: '3.0',
-              body: {}
-            }
+            msg: { name: 'get-initialization-data', version: '3.0', body: {} }
           }));
         }
         
-        // Handle initialization data with asset list
         if (data.name === 'initialization-data') {
-          console.log('Received initialization data');
           const binary = data.msg?.binary?.actives || {};
           const turbo = data.msg?.turbo?.actives || {};
           
-          // Combinar binary e turbo para ter todos os ativos
-          const allActives = { ...binary, ...turbo };
-          
-          // Build active assets map com múltiplas variações de nome
-          const otcAssets: string[] = [];
-          const opAssets: string[] = [];
-          
-          for (const [id, info] of Object.entries(allActives)) {
-            const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
-            if (assetInfo.enabled && !assetInfo.is_suspended) {
-              const name = assetInfo.name || '';
+          // Map assets with their correct option type
+          function mapAssets(actives: Record<string, any>, optionType: number) {
+            for (const [id, info] of Object.entries(actives)) {
+              const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
+              if (!assetInfo.enabled || assetInfo.is_suspended) continue;
+              
+              const name = (assetInfo.name || '').toUpperCase();
               const numId = parseInt(id);
+              const asset: AssetInfo = { id: numId, optionType };
               
-              // Adicionar com nome original
-              activeAssets[name.toUpperCase()] = numId;
+              activeAssets[name] = asset;
               
-              // Extrair nome base do ativo (ex: FRONT.GBPJPY-OTC -> GBPJPY)
-              let baseName = name.toUpperCase();
-              
-              // Remover prefixo FRONT.
-              if (baseName.startsWith('FRONT.')) {
-                baseName = baseName.replace('FRONT.', '');
-              }
-              
-              // Verificar se é OTC ou OP
+              let baseName = name.startsWith('FRONT.') ? name.replace('FRONT.', '') : name;
               const isOTC = baseName.includes('-OTC');
               const isOP = baseName.includes('-OP');
-              
-              // Remover sufixos -OTC e -OP para pegar nome base
               const cleanName = baseName.replace('-OTC', '').replace('-OP', '');
               
-              // Adicionar variações para facilitar busca
+              const withSlash = cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)
+                ? `${cleanName.slice(0, 3)}/${cleanName.slice(3)}` : null;
+              
               if (isOTC) {
-                otcAssets.push(cleanName);
-                // Variações OTC
-                activeAssets[`${cleanName}-OTC`] = numId;
-                activeAssets[`${cleanName}OTC`] = numId;
-                activeAssets[`${cleanName} OTC`] = numId;
-                
-                if (cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)) {
-                  const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
-                  activeAssets[`${withSlash}-OTC`] = numId;
-                  activeAssets[`${withSlash} OTC`] = numId;
-                  activeAssets[`${withSlash}OTC`] = numId;
-                }
-              } else if (isOP) {
-                opAssets.push(cleanName);
-                // Variações regulares (não-OTC): GBPJPY, GBP/JPY, GBPJPY-OP
-                activeAssets[cleanName] = numId;
-                activeAssets[`${cleanName}-OP`] = numId;
-                
-                if (cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)) {
-                  const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
-                  activeAssets[withSlash] = numId;
-                  activeAssets[`${withSlash}-OP`] = numId;
+                [`${cleanName}-OTC`, `${cleanName} OTC`, `${cleanName}OTC`].forEach(v => activeAssets[v] = asset);
+                if (withSlash) {
+                  [`${withSlash}-OTC`, `${withSlash} OTC`, `${withSlash}OTC`].forEach(v => activeAssets[v] = asset);
                 }
               } else {
-                // Formato sem sufixo - considerar como regular (não-OTC)
-                opAssets.push(cleanName);
-                activeAssets[cleanName] = numId;
-                if (cleanName.length === 6 && /^[A-Z]{6}$/.test(cleanName)) {
-                  const withSlash = `${cleanName.slice(0, 3)}/${cleanName.slice(3)}`;
-                  activeAssets[withSlash] = numId;
+                [cleanName, `${cleanName}-OP`].forEach(v => activeAssets[v] = asset);
+                if (withSlash) {
+                  [withSlash, `${withSlash}-OP`].forEach(v => activeAssets[v] = asset);
                 }
               }
             }
           }
           
-          console.log(`📊 Ativos mapeados: ${Object.keys(activeAssets).length} variações`);
-          console.log(`📈 Ativos regulares (-OP): ${opAssets.length > 0 ? opAssets.slice(0, 10).join(', ') : 'NENHUM'}`);
-          console.log(`🔵 Ativos OTC: ${otcAssets.length > 0 ? otcAssets.slice(0, 10).join(', ') : 'NENHUM'}`);
+          // Binary assets use option_type_id = 1, turbo uses 3
+          mapAssets(binary, 1);
+          mapAssets(turbo, 3);
           
-          // Verificar disponibilidade de mercados Blitz/Binary via IQ Option API
-          // opAssets contém os ativos regulares (Blitz/Binary) disponíveis
-          const hasBlitzBinaryOpen = opAssets.length > 0;
+          console.log(`📊 ${Object.keys(activeAssets).length} asset variations mapped`);
           
-          console.log(`🎯 VERIFICAÇÃO DE MERCADO VIA API IQ OPTION:`);
-          console.log(`   📊 Blitz/Binary: ${hasBlitzBinaryOpen ? 'ABERTO' : 'FECHADO'} (${opAssets.length} ativos)`);
-          console.log(`   📊 OTC: ${otcAssets.length} ativos disponíveis`);
-          
-          // Now place the trade with market availability info
-          placeTradeWithAssets(hasBlitzBinaryOpen, opAssets.length, otcAssets.length);
-        }
-        
-        function placeTradeWithAssets(hasBlitzBinaryOpen: boolean, blitzBinaryCount: number, otcCount: number) {
-          // Verificar se estamos no horário OTC permitido
-          // OTC permitido: Finais de semana OU Segunda-Quinta entre 00:00-05:00 (Brasília = UTC-3)
-          const nowDate = new Date();
-          const utcHour = nowDate.getUTCHours();
-          const utcDay = nowDate.getUTCDay(); // 0=Domingo, 1=Segunda, ..., 6=Sábado
-          
-          // Converter para horário de Brasília (UTC-3)
-          const brazilHour = (utcHour - 3 + 24) % 24;
-          // Ajustar dia se a conversão cruzar meia-noite
-          let brazilDay = utcDay;
-          if (utcHour < 3) {
-            brazilDay = (utcDay - 1 + 7) % 7;
-          }
-          
-          const isWeekend = brazilDay === 0 || brazilDay === 6; // Domingo ou Sábado
-          const isNightHours = brazilHour >= 0 && brazilHour < 5; // 00:00 - 04:59
-          const isWeekday = brazilDay >= 1 && brazilDay <= 4; // Segunda a Quinta
-          
-          // OTC permitido se: final de semana OU (segunda-quinta E horário noturno)
-          const isOTCAllowedBySchedule = isWeekend || (isWeekday && isNightHours);
-          
-          console.log(`⏰ Horário: ${brazilHour}:00 (Brasília), Dia: ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][brazilDay]}`);
-          console.log(`📅 OTC por horário: ${isOTCAllowedBySchedule ? 'PERMITIDO' : 'BLOQUEADO'} (Weekend: ${isWeekend}, Night: ${isNightHours}, Weekday: ${isWeekday})`);
-          
-          // Detectar se o ativo solicitado é OTC
+          // Find the asset
           const isOTCAsset = trade.asset.toUpperCase().includes('OTC');
-          
-          // Normalizar nome do ativo para busca
-          let cleanAsset = trade.asset.toUpperCase()
-            .replace(/\//g, '')  // Remove /
-            .replace(/-/g, '')   // Remove -
-            .replace(/ /g, '')   // Remove espaços
-            .replace('OTC', ''); // Remove OTC para pegar nome base
-          
-          // Gerar versão com slash se for par de moedas
+          let cleanAsset = trade.asset.toUpperCase().replace(/[\/\- ]/g, '').replace('OTC', '');
           const withSlash = cleanAsset.length === 6 && /^[A-Z]{6}$/.test(cleanAsset)
-            ? `${cleanAsset.slice(0, 3)}/${cleanAsset.slice(3)}`
-            : cleanAsset;
+            ? `${cleanAsset.slice(0, 3)}/${cleanAsset.slice(3)}` : cleanAsset;
           
-          console.log(`🔍 Buscando ativo: ${trade.asset} (base: ${cleanAsset}, slash: ${withSlash}, OTC: ${isOTCAsset})`);
-          console.log(`📈 Status mercados: Blitz/Binary=${hasBlitzBinaryOpen ? 'ABERTO' : 'FECHADO'} (${blitzBinaryCount}), OTC=${otcCount} ativos`);
-          
-          // REGRA PRINCIPAL: Se mercado Blitz/Binary está ABERTO E não estamos no horário OTC permitido, BLOQUEAR operações OTC
-          // OTC é permitido: finais de semana OU segunda-quinta entre 00:00-05:00 (Brasília)
-          if (hasBlitzBinaryOpen && isOTCAsset && !isOTCAllowedBySchedule) {
-            console.log(`🚫 BLOQUEANDO OTC - Mercado Blitz/Binary está ABERTO com ${blitzBinaryCount} ativos`);
-            console.log(`   ℹ️ OTC só é permitido em finais de semana ou Seg-Qui 00:00-05:00`);
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ 
-              success: false, 
-              error: `OTC bloqueado - Mercados Blitz/Binary estão abertos (${blitzBinaryCount} ativos disponíveis)` 
-            });
-            return;
-          }
-          
-          // Criar lista de variações para buscar - priorizar o tipo solicitado
-          let searchVariations: string[] = [];
-          
+          let searchVariations: string[];
           if (isOTCAsset) {
-            // Variações para OTC (só chega aqui se Blitz/Binary está fechado)
             searchVariations = [
-              trade.asset.toUpperCase(),
-              `${cleanAsset}-OTC`,
-              `${cleanAsset} OTC`,
-              `${cleanAsset}OTC`,
-              `${withSlash}-OTC`,
-              `${withSlash} OTC`,
-              `FRONT.${cleanAsset}-OTC`,
+              trade.asset.toUpperCase(), `${cleanAsset}-OTC`, `${cleanAsset} OTC`,
+              `${withSlash}-OTC`, `${withSlash} OTC`, `FRONT.${cleanAsset}-OTC`,
             ];
           } else {
-            // Variações para não-OTC (regular)
             searchVariations = [
-              trade.asset.toUpperCase(),
-              withSlash,
-              cleanAsset,
-              `${cleanAsset}-OP`,
-              `${withSlash}-OP`,
-              `FRONT.${cleanAsset}-OP`,
+              trade.asset.toUpperCase(), withSlash, cleanAsset,
+              `${cleanAsset}-OP`, `${withSlash}-OP`, `FRONT.${cleanAsset}-OP`,
             ];
           }
           
-          let assetId: number | undefined;
-          let matchedVariation = '';
-          let usedOTCFallback = false;
+          let foundAsset: AssetInfo | undefined;
+          let matchedName = '';
           
-          // Tentar encontrar com as variações principais
           for (const variation of searchVariations) {
             if (variation && activeAssets[variation]) {
-              assetId = activeAssets[variation];
-              matchedVariation = variation;
-              console.log(`✅ Ativo encontrado: "${variation}" -> ID: ${assetId}`);
+              foundAsset = activeAssets[variation];
+              matchedName = variation;
               break;
             }
           }
           
-          // Se não encontrou E não era OTC, verificar disponibilidade de mercados via API
-          if (!assetId && !isOTCAsset) {
-            // NOVA LÓGICA: Usar dados da API IQ Option + horário permitido
-            // OTC permitido se: Blitz/Binary fechado OU estamos no horário OTC permitido
-            const canUseOTCFallback = !hasBlitzBinaryOpen || isOTCAllowedBySchedule;
-            
-            if (!canUseOTCFallback) {
-              // Mercado Blitz/Binary está ABERTO E não estamos no horário OTC permitido
-              console.log(`🚫 Ativo ${cleanAsset} não encontrado`);
-              console.log(`   📊 Mercado Blitz/Binary está ABERTO (${blitzBinaryCount} ativos)`);
-              console.log(`   🚫 OTC BLOQUEADO - fora do horário permitido (Seg-Qui 00:00-05:00 ou finais de semana)`);
-              console.log(`📋 Ativos regulares abertos: ${Object.keys(activeAssets).filter(k => !k.includes('OTC') && k.length <= 10).slice(0, 25).join(', ')}`);
-              
-              clearTimeout(timeout);
-              ws.close();
-              resolve({ 
-                success: false, 
-                error: `Ativo ${trade.asset} não disponível (OTC bloqueado - fora do horário permitido)` 
-              });
-              return;
-            } else {
-              // Permitir OTC como fallback
-              console.log(`📅 OTC PERMITIDO: ${!hasBlitzBinaryOpen ? 'Blitz/Binary FECHADO' : 'Horário OTC permitido'}`);
-              console.log(`   ⏰ Finais de semana OU Seg-Qui 00:00-05:00 (Brasília)`);
-              
-              const otcFallbackVariations = [
-                `${cleanAsset}-OTC`,
-                `${cleanAsset} OTC`,
-                `${withSlash}-OTC`,
-                `${withSlash} OTC`,
-                `FRONT.${cleanAsset}-OTC`,
-              ];
-              
-              for (const variation of otcFallbackVariations) {
-                if (activeAssets[variation]) {
-                  assetId = activeAssets[variation];
-                  matchedVariation = variation;
-                  usedOTCFallback = true;
-                  console.log(`🔄 Usando versão OTC: "${variation}" -> ID: ${assetId}`);
-                  break;
-                }
+          // OTC fallback if not found and not OTC asset
+          if (!foundAsset && !isOTCAsset) {
+            const otcVariations = [
+              `${cleanAsset}-OTC`, `${cleanAsset} OTC`, `${withSlash}-OTC`, `${withSlash} OTC`,
+            ];
+            for (const v of otcVariations) {
+              if (activeAssets[v]) {
+                foundAsset = activeAssets[v];
+                matchedName = v;
+                console.log(`🔄 Using OTC fallback: ${v}`);
+                break;
               }
             }
           }
           
-          // Log das variações tentadas se não encontrou
-          if (!assetId) {
-            console.log(`❌ Variações tentadas: ${searchVariations.join(', ')}`);
-            console.error(`❌ Ativo ${trade.asset} não encontrado (OTC: ${isOTCAsset})`);
-            console.log('Ativos disponíveis:', Object.keys(activeAssets).slice(0, 50).join(', '));
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ success: false, error: `Ativo ${trade.asset} não disponível para trading` });
+          if (!foundAsset) {
+            console.error(`❌ Asset ${trade.asset} not found. Available: ${Object.keys(activeAssets).filter(k => k.length <= 12).slice(0, 30).join(', ')}`);
+            clearTimeout(timeout); ws.close();
+            resolve({ success: false, error: `Asset ${trade.asset} not available` });
             return;
           }
           
-          // Set balance first
+          console.log(`✅ Found: "${matchedName}" -> ID: ${foundAsset.id}, Type: ${foundAsset.optionType === 1 ? 'BINARY' : 'TURBO'}`);
+          
+          // Set balance
           ws.send(JSON.stringify({
             name: 'sendMessage',
-            msg: {
-              name: 'set-active-balance',
-              version: '1.0',
-              body: {
-                balance_id: balanceId,
-              },
-            },
+            msg: { name: 'set-active-balance', version: '1.0', body: { balance_id: balanceId } }
           }));
           
-          // Calculate expiration time (next minute boundary + expiration minutes)
+          // Calculate expiration
           const now = Math.floor(Date.now() / 1000);
           const nextMinute = Math.ceil(now / 60) * 60;
           const expirationTime = nextMinute + (trade.expiration * 60);
           
-          console.log(`Placing ${trade.direction.toUpperCase()} trade on ${trade.asset} (ID: ${assetId})`);
-          console.log(`Amount: ${trade.amount}, Expiration: ${trade.expiration} min, ExpTime: ${expirationTime}`);
+          console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} (ID:${foundAsset.id}) | $${trade.amount} | Type:${foundAsset.optionType} | Exp:${trade.expiration}min`);
           
           tradePlaced = true;
           
-          // Binary option buy message - using correct format
+          // Use correct option_type_id based on asset source
           ws.send(JSON.stringify({
             name: 'sendMessage',
             msg: {
@@ -535,150 +291,56 @@ async function placeTradeAndWaitResult(
               version: '1.0',
               body: {
                 user_balance_id: balanceId,
-                active_id: assetId,
-                option_type_id: 3, // turbo/binary option
+                active_id: foundAsset.id,
+                option_type_id: foundAsset.optionType, // FIXED: use correct type per asset
                 direction: trade.direction,
                 expired: expirationTime,
                 price: trade.amount,
-                profit_percent: 0, // Let server determine
+                profit_percent: 0,
               },
             },
           }));
         }
         
-        // Handle successful trade responses
-        if (data.name === 'binary-options.option-opened') {
-          console.log('Trade opened successfully!', JSON.stringify(data.msg));
+        // Trade opened successfully
+        if (data.name === 'binary-options.option-opened' || data.name === 'option') {
           const id = data.msg?.id || data.msg?.option_id;
           if (id) {
             tradeId = String(id);
-            console.log(`Trade ID: ${tradeId} - waiting for result...`);
-            // Don't close yet - wait for the result
-          }
-        }
-        
-        // Handle option message (alternative success response)
-        if (data.name === 'option' && data.msg?.id) {
-          console.log('Option received:', JSON.stringify(data.msg));
-          // Check if this is an error or success
-          if (data.msg.message && typeof data.msg.message === 'string' && data.msg.message.includes('not found')) {
-            console.error('Asset error:', data.msg.message);
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ success: false, error: data.msg.message });
-          } else if (data.msg.id && !tradeId) {
-            tradeId = String(data.msg.id);
-            console.log(`Trade confirmed with ID: ${tradeId} - waiting for result...`);
-          }
-        }
-        
-        // Handle option closed event - THIS IS THE RESULT!
-        if (data.name === 'option-closed' || data.name === 'binary-options.option-closed') {
-          console.log('🎯 Option closed event received:', JSON.stringify(data.msg));
-          const msg = data.msg;
-          
-          // Check if this is our trade
-          const closedId = String(msg.id || msg.option_id || msg.position_id);
-          if (tradeId && closedId === tradeId) {
-            resultReceived = true;
-            
-            let result: 'win' | 'loss' | 'tie' = 'tie';
-            const profit = msg.profit || msg.win_amount || 0;
-            const exitPrice = msg.close_quote || msg.close_rate || msg.close_price || 0;
-            
-            if (msg.win === 'win' || profit > 0) {
-              result = 'win';
-            } else if (msg.win === 'loose' || msg.win === 'loss' || profit < 0) {
-              result = 'loss';
-            } else if (msg.win === 'equal' || profit === 0) {
-              result = 'tie';
-            }
-            
-            console.log(`✅ Trade result: ${result}, profit: ${profit}, exit price: ${exitPrice}`);
-            
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ 
-              success: true, 
-              tradeId, 
-              result, 
-              profit: Number(profit),
-              exitPrice: Number(exitPrice)
-            });
-          }
-        }
-        
-        // Handle portfolio order changed (also contains results)
-        if (data.name === 'portfolio.order-changed' && data.msg) {
-          const msg = data.msg;
-          const orderId = String(msg.id || msg.option_id || msg.external_id);
-          
-          if (tradeId && orderId === tradeId && msg.status === 'closed') {
-            resultReceived = true;
-            
-            const profit = msg.close_profit || msg.pnl || msg.profit || 0;
-            const exitPrice = msg.close_quote || msg.close_rate || 0;
-            
-            let result: 'win' | 'loss' | 'tie' = 'tie';
-            if (msg.win === 'win' || profit > 0) {
-              result = 'win';
-            } else if (msg.win === 'loose' || msg.win === 'loss' || profit < 0) {
-              result = 'loss';
-            }
-            
-            console.log(`✅ Trade result from portfolio: ${result}, profit: ${profit}`);
-            
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ 
-              success: true, 
-              tradeId, 
-              result, 
-              profit: Number(profit),
-              exitPrice: Number(exitPrice)
-            });
+            console.log(`✅ Trade placed! ID: ${tradeId}`);
+            // Don't wait for result - return immediately
+            clearTimeout(timeout); ws.close();
+            resolve({ success: true, tradeId });
+            return;
           }
         }
         
         // Handle error responses
-        if (data.name === 'binary-options.open-option') {
-          if (data.msg?.result === 'error' || data.msg?.message) {
-            console.error('Trade error response:', JSON.stringify(data.msg));
-            clearTimeout(timeout);
-            ws.close();
-            resolve({ 
-              success: false, 
-              error: data.msg?.message || data.msg?.reason || 'Trade failed',
-            });
-          }
+        if (data.name === 'binary-options.open-option' && (data.msg?.result === 'error' || data.msg?.message)) {
+          console.error('❌ Trade error:', JSON.stringify(data.msg));
+          clearTimeout(timeout); ws.close();
+          resolve({ success: false, error: data.msg?.message || data.msg?.reason || 'Trade rejected' });
+          return;
         }
         
-        // Handle general errors
         if (data.name === 'error') {
-          console.error('Error received:', JSON.stringify(data));
-          clearTimeout(timeout);
-          ws.close();
-          resolve({ 
-            success: false, 
-            error: data.msg?.message || data.msg || 'Unknown error',
-          });
+          console.error('❌ Error:', JSON.stringify(data.msg));
+          clearTimeout(timeout); ws.close();
+          resolve({ success: false, error: data.msg?.message || 'Unknown error' });
+          return;
         }
         
       } catch (e) {
-        console.error('Error parsing message:', e);
+        console.error('Parse error:', e);
       }
     };
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      console.error('❌ WebSocket error:', error);
       clearTimeout(timeout);
       resolve({ success: false, error: 'WebSocket connection error' });
     };
-
-    ws.onclose = () => {
-      console.log('WebSocket closed');
-      clearTimeout(timeout);
-    };
+    ws.onclose = () => { clearTimeout(timeout); };
   });
 }
 
@@ -692,87 +354,76 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Parse trade request
     const tradeRequest: TradeRequest = await req.json();
+    console.log('📥 Trade request:', JSON.stringify(tradeRequest));
     
-    console.log('Received trade request:', JSON.stringify(tradeRequest));
-    
-    // Validate request
     if (!tradeRequest.asset || !tradeRequest.direction || !tradeRequest.amount) {
       return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: 'Missing required fields: asset, direction, amount' 
-        }),
+        JSON.stringify({ success: false, error: 'Missing required fields' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get IQ Option credentials from database
-    const { data: configData, error: configError } = await supabase
+    // Get IQ Option credentials
+    const { data: configData } = await supabase
       .from('iqoption_config')
       .select('email, password, account_type')
       .eq('is_active', true)
       .limit(1)
       .maybeSingle();
 
-    if (configError || !configData) {
-      console.error('No IQ Option credentials found');
+    if (!configData) {
       return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: 'No IQ Option credentials configured' 
-        }),
+        JSON.stringify({ success: false, error: 'No IQ Option credentials configured' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const credentials: IQOptionCredentials = configData;
-    
-    // Login to IQ Option
-    const { ssid, error: loginError } = await loginToIQOption(credentials.email, credentials.password);
+    // Login
+    const { ssid, error: loginError } = await loginToIQOption(configData.email, configData.password);
     
     if (!ssid) {
       return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: loginError || 'Failed to login to IQ Option' 
-        }),
+        JSON.stringify({ success: false, error: loginError || 'Failed to login' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Place the trade and wait for result
-    const result = await placeTradeAndWaitResult(ssid, credentials.account_type, tradeRequest);
-    
-    console.log('Trade result:', result);
+    // Place trade (fire-and-forget, don't wait for result)
+    const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
+    console.log('📊 Trade result:', JSON.stringify(result));
 
-    // Log the trade with actual result
+    // Save to operation_results
     if (result.success && result.tradeId) {
-      // Determine timeframe from expiration or use provided value
-      const timeframe = tradeRequest.timeframe || (tradeRequest.expiration <= 1 ? 'M1' : tradeRequest.expiration <= 5 ? 'M5' : 'M15');
+      const timeframe = tradeRequest.timeframe || (tradeRequest.expiration <= 1 ? 'M1' : 'M5');
       
-      const insertResult = await supabase
-        .from('operation_results')
-        .insert({
-          signal_id: tradeRequest.signalId || `manual_${Date.now()}`,
-          asset: tradeRequest.asset,
-          direction: tradeRequest.direction.toUpperCase(),
-          entry_price: tradeRequest.amount,
-          exit_price: result.exitPrice || null,
-          result: result.result || 'pending',
-          profit: result.profit || 0,
-          iq_option_id: result.tradeId,
-          is_auto_trade: tradeRequest.isAutoTrade || false,
-          is_ai_analyzed: tradeRequest.isAIAnalyzed || false,
-          timeframe: timeframe,
-        });
+      await supabase.from('operation_results').insert({
+        signal_id: tradeRequest.signalId || `auto_${Date.now()}`,
+        asset: tradeRequest.asset,
+        direction: tradeRequest.direction.toUpperCase(),
+        entry_price: tradeRequest.amount,
+        result: 'pending',
+        profit: 0,
+        iq_option_id: result.tradeId,
+        is_auto_trade: tradeRequest.isAutoTrade || false,
+        is_ai_analyzed: tradeRequest.isAIAnalyzed || false,
+        timeframe,
+      });
       
-      if (insertResult.error) {
-        console.error('Error saving result:', insertResult.error);
-      } else {
-        console.log(`💾 Saved trade result: ${result.result} with profit ${result.profit}`);
-      }
+      console.log(`💾 Saved pending trade: ${result.tradeId}`);
+    }
+
+    // Update trade_queue if this came from queue
+    if (tradeRequest.signalId) {
+      await supabase.from('trade_queue')
+        .update({ 
+          status: result.success ? 'executed' : 'failed',
+          iq_option_id: result.tradeId || null,
+          error: result.error || null,
+          executed_at: new Date().toISOString(),
+        })
+        .eq('signal_id', tradeRequest.signalId)
+        .eq('status', 'pending');
     }
 
     return new Response(
@@ -782,7 +433,7 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error:', errorMessage);
+    console.error('❌ Error:', errorMessage);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

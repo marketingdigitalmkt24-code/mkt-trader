@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
-import { QuickStats } from '@/components/QuickStats';
 import { TimeframeFilter } from '@/components/TimeframeFilter';
-import { AssetRanking } from '@/components/AssetRanking';
 import { BankManagementCard } from '@/components/BankManagementCard';
 import { MarketStatusCard } from '@/components/MarketStatusCard';
-import { AILearningCard } from '@/components/AILearningCard';
 import { SignalHistorySection } from '@/components/SignalHistorySection';
-import { AIStatusIndicator } from '@/components/AIStatusIndicator';
-import { mockAssetPerformance } from '@/data/mockData';
+import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
+import { LiveOperationsCard } from '@/components/LiveOperationsCard';
+import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
 import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
 import { useSignalResults } from '@/hooks/useSignalResults';
@@ -38,17 +36,7 @@ const Index = () => {
 
   const {
     config: autoTradingConfig,
-    updateConfig: updateAutoTradingConfig,
-    checkAndAutoTrade,
-    isPlacingTrade,
-    isAnalyzingAI,
-    activeTradesCount,
-    lastTradeResult,
-    resetDailyTrades,
   } = useAutoTrading();
-
-  // Auto trading: DESABILITADO no cliente - servidor já executa trades via auto-generate-signals
-  // O cliente apenas exibe sinais recebidos via Realtime, sem executar trades duplicados
 
   // Filter signals by timeframe and market type
   const filteredSignals = signals.filter((s) => {
@@ -77,22 +65,12 @@ const Index = () => {
           </div>
         )}
 
-        {/* AI Status Indicator */}
-        <div className="mb-4">
-          <AIStatusIndicator
-            isAutoTradingEnabled={autoTradingConfig.enabled}
-            isAIEnabled={autoTradingConfig.useAIAnalysis}
-            isAnalyzing={isAnalyzingAI}
-            isPlacingTrade={isPlacingTrade}
-            activeTradesCount={activeTradesCount}
-            todayTrades={autoTradingConfig.todayTrades}
-            maxDailyTrades={autoTradingConfig.maxDailyTrades}
-            dailyLimitEnabled={autoTradingConfig.dailyLimitEnabled}
-          />
+        {/* Broker Connections + AI Status - Top Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <BrokerConnectionsCard />
+          <AIAnalysisStatusCard />
         </div>
 
-        <QuickStats signals={filteredSignals} />
-        
         {/* Filters Row */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
           <TimeframeFilter
@@ -124,19 +102,21 @@ const Index = () => {
         </div>
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
-          {/* Main Content - Signals */}
+          {/* Main Content */}
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+            {/* Live Operations */}
+            <LiveOperationsCard />
+            
+            {/* Signal History */}
             <SignalHistorySection 
               history={history}
               onClearHistory={clearHistory}
             />
           </div>
 
-          {/* Sidebar - Stats & Management */}
+          {/* Sidebar */}
           <div className="space-y-4 sm:space-y-6">
-            <AILearningCard />
             <BankManagementCard />
-            <AssetRanking assets={mockAssetPerformance} />
             <MarketStatusCard 
               otcOpen={marketStatus.otcOpen} 
               forexOpen={marketStatus.forexOpen} 

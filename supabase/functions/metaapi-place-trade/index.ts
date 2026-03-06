@@ -84,19 +84,26 @@ serve(async (req) => {
     const baseUrl = `${tradeApiUrl}/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
     const authHeaders = { 'auth-token': METAAPI_TOKEN };
 
-    // Map asset symbol to MT5 format
+    // Map asset symbol to MT5 format - ONLY USD PAIRS
     let mt5Symbol = asset.replace('/', '').replace('-OTC', 'otc').replace(' ', '');
-    const symbolMap: Record<string, string> = {
-      'BTCUSD': 'BTCUSD', 'ETHUSD': 'ETHUSD', 'EURUSD': 'EURUSD',
-      'GBPUSD': 'GBPUSD', 'USDJPY': 'USDJPY', 'GBPJPY': 'GBPJPY',
-      'EURJPY': 'EURJPY', 'AUDUSD': 'AUDUSD', 'XAUUSD': 'XAUUSD',
-      'NZDCAD': 'NZDCAD', 'EURNZD': 'EURNZD', 'GBPAUD': 'GBPAUD',
-      'GBPCHF': 'GBPCHF', 'AUDCAD': 'AUDCAD', 'AUDJPY': 'AUDJPY',
-      'CADJPY': 'CADJPY', 'NZDUSD': 'NZDUSD', 'USDCHF': 'USDCHF',
-      'EURGBP': 'EURGBP', 'GBPNZD': 'GBPNZD',
+    const usdSymbolMap: Record<string, string> = {
+      'EURUSD': 'EURUSD', 'GBPUSD': 'GBPUSD', 'AUDUSD': 'AUDUSD',
+      'NZDUSD': 'NZDUSD', 'USDJPY': 'USDJPY', 'USDCHF': 'USDCHF',
+      'USDCAD': 'USDCAD', 'XAUUSD': 'XAUUSD', 'BTCUSD': 'BTCUSD',
+      'ETHUSD': 'ETHUSD',
     };
-    if (symbolMap[mt5Symbol]) {
-      mt5Symbol = symbolMap[mt5Symbol];
+    
+    // Reject non-USD pairs
+    if (!mt5Symbol.toUpperCase().includes('USD')) {
+      console.log(`⛔ ${mt5Symbol} is not a USD pair. MT5 only trades USD pairs.`);
+      return new Response(
+        JSON.stringify({ success: false, error: `${asset} não é par USD. MT5 opera apenas pares com USD.`, skipped: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (usdSymbolMap[mt5Symbol.toUpperCase()]) {
+      mt5Symbol = usdSymbolMap[mt5Symbol.toUpperCase()];
     }
 
     // ===== Step 2: Check for existing open positions on this symbol =====

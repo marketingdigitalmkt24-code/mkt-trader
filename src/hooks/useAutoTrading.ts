@@ -222,7 +222,7 @@ export function useAutoTrading() {
 
       const { error } = await supabase
         .from('user_trading_settings')
-        .upsert(dbData, { onConflict: 'user_id' });
+        .upsert(dbData as any, { onConflict: 'user_id' });
 
       if (error) {
         console.error('Error saving settings to DB:', error);

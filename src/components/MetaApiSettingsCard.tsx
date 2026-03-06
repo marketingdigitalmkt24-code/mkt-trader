@@ -237,6 +237,29 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </div>
       )}
 
+      {/* Token MetaAPI Global */}
+      <div className="border-t border-border/50 pt-4 space-y-2">
+        <Label htmlFor="metaapi-token">Token MetaAPI (acesso global a todas as contas)</Label>
+        <div className="relative">
+          <Input
+            id="metaapi-token"
+            type={showPassword ? 'text' : 'password'}
+            value={config.token}
+            onChange={(e) => setConfig(prev => ({ ...prev, token: e.target.value }))}
+            placeholder="eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9..."
+            className="pr-10 font-mono text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">Token único que dá acesso a todas as contas MT5 cadastradas no MetaAPI</p>
+      </div>
+
       {/* MT5 Account Data */}
       <div className="border-t border-border/50 pt-4">
         <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">

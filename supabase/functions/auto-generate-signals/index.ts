@@ -658,22 +658,22 @@ serve(async (req) => {
           .limit(1)
           .maybeSingle();
 
-        if (iqConfig) {
+      if (iqConfig) {
           const { data: tradeSettings } = await supabase
             .from('user_trading_settings')
-            .select('trade_amount')
+            .select('trade_amount, mt5_trade_amount')
             .limit(1)
             .maybeSingle();
           
-          const tradeAmount = tradeSettings?.trade_amount || 1;
+          const iqTradeAmount = tradeSettings?.trade_amount || 1;
 
-          console.log(`📡 IQ Option: ${bestSignal.asset} ${bestSignal.type} $${tradeAmount}`);
+          console.log(`📡 IQ Option: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount}`);
           
           const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
             body: {
               asset: bestSignal.asset,
               direction: bestSignal.type.toLowerCase(),
-              amount: tradeAmount,
+              amount: iqTradeAmount,
               expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
               signalId: bestSignal.id,
               userId: iqConfig.user_id,
@@ -703,19 +703,19 @@ serve(async (req) => {
         if (metaConfig && metaConfig.account_id) {
           const { data: tradeSettings } = await supabase
             .from('user_trading_settings')
-            .select('trade_amount')
+            .select('mt5_trade_amount')
             .limit(1)
             .maybeSingle();
           
-          const tradeAmount = tradeSettings?.trade_amount || 1;
+          const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
 
-          console.log(`📡 MT5: ${bestSignal.asset} ${bestSignal.type} | Volume: ${metaConfig.volume || 0.01}`);
+          console.log(`📡 MT5: ${bestSignal.asset} ${bestSignal.type} $${mt5TradeAmount} | Volume: ${metaConfig.volume || 0.01}`);
           
           const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
             body: {
               asset: bestSignal.asset,
               direction: bestSignal.type.toLowerCase(),
-              amount: tradeAmount,
+              amount: mt5TradeAmount,
               expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
               signalId: bestSignal.id,
               confluenceScore: bestSignal.indicators.confluenceScore,

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 interface AutoTradingConfig {
   enabled: boolean;
   amount: number;
+  mt5Amount: number;
   minConfluence: number;
   maxDailyTrades: number;
   dailyLimitEnabled: boolean;
@@ -155,14 +156,14 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
           />
         </div>
 
-        {/* Amount per trade */}
+        {/* Amount per trade - IQ Option */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4" />
-            Valor por entrada
+            <DollarSign className="w-4 h-4 text-orange-500" />
+            Valor entrada IQ Option
           </Label>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">R$</span>
+            <span className="text-sm text-muted-foreground">$</span>
             <Input
               type="number"
               min={1}
@@ -171,6 +172,29 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
               onChange={(e) => handleLocalChange({ amount: Number(e.target.value) })}
               className="w-24"
             />
+          </div>
+        </div>
+
+        {/* Amount per trade - MT5 */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-blue-500" />
+            Valor entrada MT5
+          </Label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">$</span>
+            <Input
+              type="number"
+              min={0.01}
+              max={1000}
+              step={0.01}
+              value={localConfig.mt5Amount}
+              onChange={(e) => handleLocalChange({ mt5Amount: Number(e.target.value) })}
+              className="w-24"
+            />
+            <span className="text-xs text-muted-foreground">
+              TP: ${((localConfig.mt5Amount || 1) * 0.1).toFixed(2)} (10%)
+            </span>
           </div>
         </div>
 

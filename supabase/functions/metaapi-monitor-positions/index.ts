@@ -64,14 +64,14 @@ serve(async (req) => {
       );
     }
 
-    // Get trade_amount from user settings (the actual investment per trade)
+    // Get mt5_trade_amount from user settings
     const { data: tradingSettings } = await supabase
       .from('user_trading_settings')
-      .select('trade_amount')
+      .select('mt5_trade_amount')
       .limit(1)
       .maybeSingle();
 
-    const tradeAmount = tradingSettings?.trade_amount || 1;
+    const tradeAmount = tradingSettings?.mt5_trade_amount || 1;
     // TP target = percentage of trade_amount (e.g., 10% of $1 = $0.10)
     const tpCurrency = tradeAmount * (tpPercent / 100);
 

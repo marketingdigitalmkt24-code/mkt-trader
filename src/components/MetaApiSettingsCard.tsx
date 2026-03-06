@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 interface MetaApiConfig {
   id?: string;
   account_id: string;
-  token: string;
   account_name: string;
   is_active: boolean;
   connection_status: string;
@@ -25,7 +24,6 @@ interface MetaApiConfig {
 export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const [config, setConfig] = useState<MetaApiConfig>({
     account_id: '',
-    token: '',
     account_name: '',
     is_active: false,
     connection_status: 'disconnected',
@@ -39,7 +37,6 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
   const [isSaving, setIsSaving] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
     loadConfig();

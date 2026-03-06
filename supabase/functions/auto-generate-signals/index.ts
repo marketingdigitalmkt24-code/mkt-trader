@@ -406,7 +406,8 @@ function tryGenerateSignal(asset: Asset) {
   if (!hasGoodMarketConditions()) return null;
 
   const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
-  const timeframe = Math.random() > 0.7 ? 'M5' : 'M1';
+  // IQ Option Scalping: Force M1 for fast entries
+  const timeframe = 'M1';
   const price = generateRandomPrice(asset.symbol);
   const forceExtreme = Math.random() < FORCE_EXTREME_PROBABILITY;
   const indicators = generateIndicators(price, type, forceExtreme);
@@ -422,7 +423,7 @@ function tryGenerateSignal(asset: Asset) {
     asset: asset.symbol,
     assetIcon: asset.icon,
     timeframe,
-    expiration: timeframe === 'M1' ? '2 min' : '5 min',
+    expiration: '1 min',
     strength: 4,
     status: 'high_probability',
     confirmations,

@@ -173,6 +173,60 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_queue: {
+        Row: {
+          amount: number
+          asset: string
+          confluence_score: number
+          created_at: string
+          direction: string
+          error: string | null
+          executed_at: string | null
+          expiration: number
+          id: string
+          iq_option_id: string | null
+          profit: number | null
+          result: string | null
+          signal_id: string
+          status: string
+          timeframe: string
+        }
+        Insert: {
+          amount?: number
+          asset: string
+          confluence_score?: number
+          created_at?: string
+          direction: string
+          error?: string | null
+          executed_at?: string | null
+          expiration?: number
+          id?: string
+          iq_option_id?: string | null
+          profit?: number | null
+          result?: string | null
+          signal_id: string
+          status?: string
+          timeframe?: string
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          confluence_score?: number
+          created_at?: string
+          direction?: string
+          error?: string | null
+          executed_at?: string | null
+          expiration?: number
+          id?: string
+          iq_option_id?: string | null
+          profit?: number | null
+          result?: string | null
+          signal_id?: string
+          status?: string
+          timeframe?: string
+        }
+        Relationships: []
+      }
       trading_signals: {
         Row: {
           asset: string

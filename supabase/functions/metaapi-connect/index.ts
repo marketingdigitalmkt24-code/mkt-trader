@@ -249,6 +249,13 @@ serve(async (req) => {
           accountName = statusData.name || accountName;
           console.log(`📊 Attempt ${attempt}/${maxAttempts}: State=${statusData.state} | Connection=${rawStatus}`);
           
+          // Check for accessToken field
+          if (statusData.accessToken) {
+            console.log(`🔑 Account access token found! Length: ${statusData.accessToken.length}`);
+          } else {
+            console.log(`🔑 No accessToken field. Keys: ${JSON.stringify(Object.keys(statusData).filter(k => k.toLowerCase().includes('token') || k.toLowerCase().includes('access')))}`);
+          }
+          
           if (connectionStatus === 'connected') {
             console.log('✅ Conexão estabelecida!');
             break;

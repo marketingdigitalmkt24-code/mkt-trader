@@ -585,8 +585,8 @@ serve(async (req) => {
       );
     }
 
-    // ============= ENVIAR TODOS OS CANDIDATOS PARA IA GROQ =============
-    console.log(`🤖 Enviando ${candidates.length} candidatos para análise IA Groq...`);
+    // ============= ENVIAR TODOS OS CANDIDATOS PARA IA =============
+    console.log(`🤖 Enviando ${candidates.length} candidatos para análise IA...`);
 
     // Preparar dados para o ai-signal-analyzer
     const signalDataForAI = candidates.map(s => ({

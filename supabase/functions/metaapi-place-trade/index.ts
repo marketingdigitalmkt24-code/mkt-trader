@@ -53,7 +53,7 @@ serve(async (req) => {
       throw new Error('MetaAPI não configurado ou desativado');
     }
 
-    const METAAPI_TOKEN = metaConfig.token || Deno.env.get('METAAPI_TOKEN');
+    const METAAPI_TOKEN = metaConfig.token;
     const METAAPI_ACCOUNT_ID = metaConfig.account_id;
 
     if (!METAAPI_TOKEN || !METAAPI_ACCOUNT_ID) {

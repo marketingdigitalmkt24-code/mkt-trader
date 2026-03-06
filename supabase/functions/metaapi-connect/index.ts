@@ -28,20 +28,8 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-
-    // Try DB token first, then env secret
-    const { data: metaConfig } = await supabase
-      .from('metaapi_config')
-      .select('token')
-      .limit(1)
-      .maybeSingle();
-
-    const METAAPI_TOKEN = metaConfig?.token || Deno.env.get('METAAPI_TOKEN');
-    if (!METAAPI_TOKEN) throw new Error('METAAPI_TOKEN não configurado. Informe o token nas configurações.');
+    const METAAPI_TOKEN = Deno.env.get('METAAPI_TOKEN');
+    if (!METAAPI_TOKEN) throw new Error('METAAPI_TOKEN não configurado');
 
     const { mt5Login, mt5Password, mt5Server, configId } = await req.json();
 

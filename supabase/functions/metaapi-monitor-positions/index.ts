@@ -54,7 +54,7 @@ serve(async (req) => {
       );
     }
 
-    const METAAPI_TOKEN = metaConfig.token;
+    const METAAPI_TOKEN = Deno.env.get('METAAPI_TOKEN') || metaConfig.token;
     const METAAPI_ACCOUNT_ID = metaConfig.account_id;
     const tpPercent = metaConfig.take_profit_pips || 10;
 

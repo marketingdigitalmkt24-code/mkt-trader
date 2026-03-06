@@ -5,13 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Check, X, Wifi, WifiOff, Eye, EyeOff, MonitorSmartphone, Target } from 'lucide-react';
+import { Loader2, Check, X, Wifi, WifiOff, Eye, EyeOff, MonitorSmartphone } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface MetaApiConfig {
   id?: string;
   account_id: string;
-  token: string;
   account_name: string;
   is_active: boolean;
   connection_status: string;
@@ -25,7 +24,6 @@ interface MetaApiConfig {
 export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const [config, setConfig] = useState<MetaApiConfig>({
     account_id: '',
-    token: '',
     account_name: '',
     is_active: false,
     connection_status: 'disconnected',
@@ -39,7 +37,6 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
   const [isSaving, setIsSaving] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -57,7 +54,6 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         setConfig({
           id: data.id,
           account_id: data.account_id || '',
-          token: data.token || '',
           account_name: data.account_name || '',
           is_active: data.is_active,
           connection_status: data.connection_status || 'disconnected',
@@ -76,15 +72,9 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
   };
 
   const handleSave = async () => {
-    if (!config.token) {
-      toast.error('Preencha o Token MetaAPI');
-      return;
-    }
-
     setIsSaving(true);
     try {
       const payload = {
-        token: config.token,
         account_id: config.account_id,
         account_name: config.account_name,
         is_active: config.is_active,
@@ -105,7 +95,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       } else {
         const { data, error } = await supabase
           .from('metaapi_config')
-          .insert(payload)
+          .insert({ ...payload, token: 'managed-by-env' })
           .select()
           .single();
         if (error) throw error;
@@ -121,10 +111,6 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
   };
 
   const handleConnect = async () => {
-    if (!config.token) {
-      toast.error('Preencha o Token MetaAPI');
-      return;
-    }
     if (!config.mt5_login || !config.mt5_password) {
       toast.error('Preencha Login e Senha do MT5');
       return;
@@ -247,28 +233,6 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </div>
       )}
 
-      {/* Token MetaAPI */}
-      <div className="space-y-2">
-        <Label htmlFor="mt5-token">Token MetaAPI</Label>
-        <div className="relative">
-          <Input
-            id="mt5-token"
-            type={showToken ? 'text' : 'password'}
-            value={config.token}
-            onChange={(e) => setConfig(prev => ({ ...prev, token: e.target.value }))}
-            placeholder="Seu token de acesso MetaAPI"
-            className="pr-10"
-          />
-          <button
-            type="button"
-            onClick={() => setShowToken(!showToken)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-
       {/* MT5 Account Data */}
       <div className="border-t border-border/50 pt-4">
         <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -329,7 +293,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </Button>
         <Button 
           onClick={handleConnect} 
-          disabled={isConnecting || !config.mt5_login || !config.mt5_password || !config.token} 
+          disabled={isConnecting || !config.mt5_login || !config.mt5_password} 
           className="flex-1"
         >
           {isConnecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wifi className="w-4 h-4 mr-2" />}

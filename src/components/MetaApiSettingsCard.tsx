@@ -289,7 +289,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="mt5-server">Servidor (opcional)</Label>
+          <Label htmlFor="mt5-server">Servidor (auto-detecta se já existir)</Label>
           <Input
             id="mt5-server"
             value={config.mt5_server}

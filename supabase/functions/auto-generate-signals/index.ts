@@ -626,7 +626,7 @@ serve(async (req) => {
       console.log('⚠️ Erro ao buscar histórico para IA:', e);
     }
 
-    // Chamar ai-signal-analyzer (Groq AI)
+    // Chamar ai-signal-analyzer (IA)
     let aiApprovedSignals: any[] = [];
     try {
       const { data: aiData, error: aiError } = await supabase.functions.invoke('ai-signal-analyzer', {
@@ -640,7 +640,7 @@ serve(async (req) => {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
         const executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
-        console.log(`🧠 IA Groq: ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
+        console.log(`🧠 IA: ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
         
         // Mapear sinais aprovados pela IA de volta aos candidatos
         for (const approved of executeSignals) {
@@ -658,7 +658,7 @@ serve(async (req) => {
         }
       }
     } catch (e) {
-      console.error('❌ Falha ao chamar IA Groq:', e);
+      console.error('❌ Falha ao chamar IA:', e);
     }
 
     // FALLBACK: Se a IA falhar, usar o melhor candidato por confluência

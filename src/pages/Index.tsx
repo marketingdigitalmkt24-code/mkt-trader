@@ -112,10 +112,6 @@ const Index = () => {
           {/* Sidebar */}
           <div className="space-y-4 sm:space-y-6">
             <BankManagementCard />
-            <MarketStatusCard 
-              otcOpen={marketStatus.otcOpen} 
-              forexOpen={marketStatus.forexOpen} 
-            />
           </div>
         </div>
       </main>

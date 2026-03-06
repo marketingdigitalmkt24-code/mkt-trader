@@ -483,54 +483,139 @@ serve(async (req) => {
       );
     }
 
-    // Pick best signal, factoring in asset history
-    candidates.sort((a, b) => {
-      // First: prefer assets with good history
-      const histA = assetHistory.get(a.asset);
-      const histB = assetHistory.get(b.asset);
-      const histScoreA = histA ? (histA.winRate >= 55 ? 20 : histA.winRate >= 45 ? 0 : -20) : 0;
-      const histScoreB = histB ? (histB.winRate >= 55 ? 20 : histB.winRate >= 45 ? 0 : -20) : 0;
+    // ============= ENVIAR TODOS OS CANDIDATOS PARA IA GROQ =============
+    console.log(`🤖 Enviando ${candidates.length} candidatos para análise IA Groq...`);
+
+    // Preparar dados para o ai-signal-analyzer
+    const signalDataForAI = candidates.map(s => ({
+      asset: s.asset,
+      type: s.type,
+      timeframe: s.timeframe,
+      price: s.price,
+      indicators: s.indicators,
+      confirmations: s.confirmations,
+    }));
+
+    // Buscar histórico para contexto da IA
+    let historicalResults: any[] = [];
+    try {
+      const { data: results } = await supabase
+        .from('operation_results')
+        .select('asset, result')
+        .order('created_at', { ascending: false })
+        .limit(100);
       
-      const totalA = a.indicators.confluenceScore + histScoreA;
-      const totalB = b.indicators.confluenceScore + histScoreB;
-      
-      if (totalB !== totalA) return totalB - totalA;
-      return b.indicators.confluenceCount - a.indicators.confluenceCount;
-    });
-
-    const bestSignal = candidates[0];
-    const hist = assetHistory.get(bestSignal.asset);
-    const histInfo = hist ? ` | History: WR ${hist.winRate}% (${hist.wins}W/${hist.losses}L)` : ' | No history';
-    console.log(`🏆 Best signal: ${bestSignal.asset} (${bestSignal.type}) - Score: ${bestSignal.indicators.confluenceScore}%${histInfo}`);
-
-    // Save to database
-    const { error: insertError } = await supabase.from('trading_signals').insert({
-      signal_id: bestSignal.id,
-      asset: bestSignal.asset,
-      asset_icon: bestSignal.assetIcon,
-      type: bestSignal.type,
-      timeframe: bestSignal.timeframe,
-      expiration: bestSignal.expiration,
-      strength: bestSignal.strength,
-      status: bestSignal.status,
-      price: bestSignal.price,
-      is_hot: bestSignal.isHot,
-      market_type: bestSignal.marketType,
-      confluence_score: bestSignal.indicators.confluenceScore,
-      confluence_count: bestSignal.indicators.confluenceCount,
-      confirmations: bestSignal.confirmations,
-      indicators: bestSignal.indicators,
-    });
-
-    if (insertError) {
-      console.error('❌ Error saving signal:', insertError);
-      return new Response(
-        JSON.stringify({ success: false, error: insertError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (results && results.length > 0) {
+        const assetStats = new Map<string, { wins: number; losses: number }>();
+        results.forEach((r: any) => {
+          const stats = assetStats.get(r.asset) || { wins: 0, losses: 0 };
+          if (r.result === 'win') stats.wins++;
+          else if (r.result === 'loss') stats.losses++;
+          assetStats.set(r.asset, stats);
+        });
+        historicalResults = Array.from(assetStats.entries()).map(([asset, stats]) => ({
+          asset,
+          wins: stats.wins,
+          losses: stats.losses,
+          winRate: stats.wins + stats.losses > 0 ? (stats.wins / (stats.wins + stats.losses)) * 100 : 50,
+        }));
+      }
+    } catch (e) {
+      console.log('⚠️ Erro ao buscar histórico para IA:', e);
     }
 
-    console.log(`💾 Signal saved: ${bestSignal.id}`);
+    // Chamar ai-signal-analyzer (Groq AI)
+    let aiApprovedSignals: any[] = [];
+    try {
+      const { data: aiData, error: aiError } = await supabase.functions.invoke('ai-signal-analyzer', {
+        body: {
+          signals: signalDataForAI,
+          historicalResults,
+        },
+      });
+
+      if (aiError) {
+        console.error('❌ Erro na análise IA:', aiError);
+      } else if (aiData?.success && aiData?.analyzedSignals) {
+        const executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
+        console.log(`🧠 IA Groq: ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
+        
+        // Mapear sinais aprovados pela IA de volta aos candidatos
+        for (const approved of executeSignals) {
+          const candidate = candidates.find(c => 
+            c.asset.toUpperCase() === approved.asset.toUpperCase()
+          );
+          if (candidate) {
+            aiApprovedSignals.push({
+              ...candidate,
+              aiConfidence: approved.confidence,
+              aiReason: approved.reason,
+              aiRiskLevel: approved.riskLevel,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('❌ Falha ao chamar IA Groq:', e);
+    }
+
+    // FALLBACK: Se a IA falhar, usar o melhor candidato por confluência
+    if (aiApprovedSignals.length === 0) {
+      console.log('⚠️ IA não aprovou sinais, usando melhor candidato por confluência');
+      candidates.sort((a, b) => {
+        const histA = assetHistory.get(a.asset);
+        const histB = assetHistory.get(b.asset);
+        const histScoreA = histA ? (histA.winRate >= 55 ? 20 : histA.winRate >= 45 ? 0 : -20) : 0;
+        const histScoreB = histB ? (histB.winRate >= 55 ? 20 : histB.winRate >= 45 ? 0 : -20) : 0;
+        return (b.indicators.confluenceScore + histScoreB) - (a.indicators.confluenceScore + histScoreA);
+      });
+      aiApprovedSignals = [candidates[0]];
+    }
+
+    // Ordenar por confiança IA
+    aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
+
+    // Limitar a 3 sinais simultâneos
+    const signalsToExecute = aiApprovedSignals.slice(0, 3);
+    console.log(`🎯 ${signalsToExecute.length} sinal(is) para execução após filtro IA`);
+
+    // ============= SALVAR E EXECUTAR CADA SINAL APROVADO =============
+    let totalIQ = 0;
+    let totalMT5 = 0;
+    let totalWhatsApp = 0;
+    const executedSignals: any[] = [];
+
+    for (const bestSignal of signalsToExecute) {
+      const hist = assetHistory.get(bestSignal.asset);
+      const histInfo = hist ? ` | History: WR ${hist.winRate}% (${hist.wins}W/${hist.losses}L)` : ' | No history';
+      const aiInfo = bestSignal.aiConfidence ? ` | IA: ${bestSignal.aiConfidence}% (${bestSignal.aiReason})` : '';
+      console.log(`🏆 Executando: ${bestSignal.asset} (${bestSignal.type}) - Score: ${bestSignal.indicators.confluenceScore}%${histInfo}${aiInfo}`);
+
+      // Save to database
+      const { error: insertError } = await supabase.from('trading_signals').insert({
+        signal_id: bestSignal.id,
+        asset: bestSignal.asset,
+        asset_icon: bestSignal.assetIcon,
+        type: bestSignal.type,
+        timeframe: bestSignal.timeframe,
+        expiration: bestSignal.expiration,
+        strength: bestSignal.strength,
+        status: bestSignal.status,
+        price: bestSignal.price,
+        is_hot: bestSignal.isHot,
+        market_type: bestSignal.marketType,
+        confluence_score: bestSignal.indicators.confluenceScore,
+        confluence_count: bestSignal.indicators.confluenceCount,
+        confirmations: bestSignal.confirmations,
+        indicators: bestSignal.indicators,
+      });
+
+      if (insertError) {
+        console.error(`❌ Error saving signal ${bestSignal.asset}:`, insertError);
+        continue;
+      }
+
+      console.log(`💾 Signal saved: ${bestSignal.id}`);
 
     // Send WhatsApp notification if high confluence
     let whatsappSent = false;

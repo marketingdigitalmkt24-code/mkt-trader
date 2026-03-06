@@ -24,6 +24,7 @@ interface MetaApiConfig {
 
 export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const [config, setConfig] = useState<MetaApiConfig>({
+    token: '',
     account_id: '',
     account_name: '',
     is_active: false,

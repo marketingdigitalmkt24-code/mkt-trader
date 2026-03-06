@@ -552,8 +552,9 @@ serve(async (req) => {
         return false;
       }
       
-      // Block assets with very bad win rate (< 35% with 5+ trades)
-      if (history && history.winRate < 35 && (history.wins + history.losses) >= 5) {
+      // Block assets with very bad win rate - EURUSD more tolerant (spread advantage)
+      const minWinRate = isEurusd ? 25 : 35;
+      if (history && history.winRate < minWinRate && (history.wins + history.losses) >= 5) {
         return false;
       }
       

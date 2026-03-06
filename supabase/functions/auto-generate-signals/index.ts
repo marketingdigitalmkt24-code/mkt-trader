@@ -617,152 +617,140 @@ serve(async (req) => {
 
       console.log(`💾 Signal saved: ${bestSignal.id}`);
 
-    // Send WhatsApp notification if high confluence
-    let whatsappSent = false;
-    if (bestSignal.indicators.confluenceScore >= WHATSAPP_CONFLUENCE_THRESHOLD) {
-      try {
-        const entryTime = new Date().toLocaleTimeString('pt-BR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'America/Sao_Paulo',
-        });
+      // Send WhatsApp notification if high confluence
+      if (bestSignal.indicators.confluenceScore >= WHATSAPP_CONFLUENCE_THRESHOLD) {
+        try {
+          const entryTime = new Date().toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'America/Sao_Paulo',
+          });
 
-        const { error: whatsappError } = await supabase.functions.invoke('send-whatsapp', {
-          body: {
-            signal: {
-              asset: bestSignal.asset,
-              type: bestSignal.type,
-              confluenceScore: bestSignal.indicators.confluenceScore,
-              timeframe: bestSignal.timeframe,
-              entryTime,
-              confirmations: bestSignal.confirmations,
-              tag: 'REVERSÃO CERTEIRA',
+          const { error: whatsappError } = await supabase.functions.invoke('send-whatsapp', {
+            body: {
+              signal: {
+                asset: bestSignal.asset,
+                type: bestSignal.type,
+                confluenceScore: bestSignal.indicators.confluenceScore,
+                timeframe: bestSignal.timeframe,
+                entryTime,
+                confirmations: bestSignal.confirmations,
+                tag: bestSignal.aiReason || 'REVERSÃO CERTEIRA',
+              },
             },
-          },
-        });
+          });
 
-        if (whatsappError) {
-          console.error('❌ WhatsApp error:', whatsappError);
-        } else {
-          whatsappSent = true;
-          console.log(`📱 WhatsApp notification sent for ${bestSignal.asset}`);
+          if (!whatsappError) {
+            totalWhatsApp++;
+            console.log(`📱 WhatsApp sent for ${bestSignal.asset}`);
+          }
+        } catch (e) {
+          console.error('❌ WhatsApp failed:', e);
+        }
+      }
+
+      // ============= COPY TRADE TO IQ OPTION =============
+      try {
+        const { data: iqConfig } = await supabase
+          .from('iqoption_config')
+          .select('*')
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (iqConfig) {
+          const { data: tradeSettings } = await supabase
+            .from('user_trading_settings')
+            .select('trade_amount')
+            .limit(1)
+            .maybeSingle();
+          
+          const tradeAmount = tradeSettings?.trade_amount || 1;
+
+          console.log(`📡 IQ Option: ${bestSignal.asset} ${bestSignal.type} $${tradeAmount}`);
+          
+          const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
+            body: {
+              asset: bestSignal.asset,
+              direction: bestSignal.type.toLowerCase(),
+              amount: tradeAmount,
+              expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
+              signalId: bestSignal.id,
+              userId: iqConfig.user_id,
+            },
+          });
+
+          if (!iqError && iqData?.success) {
+            totalIQ++;
+            console.log(`✅ IQ Trade: ${bestSignal.asset} ${bestSignal.type}`);
+          } else {
+            console.error(`❌ IQ Trade falhou: ${iqError?.message || iqData?.error}`);
+          }
         }
       } catch (e) {
-        console.error('❌ WhatsApp notification failed:', e);
+        console.error('❌ IQ Option failed:', e);
       }
-    }
 
-    // ============= COPY TRADE TO IQ OPTION =============
-    let iqSent = false;
-    try {
-      const { data: iqConfig } = await supabase
-        .from('iqoption_config')
-        .select('*')
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-
-      if (iqConfig) {
-        console.log(`📡 Enviando trade para IQ Option: ${bestSignal.asset} ${bestSignal.type}`);
-        
-        // Load trade settings
-        const { data: tradeSettings } = await supabase
-          .from('user_trading_settings')
-          .select('trade_amount')
+      // ============= COPY TRADE TO MT5 VIA METAAPI =============
+      try {
+        const { data: metaConfig } = await supabase
+          .from('metaapi_config')
+          .select('token, account_id, volume, is_active')
+          .eq('is_active', true)
           .limit(1)
           .maybeSingle();
         
-        const tradeAmount = tradeSettings?.trade_amount || 1;
+        if (metaConfig && metaConfig.account_id) {
+          const { data: tradeSettings } = await supabase
+            .from('user_trading_settings')
+            .select('trade_amount')
+            .limit(1)
+            .maybeSingle();
+          
+          const tradeAmount = tradeSettings?.trade_amount || 1;
 
-        const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
-          body: {
-            asset: bestSignal.asset,
-            direction: bestSignal.type.toLowerCase(),
-            amount: tradeAmount,
-            expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
-            signalId: bestSignal.id,
-            userId: iqConfig.user_id,
-          },
-        });
+          console.log(`📡 MT5: ${bestSignal.asset} ${bestSignal.type} | Volume: ${metaConfig.volume || 0.01}`);
+          
+          const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
+            body: {
+              asset: bestSignal.asset,
+              direction: bestSignal.type.toLowerCase(),
+              amount: tradeAmount,
+              expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
+              signalId: bestSignal.id,
+              confluenceScore: bestSignal.indicators.confluenceScore,
+            },
+          });
 
-        if (iqError) {
-          console.error('❌ IQ Option error:', iqError);
-        } else if (iqData?.success) {
-          iqSent = true;
-          console.log(`✅ IQ Option Trade executado: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.id}`);
-        } else {
-          console.error(`❌ IQ Option Trade falhou: ${iqData?.error}`);
+          if (!mt5Error && mt5Data?.success) {
+            totalMT5++;
+            console.log(`✅ MT5 Trade: ${mt5Data.symbol} ${mt5Data.direction}`);
+          } else {
+            console.error(`❌ MT5 Trade falhou: ${mt5Error?.message || mt5Data?.error}`);
+          }
         }
-      } else {
-        console.log('⏭️ IQ Option não configurado ou desativado');
+      } catch (e) {
+        console.error('❌ MT5 failed:', e);
       }
-    } catch (e) {
-      console.error('❌ IQ Option trade failed:', e);
-    }
 
-    // ============= COPY TRADE TO MT5 VIA METAAPI =============
-    let mt5Sent = false;
-    try {
-      const { data: metaConfig } = await supabase
-        .from('metaapi_config')
-        .select('token, account_id, volume, is_active')
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-      
-      if (!metaConfig) {
-        console.log('⏭️ MetaAPI não configurado ou desativado');
-      } else if (!metaConfig.account_id) {
-        console.log('⏭️ MetaAPI sem account_id configurado - conecte o MT5 primeiro');
-      } else {
-        // Load trade settings for investment amount
-        const { data: tradeSettings } = await supabase
-          .from('user_trading_settings')
-          .select('trade_amount')
-          .limit(1)
-          .maybeSingle();
-        
-        const tradeAmount = tradeSettings?.trade_amount || 1;
+      executedSignals.push({
+        asset: bestSignal.asset,
+        type: bestSignal.type,
+        confluenceScore: bestSignal.indicators.confluenceScore,
+        aiConfidence: bestSignal.aiConfidence,
+      });
+    } // end for signalsToExecute
 
-        console.log(`📡 Enviando trade para MT5: ${bestSignal.asset} ${bestSignal.type} | Volume: ${metaConfig.volume || 0.01} lotes | AccountID: ${metaConfig.account_id}`);
-        
-        const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
-          body: {
-            asset: bestSignal.asset,
-            direction: bestSignal.type.toLowerCase(),
-            amount: tradeAmount,
-            expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
-            signalId: bestSignal.id,
-            confluenceScore: bestSignal.indicators.confluenceScore,
-          },
-        });
-
-        if (mt5Error) {
-          console.error('❌ MT5 MetaAPI error:', mt5Error);
-        } else if (mt5Data?.success) {
-          mt5Sent = true;
-          console.log(`✅ MT5 Trade executado: ${mt5Data.symbol} ${mt5Data.direction} | Order: ${mt5Data.orderId}`);
-        } else {
-          console.error(`❌ MT5 Trade falhou: ${mt5Data?.error}`);
-        }
-      }
-    } catch (e) {
-      console.error('❌ MT5 copy trade failed:', e);
-    }
+    console.log(`\n📊 RESUMO: ${executedSignals.length} sinais executados | IQ: ${totalIQ} | MT5: ${totalMT5} | WhatsApp: ${totalWhatsApp}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        generated: 1,
-        signal: {
-          asset: bestSignal.asset,
-          type: bestSignal.type,
-          confluenceScore: bestSignal.indicators.confluenceScore,
-          timeframe: bestSignal.timeframe,
-        },
-        whatsappSent,
-        iqSent,
-        mt5Sent,
+        generated: executedSignals.length,
+        signals: executedSignals,
+        iqSent: totalIQ,
+        mt5Sent: totalMT5,
+        whatsappSent: totalWhatsApp,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -37,7 +37,33 @@ serve(async (req) => {
       throw new Error('Login e senha MT5 são obrigatórios');
     }
 
-    console.log(`🔐 Conectando MT5: Login ${mt5Login} | Server: ${mt5Server}`);
+    let resolvedServer = mt5Server || '';
+
+    // Auto-detect server if not provided
+    if (!resolvedServer) {
+      console.log('🔍 Servidor não informado, buscando automaticamente...');
+      try {
+        const searchRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts`, {
+          headers: { 'auth-token': METAAPI_TOKEN },
+        });
+        if (searchRes.ok) {
+          const accounts = await searchRes.json();
+          const match = accounts.find((a: any) => String(a.login) === String(mt5Login));
+          if (match?.server) {
+            resolvedServer = match.server;
+            console.log(`✅ Servidor detectado de conta existente: ${resolvedServer}`);
+          }
+        }
+      } catch (e) {
+        console.log('⚠️ Falha ao buscar servidor automaticamente:', e);
+      }
+
+      if (!resolvedServer) {
+        throw new Error('Servidor MT5 é obrigatório para novas contas. Informe o servidor (ex: XMGlobal-MT5).');
+      }
+    }
+
+    console.log(`🔐 Conectando MT5: Login ${mt5Login} | Server: ${resolvedServer}`);
 
     // Step 1: List existing accounts to avoid duplicates
     console.log('📡 Buscando contas existentes...');
@@ -125,7 +151,7 @@ serve(async (req) => {
           login: String(mt5Login),
           password: mt5Password,
           name: `MT5-${mt5Login}`,
-          ...(mt5Server ? { server: mt5Server } : {}),
+          server: resolvedServer,
           platform: 'mt5',
           type: 'cloud-g2',
           magic: 0,

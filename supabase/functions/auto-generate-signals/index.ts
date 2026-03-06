@@ -540,14 +540,21 @@ serve(async (req) => {
         return false;
       }
       
-      // Block assets with 3+ consecutive losses
+      // Block assets with consecutive losses
+      // EURUSD has spread advantage strategy - higher tolerance (5 losses)
       const history = assetHistory.get(asset.symbol);
-      if (history && history.consecutiveLosses >= 3) {
+      const isEurusd = asset.symbol === 'EUR/USD';
+      const maxConsecutiveLosses = isEurusd ? 5 : 3;
+      if (history && history.consecutiveLosses >= maxConsecutiveLosses) {
+        if (isEurusd) {
+          console.log(`⚠️ EUR/USD: ${history.consecutiveLosses} losses consecutivos (limite spread: ${maxConsecutiveLosses})`);
+        }
         return false;
       }
       
-      // Block assets with very bad win rate (< 35% with 5+ trades)
-      if (history && history.winRate < 35 && (history.wins + history.losses) >= 5) {
+      // Block assets with very bad win rate - EURUSD more tolerant (spread advantage)
+      const minWinRate = isEurusd ? 25 : 35;
+      if (history && history.winRate < minWinRate && (history.wins + history.losses) >= 5) {
         return false;
       }
       

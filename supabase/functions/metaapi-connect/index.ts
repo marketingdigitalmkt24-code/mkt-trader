@@ -80,7 +80,7 @@ serve(async (req) => {
         
         // Log ALL accounts for debugging
         for (const acc of accounts) {
-          console.log(`📋 Conta: _id=${acc._id} | id=${acc.id} | login=${acc.login} | name=${acc.name} | state=${acc.state} | region=${acc.region} | primaryReplica=${acc.primaryReplica} | replicas=${JSON.stringify(acc.accountReplicas)}`);
+          console.log(`📋 Conta: _id=${acc._id} | login=${acc.login} | name=${acc.name} | state=${acc.state} | region=${acc.region} | application=${acc.application} | type=${acc.type} | primaryReplica=${acc.primaryReplica} | replicas=${JSON.stringify(acc.accountReplicas)} | connections=${JSON.stringify(acc.connections)}`);
         }
         
         // Find all accounts matching this login

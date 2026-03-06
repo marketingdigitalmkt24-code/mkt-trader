@@ -107,11 +107,6 @@ const Index = () => {
             {/* Live Operations */}
             <LiveOperationsCard />
             
-            {/* Signal History */}
-            <SignalHistorySection 
-              history={history}
-              onClearHistory={clearHistory}
-            />
           </div>
 
           {/* Sidebar */}

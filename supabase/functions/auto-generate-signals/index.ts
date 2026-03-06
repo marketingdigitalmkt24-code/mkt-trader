@@ -6,13 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============= CONFIGURAÇÕES REVERSÃO CERTEIRA - ULTRA RIGOROSA =============
-const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações (era 4)
-const RSI_CALL_MAX = 25; // Mais extremo (era 30)
-const RSI_PUT_MIN = 75; // Mais extremo (era 70)
+// ============= CONFIGURAÇÕES SCALPING M1 TURBO - ULTRA RIGOROSA =============
+const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações
+const RSI_CALL_MAX = 25; // Mais extremo
+const RSI_PUT_MIN = 75; // Mais extremo
 const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
+const IQ_MIN_CONFLUENCE_SCALPING = 90; // Confluência mínima para IQ Option Scalping
 const FORCE_EXTREME_PROBABILITY = 0.98; // 98% chance de indicadores extremos
-const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO (era 50s global)
+const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
 
 // ============= NEWS FILTER - Avoid trading during high-impact news =============
 interface NewsEvent {

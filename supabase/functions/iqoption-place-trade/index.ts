@@ -112,6 +112,8 @@ async function loginToIQOption(email: string, password: string): Promise<{ ssid:
 interface AssetInfo {
   id: number;
   optionType: number; // 1 = binary, 3 = turbo
+  turboId?: number;  // Alternative turbo ID if available
+  binaryId?: number; // Alternative binary ID if available
 }
 
 async function placeTradeFireAndForget(

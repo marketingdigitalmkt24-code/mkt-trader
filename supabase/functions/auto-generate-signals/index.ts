@@ -549,6 +549,13 @@ serve(async (req) => {
         return false;
       }
       
+      // Block assets affected by high-impact news
+      const newsCheck = isAssetAffectedByNews(asset.symbol);
+      if (newsCheck.affected) {
+        console.log(`📰 ${asset.symbol}: BLOQUEADO por notícia - ${newsCheck.reason}`);
+        return false;
+      }
+      
       return true;
     });
 

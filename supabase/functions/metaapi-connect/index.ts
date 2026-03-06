@@ -90,8 +90,8 @@ serve(async (req) => {
         );
         
         if (existingAccount) {
-          const accId = existingAccount._id || existingAccount.id;
-          console.log(`✅ Conta existente: ID=${accId} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
+          const accId = existingAccount.id || existingAccount._id;
+          console.log(`✅ Conta existente: ID=${accId} | _id=${existingAccount._id} | id=${existingAccount.id} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
         }
       } else {
         const err = await listRes.text();

@@ -540,9 +540,15 @@ serve(async (req) => {
         return false;
       }
       
-      // Block assets with 3+ consecutive losses
+      // Block assets with consecutive losses
+      // EURUSD has spread advantage strategy - higher tolerance (5 losses)
       const history = assetHistory.get(asset.symbol);
-      if (history && history.consecutiveLosses >= 3) {
+      const isEurusd = asset.symbol === 'EUR/USD';
+      const maxConsecutiveLosses = isEurusd ? 5 : 3;
+      if (history && history.consecutiveLosses >= maxConsecutiveLosses) {
+        if (isEurusd) {
+          console.log(`⚠️ EUR/USD: ${history.consecutiveLosses} losses consecutivos (limite spread: ${maxConsecutiveLosses})`);
+        }
         return false;
       }
       

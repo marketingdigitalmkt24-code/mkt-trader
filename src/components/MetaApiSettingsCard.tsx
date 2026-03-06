@@ -55,6 +55,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       if (data) {
         setConfig({
           id: data.id,
+          token: data.token || '',
           account_id: data.account_id || '',
           account_name: data.account_name || '',
           is_active: data.is_active,

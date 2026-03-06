@@ -113,8 +113,42 @@ serve(async (req) => {
     let accountName: string;
 
     if (existingAccount) {
-      accountId = existingAccount.id || existingAccount._id;
+      // Use _id as the base account ID
+      const primaryId = existingAccount._id;
       accountName = existingAccount.name || `MT5-${mt5Login}`;
+
+      // Check if this is a primary account with replicas
+      // MetaAPI Client API (trading) requires using the REPLICA ID, not the primary
+      let tradingAccountId = primaryId;
+      if (existingAccount.accountReplicas && existingAccount.accountReplicas.length > 0) {
+        // Find the first deployed/active replica
+        const replica = existingAccount.accountReplicas.find((r: any) => r.state === 'DEPLOYED') 
+          || existingAccount.accountReplicas[0];
+        const replicaId = replica._id || replica.id;
+        if (replicaId) {
+          tradingAccountId = replicaId;
+          console.log(`🔗 Usando réplica para trading: ${tradingAccountId} (primária: ${primaryId})`);
+        }
+      }
+      
+      // Also check all accounts for a replica pointing to this primary
+      if (tradingAccountId === primaryId) {
+        const allAccounts = await safeFetch(`${PROVISIONING_URL}/users/current/accounts`, {
+          headers: { 'auth-token': METAAPI_TOKEN },
+        });
+        if (allAccounts.ok) {
+          const accs = await allAccounts.json();
+          const replica = accs.find((a: any) => 
+            a.primaryReplica === primaryId && a._id !== primaryId
+          );
+          if (replica) {
+            tradingAccountId = replica._id || replica.id;
+            console.log(`🔗 Réplica encontrada na lista: ${tradingAccountId} (primária: ${primaryId})`);
+          }
+        }
+      }
+
+      accountId = tradingAccountId;
 
       // Update password
       try {

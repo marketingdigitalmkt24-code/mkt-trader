@@ -78,20 +78,32 @@ serve(async (req) => {
         const accounts = await listRes.json();
         console.log(`📋 ${accounts.length} contas na MetaAPI`);
         
-        // Log first account structure to debug field names
-        if (accounts.length > 0) {
-          const sample = accounts[0];
-          console.log(`🔍 Campos da conta: ${JSON.stringify(Object.keys(sample))}`);
-          console.log(`🔍 Primeira conta: id=${sample.id} _id=${sample._id} login=${sample.login} name=${sample.name}`);
+        // Log ALL accounts for debugging
+        for (const acc of accounts) {
+          console.log(`📋 Conta: _id=${acc._id} | login=${acc.login} | name=${acc.name} | state=${acc.state} | region=${acc.region} | application=${acc.application} | type=${acc.type} | primaryReplica=${acc.primaryReplica} | replicas=${JSON.stringify(acc.accountReplicas)} | connections=${JSON.stringify(acc.connections)}`);
         }
         
-        existingAccount = accounts.find((a: any) => 
-          String(a.login) === String(mt5Login)
-        );
+        // Find all accounts matching this login
+        const matchingAccounts = accounts.filter((a: any) => String(a.login) === String(mt5Login));
+        console.log(`🔍 ${matchingAccounts.length} conta(s) com login ${mt5Login}`);
+        
+        if (matchingAccounts.length > 1) {
+          // Multiple accounts for same login - prefer the one that is a replica (has primaryReplica set)
+          const replica = matchingAccounts.find((a: any) => a.primaryReplica);
+          if (replica) {
+            existingAccount = replica;
+            console.log(`🔗 Usando réplica _id=${replica._id} (primaryReplica=${replica.primaryReplica})`);
+          } else {
+            existingAccount = matchingAccounts[0];
+          }
+        } else if (matchingAccounts.length === 1) {
+          existingAccount = matchingAccounts[0];
+        }
         
         if (existingAccount) {
           const accId = existingAccount.id || existingAccount._id;
-          console.log(`✅ Conta existente: ID=${accId} | _id=${existingAccount._id} | id=${existingAccount.id} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
+          console.log(`✅ Conta selecionada: ID=${accId} | _id=${existingAccount._id} | region=${existingAccount.region} | State=${existingAccount.state} | Connection=${existingAccount.connectionStatus}`);
+          console.log(`🔗 accountReplicas=${JSON.stringify(existingAccount.accountReplicas)} | primaryReplica=${existingAccount.primaryReplica}`);
         }
       } else {
         const err = await listRes.text();
@@ -105,8 +117,42 @@ serve(async (req) => {
     let accountName: string;
 
     if (existingAccount) {
-      accountId = existingAccount.id || existingAccount._id;
+      // Use _id as the base account ID
+      const primaryId = existingAccount._id;
       accountName = existingAccount.name || `MT5-${mt5Login}`;
+
+      // Check if this is a primary account with replicas
+      // MetaAPI Client API (trading) requires using the REPLICA ID, not the primary
+      let tradingAccountId = primaryId;
+      if (existingAccount.accountReplicas && existingAccount.accountReplicas.length > 0) {
+        // Find the first deployed/active replica
+        const replica = existingAccount.accountReplicas.find((r: any) => r.state === 'DEPLOYED') 
+          || existingAccount.accountReplicas[0];
+        const replicaId = replica._id || replica.id;
+        if (replicaId) {
+          tradingAccountId = replicaId;
+          console.log(`🔗 Usando réplica para trading: ${tradingAccountId} (primária: ${primaryId})`);
+        }
+      }
+      
+      // Also check all accounts for a replica pointing to this primary
+      if (tradingAccountId === primaryId) {
+        const allAccounts = await safeFetch(`${PROVISIONING_URL}/users/current/accounts`, {
+          headers: { 'auth-token': METAAPI_TOKEN },
+        });
+        if (allAccounts.ok) {
+          const accs = await allAccounts.json();
+          const replica = accs.find((a: any) => 
+            a.primaryReplica === primaryId && a._id !== primaryId
+          );
+          if (replica) {
+            tradingAccountId = replica._id || replica.id;
+            console.log(`🔗 Réplica encontrada na lista: ${tradingAccountId} (primária: ${primaryId})`);
+          }
+        }
+      }
+
+      accountId = tradingAccountId;
 
       // Update password
       try {
@@ -202,6 +248,13 @@ serve(async (req) => {
           connectionStatus = rawStatus === 'CONNECTED' ? 'connected' : rawStatus.toLowerCase() || 'connecting';
           accountName = statusData.name || accountName;
           console.log(`📊 Attempt ${attempt}/${maxAttempts}: State=${statusData.state} | Connection=${rawStatus}`);
+          
+          // Check for accessToken field
+          if (statusData.accessToken) {
+            console.log(`🔑 Account access token found! Length: ${statusData.accessToken.length}`);
+          } else {
+            console.log(`🔑 No accessToken field. Keys: ${JSON.stringify(Object.keys(statusData).filter(k => k.toLowerCase().includes('token') || k.toLowerCase().includes('access')))}`);
+          }
           
           if (connectionStatus === 'connected') {
             console.log('✅ Conexão estabelecida!');

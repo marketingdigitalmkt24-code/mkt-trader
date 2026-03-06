@@ -65,8 +65,9 @@ serve(async (req) => {
 
     console.log(`🔄 MT5 Trade Request: ${asset} ${direction} | Signal: ${signalId} | AccountID: ${METAAPI_ACCOUNT_ID}`);
 
-    // Step 1: Get account region from provisioning API
+    // Step 1: Get account region and access token from provisioning API
     let region = 'new-york';
+    let clientToken = METAAPI_TOKEN; // fallback to general token
     try {
       const accountRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}`, {
         headers: { 'auth-token': METAAPI_TOKEN },
@@ -80,9 +81,28 @@ serve(async (req) => {
       console.log(`⚠️ Region lookup failed, using default: ${region}`);
     }
 
+    // Get account-specific access token for Client API
+    try {
+      const tokenRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}/access-token`, {
+        headers: { 'auth-token': METAAPI_TOKEN },
+      });
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        if (tokenData.accessToken) {
+          clientToken = tokenData.accessToken;
+          console.log(`🔑 Account access token obtained (length: ${clientToken.length})`);
+        }
+      } else {
+        const errText = await tokenRes.text();
+        console.log(`⚠️ Access token not available [${tokenRes.status}]: ${errText}`);
+      }
+    } catch (e) {
+      console.log(`⚠️ Access token fetch failed, using general token`);
+    }
+
     const tradeApiUrl = `https://mt-client-api-v1.${region}.agiliumtrade.ai`;
     const baseUrl = `${tradeApiUrl}/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
-    const authHeaders = { 'auth-token': METAAPI_TOKEN };
+    const authHeaders = { 'auth-token': clientToken };
 
     // Map asset symbol to MT5 format - ONLY USD PAIRS
     let mt5Symbol = asset.replace('/', '').replace('-OTC', 'otc').replace(' ', '');

@@ -320,42 +320,6 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </div>
       </div>
 
-      {/* Trading Settings */}
-      <div className="border-t border-border/50 pt-4">
-        <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-          <Target className="w-4 h-4" />
-          Configurações de Trade
-        </h4>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="mt5-volume">Volume (Lotes)</Label>
-          <Input
-            id="mt5-volume"
-            type="number"
-            step="0.01"
-            min="0.01"
-            value={config.volume}
-            onChange={(e) => setConfig(prev => ({ ...prev, volume: parseFloat(e.target.value) || 0.01 }))}
-            placeholder="0.01"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="mt5-tp">Take Profit (% do investimento)</Label>
-          <Input
-            id="mt5-tp"
-            type="number"
-            step="1"
-            min="0"
-            value={config.take_profit_pips}
-            onChange={(e) => setConfig(prev => ({ ...prev, take_profit_pips: parseFloat(e.target.value) || 0 }))}
-            placeholder="10"
-          />
-          <p className="text-xs text-muted-foreground">Ex: 10 = fecha com 10% de lucro sobre o valor investido. 0 = sem TP automático</p>
-        </div>
-      </div>
 
       {/* Buttons */}
       <div className="flex gap-2 pt-2">

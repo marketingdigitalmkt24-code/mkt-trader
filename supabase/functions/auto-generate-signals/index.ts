@@ -805,22 +805,21 @@ serve(async (req) => {
               },
             });
 
-          if (!iqError && iqData?.success) {
-            totalIQ++;
-            console.log(`✅ IQ Trade placed: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.tradeId}`);
-            
-            // Update queue status
-            await supabase.from('trade_queue')
-              .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
-              .eq('signal_id', bestSignal.id);
-          } else {
-            const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
-            console.error(`❌ IQ Trade falhou: ${errorMsg}`);
-            
-            // Update queue with error
-            await supabase.from('trade_queue')
-              .update({ status: 'failed', error: errorMsg })
-              .eq('signal_id', bestSignal.id);
+            if (!iqError && iqData?.success) {
+              totalIQ++;
+              console.log(`✅ IQ Scalping: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.tradeId} | 1min Turbo`);
+              
+              await supabase.from('trade_queue')
+                .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
+                .eq('signal_id', bestSignal.id);
+            } else {
+              const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
+              console.error(`❌ IQ Trade falhou: ${errorMsg}`);
+              
+              await supabase.from('trade_queue')
+                .update({ status: 'failed', error: errorMsg })
+                .eq('signal_id', bestSignal.id);
+            }
           }
         }
       } catch (e) {

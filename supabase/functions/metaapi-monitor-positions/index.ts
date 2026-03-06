@@ -91,33 +91,34 @@ serve(async (req) => {
     const closedPositions: any[] = [];
     const openPositions: any[] = [];
 
-    // Get user trading settings for investment amount
-    const { data: tradingSettings } = await supabase
-      .from('user_trading_settings')
-      .select('trade_amount')
-      .limit(1)
-      .maybeSingle();
-
-    const investmentAmount = tradingSettings?.trade_amount || 1;
-    const tpCurrency = investmentAmount * (tpPercent / 100);
+    // TP percentage from config (default 10%)
+    const tpPercent = metaConfig.take_profit_pips || 10;
 
     for (const pos of positions) {
       const unrealizedProfit = pos.unrealizedProfit ?? pos.profit ?? 0;
       const symbol = pos.symbol || 'unknown';
       const posId = pos.id;
+      const volume = pos.volume || 0.01;
+
+      // Calculate TP based on ACTUAL position margin, not IQ Option trade_amount
+      // For forex: 1 lot ≈ $1000 margin (100:1 leverage), so 0.01 lot ≈ $10 margin
+      // TP target = margin * tpPercent / 100
+      const estimatedMargin = volume * 1000; // $1000 per lot at 100:1
+      const tpCurrency = estimatedMargin * (tpPercent / 100);
 
       openPositions.push({
         id: posId,
         symbol,
         unrealizedProfit: parseFloat(unrealizedProfit.toFixed(2)),
-        volume: pos.volume,
+        volume,
         type: pos.type,
         target: parseFloat(tpCurrency.toFixed(2)),
+        margin: parseFloat(estimatedMargin.toFixed(2)),
       });
 
       // Check if profit target reached
       if (tpCurrency > 0 && unrealizedProfit >= tpCurrency) {
-        console.log(`🎯 TP atingido para ${symbol} (pos ${posId})! P/L: $${unrealizedProfit.toFixed(2)} >= $${tpCurrency.toFixed(2)}. Fechando...`);
+        console.log(`🎯 TP atingido para ${symbol} (pos ${posId})! P/L: $${unrealizedProfit.toFixed(2)} >= $${tpCurrency.toFixed(2)} (${tpPercent}% de margem $${estimatedMargin.toFixed(2)}). Fechando...`);
         try {
           const closeRes = await safeFetch(`${baseUrl}/trade`, {
             method: 'POST',
@@ -136,6 +137,31 @@ serve(async (req) => {
           }
         } catch (e) {
           console.error(`❌ Erro de rede ao fechar ${posId}: ${e}`);
+        }
+      }
+
+      // Also close if LOSS exceeds stop loss (optional: 20% of margin)
+      const slCurrency = estimatedMargin * 0.20; // 20% stop loss
+      if (unrealizedProfit < 0 && Math.abs(unrealizedProfit) >= slCurrency) {
+        console.log(`🛑 SL atingido para ${symbol} (pos ${posId})! P/L: $${unrealizedProfit.toFixed(2)} <= -$${slCurrency.toFixed(2)}. Fechando...`);
+        try {
+          const closeRes = await safeFetch(`${baseUrl}/trade`, {
+            method: 'POST',
+            headers: { ...authHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              actionType: 'POSITION_CLOSE_ID',
+              positionId: posId,
+            }),
+          });
+          const closeResult = await closeRes.json();
+          if (closeRes.ok) {
+            console.log(`✅ SL: Posição ${posId} (${symbol}) fechada! Perda: $${unrealizedProfit.toFixed(2)}`);
+            closedPositions.push({ id: posId, symbol, profit: unrealizedProfit, reason: 'stop_loss' });
+          } else {
+            console.error(`❌ Erro ao fechar SL ${posId}: ${JSON.stringify(closeResult)}`);
+          }
+        } catch (e) {
+          console.error(`❌ Erro de rede ao fechar SL ${posId}: ${e}`);
         }
       }
     }

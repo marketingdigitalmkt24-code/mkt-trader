@@ -13,6 +13,7 @@ const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
 interface AutoTradingConfig {
   enabled: boolean;
   amount: number;
+  mt5Amount: number;
   minConfluence: number;
   maxDailyTrades: number;
   dailyLimitEnabled: boolean;
@@ -39,6 +40,7 @@ interface TradeResult {
 const DEFAULT_CONFIG: AutoTradingConfig = {
   enabled: false,
   amount: 10,
+  mt5Amount: 1,
   minConfluence: 95,
   maxDailyTrades: 3,
   dailyLimitEnabled: true,
@@ -167,6 +169,7 @@ export function useAutoTrading() {
           const dbConfig: AutoTradingConfig = {
             enabled: data.auto_trading_enabled,
             amount: Number(data.trade_amount),
+            mt5Amount: Number((data as any).mt5_trade_amount ?? 1),
             minConfluence: data.min_confluence,
             maxDailyTrades: data.max_daily_trades,
             dailyLimitEnabled: data.daily_limit_enabled ?? true,
@@ -203,10 +206,11 @@ export function useAutoTrading() {
 
     isSavingToDb.current = true;
     try {
-      const dbData = {
+      const dbData: Record<string, any> = {
         user_id: user.id,
         auto_trading_enabled: newConfig.enabled,
         trade_amount: newConfig.amount,
+        mt5_trade_amount: newConfig.mt5Amount,
         min_confluence: newConfig.minConfluence,
         max_daily_trades: newConfig.maxDailyTrades,
         daily_limit_enabled: newConfig.dailyLimitEnabled,

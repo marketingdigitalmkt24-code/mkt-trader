@@ -104,27 +104,58 @@ serve(async (req) => {
     const baseUrl = `${tradeApiUrl}/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
     const authHeaders = { 'auth-token': clientToken };
 
-    // Map asset symbol to MT5 format - ONLY USD PAIRS
-    let mt5Symbol = asset.replace('/', '').replace('-OTC', 'otc').replace(' ', '');
-    const usdSymbolMap: Record<string, string> = {
-      'EURUSD': 'EURUSD', 'GBPUSD': 'GBPUSD', 'AUDUSD': 'AUDUSD',
-      'NZDUSD': 'NZDUSD', 'USDJPY': 'USDJPY', 'USDCHF': 'USDCHF',
-      'USDCAD': 'USDCAD', 'XAUUSD': 'XAUUSD', 'BTCUSD': 'BTCUSD',
-      'ETHUSD': 'ETHUSD',
-    };
-    
-    // Reject non-USD pairs
-    if (!mt5Symbol.toUpperCase().includes('USD')) {
-      console.log(`⛔ ${mt5Symbol} is not a USD pair. MT5 only trades USD pairs.`);
+    // ===== FILTER: Only allow REAL assets (no OTC) that exist on XM MT5 =====
+    const isOTC = asset.toUpperCase().includes('OTC');
+    if (isOTC) {
+      console.log(`⛔ ${asset} é OTC — MT5 não opera ativos OTC. Ignorando.`);
       return new Response(
-        JSON.stringify({ success: false, error: `${asset} não é par USD. MT5 opera apenas pares com USD.`, skipped: true }),
+        JSON.stringify({ success: false, error: `${asset} é OTC. MT5 opera apenas ativos reais.`, skipped: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Map IQ Option asset names to MT5/XM symbol format
+    const xmSymbolMap: Record<string, string> = {
+      // Forex majors
+      'EUR/USD': 'EURUSD', 'GBP/USD': 'GBPUSD', 'AUD/USD': 'AUDUSD',
+      'NZD/USD': 'NZDUSD', 'USD/JPY': 'USDJPY', 'USD/CHF': 'USDCHF',
+      'USD/CAD': 'USDCAD',
+      // Forex crosses with USD
+      'EUR/USD': 'EURUSD', 'GBP/USD': 'GBPUSD',
+      // Commodities
+      'XAU/USD': 'XAUUSD', 'XAG/USD': 'XAGUSD',
+      'USO/USD': 'USOIL', 'UKO/USD': 'UKOIL',
+      // Crypto
+      'BTC/USD': 'BTCUSD', 'ETH/USD': 'ETHUSD',
+      // Indices
+      'US500': 'US500', 'US100': 'US100', 'US30': 'US30',
+      'SP500': 'US500', 'DE30': 'DE30', 'UK100': 'UK100',
+      'JP225': 'JP225', 'FR40': 'FR40',
+    };
+
+    // Normalize asset name: remove extra spaces, slashes
+    const cleanAsset = asset.trim();
+    let mt5Symbol = xmSymbolMap[cleanAsset];
     
-    if (usdSymbolMap[mt5Symbol.toUpperCase()]) {
-      mt5Symbol = usdSymbolMap[mt5Symbol.toUpperCase()];
+    if (!mt5Symbol) {
+      // Try without slash: "EURUSD" format
+      const noSlash = cleanAsset.replace('/', '').replace(' ', '');
+      mt5Symbol = Object.values(xmSymbolMap).find(s => s === noSlash) || noSlash;
     }
+
+    // Final USD check
+    const symbolUpper = mt5Symbol.toUpperCase();
+    const hasUSD = symbolUpper.includes('USD') || symbolUpper.includes('OIL') || 
+                   ['US500','US100','US30','DE30','UK100','JP225','FR40'].includes(symbolUpper);
+    if (!hasUSD) {
+      console.log(`⛔ ${mt5Symbol} (from ${asset}) não é par USD/índice válido. Ignorando.`);
+      return new Response(
+        JSON.stringify({ success: false, error: `${asset} não é ativo compatível com MT5/XM.`, skipped: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`✅ Símbolo mapeado: ${asset} → ${mt5Symbol}`);
 
     // ===== Step 2: Check for existing open positions on this symbol =====
     try {

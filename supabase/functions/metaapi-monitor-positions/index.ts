@@ -91,21 +91,9 @@ serve(async (req) => {
     const baseUrl = `https://mt-client-api-v1.${region}.agiliumtrade.ai/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
     const authHeaders = { 'auth-token': METAAPI_TOKEN };
 
-    // Spread map for major pairs (in price units, approximate)
-    // EURUSD has the tightest spread — ideal for quick scalp profits
-    const spreadMap: Record<string, number> = {
-      'EURUSD': 0.00010,  // ~1 pip
-      'GBPUSD': 0.00015,  // ~1.5 pips
-      'USDJPY': 0.010,    // ~1 pip
-      'AUDUSD': 0.00012,  // ~1.2 pips
-      'USDCAD': 0.00015,
-      'USDCHF': 0.00015,
-      'NZDUSD': 0.00015,
-    };
-
-    // For EURUSD and other tight-spread pairs, we can use a lower effective TP
-    // since the spread cost is minimal — profit comes faster
-    const SPREAD_ADVANTAGE_MULTIPLIER = 0.85; // Close 15% earlier on tight-spread pairs
+    // Spread advantage: ONLY for EURUSD (tightest spread ~1 pip)
+    // EURUSD closes 15% earlier since spread cost is minimal — faster profit
+    const EURUSD_SPREAD_MULTIPLIER = 0.85;
 
     // Loop mode: run for ~55 seconds checking every 3 seconds
     const maxIterations = loopMode ? 18 : 1; // 18 * 3s = 54s
@@ -152,15 +140,15 @@ serve(async (req) => {
           const symbol = pos.symbol || 'unknown';
           const posId = pos.id;
 
-          // Spread-aware TP: tight-spread pairs like EURUSD close earlier
-          const isLowSpread = spreadMap[symbol] !== undefined && spreadMap[symbol] <= 0.00012;
-          const effectiveTp = isLowSpread ? tpCurrency * SPREAD_ADVANTAGE_MULTIPLIER : tpCurrency;
+          // Spread advantage ONLY for EURUSD
+          const isEurusd = symbol === 'EURUSD';
+          const effectiveTp = isEurusd ? tpCurrency * EURUSD_SPREAD_MULTIPLIER : tpCurrency;
 
           const shouldClose = closeAll || (effectiveTp > 0 && unrealizedProfit >= effectiveTp);
 
           if (shouldClose) {
-            const reason = closeAll ? 'CLOSE_ALL' : (isLowSpread ? 'TP_SPREAD' : 'TP');
-            console.log(`🎯 ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | TP: $${effectiveTp.toFixed(2)}${isLowSpread ? ' (spread advantage)' : ''}`);
+            const reason = closeAll ? 'CLOSE_ALL' : (isEurusd ? 'TP_SPREAD' : 'TP');
+            console.log(`🎯 ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | TP: $${effectiveTp.toFixed(2)}${isEurusd ? ' (EURUSD spread)' : ''}`);
             try {
               const closeRes = await safeFetch(`${baseUrl}/trade`, {
                 method: 'POST',

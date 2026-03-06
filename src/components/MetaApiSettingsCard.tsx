@@ -125,8 +125,8 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       toast.error('Preencha o Token MetaAPI');
       return;
     }
-    if (!config.mt5_login || !config.mt5_password || !config.mt5_server) {
-      toast.error('Preencha Login, Senha e Servidor do MT5');
+    if (!config.mt5_login || !config.mt5_password) {
+      toast.error('Preencha Login e Senha do MT5');
       return;
     }
 
@@ -289,7 +289,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="mt5-server">Servidor</Label>
+          <Label htmlFor="mt5-server">Servidor (opcional)</Label>
           <Input
             id="mt5-server"
             value={config.mt5_server}
@@ -329,7 +329,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
         </Button>
         <Button 
           onClick={handleConnect} 
-          disabled={isConnecting || !config.mt5_login || !config.mt5_password || !config.mt5_server || !config.token} 
+          disabled={isConnecting || !config.mt5_login || !config.mt5_password || !config.token} 
           className="flex-1"
         >
           {isConnecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wifi className="w-4 h-4 mr-2" />}

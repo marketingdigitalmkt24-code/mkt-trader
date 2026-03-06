@@ -99,7 +99,7 @@ export function MetaApiSettingsCard({ defaultOpen = false }: { defaultOpen?: boo
       } else {
         const { data, error } = await supabase
           .from('metaapi_config')
-          .insert({ ...payload, token: 'managed-by-env' })
+          .insert(payload)
           .select()
           .single();
         if (error) throw error;

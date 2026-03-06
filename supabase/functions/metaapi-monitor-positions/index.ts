@@ -27,11 +27,12 @@ serve(async (req) => {
   }
 
   try {
-    // Check if closeAll was requested
     let closeAll = false;
+    let loopMode = false;
     try {
       const body = await req.json();
       closeAll = body?.closeAll === true;
+      loopMode = body?.loopMode === true;
     } catch (_) {}
 
     const supabase = createClient(
@@ -48,14 +49,14 @@ serve(async (req) => {
 
     if (!metaConfig) {
       return new Response(
-        JSON.stringify({ success: false, openPositions: 0, closedPositions: 0, error: 'MetaAPI não configurado' }),
+        JSON.stringify({ success: false, error: 'MetaAPI não configurado' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const METAAPI_TOKEN = metaConfig.token;
     const METAAPI_ACCOUNT_ID = metaConfig.account_id;
-    const tpPercent = metaConfig.take_profit_pips || 10; // 10% default
+    const tpPercent = metaConfig.take_profit_pips || 10;
 
     if (!METAAPI_TOKEN || !METAAPI_ACCOUNT_ID) {
       return new Response(
@@ -64,7 +65,6 @@ serve(async (req) => {
       );
     }
 
-    // Get mt5_trade_amount from user settings
     const { data: tradingSettings } = await supabase
       .from('user_trading_settings')
       .select('mt5_trade_amount')
@@ -72,7 +72,6 @@ serve(async (req) => {
       .maybeSingle();
 
     const tradeAmount = tradingSettings?.mt5_trade_amount || 1;
-    // TP target = percentage of trade_amount (e.g., 10% of $1 = $0.10)
     const tpCurrency = tradeAmount * (tpPercent / 100);
 
     // Get region
@@ -92,78 +91,81 @@ serve(async (req) => {
     const baseUrl = `https://mt-client-api-v1.${region}.agiliumtrade.ai/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
     const authHeaders = { 'auth-token': METAAPI_TOKEN };
 
-    // Get all open positions
-    const positionsRes = await safeFetch(`${baseUrl}/positions`, {
-      headers: authHeaders,
-    });
+    // Loop mode: run for ~55 seconds checking every 3 seconds
+    const maxIterations = loopMode ? 18 : 1; // 18 * 3s = 54s
+    const allClosed: any[] = [];
 
-    if (!positionsRes.ok) {
-      const errText = await positionsRes.text();
-      return new Response(
-        JSON.stringify({ success: false, error: `Failed to get positions: ${positionsRes.status}`, details: errText }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    for (let i = 0; i < maxIterations; i++) {
+      if (i > 0) {
+        await new Promise(r => setTimeout(r, 3000));
+      }
 
-    const positions = await positionsRes.json();
-    const closedPositions: any[] = [];
-    const openPositions: any[] = [];
+      try {
+        const positionsRes = await safeFetch(`${baseUrl}/positions`, {
+          headers: authHeaders,
+        });
 
-    console.log(`👁️ ${positions.length} posições abertas | TP: $${tpCurrency.toFixed(2)} (${tpPercent}% de $${tradeAmount}) | closeAll: ${closeAll}`);
-
-    for (const pos of positions) {
-      const unrealizedProfit = pos.unrealizedProfit ?? pos.profit ?? 0;
-      const symbol = pos.symbol || 'unknown';
-      const posId = pos.id;
-      const volume = pos.volume || 0.01;
-
-      openPositions.push({
-        id: posId,
-        symbol,
-        unrealizedProfit: parseFloat(unrealizedProfit.toFixed(2)),
-        volume,
-        type: pos.type,
-        target: parseFloat(tpCurrency.toFixed(2)),
-      });
-
-      // Close if: closeAll requested OR profit target reached
-      const shouldClose = closeAll || (tpCurrency > 0 && unrealizedProfit >= tpCurrency);
-
-      if (shouldClose) {
-        const reason = closeAll ? 'CLOSE_ALL' : 'TP';
-        console.log(`🎯 ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | Alvo: $${tpCurrency.toFixed(2)}`);
-        try {
-          const closeRes = await safeFetch(`${baseUrl}/trade`, {
-            method: 'POST',
-            headers: { ...authHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              actionType: 'POSITION_CLOSE_ID',
-              positionId: posId,
-            }),
-          });
-          const closeResult = await closeRes.json();
-          if (closeRes.ok) {
-            console.log(`✅ Posição ${posId} (${symbol}) fechada! P/L: $${unrealizedProfit.toFixed(2)}`);
-            closedPositions.push({ id: posId, symbol, profit: unrealizedProfit, reason });
-          } else {
-            console.error(`❌ Erro ao fechar ${posId}: ${JSON.stringify(closeResult)}`);
-          }
-        } catch (e) {
-          console.error(`❌ Erro de rede ao fechar ${posId}: ${e}`);
+        if (!positionsRes.ok) {
+          const errText = await positionsRes.text();
+          console.error(`❌ Erro ao buscar posições (iter ${i}): ${positionsRes.status} ${errText}`);
+          continue;
         }
+
+        const positions = await positionsRes.json();
+
+        if (positions.length === 0) {
+          if (loopMode) continue;
+          break;
+        }
+
+        console.log(`👁️ [${i+1}/${maxIterations}] ${positions.length} posições | TP: $${tpCurrency.toFixed(2)} (${tpPercent}%) | closeAll: ${closeAll}`);
+
+        for (const pos of positions) {
+          const unrealizedProfit = pos.unrealizedProfit ?? pos.profit ?? 0;
+          const symbol = pos.symbol || 'unknown';
+          const posId = pos.id;
+
+          const shouldClose = closeAll || (tpCurrency > 0 && unrealizedProfit >= tpCurrency);
+
+          if (shouldClose) {
+            const reason = closeAll ? 'CLOSE_ALL' : 'TP';
+            console.log(`🎯 ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)}`);
+            try {
+              const closeRes = await safeFetch(`${baseUrl}/trade`, {
+                method: 'POST',
+                headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  actionType: 'POSITION_CLOSE_ID',
+                  positionId: posId,
+                }),
+              });
+              const closeResult = await closeRes.json();
+              if (closeRes.ok) {
+                console.log(`✅ Posição ${posId} (${symbol}) fechada! P/L: $${unrealizedProfit.toFixed(2)}`);
+                allClosed.push({ id: posId, symbol, profit: unrealizedProfit, reason });
+              } else {
+                console.error(`❌ Erro ao fechar ${posId}: ${JSON.stringify(closeResult)}`);
+              }
+            } catch (e) {
+              console.error(`❌ Erro de rede ao fechar ${posId}: ${e}`);
+            }
+          }
+        }
+
+        // If closeAll, only need one iteration
+        if (closeAll) break;
+      } catch (iterErr) {
+        console.error(`❌ Erro na iteração ${i}: ${iterErr}`);
       }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        totalOpen: positions.length - closedPositions.length,
-        closedCount: closedPositions.length,
-        closedPositions,
-        openPositions: openPositions.filter(p => !closedPositions.find(c => c.id === p.id)),
+        closedCount: allClosed.length,
+        closedPositions: allClosed,
+        iterations: Math.min(maxIterations, maxIterations),
         tpTarget: parseFloat(tpCurrency.toFixed(2)),
-        tpPercent,
-        tradeAmount,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

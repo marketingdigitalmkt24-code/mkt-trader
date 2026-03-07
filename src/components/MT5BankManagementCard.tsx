@@ -195,6 +195,29 @@ export function MT5BankManagementCard() {
         </div>
       </div>
 
+      {/* Balance */}
+      {mt5Balance.balance !== null && (
+        <div className="bg-secondary/50 rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Saldo MT5</span>
+            </div>
+            <span className="text-lg font-bold text-foreground">
+              {formatCurrency(mt5Balance.balance)} <span className="text-xs text-muted-foreground">{mt5Balance.currency}</span>
+            </span>
+          </div>
+          {mt5Balance.equity !== null && mt5Balance.equity !== mt5Balance.balance && (
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-xs text-muted-foreground">Equity</span>
+              <span className={cn("text-sm font-semibold", mt5Balance.equity >= mt5Balance.balance ? "text-call" : "text-put")}>
+                {formatCurrency(mt5Balance.equity)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Stats label - Today only */}
       <div className="bg-secondary/50 rounded-xl p-4 mb-4">
         <div className="flex items-center justify-center gap-1 mb-2">

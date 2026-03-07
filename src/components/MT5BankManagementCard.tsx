@@ -195,32 +195,23 @@ export function MT5BankManagementCard() {
         </div>
       </div>
 
-      {/* Balance */}
-      {mt5Balance.balance !== null && (
-        <div className="bg-secondary/50 rounded-xl p-3 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Saldo MT5</span>
-            </div>
-            <span className="text-lg font-bold text-foreground">
-              {formatCurrency(mt5Balance.balance)} <span className="text-xs text-muted-foreground">{mt5Balance.currency}</span>
+      {/* Balance + Stats (same style as IQ Option) */}
+      <div className="bg-secondary/50 rounded-xl p-4 mb-4">
+        <div className="text-sm text-muted-foreground mb-1">Saldo Atual</div>
+        <div className="text-2xl font-bold font-mono text-foreground">
+          {mt5Balance.balance !== null ? formatCurrency(mt5Balance.balance) : '—'}
+        </div>
+        {mt5Balance.equity !== null && mt5Balance.equity !== mt5Balance.balance && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-muted-foreground">Equity:</span>
+            <span className={cn("text-sm font-semibold", (mt5Balance.equity ?? 0) >= (mt5Balance.balance ?? 0) ? "text-call" : "text-put")}>
+              {formatCurrency(mt5Balance.equity)}
             </span>
           </div>
-          {mt5Balance.equity !== null && mt5Balance.equity !== mt5Balance.balance && (
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-xs text-muted-foreground">Equity</span>
-              <span className={cn("text-sm font-semibold", mt5Balance.equity >= mt5Balance.balance ? "text-call" : "text-put")}>
-                {formatCurrency(mt5Balance.equity)}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
-      {/* Stats label - Today only */}
-      <div className="bg-secondary/50 rounded-xl p-4 mb-4">
-        <div className="flex items-center justify-center gap-1 mb-2">
+        {/* Stats label - Today only */}
+        <div className="flex items-center justify-center gap-1 mt-3 mb-2">
           <Calendar className="w-4 h-4 text-muted-foreground mr-1" />
           <span className="text-xs text-muted-foreground">Estatísticas de Hoje</span>
         </div>

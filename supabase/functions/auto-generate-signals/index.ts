@@ -449,8 +449,8 @@ serve(async (req) => {
     const weekend = isWeekend();
     console.log(`🕐 Server-side signal generation | Weekend: ${weekend}`);
 
-    // ============= CHECK PENDING OPERATIONS PER ASSET =============
-    // Get all assets with pending trades - DON'T generate signals for them
+    // ============= CHECK PENDING OPERATIONS - ONE AT A TIME FOR IQ OPTION =============
+    // IQ Option: Only ONE operation at a time. Block ALL new trades if ANY is pending.
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: pendingOps } = await supabase
       .from('operation_results')
@@ -462,8 +462,15 @@ serve(async (req) => {
       (pendingOps || []).map((op: any) => op.asset.toUpperCase())
     );
     
+    const hasAnyPendingIQTrade = (pendingOps || []).length > 0;
+    
+    if (hasAnyPendingIQTrade) {
+      console.log(`🔒 IQ OPTION BLOQUEADO: ${(pendingOps || []).length} operação(ões) pendente(s) - aguardando finalizar antes de nova entrada`);
+      console.log(`🔒 Assets pendentes: ${Array.from(assetsWithPendingTrades).join(', ')}`);
+    }
+    
     if (assetsWithPendingTrades.size > 0) {
-      console.log(`🔒 Assets com trades pendentes (BLOQUEADOS): ${Array.from(assetsWithPendingTrades).join(', ')}`);
+      console.log(`🔒 Assets com trades pendentes (BLOQUEADOS para MT5): ${Array.from(assetsWithPendingTrades).join(', ')}`);
     }
 
     // ============= CHECK RECENT SIGNALS PER ASSET (cooldown) =============

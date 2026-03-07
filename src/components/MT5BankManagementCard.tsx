@@ -59,25 +59,27 @@ export function MT5BankManagementCard() {
     }
   }, []);
 
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      setStats({ dailyProfit: 0, todayTrades: 0, wins: 0, losses: 0, consecutiveLosses: 0, pnl30d: 0 });
+      toast({ title: 'Resultados resetados', description: 'Dados MT5 atualizados.' });
+    } catch (error) {
+      console.error('Error resetting MT5 stats:', error);
+      toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   useEffect(() => {
-    fetchStats();
     fetchBalance();
-    const interval = setInterval(fetchStats, 15000);
     const balanceInterval = setInterval(fetchBalance, 30000);
 
-    const channel = supabase
-      .channel('mt5-bank-stats')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, () => {
-        fetchStats();
-      })
-      .subscribe();
-
     return () => {
-      clearInterval(interval);
       clearInterval(balanceInterval);
-      supabase.removeChannel(channel);
     };
-  }, [fetchStats, fetchBalance]);
+  }, [fetchBalance]);
 
   const totalDecided = stats.wins + stats.losses;
   const winRate = totalDecided > 0 ? (stats.wins / totalDecided) * 100 : 0;

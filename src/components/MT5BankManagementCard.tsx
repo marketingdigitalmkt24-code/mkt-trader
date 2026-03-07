@@ -40,22 +40,31 @@ export function MT5BankManagementCard() {
     try {
       const now = new Date();
       const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      const thirtyDaysAgo = new Date(todayUTC);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // MT5 trades are NOT OTC and come from metaapi-place-trade
-      // We identify MT5 trades by checking assets that don't contain 'OTC'
-      const { data: results, error } = await supabase
-        .from('operation_results')
-        .select('asset, result, profit, entry_price')
-        .gte('created_at', todayUTC.toISOString())
-        .order('created_at', { ascending: true });
+      // Fetch today + last 30 days in parallel
+      const [todayRes, monthRes] = await Promise.all([
+        supabase
+          .from('operation_results')
+          .select('asset, result, profit, entry_price')
+          .gte('created_at', todayUTC.toISOString())
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('operation_results')
+          .select('asset, result, profit')
+          .gte('created_at', thirtyDaysAgo.toISOString())
+      ]);
 
-      if (error) throw error;
+      if (todayRes.error) throw todayRes.error;
 
-      // Filter MT5 trades: non-OTC USD pairs (same logic as auto-generate-signals)
-      const mt5Results = (results || []).filter(r => {
+      const filterMT5 = (rows: any[]) => (rows || []).filter(r => {
         const asset = r.asset?.toUpperCase() || '';
         return !asset.includes('OTC') && asset.includes('USD');
       });
+
+      const mt5Results = filterMT5(todayRes.data);
+      const mt5Results30d = filterMT5(monthRes.data);
 
       let profit = 0;
       let wins = 0;
@@ -74,8 +83,15 @@ export function MT5BankManagementCard() {
           profit += result.profit || 0;
           currentStreak++;
           consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
-        } else if (resultType === 'pending') {
-          // skip pending
+        }
+      }
+
+      // Calculate 30d P&L
+      let pnl30d = 0;
+      for (const r of mt5Results30d) {
+        const rt = r.result?.toLowerCase();
+        if (rt === 'win' || rt === 'loss' || rt === 'loose') {
+          pnl30d += r.profit || 0;
         }
       }
 
@@ -85,6 +101,7 @@ export function MT5BankManagementCard() {
         wins,
         losses,
         consecutiveLosses,
+        pnl30d,
       });
     } catch (error) {
       console.error('Error fetching MT5 stats:', error);

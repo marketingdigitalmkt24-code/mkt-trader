@@ -74,9 +74,10 @@ serve(async (req) => {
     const tradeAmount = tradingSettings?.mt5_trade_amount || 1;
     const tpCurrency = tradeAmount * (tpPercent / 100);
 
-    // Get region
+    // Get region and ensure account is deployed
     let region = 'new-york';
     let clientToken = METAAPI_TOKEN;
+    let accountState = 'UNKNOWN';
     try {
       const accountRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}`, {
         headers: { 'auth-token': METAAPI_TOKEN },
@@ -84,10 +85,30 @@ serve(async (req) => {
       if (accountRes.ok) {
         const accountData = await accountRes.json();
         region = accountData.region || 'new-york';
+        accountState = accountData.state || 'UNKNOWN';
+        
+        // Auto-deploy if undeployed
+        if (accountState === 'UNDEPLOYED') {
+          console.log('🔄 Account is UNDEPLOYED, deploying...');
+          const deployRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}/deploy`, {
+            method: 'POST',
+            headers: { 'auth-token': METAAPI_TOKEN },
+          });
+          if (deployRes.ok) {
+            console.log('✅ Deploy request sent. Waiting for connection...');
+            // Wait a bit for deployment
+            await new Promise(r => setTimeout(r, 5000));
+          } else {
+            const errText = await deployRes.text();
+            console.error(`❌ Deploy failed: ${errText}`);
+          }
+        }
       } else {
         await accountRes.text();
       }
-    } catch (_) {}
+    } catch (e) {
+      console.error('Error checking account:', e);
+    }
 
     // Get account-specific access token for Client API
     try {
@@ -105,21 +126,35 @@ serve(async (req) => {
     const baseUrl = `https://mt-client-api-v1.${region}.agiliumtrade.ai/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
     const authHeaders = { 'auth-token': clientToken };
 
-    // Fetch account balance
+    // Fetch account balance - retry with main token if client token fails
     let accountBalance: number | null = null;
     let accountEquity: number | null = null;
     let accountCurrency = 'USD';
     try {
-      const infoRes = await safeFetch(`${baseUrl}/account-information`, {
+      let infoRes = await safeFetch(`${baseUrl}/account-information`, {
         headers: authHeaders,
       });
+      // If client token fails, try with main token
+      if (!infoRes.ok && clientToken !== METAAPI_TOKEN) {
+        await infoRes.text();
+        console.log('⚠️ Client token failed for account-info, retrying with main token...');
+        infoRes = await safeFetch(`${baseUrl}/account-information`, {
+          headers: { 'auth-token': METAAPI_TOKEN },
+        });
+      }
       if (infoRes.ok) {
         const info = await infoRes.json();
         accountBalance = info.balance ?? null;
         accountEquity = info.equity ?? null;
         accountCurrency = info.currency || 'USD';
+        console.log(`💰 MT5 Balance: ${accountBalance} ${accountCurrency} | Equity: ${accountEquity}`);
+      } else {
+        const errText = await infoRes.text();
+        console.error(`❌ Failed to get account info: ${infoRes.status} ${errText}`);
       }
-    } catch (_) {}
+    } catch (e) {
+      console.error('❌ Error fetching account info:', e);
+    }
 
     // Fetch deal history: today + 30 days
     let todayDeals: any[] = [];

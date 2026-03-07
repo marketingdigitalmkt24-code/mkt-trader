@@ -51,6 +51,41 @@ export function BankManagementCard() {
     }
   };
 
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      const now = new Date();
+      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+
+      // Delete today's IQ Option results (OTC + non-USD pairs)
+      const { data: results } = await supabase
+        .from('operation_results')
+        .select('id, asset')
+        .gte('created_at', todayUTC.toISOString());
+
+      const iqIds = (results || [])
+        .filter(r => {
+          const asset = r.asset?.toUpperCase() || '';
+          // IQ Option trades: OTC assets OR non-USD pairs
+          return asset.includes('OTC') || !asset.includes('USD');
+        })
+        .map(r => r.id);
+
+      if (iqIds.length > 0) {
+        for (const id of iqIds) {
+          await supabase.from('operation_results').delete().eq('id', id);
+        }
+      }
+
+      toast({ title: 'Resultados IQ Option resetados', description: 'Estatísticas do dia zeradas com sucesso.' });
+    } catch (error) {
+      console.error('Error resetting IQ stats:', error);
+      toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     if (currency === 'BRL') {
       return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;

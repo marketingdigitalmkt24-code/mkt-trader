@@ -376,15 +376,15 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     return { score: 0, adjustments: [`🔴 PADRÃO DE PERDA: ${s.asset} ${s.type} às ${currentHour}h = ${matchingLossPattern.count} losses`], shouldSkip: true, skipReason: `Padrão de perda identificado` };
   }
 
-  // 1. ATIVO COM HISTÓRICO NEGATIVO → BLOQUEAR
+  // 1. ATIVO COM HISTÓRICO MUITO NEGATIVO → BLOQUEAR
   const assetPerf = model.assetPerformance.get(s.asset);
-  if (assetPerf && assetPerf.trades >= 2 && assetPerf.winRate < 45 && assetPerf.profit < 0) {
-    return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
+  if (assetPerf && assetPerf.trades >= 5 && assetPerf.winRate < 30 && assetPerf.profit < -200) {
+    return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico muito negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
   }
 
-  // 2. LOSS STREAK RECENTE → BLOQUEAR
+  // 2. LOSS STREAK RECENTE → BLOQUEAR só com 3+
   const lossStreak = model.recentLossStreaks.get(s.asset) || 0;
-  if (lossStreak >= 2) {
+  if (lossStreak >= 3) {
     return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
   }
 
@@ -421,9 +421,9 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
       adjustments.push(`ATIVO FRACO: WR ${assetPerf.winRate}%`);
     }
   } else {
-    // Ativo SEM histórico = risco desconhecido, penalizar
-    score -= 5;
-    adjustments.push(`ATIVO NOVO: sem histórico (risco)`);
+    // Ativo SEM histórico = aceitar se indicadores forem fortes
+    score += 0;
+    adjustments.push(`ATIVO NOVO: sem histórico`);
   }
 
   // 5. Direção com melhor taxa de acerto para este ativo
@@ -588,16 +588,16 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
       continue;
     }
 
-    // Rejeitar volatilidade alta ou média
-    if (s.indicators.atr.volatility === 'high' || s.indicators.atr.volatility === 'medium') {
-      console.log(`❌ ${s.asset}: Volatilidade ${s.indicators.atr.volatility} (apenas low aceito)`);
+    // Rejeitar volatilidade alta
+    if (s.indicators.atr.volatility === 'high') {
+      console.log(`❌ ${s.asset}: Volatilidade ${s.indicators.atr.volatility} (alta = rejeitado)`);
       continue;
     }
 
-    // Confluência mínima RIGOROSA
+    // Confluência mínima
     const assetPerf = model.assetPerformance.get(s.asset);
-    const isTopAsset = assetPerf && assetPerf.winRate >= 60 && assetPerf.profit > 0;
-    const minConf = isTopAsset ? 75 : 83; // Mais rigoroso (era 65/70)
+    const isTopAsset = assetPerf && assetPerf.winRate >= 55 && assetPerf.profit > 0;
+    const minConf = isTopAsset ? 70 : 75;
     if (s.indicators.confluenceScore < minConf) {
       console.log(`❌ ${s.asset}: Confluência ${s.indicators.confluenceScore}% < ${minConf}%`);
       continue;
@@ -717,10 +717,10 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
     const finalScore = Math.min(Math.round(score + (model.hasSufficientData ? learned.score * 0.5 : 0)), 100);
     const finalRisk = Math.max(0, riskScore + (model.hasSufficientData && learned.score < 0 ? 10 : 0));
 
-    // Critérios adaptativos - ULTRA RIGOROSOS para IQ Option
-    const minScore = isTopAsset ? 92 : (model.hasSufficientData ? 95 : 93);
-    const maxRisk = isTopAsset ? 40 : (model.hasSufficientData ? 35 : 40);
-    const minCriteria = isTopAsset ? 4 : 5;
+    // Critérios adaptativos - Aceitar sinais com qualidade atual
+    const minScore = isTopAsset ? 85 : (model.hasSufficientData ? 88 : 85);
+    const maxRisk = isTopAsset ? 55 : (model.hasSufficientData ? 50 : 55);
+    const minCriteria = isTopAsset ? 3 : 4;
 
     if (finalScore >= minScore && finalRisk <= maxRisk && criteriaCount >= minCriteria) {
       matches.push({
@@ -857,44 +857,25 @@ ${model.worstHours.length > 0 ? `- Piores horários: ${model.worstHours.join('h,
     const toxicAssetsList = Array.from(model.toxicAssets);
     const toxicDirsList = Array.from(model.toxicDirections.keys());
 
-    const systemPrompt = `Você é um analista de risco ULTRA CONSERVADOR para opções binárias na IQ Option. Seu objetivo é EVITAR PERDAS a todo custo. Você APRENDE com cada operação perdedora para NUNCA repetir o mesmo erro.
+    const systemPrompt = `Você é um analista de sinais para opções binárias na IQ Option. Os sinais já passaram por filtros técnicos rigorosos (RSI extremo, Stochastic, Bollinger, padrão de candle). Sua função é validar e aprovar sinais de qualidade.
 
-🧠 MODO: ${mode} - PROTEÇÃO ANTI-PERDA MÁXIMA
+🧠 MODO: ${mode}
 ${learningSummary}
 
-🔴 PADRÕES DE PERDA IDENTIFICADOS (NUNCA REPETIR):
-${lossPatternsSummary}
-
-${toxicAssetsList.length > 0 ? `☠️ ATIVOS TÓXICOS (NUNCA OPERAR): ${toxicAssetsList.join(', ')}` : ''}
+${toxicAssetsList.length > 0 ? `☠️ ATIVOS TÓXICOS (REJEITAR): ${toxicAssetsList.join(', ')}` : ''}
 ${toxicDirsList.length > 0 ? `⛔ DIREÇÕES TÓXICAS: ${toxicDirsList.join(', ')}` : ''}
-${preferredAssets.length > 0 ? `✅ ÚNICOS ATIVOS PERMITIDOS (com lucro comprovado): ${preferredAssets.join(', ')}` : '⚠️ NENHUM ativo com lucro comprovado - ser EXTREMAMENTE seletivo'}
-${avoidAssets.length > 0 ? `❌ ATIVOS COM PERDA (EVITAR): ${avoidAssets.join(', ')}` : ''}
+${preferredAssets.length > 0 ? `✅ ATIVOS COM BOM HISTÓRICO: ${preferredAssets.join(', ')}` : ''}
 
-🎯 REGRA DE OURO: SÓ APROVAR SE O ATIVO TEM HISTÓRICO DE LUCRO
-- Se o ativo NUNCA foi operado → SKIP (risco desconhecido)
-- Se o ativo tem mais losses que wins → SKIP
-- Se o ativo perdeu dinheiro no total → SKIP  
-- Se a DIREÇÃO (CALL/PUT) deste ativo tem WR < 50% → SKIP
-- SÓ APROVAR ativos com WR >= 55% E lucro positivo E nesta direção específica
+🎯 CRITÉRIOS PARA APROVAR (EXECUTE):
+1. RSI em zona extrema (< 25 para CALL, > 75 para PUT)
+2. Pelo menos 4 confirmações técnicas
+3. Ativo NÃO está na lista de tóxicos
+4. Direção NÃO está na lista de tóxicas
+5. Se tem histórico, WR >= 40%
 
-CRITÉRIOS TÉCNICOS (todos obrigatórios para EXECUTE):
-1. RSI em zona extrema (< 15 para CALL, > 85 para PUT) — mais rigoroso que antes
-2. Stochastic confirmando exaustão (< 15 CALL, > 85 PUT)
-3. Padrão de candle de reversão confirmado
-4. Preço no suporte (CALL) ou resistência (PUT)
-5. Volatilidade BAIXA (ATR low)
-6. Ativo com WR >= 55% e lucro positivo no histórico
-7. Direção (CALL/PUT) com WR >= 50% para este ativo
-8. Horário não está nos piores horários
-
-QUANDO REJEITAR (SKIP):
-- Qualquer dúvida = SKIP
-- Ativo sem histórico de lucro = SKIP
-- Ativo que aparece nos padrões de perda = SKIP
-- RSI entre 25-75 = SKIP (não está em extremo real)
-- WR da direção < 50% = SKIP
-
-FILOSOFIA: É melhor perder uma oportunidade do que perder dinheiro. Rejeite 90% dos sinais se necessário.
+APROVAR sinais que atendem os critérios técnicos. Estes sinais já foram pré-filtrados com alta qualidade.
+Ativos novos (sem histórico) PODEM ser aprovados se os indicadores técnicos forem fortes.
+REJEITAR apenas ativos tóxicos ou com padrão claro de perda.
 
 Responda APENAS JSON válido:
 {"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":85-100,"reason":"","adjustedConfluence":85+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name"}`;

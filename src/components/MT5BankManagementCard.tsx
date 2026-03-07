@@ -36,106 +36,6 @@ export function MT5BankManagementCard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const now = new Date();
-      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-      const thirtyDaysAgo = new Date(todayUTC);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      // Fetch today + last 30 days in parallel
-      const [todayRes, monthRes] = await Promise.all([
-        supabase
-          .from('operation_results')
-          .select('asset, result, profit, entry_price')
-          .gte('created_at', todayUTC.toISOString())
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('operation_results')
-          .select('asset, result, profit')
-          .gte('created_at', thirtyDaysAgo.toISOString())
-      ]);
-
-      if (todayRes.error) throw todayRes.error;
-
-      const filterMT5 = (rows: any[]) => (rows || []).filter(r => {
-        const asset = r.asset?.toUpperCase() || '';
-        return !asset.includes('OTC') && asset.includes('USD');
-      });
-
-      const mt5Results = filterMT5(todayRes.data);
-      const mt5Results30d = filterMT5(monthRes.data);
-
-      let profit = 0;
-      let wins = 0;
-      let losses = 0;
-      let consecutiveLosses = 0;
-      let currentStreak = 0;
-
-      for (const result of mt5Results) {
-        const resultType = result.result?.toLowerCase();
-        if (resultType === 'win') {
-          wins++;
-          profit += result.profit || 0;
-          currentStreak = 0;
-        } else if (resultType === 'loss' || resultType === 'loose') {
-          losses++;
-          profit += result.profit || 0;
-          currentStreak++;
-          consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
-        }
-      }
-
-      // Calculate 30d P&L
-      let pnl30d = 0;
-      for (const r of mt5Results30d) {
-        const rt = r.result?.toLowerCase();
-        if (rt === 'win' || rt === 'loss' || rt === 'loose') {
-          pnl30d += r.profit || 0;
-        }
-      }
-
-      setStats({
-        dailyProfit: profit,
-        todayTrades: mt5Results.filter(r => r.result?.toLowerCase() !== 'pending').length,
-        wins,
-        losses,
-        consecutiveLosses,
-        pnl30d,
-      });
-    } catch (error) {
-      console.error('Error fetching MT5 stats:', error);
-    }
-  }, []);
-
-  const handleReset = async () => {
-    setIsResetting(true);
-    try {
-      const now = new Date();
-      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-
-      // Delete ALL today's results (IQ Option + MT5)
-      const { data: results } = await supabase
-        .from('operation_results')
-        .select('id')
-        .gte('created_at', todayUTC.toISOString());
-
-      if (results && results.length > 0) {
-        for (const r of results) {
-          await supabase.from('operation_results').delete().eq('id', r.id);
-        }
-      }
-
-      setStats({ dailyProfit: 0, todayTrades: 0, wins: 0, losses: 0, consecutiveLosses: 0, pnl30d: 0 });
-      toast({ title: 'Resultados resetados', description: 'IQ Option e MT5 zerados com sucesso.' });
-    } catch (error) {
-      console.error('Error resetting MT5 stats:', error);
-      toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
   const fetchBalance = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke('metaapi-monitor-positions');
@@ -145,9 +45,17 @@ export function MT5BankManagementCard() {
           equity: data.equity ?? null,
           currency: data.currency || 'USD',
         });
+        setStats({
+          dailyProfit: data.todayProfit ?? 0,
+          todayTrades: data.todayTrades ?? 0,
+          wins: data.todayWins ?? 0,
+          losses: data.todayLosses ?? 0,
+          consecutiveLosses: data.consecutiveLosses ?? 0,
+          pnl30d: data.pnl30d ?? 0,
+        });
       }
     } catch (e) {
-      console.error('Error fetching MT5 balance:', e);
+      console.error('Error fetching MT5 data:', e);
     }
   }, []);
 

@@ -416,6 +416,31 @@ function tryGenerateSignal(asset: Asset) {
   // RIGOROSO: Mínimo 5 de 6 confirmações
   if (indicators.confluenceCount < MIN_CONFIRMATIONS) return null;
 
+  // ============= FILTRO TOPO/FUNDO REAL =============
+  // Só gerar sinal quando o preço está REALMENTE no topo ou fundo
+  const isCall = type === 'CALL';
+  const atExtreme = isCall
+    ? (indicators.rsi.value <= RSI_CALL_MAX && indicators.supportResistance.pricePosition === 'near_support')
+    : (indicators.rsi.value >= RSI_PUT_MIN && indicators.supportResistance.pricePosition === 'near_resistance');
+  
+  if (!atExtreme) {
+    return null; // Preço não está em topo/fundo real — não operar
+  }
+
+  // Exigir padrão de candle de reversão para confirmar topo/fundo
+  if (!indicators.reversalPattern) {
+    return null; // Sem confirmação de candle de reversão no topo/fundo
+  }
+
+  // Exigir Stochastic também em zona extrema para confirmar exaustão
+  const stochExtreme = isCall
+    ? (indicators.stochastic.k <= 25)
+    : (indicators.stochastic.k >= 75);
+  
+  if (!stochExtreme) {
+    return null; // Stochastic não confirma exaustão no topo/fundo
+  }
+
   const confirmations = generateConfirmations(indicators, type);
 
   return {

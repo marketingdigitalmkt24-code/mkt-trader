@@ -66,10 +66,11 @@ const Index = () => {
           </div>
         )}
 
-        {/* Broker Connections + AI Status - Top Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        {/* Top Row: Broker Connections + Gestão Banca IQ + Gestão Banca MT5 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
           <BrokerConnectionsCard />
-          <AIAnalysisStatusCard />
+          <BankManagementCard />
+          <MT5BankManagementCard />
         </div>
 
         {/* Filters Row */}
@@ -102,19 +103,10 @@ const Index = () => {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-            {/* Live Operations */}
-            <LiveOperationsCard />
-            
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-4 sm:space-y-6">
-            <BankManagementCard />
-            <MT5BankManagementCard />
-          </div>
+        {/* Bottom Row: Live Operations + AI Status */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <LiveOperationsCard />
+          <AIAnalysisStatusCard />
         </div>
       </main>
     </div>

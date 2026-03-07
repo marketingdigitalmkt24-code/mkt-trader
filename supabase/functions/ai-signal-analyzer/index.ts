@@ -358,13 +358,31 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
   const adjustments: string[] = [];
   const currentHour = new Date().getUTCHours();
 
-  // 1. ATIVO COM HISTÓRICO TERRÍVEL → BLOQUEAR (mais agressivo)
+  // 0. ATIVO TÓXICO → BLOQUEAR IMEDIATAMENTE
+  if (model.toxicAssets.has(s.asset)) {
+    return { score: 0, adjustments: ['☠️ ATIVO TÓXICO: só gera perda'], shouldSkip: true, skipReason: `Ativo tóxico (WR < 40%)` };
+  }
+
+  // 0b. DIREÇÃO TÓXICA para este ativo → BLOQUEAR
+  if (model.toxicDirections.has(`${s.asset}|${s.type}`)) {
+    return { score: 0, adjustments: [`☠️ DIREÇÃO TÓXICA: ${s.type} perde neste ativo`], shouldSkip: true, skipReason: `${s.type} tóxico em ${s.asset}` };
+  }
+
+  // 0c. PADRÃO DE PERDA: mesmo ativo + direção + hora = perda repetida
+  const matchingLossPattern = model.lossPatterns.find(lp => 
+    lp.asset === s.asset && lp.direction === s.type && lp.hour === currentHour
+  );
+  if (matchingLossPattern && matchingLossPattern.count >= 2) {
+    return { score: 0, adjustments: [`🔴 PADRÃO DE PERDA: ${s.asset} ${s.type} às ${currentHour}h = ${matchingLossPattern.count} losses`], shouldSkip: true, skipReason: `Padrão de perda identificado` };
+  }
+
+  // 1. ATIVO COM HISTÓRICO NEGATIVO → BLOQUEAR
   const assetPerf = model.assetPerformance.get(s.asset);
   if (assetPerf && assetPerf.trades >= 2 && assetPerf.winRate < 45 && assetPerf.profit < 0) {
     return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
   }
 
-  // 2. LOSS STREAK RECENTE → BLOQUEAR (era 3, agora 2)
+  // 2. LOSS STREAK RECENTE → BLOQUEAR
   const lossStreak = model.recentLossStreaks.get(s.asset) || 0;
   if (lossStreak >= 2) {
     return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
@@ -380,20 +398,32 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     }
   }
 
+  // 3b. PADRÃO DE PERDA PARCIAL: mesmo ativo + hora (qualquer direção)
+  const anyLossAtHour = model.lossPatterns.filter(lp => lp.asset === s.asset && lp.hour === currentHour);
+  const totalLossesAtHour = anyLossAtHour.reduce((sum, lp) => sum + lp.count, 0);
+  if (totalLossesAtHour >= 3) {
+    score -= 20;
+    adjustments.push(`⚠️ ${totalLossesAtHour} losses neste ativo às ${currentHour}h`);
+  }
+
   // ===== BONIFICAÇÕES =====
 
-  // 4. Ativo com bom histórico
+  // 4. Ativo com bom histórico - SÓ bonificar se REALMENTE lucrativo
   if (assetPerf) {
-    if (assetPerf.winRate >= 60 && assetPerf.profit > 0) {
+    if (assetPerf.winRate >= 65 && assetPerf.profit > 0 && assetPerf.trades >= 3) {
       score += 15;
       adjustments.push(`ATIVO TOP: WR ${assetPerf.winRate}% | $${assetPerf.profit}`);
-    } else if (assetPerf.winRate >= 50 && assetPerf.profit >= 0) {
+    } else if (assetPerf.winRate >= 55 && assetPerf.profit >= 0) {
       score += 8;
       adjustments.push(`ATIVO BOM: WR ${assetPerf.winRate}%`);
-    } else if (assetPerf.winRate < 45 && assetPerf.trades >= 3) {
-      score -= 10;
+    } else if (assetPerf.winRate < 50 && assetPerf.trades >= 2) {
+      score -= 15;
       adjustments.push(`ATIVO FRACO: WR ${assetPerf.winRate}%`);
     }
+  } else {
+    // Ativo SEM histórico = risco desconhecido, penalizar
+    score -= 5;
+    adjustments.push(`ATIVO NOVO: sem histórico (risco)`);
   }
 
   // 5. Direção com melhor taxa de acerto para este ativo
@@ -402,15 +432,14 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     const dirType = s.type;
     const dirWinRate = dirType === 'CALL' ? dirPerf.callWinRate : dirPerf.putWinRate;
     const dirTrades = dirType === 'CALL' ? dirPerf.callTrades : dirPerf.putTrades;
-    const otherWinRate = dirType === 'CALL' ? dirPerf.putWinRate : dirPerf.callWinRate;
 
     if (dirTrades >= 2) {
       if (dirWinRate >= 65) {
         score += 12;
         adjustments.push(`DIREÇÃO FORTE: ${dirType} WR ${dirWinRate}%`);
-      } else if (dirWinRate < 35 && dirTrades >= 3) {
-        score -= 15;
-        adjustments.push(`DIREÇÃO FRACA: ${dirType} WR ${dirWinRate}% (${otherWinRate === 'CALL' ? 'PUT' : 'CALL'} é melhor)`);
+      } else if (dirWinRate < 40) {
+        score -= 20;
+        adjustments.push(`DIREÇÃO PERDEDORA: ${dirType} WR ${dirWinRate}%`);
       }
     }
   }

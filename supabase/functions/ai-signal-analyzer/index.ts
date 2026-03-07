@@ -47,6 +47,13 @@ interface AssetPerformance {
 
 // ============= LEARNING ENGINE: Aprendizado com operações passadas =============
 
+interface LossPattern {
+  asset: string;
+  direction: string;
+  hour: number;
+  count: number;
+}
+
 interface LearnedPattern {
   // Performance por ativo
   assetPerformance: Map<string, AssetPerformance>;
@@ -58,6 +65,12 @@ interface LearnedPattern {
   timeframePerformance: Map<string, { wins: number; losses: number; profit: number }>;
   // Sequências de loss por ativo (para evitar overtrading em ativos perdedores)
   recentLossStreaks: Map<string, number>;
+  // NOVO: Padrões de perda identificados (asset+direction+hora)
+  lossPatterns: LossPattern[];
+  // NOVO: Ativos que só perdem (WR < 40% com 3+ trades)
+  toxicAssets: Set<string>;
+  // NOVO: Direções tóxicas por ativo
+  toxicDirections: Map<string, string>; // asset -> 'CALL' ou 'PUT' que mais perde
   // Lucro total e métricas gerais
   totalProfit: number;
   totalTrades: number;

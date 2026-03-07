@@ -30,6 +30,7 @@ export function MT5BankManagementCard() {
     wins: 0,
     losses: 0,
     consecutiveLosses: 0,
+    pnl30d: 0,
   });
   const [mt5Balance, setMt5Balance] = useState<MT5BalanceInfo>({ balance: null, equity: null, currency: 'USD' });
   const [isLoading, setIsLoading] = useState(false);

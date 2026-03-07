@@ -105,6 +105,22 @@ serve(async (req) => {
     const baseUrl = `https://mt-client-api-v1.${region}.agiliumtrade.ai/users/current/accounts/${METAAPI_ACCOUNT_ID}`;
     const authHeaders = { 'auth-token': clientToken };
 
+    // Fetch account balance
+    let accountBalance: number | null = null;
+    let accountEquity: number | null = null;
+    let accountCurrency = 'USD';
+    try {
+      const infoRes = await safeFetch(`${baseUrl}/account-information`, {
+        headers: authHeaders,
+      });
+      if (infoRes.ok) {
+        const info = await infoRes.json();
+        accountBalance = info.balance ?? null;
+        accountEquity = info.equity ?? null;
+        accountCurrency = info.currency || 'USD';
+      }
+    } catch (_) {}
+
     // Spread advantage: ONLY for EURUSD (tightest spread ~1 pip)
     // EURUSD closes 15% earlier since spread cost is minimal — faster profit
     const EURUSD_SPREAD_MULTIPLIER = 0.85;
@@ -204,6 +220,9 @@ serve(async (req) => {
         tpTarget: parseFloat(tpCurrency.toFixed(2)),
         tpPercent,
         tradeAmount,
+        balance: accountBalance,
+        equity: accountEquity,
+        currency: accountCurrency,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

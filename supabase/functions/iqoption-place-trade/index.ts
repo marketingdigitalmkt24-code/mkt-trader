@@ -136,13 +136,12 @@ async function placeTradeFireAndForget(
       ws.close();
       if (tradePlaced && tradeId) {
         resolve({ success: true, tradeId });
-      } else if (tradePlaced) {
-        // Trade was sent but no confirmation - still might have worked
-        resolve({ success: true, tradeId: `pending_${Date.now()}` });
       } else {
-        resolve({ success: false, error: 'Trade timeout - asset may be closed' });
+        // Trade was NOT confirmed by IQ Option - do NOT save as pending
+        console.log('❌ Trade NOT confirmed - will not save fake pending entry');
+        resolve({ success: false, error: 'Trade timeout - no confirmation from IQ Option' });
       }
-    }, 30000); // 30s timeout (was 120s)
+    }, 30000);
 
     ws.onopen = () => {
       console.log('🔗 WebSocket connected, authenticating...');

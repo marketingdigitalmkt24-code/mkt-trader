@@ -12,8 +12,9 @@ const RSI_CALL_MAX = 25; // Mais extremo
 const RSI_PUT_MIN = 75; // Mais extremo
 const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
 const IQ_MIN_CONFLUENCE_SCALPING = 90; // Confluência mínima para IQ Option Scalping
-const FORCE_EXTREME_PROBABILITY = 0.98; // 98% chance de indicadores extremos
-const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
+const FORCE_EXTREME_PROBABILITY = 0.80; // 80% chance de indicadores extremos (era 98% = tudo passava)
+const ASSET_SIGNAL_COOLDOWN_MS = 300000; // 5 minutos de cooldown POR ATIVO (era 3min)
+const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
 
 // ============= NEWS FILTER - Avoid trading during high-impact news =============
 interface NewsEvent {
@@ -150,10 +151,8 @@ const OTC_ASSETS = [
   { symbol: 'AUD/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
 ];
 
-const CRYPTO_ASSETS = [
-  { symbol: 'BTC/USD', icon: '₿', type: 'crypto', isOTC: false },
-  { symbol: 'ETH/USD', icon: 'Ξ', type: 'crypto', isOTC: false },
-];
+// Crypto removido - IQ Option opera SOMENTE pares de moedas
+const CRYPTO_ASSETS: Asset[] = [];
 
 interface Asset {
   symbol: string;
@@ -525,30 +524,46 @@ serve(async (req) => {
       }
     });
 
-    // Get available assets
+    // Get available assets - FILTRAR APENAS FOREX NA GERAÇÃO
     let assets: Asset[] = [];
+
+    // Helper: verificar se é par de moedas forex
+    const isForexPairAsset = (symbol: string): boolean => {
+      const clean = symbol.replace('-OTC', '').replace(' OTC', '').trim();
+      const parts = clean.split('/').map(p => p.trim().toUpperCase());
+      return parts.length === 2 && parts.every(p => IQ_FOREX_CURRENCIES.includes(p));
+    };
 
     try {
       const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets');
       if (iqData?.success && iqData?.assets?.length > 0) {
         const enabledAssets = iqData.assets.filter((a: any) => a.enabled === true);
-        assets = enabledAssets.map((a: any) => ({
+        let allAssets = enabledAssets.map((a: any) => ({
           symbol: a.name,
-          icon: a.isOTC ? '🔵' : a.name.includes('BTC') ? '₿' : a.name.includes('ETH') ? 'Ξ' :
-                a.name.includes('EUR') ? '🇪🇺' : a.name.includes('GBP') ? '🇬🇧' : '📊',
+          icon: a.isOTC ? '🔵' : a.name.includes('EUR') ? '🇪🇺' : a.name.includes('GBP') ? '🇬🇧' : '📊',
           type: a.isOTC ? 'otc' : a.isBlitz ? 'blitz' : a.type,
           isOTC: a.isOTC || false,
           isBlitz: a.isBlitz || false,
           isBinary: a.isBinary || false,
           payout: a.payout,
         }));
+        
+        // FILTRO FOREX NA GERAÇÃO: só gerar sinais para pares de moedas
+        const beforeFilter = allAssets.length;
+        allAssets = allAssets.filter((a: Asset) => isForexPairAsset(a.symbol));
+        console.log(`🔒 Filtro FOREX na geração: ${allAssets.length}/${beforeFilter} assets são pares de moedas`);
+        
+        // Filtrar por payout mínimo de 75% (evitar trades com retorno baixo)
+        allAssets = allAssets.filter((a: Asset) => !a.payout || a.payout >= 75);
+        
+        assets = allAssets;
       }
     } catch (e) {
       console.log('⚠️ IQ Option assets fetch failed, using fallback');
     }
 
     if (assets.length === 0) {
-      assets = weekend ? OTC_ASSETS : [...FOREX_ASSETS, ...CRYPTO_ASSETS];
+      assets = weekend ? OTC_ASSETS : [...FOREX_ASSETS];
     } else {
       if (weekend) {
         assets = assets.filter(a => a.isOTC || isOTCAsset(a.symbol));
@@ -587,14 +602,16 @@ serve(async (req) => {
         return false;
       }
       
-      // Block assets with 3+ consecutive losses
+      // Block assets with 2+ consecutive losses (era 3+)
       const history = assetHistory.get(asset.symbol);
-      if (history && history.consecutiveLosses >= 3) {
+      if (history && history.consecutiveLosses >= 2) {
+        console.log(`⛔ ${asset.symbol}: BLOQUEADO por ${history.consecutiveLosses} losses consecutivos`);
         return false;
       }
       
-      // Block assets with very bad win rate (< 35% with 5+ trades)
-      if (history && history.winRate < 35 && (history.wins + history.losses) >= 5) {
+      // Block assets with bad win rate (< 45% with 3+ trades) - era < 35% com 5+
+      if (history && history.winRate < 45 && (history.wins + history.losses) >= 3) {
+        console.log(`⛔ ${asset.symbol}: BLOQUEADO por WR ${history.winRate}% (${history.wins}W/${history.losses}L)`);
         return false;
       }
       
@@ -710,17 +727,13 @@ serve(async (req) => {
       console.error('❌ Falha ao chamar IA:', e);
     }
 
-    // FALLBACK: Se a IA falhar, usar o melhor candidato por confluência
+    // FALLBACK: Se a IA falhar, NÃO operar — esperar próximo ciclo
     if (aiApprovedSignals.length === 0) {
-      console.log('⚠️ IA não aprovou sinais, usando melhor candidato por confluência');
-      candidates.sort((a, b) => {
-        const histA = assetHistory.get(a.asset);
-        const histB = assetHistory.get(b.asset);
-        const histScoreA = histA ? (histA.winRate >= 55 ? 20 : histA.winRate >= 45 ? 0 : -20) : 0;
-        const histScoreB = histB ? (histB.winRate >= 55 ? 20 : histB.winRate >= 45 ? 0 : -20) : 0;
-        return (b.indicators.confluenceScore + histScoreB) - (a.indicators.confluenceScore + histScoreA);
-      });
-      aiApprovedSignals = [candidates[0]];
+      console.log('⚠️ IA não aprovou sinais — NÃO operando (proteção anti-loss)');
+      return new Response(
+        JSON.stringify({ success: true, generated: 0, reason: 'AI did not approve any signals' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Ordenar por confiança IA

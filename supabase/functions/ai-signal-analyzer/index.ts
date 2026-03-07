@@ -285,15 +285,15 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
   const adjustments: string[] = [];
   const currentHour = new Date().getUTCHours();
 
-  // 1. ATIVO COM HISTÓRICO TERRÍVEL → BLOQUEAR
+  // 1. ATIVO COM HISTÓRICO TERRÍVEL → BLOQUEAR (mais agressivo)
   const assetPerf = model.assetPerformance.get(s.asset);
-  if (assetPerf && assetPerf.trades >= 3 && assetPerf.winRate < 35 && assetPerf.profit < -50) {
-    return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico péssimo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
+  if (assetPerf && assetPerf.trades >= 2 && assetPerf.winRate < 45 && assetPerf.profit < 0) {
+    return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
   }
 
-  // 2. LOSS STREAK RECENTE → BLOQUEAR
+  // 2. LOSS STREAK RECENTE → BLOQUEAR (era 3, agora 2)
   const lossStreak = model.recentLossStreaks.get(s.asset) || 0;
-  if (lossStreak >= 3) {
+  if (lossStreak >= 2) {
     return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
   }
 
@@ -615,10 +615,10 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
     const finalScore = Math.min(Math.round(score + (model.hasSufficientData ? learned.score * 0.5 : 0)), 100);
     const finalRisk = Math.max(0, riskScore + (model.hasSufficientData && learned.score < 0 ? 10 : 0));
 
-    // Critérios adaptativos - MAIS RIGOROSOS
-    const minScore = isTopAsset ? 88 : (model.hasSufficientData ? 92 : 90);
-    const maxRisk = isTopAsset ? 50 : (model.hasSufficientData ? 45 : 45);
-    const minCriteria = isTopAsset ? 3 : 4;
+    // Critérios adaptativos - ULTRA RIGOROSOS para IQ Option
+    const minScore = isTopAsset ? 92 : (model.hasSufficientData ? 95 : 93);
+    const maxRisk = isTopAsset ? 40 : (model.hasSufficientData ? 35 : 40);
+    const minCriteria = isTopAsset ? 4 : 5;
 
     if (finalScore >= minScore && finalRisk <= maxRisk && criteriaCount >= minCriteria) {
       matches.push({

@@ -776,10 +776,17 @@ serve(async (req) => {
         }
       }
 
-      // ============= COPY TRADE TO IQ OPTION (UMA OPERAÇÃO POR VEZ) =============
+      // ============= COPY TRADE TO IQ OPTION (APENAS PARES DE MOEDAS) =============
       try {
-        // BLOQUEIO GLOBAL: Se já tem qualquer operação pendente, NÃO abre nova
-        if (hasAnyPendingIQTrade) {
+        // IQ Option: Operar SOMENTE pares de moedas (forex)
+        const forexCurrencies = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
+        const assetClean = bestSignal.asset.replace('-OTC', '').replace(' OTC', '').trim();
+        const assetParts = assetClean.split('/').map((p: string) => p.trim().toUpperCase());
+        const isForexPair = assetParts.length === 2 && assetParts.every((p: string) => forexCurrencies.includes(p));
+
+        if (!isForexPair) {
+          console.log(`⏭️ IQ Option: Skipping ${bestSignal.asset} — não é par de moedas (apenas forex permitido)`);
+        } else if (hasAnyPendingIQTrade) {
           console.log(`🚫 IQ Option: BLOQUEADO — operação anterior ainda pendente. Aguardando finalizar.`);
         } else if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
           console.log(`⏭️ IQ Scalping: Skipping ${bestSignal.asset} — confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% mínimo`);

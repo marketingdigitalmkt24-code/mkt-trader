@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { TimeframeFilter } from '@/components/TimeframeFilter';
 import { BankManagementCard } from '@/components/BankManagementCard';
+import { MT5BankManagementCard } from '@/components/MT5BankManagementCard';
 import { MarketStatusCard } from '@/components/MarketStatusCard';
 import { SignalHistorySection } from '@/components/SignalHistorySection';
 import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';

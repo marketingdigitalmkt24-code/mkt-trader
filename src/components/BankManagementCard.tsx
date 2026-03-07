@@ -1,4 +1,4 @@
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Wifi, WifiOff, PlugZap, Calendar, RotateCcw } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Calendar, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
@@ -16,11 +16,7 @@ export function BankManagementCard() {
     dailyStats,
     isLoading,
     lastUpdate,
-    connectionStatus,
-    connect,
-    disconnect,
     refreshBalance,
-    isConnected,
   } = useIQOptionConnection();
 
   // Use REAL stats from IQ Option API (not simulated)
@@ -85,85 +81,15 @@ export function BankManagementCard() {
     return `$ ${value.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   };
 
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'text-call';
-      case 'disconnected': return 'text-put';
-      case 'error': return 'text-put';
-      case 'connecting': return 'text-gold';
-    }
-  };
-
-  const getConnectionStatusText = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'Conectado à IQ Option (client-side)';
-      case 'disconnected': return 'Desconectado';
-      case 'error': return 'Erro na conexão - Clique para reconectar';
-      case 'connecting': return 'Conectando...';
-    }
-  };
-
-  const handleConnectionToggle = () => {
-    if (isConnected) {
-      disconnect();
-    } else {
-      connect();
-    }
-  };
-
-
   return (
     <section className="glass-card p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Wallet className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-foreground">Gestão de Banca</h3>
+          <h3 className="font-semibold text-foreground">Gestão de Banca IQ Option</h3>
         </div>
         <div className="flex items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                {connectionStatus === 'connected' ? (
-                  <Wifi className={cn("w-4 h-4", getConnectionStatusColor())} />
-                ) : connectionStatus === 'connecting' ? (
-                  <Loader2 className={cn("w-4 h-4 animate-spin", getConnectionStatusColor())} />
-                ) : (
-                  <WifiOff className={cn("w-4 h-4", getConnectionStatusColor())} />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{getConnectionStatusText()}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <span className={cn(
-            "text-xs px-2 py-0.5 rounded-full",
-            accountType === 'PRACTICE' 
-              ? "bg-blue-500/20 text-blue-400" 
-              : "bg-call/20 text-call"
-          )}>
-            {accountType === 'PRACTICE' ? 'DEMO' : 'REAL'}
-          </span>
-          {isConnected && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={handleRefresh}
-                    disabled={isLoading}
-                  >
-                    <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Atualizar saldo</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">IQ</span>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -171,20 +97,18 @@ export function BankManagementCard() {
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6"
-                  onClick={handleConnectionToggle}
-                  disabled={isLoading || connectionStatus === 'connecting'}
+                  onClick={handleRefresh}
+                  disabled={isLoading}
                 >
-                  {isLoading || connectionStatus === 'connecting' ? (
+                  {isLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : isConnected ? (
-                    <Wifi className="w-4 h-4 text-call" />
                   ) : (
-                    <PlugZap className="w-4 h-4" />
+                    <RefreshCw className="w-4 h-4 text-muted-foreground hover:text-primary" />
                   )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{isConnected ? 'Desconectar' : 'Conectar à IQ Option'}</p>
+                <p>Atualizar saldo</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -206,7 +130,7 @@ export function BankManagementCard() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Resetar resultados IQ Option</p>
+                <p>Resetar resultados</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

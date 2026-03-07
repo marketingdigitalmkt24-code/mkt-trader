@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Activity, Calendar, RotateCcw, Loader2, Server, Target } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Activity, Calendar, RotateCcw, Loader2, Server, Target, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -99,6 +99,28 @@ export function MT5BankManagementCard() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">MT5</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => { setIsLoading(true); fetchBalance().finally(() => setIsLoading(false)); }}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Atualizar saldo</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>

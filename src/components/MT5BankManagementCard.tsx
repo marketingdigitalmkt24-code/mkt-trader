@@ -126,7 +126,7 @@ export function MT5BankManagementCard() {
         }
       }
 
-      setStats({ dailyProfit: 0, todayTrades: 0, wins: 0, losses: 0, consecutiveLosses: 0 });
+      setStats({ dailyProfit: 0, todayTrades: 0, wins: 0, losses: 0, consecutiveLosses: 0, pnl30d: 0 });
       toast({ title: 'Resultados resetados', description: 'IQ Option e MT5 zerados com sucesso.' });
     } catch (error) {
       console.error('Error resetting MT5 stats:', error);

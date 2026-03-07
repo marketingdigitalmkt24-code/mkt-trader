@@ -258,6 +258,29 @@ export function MT5BankManagementCard() {
         </div>
       </div>
 
+      {/* Stats Grid - Trades Hoje + P&L 30d */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-secondary/50 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Activity className="w-4 h-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Trades (Hoje)</span>
+          </div>
+          <div className={cn('font-mono font-bold', isOvertrading ? 'text-gold' : 'text-foreground')}>
+            {stats.todayTrades}/{maxDailyTrades}
+          </div>
+        </div>
+
+        <div className="bg-secondary/50 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Target className="w-4 h-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">P&L Total (30d)</span>
+          </div>
+          <div className={cn('font-mono font-bold', stats.pnl30d >= 0 ? 'text-call' : 'text-put')}>
+            {stats.pnl30d >= 0 ? '+' : ''}{formatCurrency(stats.pnl30d)}
+          </div>
+        </div>
+      </div>
+
       {/* Win/Loss Stats */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="bg-call/10 rounded-lg p-2 text-center">
@@ -277,8 +300,8 @@ export function MT5BankManagementCard() {
       {/* Trade Progress */}
       <div className="mb-4">
         <div className="flex justify-between text-xs text-muted-foreground mb-2">
-          <span>Trades Hoje</span>
-          <span>{stats.todayTrades}/{maxDailyTrades}</span>
+          <span>Progresso Diário</span>
+          <span>{tradeProgress.toFixed(0)}%</span>
         </div>
         <Progress
           value={tradeProgress}

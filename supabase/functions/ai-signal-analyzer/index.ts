@@ -47,6 +47,13 @@ interface AssetPerformance {
 
 // ============= LEARNING ENGINE: Aprendizado com operações passadas =============
 
+interface LossPattern {
+  asset: string;
+  direction: string;
+  hour: number;
+  count: number;
+}
+
 interface LearnedPattern {
   // Performance por ativo
   assetPerformance: Map<string, AssetPerformance>;
@@ -58,6 +65,12 @@ interface LearnedPattern {
   timeframePerformance: Map<string, { wins: number; losses: number; profit: number }>;
   // Sequências de loss por ativo (para evitar overtrading em ativos perdedores)
   recentLossStreaks: Map<string, number>;
+  // NOVO: Padrões de perda identificados (asset+direction+hora)
+  lossPatterns: LossPattern[];
+  // NOVO: Ativos que só perdem (WR < 40% com 3+ trades)
+  toxicAssets: Set<string>;
+  // NOVO: Direções tóxicas por ativo
+  toxicDirections: Map<string, string>; // asset -> 'CALL' ou 'PUT' que mais perde
   // Lucro total e métricas gerais
   totalProfit: number;
   totalTrades: number;
@@ -74,6 +87,9 @@ async function buildLearningModel(): Promise<LearnedPattern> {
     hourlyPerformance: new Map(),
     timeframePerformance: new Map(),
     recentLossStreaks: new Map(),
+    lossPatterns: [],
+    toxicAssets: new Set(),
+    toxicDirections: new Map(),
     totalProfit: 0,
     totalTrades: 0,
     overallWinRate: 50,
@@ -223,6 +239,42 @@ async function buildLearningModel(): Promise<LearnedPattern> {
       if (streak >= 2) model.recentLossStreaks.set(asset, streak);
     }
 
+    // ===== NOVO: Identificar PADRÕES DE PERDA (asset + direction + hora) =====
+    const lossPatternMap: Record<string, number> = {};
+    for (const r of results) {
+      if (r.result !== 'loss') continue;
+      const hour = new Date(r.created_at).getUTCHours();
+      const key = `${r.asset}|${(r.direction || '').toUpperCase()}|${hour}`;
+      lossPatternMap[key] = (lossPatternMap[key] || 0) + 1;
+    }
+    
+    for (const [key, count] of Object.entries(lossPatternMap)) {
+      if (count >= 2) {
+        const [asset, direction, hourStr] = key.split('|');
+        model.lossPatterns.push({ asset, direction, hour: parseInt(hourStr), count });
+      }
+    }
+
+    // ===== NOVO: Ativos tóxicos (WR < 40% com 3+ trades) =====
+    for (const [asset, stats] of Object.entries(assetStats)) {
+      const total = stats.wins + stats.losses;
+      if (total >= 3 && stats.wins / total < 0.4) {
+        model.toxicAssets.add(asset);
+      }
+    }
+
+    // ===== NOVO: Direções tóxicas por ativo =====
+    for (const [asset, ds] of Object.entries(dirStats)) {
+      const callTotal = ds.callWins + ds.callLosses;
+      const putTotal = ds.putWins + ds.putLosses;
+      if (callTotal >= 2 && ds.callWins / callTotal < 0.3) {
+        model.toxicDirections.set(asset + '|CALL', 'CALL');
+      }
+      if (putTotal >= 2 && ds.putWins / putTotal < 0.3) {
+        model.toxicDirections.set(asset + '|PUT', 'PUT');
+      }
+    }
+
     model.overallWinRate = totalWins + totalLosses > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 1000) / 10 : 50;
 
     // ===== LOGGING DO APRENDIZADO =====
@@ -264,6 +316,27 @@ async function buildLearningModel(): Promise<LearnedPattern> {
       console.log(`   ⚠️ ${asset}: ${streak} losses consecutivos recentes`);
     });
 
+    // Loss patterns
+    if (model.lossPatterns.length > 0) {
+      console.log(`   🔴 PADRÕES DE PERDA IDENTIFICADOS:`);
+      model.lossPatterns.forEach(lp => {
+        console.log(`      ❌ ${lp.asset} ${lp.direction} às ${lp.hour}h UTC: ${lp.count} losses`);
+      });
+    }
+
+    // Toxic assets
+    if (model.toxicAssets.size > 0) {
+      console.log(`   ☠️ ATIVOS TÓXICOS: ${Array.from(model.toxicAssets).join(', ')}`);
+    }
+
+    // Toxic directions
+    if (model.toxicDirections.size > 0) {
+      console.log(`   ⛔ DIREÇÕES TÓXICAS:`);
+      model.toxicDirections.forEach((dir, key) => {
+        console.log(`      ${key}`);
+      });
+    }
+
     console.log(`🧠 ================================\n`);
 
     return model;
@@ -285,13 +358,31 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
   const adjustments: string[] = [];
   const currentHour = new Date().getUTCHours();
 
-  // 1. ATIVO COM HISTÓRICO TERRÍVEL → BLOQUEAR (mais agressivo)
+  // 0. ATIVO TÓXICO → BLOQUEAR IMEDIATAMENTE
+  if (model.toxicAssets.has(s.asset)) {
+    return { score: 0, adjustments: ['☠️ ATIVO TÓXICO: só gera perda'], shouldSkip: true, skipReason: `Ativo tóxico (WR < 40%)` };
+  }
+
+  // 0b. DIREÇÃO TÓXICA para este ativo → BLOQUEAR
+  if (model.toxicDirections.has(`${s.asset}|${s.type}`)) {
+    return { score: 0, adjustments: [`☠️ DIREÇÃO TÓXICA: ${s.type} perde neste ativo`], shouldSkip: true, skipReason: `${s.type} tóxico em ${s.asset}` };
+  }
+
+  // 0c. PADRÃO DE PERDA: mesmo ativo + direção + hora = perda repetida
+  const matchingLossPattern = model.lossPatterns.find(lp => 
+    lp.asset === s.asset && lp.direction === s.type && lp.hour === currentHour
+  );
+  if (matchingLossPattern && matchingLossPattern.count >= 2) {
+    return { score: 0, adjustments: [`🔴 PADRÃO DE PERDA: ${s.asset} ${s.type} às ${currentHour}h = ${matchingLossPattern.count} losses`], shouldSkip: true, skipReason: `Padrão de perda identificado` };
+  }
+
+  // 1. ATIVO COM HISTÓRICO NEGATIVO → BLOQUEAR
   const assetPerf = model.assetPerformance.get(s.asset);
   if (assetPerf && assetPerf.trades >= 2 && assetPerf.winRate < 45 && assetPerf.profit < 0) {
     return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
   }
 
-  // 2. LOSS STREAK RECENTE → BLOQUEAR (era 3, agora 2)
+  // 2. LOSS STREAK RECENTE → BLOQUEAR
   const lossStreak = model.recentLossStreaks.get(s.asset) || 0;
   if (lossStreak >= 2) {
     return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
@@ -307,20 +398,32 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     }
   }
 
+  // 3b. PADRÃO DE PERDA PARCIAL: mesmo ativo + hora (qualquer direção)
+  const anyLossAtHour = model.lossPatterns.filter(lp => lp.asset === s.asset && lp.hour === currentHour);
+  const totalLossesAtHour = anyLossAtHour.reduce((sum, lp) => sum + lp.count, 0);
+  if (totalLossesAtHour >= 3) {
+    score -= 20;
+    adjustments.push(`⚠️ ${totalLossesAtHour} losses neste ativo às ${currentHour}h`);
+  }
+
   // ===== BONIFICAÇÕES =====
 
-  // 4. Ativo com bom histórico
+  // 4. Ativo com bom histórico - SÓ bonificar se REALMENTE lucrativo
   if (assetPerf) {
-    if (assetPerf.winRate >= 60 && assetPerf.profit > 0) {
+    if (assetPerf.winRate >= 65 && assetPerf.profit > 0 && assetPerf.trades >= 3) {
       score += 15;
       adjustments.push(`ATIVO TOP: WR ${assetPerf.winRate}% | $${assetPerf.profit}`);
-    } else if (assetPerf.winRate >= 50 && assetPerf.profit >= 0) {
+    } else if (assetPerf.winRate >= 55 && assetPerf.profit >= 0) {
       score += 8;
       adjustments.push(`ATIVO BOM: WR ${assetPerf.winRate}%`);
-    } else if (assetPerf.winRate < 45 && assetPerf.trades >= 3) {
-      score -= 10;
+    } else if (assetPerf.winRate < 50 && assetPerf.trades >= 2) {
+      score -= 15;
       adjustments.push(`ATIVO FRACO: WR ${assetPerf.winRate}%`);
     }
+  } else {
+    // Ativo SEM histórico = risco desconhecido, penalizar
+    score -= 5;
+    adjustments.push(`ATIVO NOVO: sem histórico (risco)`);
   }
 
   // 5. Direção com melhor taxa de acerto para este ativo
@@ -329,15 +432,14 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     const dirType = s.type;
     const dirWinRate = dirType === 'CALL' ? dirPerf.callWinRate : dirPerf.putWinRate;
     const dirTrades = dirType === 'CALL' ? dirPerf.callTrades : dirPerf.putTrades;
-    const otherWinRate = dirType === 'CALL' ? dirPerf.putWinRate : dirPerf.callWinRate;
 
     if (dirTrades >= 2) {
       if (dirWinRate >= 65) {
         score += 12;
         adjustments.push(`DIREÇÃO FORTE: ${dirType} WR ${dirWinRate}%`);
-      } else if (dirWinRate < 35 && dirTrades >= 3) {
-        score -= 15;
-        adjustments.push(`DIREÇÃO FRACA: ${dirType} WR ${dirWinRate}% (${otherWinRate === 'CALL' ? 'PUT' : 'CALL'} é melhor)`);
+      } else if (dirWinRate < 40) {
+        score -= 20;
+        adjustments.push(`DIREÇÃO PERDEDORA: ${dirType} WR ${dirWinRate}%`);
       }
     }
   }
@@ -730,7 +832,7 @@ serve(async (req) => {
 
     console.log(`🎯 ${selectedSignals.length} sinal(is) aprovado(s) pelo modelo!`);
 
-    // ===== PROMPT COM CONTEXTO DE APRENDIZADO =====
+    // ===== PROMPT COM CONTEXTO DE APRENDIZADO + PADRÕES DE PERDA =====
     const learningSummary = model.hasSufficientData ? `
 📊 DADOS DE APRENDIZADO (últimos 14 dias):
 - Win Rate geral: ${model.overallWinRate}%
@@ -741,64 +843,76 @@ ${model.worstHours.length > 0 ? `- Piores horários: ${model.worstHours.join('h,
 ` : '⚠️ Dados insuficientes - usando análise técnica pura';
 
     const preferredAssets = Array.from(model.assetPerformance.values())
-      .filter(a => a.winRate >= 50 && a.profit >= 0)
-      .map(a => a.asset);
+      .filter(a => a.winRate >= 55 && a.profit > 0 && a.trades >= 3)
+      .map(a => `${a.asset} (WR ${a.winRate}%, $${a.profit})`);
     const avoidAssets = Array.from(model.assetPerformance.values())
-      .filter(a => a.winRate < 35 && a.profit < -50 && a.trades >= 3)
-      .map(a => a.asset);
+      .filter(a => a.winRate < 45 || a.profit < 0)
+      .map(a => `${a.asset} (WR ${a.winRate}%, $${a.profit})`);
+    
+    // Loss patterns para o prompt
+    const lossPatternsSummary = model.lossPatterns.length > 0
+      ? model.lossPatterns.map(lp => `${lp.asset} ${lp.direction} às ${lp.hour}h UTC: ${lp.count} losses`).join('\n')
+      : 'Nenhum padrão de perda identificado';
 
-    const systemPrompt = `Você é um trader ESPECIALISTA em REVERSÕES CERTEIRAS em opções binárias. Seu ÚNICO objetivo é LUCRO CONSISTENTE. Você aprende com cada operação passada para NUNCA repetir erros.
+    const toxicAssetsList = Array.from(model.toxicAssets);
+    const toxicDirsList = Array.from(model.toxicDirections.keys());
 
-🧠 MODO: ${mode} - ESTRATÉGIA REVERSÃO EM TOPO/FUNDO REAL - FOCO LUCRO
+    const systemPrompt = `Você é um analista de risco ULTRA CONSERVADOR para opções binárias na IQ Option. Seu objetivo é EVITAR PERDAS a todo custo. Você APRENDE com cada operação perdedora para NUNCA repetir o mesmo erro.
+
+🧠 MODO: ${mode} - PROTEÇÃO ANTI-PERDA MÁXIMA
 ${learningSummary}
 
-${preferredAssets.length > 0 ? `✅ ATIVOS LUCRATIVOS (PRIORIZE): ${preferredAssets.join(', ')}` : ''}
-${avoidAssets.length > 0 ? `⛔ ATIVOS TÓXICOS (NUNCA OPERE): ${avoidAssets.join(', ')}` : ''}
+🔴 PADRÕES DE PERDA IDENTIFICADOS (NUNCA REPETIR):
+${lossPatternsSummary}
 
-🎯 ESTRATÉGIA: OPERAR APENAS EM TOPOS E FUNDOS CONFIRMADOS
-- CALL (comprar): SOMENTE quando o preço atingiu um FUNDO REAL — RSI extremo oversold (< 20), Stochastic oversold (< 20), preço tocou suporte forte, padrão de candle de reversão bullish (Martelo, Engolfo de Alta, Morning Star, Pin Bar). O preço PRECISA ter chegado ao fundo e mostrar sinais claros de exaustão da queda.
-- PUT (vender): SOMENTE quando o preço atingiu um TOPO REAL — RSI extremo overbought (> 80), Stochastic overbought (> 80), preço tocou resistência forte, padrão de candle de reversão bearish (Estrela Cadente, Engolfo de Baixa, Evening Star, Pin Bar). O preço PRECISA ter chegado ao topo e mostrar sinais claros de exaustão da alta.
+${toxicAssetsList.length > 0 ? `☠️ ATIVOS TÓXICOS (NUNCA OPERAR): ${toxicAssetsList.join(', ')}` : ''}
+${toxicDirsList.length > 0 ? `⛔ DIREÇÕES TÓXICAS: ${toxicDirsList.join(', ')}` : ''}
+${preferredAssets.length > 0 ? `✅ ÚNICOS ATIVOS PERMITIDOS (com lucro comprovado): ${preferredAssets.join(', ')}` : '⚠️ NENHUM ativo com lucro comprovado - ser EXTREMAMENTE seletivo'}
+${avoidAssets.length > 0 ? `❌ ATIVOS COM PERDA (EVITAR): ${avoidAssets.join(', ')}` : ''}
 
-PREVISÃO DE LUCRO - Antes de aprovar, verifique:
-1. O preço realmente esgotou o movimento? (RSI + Stochastic ambos em zona extrema)
-2. Existe confirmação visual de reversão? (padrão de candle)
-3. O preço está em nível de suporte/resistência forte? (S/R)
-4. A volatilidade permite uma reversão limpa? (ATR baixo = melhor)
-5. O histórico desse ativo nessa direção é lucrativo? (Learning Engine)
+🎯 REGRA DE OURO: SÓ APROVAR SE O ATIVO TEM HISTÓRICO DE LUCRO
+- Se o ativo NUNCA foi operado → SKIP (risco desconhecido)
+- Se o ativo tem mais losses que wins → SKIP
+- Se o ativo perdeu dinheiro no total → SKIP  
+- Se a DIREÇÃO (CALL/PUT) deste ativo tem WR < 50% → SKIP
+- SÓ APROVAR ativos com WR >= 55% E lucro positivo E nesta direção específica
 
-REGRAS ABSOLUTAS:
-1. ✅ EXECUTE: Preço no FUNDO REAL (RSI < 20 + Stoch < 20 + suporte + candle reversão) = CALL
-2. ✅ EXECUTE: Preço no TOPO REAL (RSI > 80 + Stoch > 80 + resistência + candle reversão) = PUT
-3. ❌ SKIP: Preço no MEIO do range — NÃO é topo nem fundo = NÃO OPERAR
-4. ❌ SKIP: RSI entre 30-70 = preço não atingiu extremo = NÃO OPERAR
-5. ❌ SKIP: Sem padrão de candle de reversão = sem confirmação de topo/fundo
-6. ❌ SKIP: Volatilidade alta = reversão imprevisível
-7. ❌ SKIP: Ativo com WR < 45% ou 2+ losses consecutivos
-8. ❌ SKIP: Horário desfavorável no histórico
-9. 📰 SKIP: Durante notícias de alto impacto
+CRITÉRIOS TÉCNICOS (todos obrigatórios para EXECUTE):
+1. RSI em zona extrema (< 15 para CALL, > 85 para PUT) — mais rigoroso que antes
+2. Stochastic confirmando exaustão (< 15 CALL, > 85 PUT)
+3. Padrão de candle de reversão confirmado
+4. Preço no suporte (CALL) ou resistência (PUT)
+5. Volatilidade BAIXA (ATR low)
+6. Ativo com WR >= 55% e lucro positivo no histórico
+7. Direção (CALL/PUT) com WR >= 50% para este ativo
+8. Horário não está nos piores horários
 
-APRENDIZADO CONTÍNUO:
-- Analise o histórico de WR por ativo e direção antes de aprovar
-- Se um ativo tem WR alto em CALL mas baixo em PUT, só aprove CALL
-- Prefira ativos que já geraram lucro no passado
-- Rejeite qualquer setup que tenha padrão similar a operações perdedoras passadas
-- OBJETIVO: manter WR acima de 60% e lucro positivo SEMPRE
-- PREVER: analise se a reversão tem alta probabilidade de gerar lucro na expiração de 1 minuto
+QUANDO REJEITAR (SKIP):
+- Qualquer dúvida = SKIP
+- Ativo sem histórico de lucro = SKIP
+- Ativo que aparece nos padrões de perda = SKIP
+- RSI entre 25-75 = SKIP (não está em extremo real)
+- WR da direção < 50% = SKIP
 
-PRINCÍPIO: SÓ OPERAR QUANDO O PREÇO CHEGOU NO TOPO OU FUNDO REAL. Qualquer dúvida = NÃO OPERAR.
+FILOSOFIA: É melhor perder uma oportunidade do que perder dinheiro. Rejeite 90% dos sinais se necessário.
 
 Responda APENAS JSON válido:
-{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":80-100,"reason":"","adjustedConfluence":80+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name"}`;
+{"analyzedSignals":[{"signalId":"","asset":"","recommendation":"EXECUTE|SKIP","confidence":85-100,"reason":"","adjustedConfluence":85+,"riskLevel":"LOW|MEDIUM"}],"marketSentiment":"BULLISH|BEARISH|NEUTRAL","bestSignal":"asset_name"}`;
 
-    const userPrompt = `SINAIS PRÉ-FILTRADOS PELO MODELO DE APRENDIZADO:
+    const userPrompt = `SINAIS PRÉ-FILTRADOS - ANALISE COM FOCO EM EVITAR PERDAS:
 
 ${selectedSignals.map((d, i) => {
   const s = d.signal;
   const dirPerf = model.directionPerformance.get(s.asset);
-  const dirInfo = dirPerf ? `${s.type} WR: ${s.type === 'CALL' ? dirPerf.callWinRate : dirPerf.putWinRate}%` : '';
+  const dirInfo = dirPerf ? `${s.type} WR: ${s.type === 'CALL' ? dirPerf.callWinRate : dirPerf.putWinRate}% (${s.type === 'CALL' ? dirPerf.callTrades : dirPerf.putTrades} trades)` : 'SEM HISTÓRICO DE DIREÇÃO';
+  const assetP = model.assetPerformance.get(s.asset);
+  const assetInfo = assetP ? `WR geral: ${assetP.winRate}% | Lucro: $${assetP.profit} | ${assetP.trades} trades` : 'SEM HISTÓRICO';
+  const isInLossPattern = model.lossPatterns.some(lp => lp.asset === s.asset);
   return `${i + 1}. ${s.asset} ${s.type} | ${d.pattern}
-   Score: ${d.score}% | Risco: ${d.riskScore}% | Aprendizado: ${d.learnedScore > 0 ? '+' : ''}${d.learnedScore}
+   Score: ${d.score}% | Risco: ${d.riskScore}%
    ${dirInfo}
+   Histórico: ${assetInfo}
+   ${isInLossPattern ? '🔴 ATIVO COM PADRÃO DE PERDA' : ''}
    Ajustes: ${d.learnedAdjustments.join(', ') || 'N/A'}`;
 }).join('\n\n')}`;
 

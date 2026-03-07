@@ -832,7 +832,46 @@ serve(async (req) => {
 
     console.log(`🎯 ${selectedSignals.length} sinal(is) aprovado(s) pelo modelo!`);
 
-    // ===== PROMPT COM CONTEXTO DE APRENDIZADO + PADRÕES DE PERDA =====
+    // ===== APROVAÇÃO DIRETA: Se os filtros pré-computados aprovaram, EXECUTAR =====
+    // Os sinais já passaram por: filtros técnicos rigorosos, learning engine, padrões de perda, ativos tóxicos
+    // Não depender do LLM para aprovação final — usar análise pré-computada diretamente
+    const approvedSignals = selectedSignals.map(d => ({
+      signalId: `${d.signal.asset}-${Date.now()}`,
+      asset: d.signal.asset,
+      recommendation: 'EXECUTE' as const,
+      confidence: d.score,
+      reason: `${d.pattern}: ${d.learnedAdjustments[0] || 'Setup técnico forte'} | Score ${d.score}% | Risco ${d.riskScore}%`,
+      adjustedConfluence: d.score,
+      riskLevel: d.riskScore <= 35 ? 'LOW' : 'MEDIUM'
+    }));
+
+    console.log(`✅ ${approvedSignals.length} sinal(is) aprovados DIRETAMENTE pelos filtros pré-computados`);
+    approvedSignals.forEach(s => console.log(`   ✅ ${s.asset}: ${s.reason}`));
+
+    // Mapear todos os sinais (aprovados + não aprovados)
+    const allSignalAnalysis = signals.map(s => {
+      const approved = approvedSignals.find(a => a.asset === s.asset);
+      if (approved) return approved;
+      return {
+        signalId: `${s.asset}-${Date.now()}`,
+        asset: s.asset,
+        recommendation: 'SKIP',
+        confidence: s.indicators.confluenceScore,
+        reason: 'Não aprovado pelos filtros',
+        adjustedConfluence: s.indicators.confluenceScore,
+        riskLevel: 'HIGH'
+      };
+    });
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        analyzedSignals: allSignalAnalysis,
+        marketSentiment: 'NEUTRAL',
+        bestSignal: approvedSignals[0]?.asset || null
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
     const learningSummary = model.hasSufficientData ? `
 📊 DADOS DE APRENDIZADO (últimos 14 dias):
 - Win Rate geral: ${model.overallWinRate}%

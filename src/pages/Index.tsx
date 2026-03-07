@@ -1,14 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Header } from '@/components/Header';
-import { TimeframeFilter } from '@/components/TimeframeFilter';
 import { BankManagementCard } from '@/components/BankManagementCard';
 import { MT5BankManagementCard } from '@/components/MT5BankManagementCard';
-import { MarketStatusCard } from '@/components/MarketStatusCard';
-import { SignalHistorySection } from '@/components/SignalHistorySection';
 import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
 import { LiveOperationsCard } from '@/components/LiveOperationsCard';
 import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
-import { Timeframe, MarketType, TradingSignal } from '@/types/trading';
+import { Timeframe, MarketType } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
 import { useSignalResults } from '@/hooks/useSignalResults';
 import { useAutoTrading } from '@/hooks/useAutoTrading';

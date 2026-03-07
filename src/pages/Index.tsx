@@ -113,6 +113,7 @@ const Index = () => {
           {/* Sidebar */}
           <div className="space-y-4 sm:space-y-6">
             <BankManagementCard />
+            <MT5BankManagementCard />
           </div>
         </div>
       </main>

@@ -47,16 +47,14 @@ export function BrokerConnectionsCard() {
         .maybeSingle();
 
       if (iqConfig) {
-        const lastConn = iqConfig.last_connected_at ? new Date(iqConfig.last_connected_at) : null;
-        const isRecent = lastConn && (Date.now() - lastConn.getTime()) < 5 * 60 * 1000;
         setIqStatus({
           name: 'IQ Option',
           icon: <MonitorSmartphone className="w-4 h-4" />,
-          connected: !!isRecent,
+          connected: true,
           loading: false,
-          details: isRecent ? iqConfig.email : 'Desconectado',
+          details: iqConfig.email,
           accountType: iqConfig.account_type,
-          lastActivity: lastConn ? lastConn.toLocaleTimeString('pt-BR') : undefined,
+          lastActivity: iqConfig.last_connected_at ? new Date(iqConfig.last_connected_at).toLocaleTimeString('pt-BR') : undefined,
         });
       } else {
         setIqStatus(prev => ({ ...prev, loading: false, details: 'Não configurado' }));

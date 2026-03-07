@@ -239,6 +239,42 @@ async function buildLearningModel(): Promise<LearnedPattern> {
       if (streak >= 2) model.recentLossStreaks.set(asset, streak);
     }
 
+    // ===== NOVO: Identificar PADRÕES DE PERDA (asset + direction + hora) =====
+    const lossPatternMap: Record<string, number> = {};
+    for (const r of results) {
+      if (r.result !== 'loss') continue;
+      const hour = new Date(r.created_at).getUTCHours();
+      const key = `${r.asset}|${(r.direction || '').toUpperCase()}|${hour}`;
+      lossPatternMap[key] = (lossPatternMap[key] || 0) + 1;
+    }
+    
+    for (const [key, count] of Object.entries(lossPatternMap)) {
+      if (count >= 2) {
+        const [asset, direction, hourStr] = key.split('|');
+        model.lossPatterns.push({ asset, direction, hour: parseInt(hourStr), count });
+      }
+    }
+
+    // ===== NOVO: Ativos tóxicos (WR < 40% com 3+ trades) =====
+    for (const [asset, stats] of Object.entries(assetStats)) {
+      const total = stats.wins + stats.losses;
+      if (total >= 3 && stats.wins / total < 0.4) {
+        model.toxicAssets.add(asset);
+      }
+    }
+
+    // ===== NOVO: Direções tóxicas por ativo =====
+    for (const [asset, ds] of Object.entries(dirStats)) {
+      const callTotal = ds.callWins + ds.callLosses;
+      const putTotal = ds.putWins + ds.putLosses;
+      if (callTotal >= 2 && ds.callWins / callTotal < 0.3) {
+        model.toxicDirections.set(asset + '|CALL', 'CALL');
+      }
+      if (putTotal >= 2 && ds.putWins / putTotal < 0.3) {
+        model.toxicDirections.set(asset + '|PUT', 'PUT');
+      }
+    }
+
     model.overallWinRate = totalWins + totalLosses > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 1000) / 10 : 50;
 
     // ===== LOGGING DO APRENDIZADO =====

@@ -12,8 +12,9 @@ const RSI_CALL_MAX = 25; // Mais extremo
 const RSI_PUT_MIN = 75; // Mais extremo
 const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
 const IQ_MIN_CONFLUENCE_SCALPING = 90; // Confluência mínima para IQ Option Scalping
-const FORCE_EXTREME_PROBABILITY = 0.98; // 98% chance de indicadores extremos
-const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
+const FORCE_EXTREME_PROBABILITY = 0.80; // 80% chance de indicadores extremos (era 98% = tudo passava)
+const ASSET_SIGNAL_COOLDOWN_MS = 300000; // 5 minutos de cooldown POR ATIVO (era 3min)
+const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
 
 // ============= NEWS FILTER - Avoid trading during high-impact news =============
 interface NewsEvent {
@@ -525,30 +526,46 @@ serve(async (req) => {
       }
     });
 
-    // Get available assets
+    // Get available assets - FILTRAR APENAS FOREX NA GERAÇÃO
     let assets: Asset[] = [];
+
+    // Helper: verificar se é par de moedas forex
+    const isForexPairAsset = (symbol: string): boolean => {
+      const clean = symbol.replace('-OTC', '').replace(' OTC', '').trim();
+      const parts = clean.split('/').map(p => p.trim().toUpperCase());
+      return parts.length === 2 && parts.every(p => IQ_FOREX_CURRENCIES.includes(p));
+    };
 
     try {
       const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets');
       if (iqData?.success && iqData?.assets?.length > 0) {
         const enabledAssets = iqData.assets.filter((a: any) => a.enabled === true);
-        assets = enabledAssets.map((a: any) => ({
+        let allAssets = enabledAssets.map((a: any) => ({
           symbol: a.name,
-          icon: a.isOTC ? '🔵' : a.name.includes('BTC') ? '₿' : a.name.includes('ETH') ? 'Ξ' :
-                a.name.includes('EUR') ? '🇪🇺' : a.name.includes('GBP') ? '🇬🇧' : '📊',
+          icon: a.isOTC ? '🔵' : a.name.includes('EUR') ? '🇪🇺' : a.name.includes('GBP') ? '🇬🇧' : '📊',
           type: a.isOTC ? 'otc' : a.isBlitz ? 'blitz' : a.type,
           isOTC: a.isOTC || false,
           isBlitz: a.isBlitz || false,
           isBinary: a.isBinary || false,
           payout: a.payout,
         }));
+        
+        // FILTRO FOREX NA GERAÇÃO: só gerar sinais para pares de moedas
+        const beforeFilter = allAssets.length;
+        allAssets = allAssets.filter((a: Asset) => isForexPairAsset(a.symbol));
+        console.log(`🔒 Filtro FOREX na geração: ${allAssets.length}/${beforeFilter} assets são pares de moedas`);
+        
+        // Filtrar por payout mínimo de 75% (evitar trades com retorno baixo)
+        allAssets = allAssets.filter((a: Asset) => !a.payout || a.payout >= 75);
+        
+        assets = allAssets;
       }
     } catch (e) {
       console.log('⚠️ IQ Option assets fetch failed, using fallback');
     }
 
     if (assets.length === 0) {
-      assets = weekend ? OTC_ASSETS : [...FOREX_ASSETS, ...CRYPTO_ASSETS];
+      assets = weekend ? OTC_ASSETS : [...FOREX_ASSETS];
     } else {
       if (weekend) {
         assets = assets.filter(a => a.isOTC || isOTCAsset(a.symbol));

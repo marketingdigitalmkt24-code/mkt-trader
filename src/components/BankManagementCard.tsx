@@ -57,29 +57,21 @@ export function BankManagementCard() {
       const now = new Date();
       const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
 
-      // Delete today's IQ Option results (OTC + non-USD pairs)
+      // Delete ALL today's results (IQ Option + MT5)
       const { data: results } = await supabase
         .from('operation_results')
-        .select('id, asset')
+        .select('id')
         .gte('created_at', todayUTC.toISOString());
 
-      const iqIds = (results || [])
-        .filter(r => {
-          const asset = r.asset?.toUpperCase() || '';
-          // IQ Option trades: OTC assets OR non-USD pairs
-          return asset.includes('OTC') || !asset.includes('USD');
-        })
-        .map(r => r.id);
-
-      if (iqIds.length > 0) {
-        for (const id of iqIds) {
-          await supabase.from('operation_results').delete().eq('id', id);
+      if (results && results.length > 0) {
+        for (const r of results) {
+          await supabase.from('operation_results').delete().eq('id', r.id);
         }
       }
 
-      toast({ title: 'Resultados IQ Option resetados', description: 'Estatísticas do dia zeradas com sucesso.' });
+      toast({ title: 'Resultados resetados', description: 'IQ Option e MT5 zerados com sucesso.' });
     } catch (error) {
-      console.error('Error resetting IQ stats:', error);
+      console.error('Error resetting stats:', error);
       toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });
     } finally {
       setIsResetting(false);

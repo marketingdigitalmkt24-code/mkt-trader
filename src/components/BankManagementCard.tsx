@@ -1,11 +1,16 @@
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Wifi, WifiOff, PlugZap, Calendar } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Wifi, WifiOff, PlugZap, Calendar, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useState } from 'react';
 
 export function BankManagementCard() {
+  const { toast } = useToast();
+  const [isResetting, setIsResetting] = useState(false);
   const {
     balance,
     dailyStats,
@@ -43,6 +48,41 @@ export function BankManagementCard() {
   const handleRefresh = async () => {
     if (refreshBalance) {
       await refreshBalance();
+    }
+  };
+
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      const now = new Date();
+      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+
+      // Delete today's IQ Option results (OTC + non-USD pairs)
+      const { data: results } = await supabase
+        .from('operation_results')
+        .select('id, asset')
+        .gte('created_at', todayUTC.toISOString());
+
+      const iqIds = (results || [])
+        .filter(r => {
+          const asset = r.asset?.toUpperCase() || '';
+          // IQ Option trades: OTC assets OR non-USD pairs
+          return asset.includes('OTC') || !asset.includes('USD');
+        })
+        .map(r => r.id);
+
+      if (iqIds.length > 0) {
+        for (const id of iqIds) {
+          await supabase.from('operation_results').delete().eq('id', id);
+        }
+      }
+
+      toast({ title: 'Resultados IQ Option resetados', description: 'Estatísticas do dia zeradas com sucesso.' });
+    } catch (error) {
+      console.error('Error resetting IQ stats:', error);
+      toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -153,6 +193,28 @@ export function BankManagementCard() {
               </TooltipTrigger>
               <TooltipContent>
                 <p>{isConnected ? 'Desconectar' : 'Conectar à IQ Option'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={handleReset}
+                  disabled={isResetting}
+                >
+                  {isResetting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4 text-muted-foreground hover:text-put" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Resetar resultados IQ Option</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

@@ -701,9 +701,10 @@ serve(async (req) => {
     // Ordenar por confiança IA
     aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
 
-    // Limitar a 3 sinais simultâneos
-    const signalsToExecute = aiApprovedSignals.slice(0, 3);
-    console.log(`🎯 ${signalsToExecute.length} sinal(is) para execução após filtro IA`);
+    // ============= IQ OPTION: UMA OPERAÇÃO POR VEZ =============
+    // Selecionar APENAS o melhor sinal (IA escolhe o melhor par)
+    const signalsToExecute = [aiApprovedSignals[0]];
+    console.log(`🎯 IA selecionou o MELHOR par: ${signalsToExecute[0].asset} (${signalsToExecute[0].type}) - Score: ${signalsToExecute[0].aiConfidence || signalsToExecute[0].indicators.confluenceScore}%`);
 
     // ============= SALVAR E EXECUTAR CADA SINAL APROVADO =============
     let totalIQ = 0;

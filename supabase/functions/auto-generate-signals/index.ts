@@ -449,8 +449,8 @@ serve(async (req) => {
     const weekend = isWeekend();
     console.log(`🕐 Server-side signal generation | Weekend: ${weekend}`);
 
-    // ============= CHECK PENDING OPERATIONS PER ASSET =============
-    // Get all assets with pending trades - DON'T generate signals for them
+    // ============= CHECK PENDING OPERATIONS - ONE AT A TIME FOR IQ OPTION =============
+    // IQ Option: Only ONE operation at a time. Block ALL new trades if ANY is pending.
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: pendingOps } = await supabase
       .from('operation_results')
@@ -462,8 +462,15 @@ serve(async (req) => {
       (pendingOps || []).map((op: any) => op.asset.toUpperCase())
     );
     
+    const hasAnyPendingIQTrade = (pendingOps || []).length > 0;
+    
+    if (hasAnyPendingIQTrade) {
+      console.log(`🔒 IQ OPTION BLOQUEADO: ${(pendingOps || []).length} operação(ões) pendente(s) - aguardando finalizar antes de nova entrada`);
+      console.log(`🔒 Assets pendentes: ${Array.from(assetsWithPendingTrades).join(', ')}`);
+    }
+    
     if (assetsWithPendingTrades.size > 0) {
-      console.log(`🔒 Assets com trades pendentes (BLOQUEADOS): ${Array.from(assetsWithPendingTrades).join(', ')}`);
+      console.log(`🔒 Assets com trades pendentes (BLOQUEADOS para MT5): ${Array.from(assetsWithPendingTrades).join(', ')}`);
     }
 
     // ============= CHECK RECENT SIGNALS PER ASSET (cooldown) =============
@@ -694,9 +701,10 @@ serve(async (req) => {
     // Ordenar por confiança IA
     aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
 
-    // Limitar a 3 sinais simultâneos
-    const signalsToExecute = aiApprovedSignals.slice(0, 3);
-    console.log(`🎯 ${signalsToExecute.length} sinal(is) para execução após filtro IA`);
+    // ============= IQ OPTION: UMA OPERAÇÃO POR VEZ =============
+    // Selecionar APENAS o melhor sinal (IA escolhe o melhor par)
+    const signalsToExecute = [aiApprovedSignals[0]];
+    console.log(`🎯 IA selecionou o MELHOR par: ${signalsToExecute[0].asset} (${signalsToExecute[0].type}) - Score: ${signalsToExecute[0].aiConfidence || signalsToExecute[0].indicators.confluenceScore}%`);
 
     // ============= SALVAR E EXECUTAR CADA SINAL APROVADO =============
     let totalIQ = 0;
@@ -768,10 +776,12 @@ serve(async (req) => {
         }
       }
 
-      // ============= COPY TRADE TO IQ OPTION (SCALPING M1 TURBO) =============
+      // ============= COPY TRADE TO IQ OPTION (UMA OPERAÇÃO POR VEZ) =============
       try {
-        // IQ Option Scalping: Only trade with 90%+ confluence
-        if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
+        // BLOQUEIO GLOBAL: Se já tem qualquer operação pendente, NÃO abre nova
+        if (hasAnyPendingIQTrade) {
+          console.log(`🚫 IQ Option: BLOQUEADO — operação anterior ainda pendente. Aguardando finalizar.`);
+        } else if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
           console.log(`⏭️ IQ Scalping: Skipping ${bestSignal.asset} — confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% mínimo`);
         } else {
           const { data: iqConfig } = await supabase

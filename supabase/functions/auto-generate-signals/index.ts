@@ -604,14 +604,16 @@ serve(async (req) => {
         return false;
       }
       
-      // Block assets with 3+ consecutive losses
+      // Block assets with 2+ consecutive losses (era 3+)
       const history = assetHistory.get(asset.symbol);
-      if (history && history.consecutiveLosses >= 3) {
+      if (history && history.consecutiveLosses >= 2) {
+        console.log(`⛔ ${asset.symbol}: BLOQUEADO por ${history.consecutiveLosses} losses consecutivos`);
         return false;
       }
       
-      // Block assets with very bad win rate (< 35% with 5+ trades)
-      if (history && history.winRate < 35 && (history.wins + history.losses) >= 5) {
+      // Block assets with bad win rate (< 45% with 3+ trades) - era < 35% com 5+
+      if (history && history.winRate < 45 && (history.wins + history.losses) >= 3) {
+        console.log(`⛔ ${asset.symbol}: BLOQUEADO por WR ${history.winRate}% (${history.wins}W/${history.losses}L)`);
         return false;
       }
       

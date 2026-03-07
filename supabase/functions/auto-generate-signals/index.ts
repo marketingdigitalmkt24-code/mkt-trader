@@ -729,17 +729,13 @@ serve(async (req) => {
       console.error('❌ Falha ao chamar IA:', e);
     }
 
-    // FALLBACK: Se a IA falhar, usar o melhor candidato por confluência
+    // FALLBACK: Se a IA falhar, NÃO operar — esperar próximo ciclo
     if (aiApprovedSignals.length === 0) {
-      console.log('⚠️ IA não aprovou sinais, usando melhor candidato por confluência');
-      candidates.sort((a, b) => {
-        const histA = assetHistory.get(a.asset);
-        const histB = assetHistory.get(b.asset);
-        const histScoreA = histA ? (histA.winRate >= 55 ? 20 : histA.winRate >= 45 ? 0 : -20) : 0;
-        const histScoreB = histB ? (histB.winRate >= 55 ? 20 : histB.winRate >= 45 ? 0 : -20) : 0;
-        return (b.indicators.confluenceScore + histScoreB) - (a.indicators.confluenceScore + histScoreA);
-      });
-      aiApprovedSignals = [candidates[0]];
+      console.log('⚠️ IA não aprovou sinais — NÃO operando (proteção anti-loss)');
+      return new Response(
+        JSON.stringify({ success: true, generated: 0, reason: 'AI did not approve any signals' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Ordenar por confiança IA

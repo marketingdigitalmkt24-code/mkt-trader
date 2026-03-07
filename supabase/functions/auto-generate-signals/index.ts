@@ -151,10 +151,8 @@ const OTC_ASSETS = [
   { symbol: 'AUD/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
 ];
 
-const CRYPTO_ASSETS = [
-  { symbol: 'BTC/USD', icon: '₿', type: 'crypto', isOTC: false },
-  { symbol: 'ETH/USD', icon: 'Ξ', type: 'crypto', isOTC: false },
-];
+// Crypto removido - IQ Option opera SOMENTE pares de moedas
+const CRYPTO_ASSETS: Asset[] = [];
 
 interface Asset {
   symbol: string;

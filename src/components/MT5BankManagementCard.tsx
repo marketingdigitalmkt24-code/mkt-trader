@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Activity, Calendar, RotateCcw, Loader2, Server } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Activity, Calendar, RotateCcw, Loader2, Server, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ interface MT5DailyStats {
   wins: number;
   losses: number;
   consecutiveLosses: number;
+  pnl30d: number;
 }
 
 interface MT5BalanceInfo {
@@ -29,6 +30,7 @@ export function MT5BankManagementCard() {
     wins: 0,
     losses: 0,
     consecutiveLosses: 0,
+    pnl30d: 0,
   });
   const [mt5Balance, setMt5Balance] = useState<MT5BalanceInfo>({ balance: null, equity: null, currency: 'USD' });
   const [isLoading, setIsLoading] = useState(false);
@@ -38,22 +40,31 @@ export function MT5BankManagementCard() {
     try {
       const now = new Date();
       const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      const thirtyDaysAgo = new Date(todayUTC);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // MT5 trades are NOT OTC and come from metaapi-place-trade
-      // We identify MT5 trades by checking assets that don't contain 'OTC'
-      const { data: results, error } = await supabase
-        .from('operation_results')
-        .select('asset, result, profit, entry_price')
-        .gte('created_at', todayUTC.toISOString())
-        .order('created_at', { ascending: true });
+      // Fetch today + last 30 days in parallel
+      const [todayRes, monthRes] = await Promise.all([
+        supabase
+          .from('operation_results')
+          .select('asset, result, profit, entry_price')
+          .gte('created_at', todayUTC.toISOString())
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('operation_results')
+          .select('asset, result, profit')
+          .gte('created_at', thirtyDaysAgo.toISOString())
+      ]);
 
-      if (error) throw error;
+      if (todayRes.error) throw todayRes.error;
 
-      // Filter MT5 trades: non-OTC USD pairs (same logic as auto-generate-signals)
-      const mt5Results = (results || []).filter(r => {
+      const filterMT5 = (rows: any[]) => (rows || []).filter(r => {
         const asset = r.asset?.toUpperCase() || '';
         return !asset.includes('OTC') && asset.includes('USD');
       });
+
+      const mt5Results = filterMT5(todayRes.data);
+      const mt5Results30d = filterMT5(monthRes.data);
 
       let profit = 0;
       let wins = 0;
@@ -72,8 +83,15 @@ export function MT5BankManagementCard() {
           profit += result.profit || 0;
           currentStreak++;
           consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
-        } else if (resultType === 'pending') {
-          // skip pending
+        }
+      }
+
+      // Calculate 30d P&L
+      let pnl30d = 0;
+      for (const r of mt5Results30d) {
+        const rt = r.result?.toLowerCase();
+        if (rt === 'win' || rt === 'loss' || rt === 'loose') {
+          pnl30d += r.profit || 0;
         }
       }
 
@@ -83,6 +101,7 @@ export function MT5BankManagementCard() {
         wins,
         losses,
         consecutiveLosses,
+        pnl30d,
       });
     } catch (error) {
       console.error('Error fetching MT5 stats:', error);
@@ -107,7 +126,7 @@ export function MT5BankManagementCard() {
         }
       }
 
-      setStats({ dailyProfit: 0, todayTrades: 0, wins: 0, losses: 0, consecutiveLosses: 0 });
+      setStats({ dailyProfit: 0, todayTrades: 0, wins: 0, losses: 0, consecutiveLosses: 0, pnl30d: 0 });
       toast({ title: 'Resultados resetados', description: 'IQ Option e MT5 zerados com sucesso.' });
     } catch (error) {
       console.error('Error resetting MT5 stats:', error);
@@ -239,6 +258,29 @@ export function MT5BankManagementCard() {
         </div>
       </div>
 
+      {/* Stats Grid - Trades Hoje + P&L 30d */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-secondary/50 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Activity className="w-4 h-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Trades (Hoje)</span>
+          </div>
+          <div className={cn('font-mono font-bold', isOvertrading ? 'text-gold' : 'text-foreground')}>
+            {stats.todayTrades}/{maxDailyTrades}
+          </div>
+        </div>
+
+        <div className="bg-secondary/50 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Target className="w-4 h-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">P&L Total (30d)</span>
+          </div>
+          <div className={cn('font-mono font-bold', stats.pnl30d >= 0 ? 'text-call' : 'text-put')}>
+            {stats.pnl30d >= 0 ? '+' : ''}{formatCurrency(stats.pnl30d)}
+          </div>
+        </div>
+      </div>
+
       {/* Win/Loss Stats */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="bg-call/10 rounded-lg p-2 text-center">
@@ -258,8 +300,8 @@ export function MT5BankManagementCard() {
       {/* Trade Progress */}
       <div className="mb-4">
         <div className="flex justify-between text-xs text-muted-foreground mb-2">
-          <span>Trades Hoje</span>
-          <span>{stats.todayTrades}/{maxDailyTrades}</span>
+          <span>Progresso Diário</span>
+          <span>{tradeProgress.toFixed(0)}%</span>
         </div>
         <Progress
           value={tradeProgress}

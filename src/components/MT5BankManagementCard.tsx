@@ -13,6 +13,7 @@ interface MT5DailyStats {
   wins: number;
   losses: number;
   consecutiveLosses: number;
+  pnl30d: number;
 }
 
 interface MT5BalanceInfo {

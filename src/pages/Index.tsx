@@ -55,7 +55,7 @@ const Index = () => {
         isSearching={isSearching}
       />
       
-      <main className="container px-4 pb-6 sm:pb-8">
+      <main className="container px-3 sm:px-4 pb-6 sm:pb-8 space-y-3 sm:space-y-4">
         {/* Loading Overlay */}
         {isLoading && (
           <div className="fixed inset-0 z-40 bg-background/50 backdrop-blur-sm flex items-center justify-center">
@@ -66,45 +66,17 @@ const Index = () => {
           </div>
         )}
 
-        {/* Top Row: Broker Connections + Gestão Banca IQ + Gestão Banca MT5 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-          <BrokerConnectionsCard />
+        {/* Row 1: Broker Connections (full width, compact) */}
+        <BrokerConnectionsCard />
+
+        {/* Row 2: Bank Management IQ + MT5 side by side */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <BankManagementCard />
           <MT5BankManagementCard />
         </div>
 
-        {/* Filters Row */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
-          <TimeframeFilter
-            selected={selectedTimeframe}
-            onChange={setSelectedTimeframe}
-          />
-          
-          {/* Market Type Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs sm:text-sm text-muted-foreground shrink-0">Mercado:</span>
-            <div className="flex bg-secondary/50 rounded-lg p-1 overflow-x-auto">
-              {(['ALL', 'forex', 'crypto', 'otc'] as MarketFilter[]).map((market) => (
-                <button
-                  key={market}
-                  onClick={() => setSelectedMarket(market)}
-                  className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
-                    selectedMarket === market
-                      ? market === 'otc' 
-                        ? 'bg-blue-500/20 text-blue-400 shadow-lg'
-                        : 'bg-primary text-primary-foreground shadow-lg'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {market === 'ALL' ? 'Todos' : market.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Row: Live Operations + AI Status */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Row 3: Live Operations + AI Status side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <LiveOperationsCard />
           <AIAnalysisStatusCard />
         </div>

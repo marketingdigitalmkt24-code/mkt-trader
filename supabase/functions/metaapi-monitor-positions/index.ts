@@ -284,6 +284,12 @@ serve(async (req) => {
         balance: accountBalance,
         equity: accountEquity,
         currency: accountCurrency,
+        todayTrades: todayDeals.length,
+        todayProfit: parseFloat(todayProfit.toFixed(2)),
+        todayWins,
+        todayLosses,
+        consecutiveLosses,
+        pnl30d: parseFloat(pnl30d.toFixed(2)),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

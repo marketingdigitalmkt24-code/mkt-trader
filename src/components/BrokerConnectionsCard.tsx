@@ -115,14 +115,6 @@ export function BrokerConnectionsCard() {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium truncate">{status.name}</span>
-            {status.accountType && (
-              <Badge variant="secondary" className={cn(
-                "text-[10px] px-1.5 py-0",
-                status.accountType === 'PRACTICE' ? "bg-blue-500/20 text-blue-400" : "bg-call/20 text-call"
-              )}>
-                {status.accountType === 'PRACTICE' ? 'DEMO' : 'REAL'}
-              </Badge>
-            )}
           </div>
           <p className="text-xs text-muted-foreground truncate">{status.details}</p>
         </div>

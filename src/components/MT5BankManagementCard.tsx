@@ -15,6 +15,12 @@ interface MT5DailyStats {
   consecutiveLosses: number;
 }
 
+interface MT5BalanceInfo {
+  balance: number | null;
+  equity: number | null;
+  currency: string;
+}
+
 export function MT5BankManagementCard() {
   const { toast } = useToast();
   const [stats, setStats] = useState<MT5DailyStats>({
@@ -24,6 +30,7 @@ export function MT5BankManagementCard() {
     losses: 0,
     consecutiveLosses: 0,
   });
+  const [mt5Balance, setMt5Balance] = useState<MT5BalanceInfo>({ balance: null, equity: null, currency: 'USD' });
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 

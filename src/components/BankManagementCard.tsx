@@ -9,6 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 
 export function BankManagementCard() {
+  const { toast } = useToast();
+  const [isResetting, setIsResetting] = useState(false);
   const {
     balance,
     dailyStats,

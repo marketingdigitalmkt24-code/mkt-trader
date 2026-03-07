@@ -376,15 +376,15 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     return { score: 0, adjustments: [`🔴 PADRÃO DE PERDA: ${s.asset} ${s.type} às ${currentHour}h = ${matchingLossPattern.count} losses`], shouldSkip: true, skipReason: `Padrão de perda identificado` };
   }
 
-  // 1. ATIVO COM HISTÓRICO NEGATIVO → BLOQUEAR
+  // 1. ATIVO COM HISTÓRICO MUITO NEGATIVO → BLOQUEAR
   const assetPerf = model.assetPerformance.get(s.asset);
-  if (assetPerf && assetPerf.trades >= 2 && assetPerf.winRate < 45 && assetPerf.profit < 0) {
-    return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
+  if (assetPerf && assetPerf.trades >= 5 && assetPerf.winRate < 30 && assetPerf.profit < -200) {
+    return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico muito negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
   }
 
-  // 2. LOSS STREAK RECENTE → BLOQUEAR
+  // 2. LOSS STREAK RECENTE → BLOQUEAR só com 3+
   const lossStreak = model.recentLossStreaks.get(s.asset) || 0;
-  if (lossStreak >= 2) {
+  if (lossStreak >= 3) {
     return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
   }
 
@@ -421,9 +421,9 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
       adjustments.push(`ATIVO FRACO: WR ${assetPerf.winRate}%`);
     }
   } else {
-    // Ativo SEM histórico = risco desconhecido, penalizar
-    score -= 5;
-    adjustments.push(`ATIVO NOVO: sem histórico (risco)`);
+    // Ativo SEM histórico = aceitar se indicadores forem fortes
+    score += 0;
+    adjustments.push(`ATIVO NOVO: sem histórico`);
   }
 
   // 5. Direção com melhor taxa de acerto para este ativo

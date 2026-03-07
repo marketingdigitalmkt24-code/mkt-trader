@@ -88,27 +88,20 @@ export function MT5BankManagementCard() {
       const now = new Date();
       const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
 
-      // Delete today's MT5 results (non-OTC USD pairs)
+      // Delete ALL today's results (IQ Option + MT5)
       const { data: results } = await supabase
         .from('operation_results')
-        .select('id, asset')
+        .select('id')
         .gte('created_at', todayUTC.toISOString());
 
-      const mt5Ids = (results || [])
-        .filter(r => {
-          const asset = r.asset?.toUpperCase() || '';
-          return !asset.includes('OTC') && asset.includes('USD');
-        })
-        .map(r => r.id);
-
-      if (mt5Ids.length > 0) {
-        for (const id of mt5Ids) {
-          await supabase.from('operation_results').delete().eq('id', id);
+      if (results && results.length > 0) {
+        for (const r of results) {
+          await supabase.from('operation_results').delete().eq('id', r.id);
         }
       }
 
       setStats({ dailyProfit: 0, todayTrades: 0, wins: 0, losses: 0, consecutiveLosses: 0 });
-      toast({ title: 'Resultados MT5 resetados', description: 'Estatísticas do dia zeradas com sucesso.' });
+      toast({ title: 'Resultados resetados', description: 'IQ Option e MT5 zerados com sucesso.' });
     } catch (error) {
       console.error('Error resetting MT5 stats:', error);
       toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });

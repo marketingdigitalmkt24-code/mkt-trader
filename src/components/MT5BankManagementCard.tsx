@@ -15,6 +15,12 @@ interface MT5DailyStats {
   consecutiveLosses: number;
 }
 
+interface MT5BalanceInfo {
+  balance: number | null;
+  equity: number | null;
+  currency: string;
+}
+
 export function MT5BankManagementCard() {
   const { toast } = useToast();
   const [stats, setStats] = useState<MT5DailyStats>({
@@ -24,6 +30,7 @@ export function MT5BankManagementCard() {
     losses: 0,
     consecutiveLosses: 0,
   });
+  const [mt5Balance, setMt5Balance] = useState<MT5BalanceInfo>({ balance: null, equity: null, currency: 'USD' });
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
@@ -110,9 +117,26 @@ export function MT5BankManagementCard() {
     }
   };
 
+  const fetchBalance = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('metaapi-monitor-positions');
+      if (!error && data) {
+        setMt5Balance({
+          balance: data.balance ?? null,
+          equity: data.equity ?? null,
+          currency: data.currency || 'USD',
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching MT5 balance:', e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
+    fetchBalance();
     const interval = setInterval(fetchStats, 15000);
+    const balanceInterval = setInterval(fetchBalance, 30000);
 
     const channel = supabase
       .channel('mt5-bank-stats')
@@ -123,9 +147,10 @@ export function MT5BankManagementCard() {
 
     return () => {
       clearInterval(interval);
+      clearInterval(balanceInterval);
       supabase.removeChannel(channel);
     };
-  }, [fetchStats]);
+  }, [fetchStats, fetchBalance]);
 
   const totalDecided = stats.wins + stats.losses;
   const winRate = totalDecided > 0 ? (stats.wins / totalDecided) * 100 : 0;
@@ -169,6 +194,29 @@ export function MT5BankManagementCard() {
           </TooltipProvider>
         </div>
       </div>
+
+      {/* Balance */}
+      {mt5Balance.balance !== null && (
+        <div className="bg-secondary/50 rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Saldo MT5</span>
+            </div>
+            <span className="text-lg font-bold text-foreground">
+              {formatCurrency(mt5Balance.balance)} <span className="text-xs text-muted-foreground">{mt5Balance.currency}</span>
+            </span>
+          </div>
+          {mt5Balance.equity !== null && mt5Balance.equity !== mt5Balance.balance && (
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-xs text-muted-foreground">Equity</span>
+              <span className={cn("text-sm font-semibold", mt5Balance.equity >= mt5Balance.balance ? "text-call" : "text-put")}>
+                {formatCurrency(mt5Balance.equity)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats label - Today only */}
       <div className="bg-secondary/50 rounded-xl p-4 mb-4">

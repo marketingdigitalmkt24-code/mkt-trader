@@ -121,6 +121,67 @@ serve(async (req) => {
       }
     } catch (_) {}
 
+    // Fetch deal history: today + 30 days
+    let todayDeals: any[] = [];
+    let monthDeals: any[] = [];
+    try {
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      const thirtyDaysAgo = new Date(todayStart);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const endTime = new Date(now.getTime() + 60000); // +1min buffer
+
+      const [todayRes, monthRes] = await Promise.all([
+        safeFetch(`${baseUrl}/history-deals/time/${todayStart.toISOString()}/${endTime.toISOString()}`, {
+          headers: authHeaders,
+        }),
+        safeFetch(`${baseUrl}/history-deals/time/${thirtyDaysAgo.toISOString()}/${endTime.toISOString()}`, {
+          headers: authHeaders,
+        }),
+      ]);
+
+      if (todayRes.ok) {
+        todayDeals = await todayRes.json();
+        // Filter only trade deals (entry OUT = closed trades with profit)
+        todayDeals = (todayDeals || []).filter((d: any) => 
+          d.entryType === 'DEAL_ENTRY_OUT' && d.type !== 'DEAL_TYPE_BALANCE'
+        );
+      }
+      if (monthRes.ok) {
+        monthDeals = await monthRes.json();
+        monthDeals = (monthDeals || []).filter((d: any) => 
+          d.entryType === 'DEAL_ENTRY_OUT' && d.type !== 'DEAL_TYPE_BALANCE'
+        );
+      }
+    } catch (e) {
+      console.error('Error fetching deal history:', e);
+    }
+
+    // Calculate today stats from deals
+    let todayProfit = 0;
+    let todayWins = 0;
+    let todayLosses = 0;
+    let consecutiveLosses = 0;
+    let currentStreak = 0;
+    for (const deal of todayDeals) {
+      const p = deal.profit ?? 0;
+      todayProfit += p;
+      if (p > 0) {
+        todayWins++;
+        currentStreak = 0;
+      } else if (p < 0) {
+        todayLosses++;
+        currentStreak++;
+        consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
+      }
+    }
+
+    // Calculate 30d P&L
+    let pnl30d = 0;
+    for (const deal of monthDeals) {
+      pnl30d += deal.profit ?? 0;
+    }
+
     // Spread advantage: ONLY for EURUSD (tightest spread ~1 pip)
     // EURUSD closes 15% earlier since spread cost is minimal — faster profit
     const EURUSD_SPREAD_MULTIPLIER = 0.85;

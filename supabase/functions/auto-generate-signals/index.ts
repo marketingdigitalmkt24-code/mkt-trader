@@ -776,10 +776,12 @@ serve(async (req) => {
         }
       }
 
-      // ============= COPY TRADE TO IQ OPTION (SCALPING M1 TURBO) =============
+      // ============= COPY TRADE TO IQ OPTION (UMA OPERAÇÃO POR VEZ) =============
       try {
-        // IQ Option Scalping: Only trade with 90%+ confluence
-        if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
+        // BLOQUEIO GLOBAL: Se já tem qualquer operação pendente, NÃO abre nova
+        if (hasAnyPendingIQTrade) {
+          console.log(`🚫 IQ Option: BLOQUEADO — operação anterior ainda pendente. Aguardando finalizar.`);
+        } else if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
           console.log(`⏭️ IQ Scalping: Skipping ${bestSignal.asset} — confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% mínimo`);
         } else {
           const { data: iqConfig } = await supabase

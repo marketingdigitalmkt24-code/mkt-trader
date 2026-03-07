@@ -316,6 +316,27 @@ async function buildLearningModel(): Promise<LearnedPattern> {
       console.log(`   ⚠️ ${asset}: ${streak} losses consecutivos recentes`);
     });
 
+    // Loss patterns
+    if (model.lossPatterns.length > 0) {
+      console.log(`   🔴 PADRÕES DE PERDA IDENTIFICADOS:`);
+      model.lossPatterns.forEach(lp => {
+        console.log(`      ❌ ${lp.asset} ${lp.direction} às ${lp.hour}h UTC: ${lp.count} losses`);
+      });
+    }
+
+    // Toxic assets
+    if (model.toxicAssets.size > 0) {
+      console.log(`   ☠️ ATIVOS TÓXICOS: ${Array.from(model.toxicAssets).join(', ')}`);
+    }
+
+    // Toxic directions
+    if (model.toxicDirections.size > 0) {
+      console.log(`   ⛔ DIREÇÕES TÓXICAS:`);
+      model.toxicDirections.forEach((dir, key) => {
+        console.log(`      ${key}`);
+      });
+    }
+
     console.log(`🧠 ================================\n`);
 
     return model;

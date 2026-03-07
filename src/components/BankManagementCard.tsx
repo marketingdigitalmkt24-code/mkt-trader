@@ -16,11 +16,7 @@ export function BankManagementCard() {
     dailyStats,
     isLoading,
     lastUpdate,
-    connectionStatus,
-    connect,
-    disconnect,
     refreshBalance,
-    isConnected,
   } = useIQOptionConnection();
 
   // Use REAL stats from IQ Option API (not simulated)
@@ -84,33 +80,6 @@ export function BankManagementCard() {
     }
     return `$ ${value.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   };
-
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'text-call';
-      case 'disconnected': return 'text-put';
-      case 'error': return 'text-put';
-      case 'connecting': return 'text-gold';
-    }
-  };
-
-  const getConnectionStatusText = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'Conectado à IQ Option (client-side)';
-      case 'disconnected': return 'Desconectado';
-      case 'error': return 'Erro na conexão - Clique para reconectar';
-      case 'connecting': return 'Conectando...';
-    }
-  };
-
-  const handleConnectionToggle = () => {
-    if (isConnected) {
-      disconnect();
-    } else {
-      connect();
-    }
-  };
-
 
   return (
     <section className="glass-card p-4">

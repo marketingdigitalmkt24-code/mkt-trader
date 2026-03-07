@@ -78,6 +78,8 @@ serve(async (req) => {
     let region = 'new-york';
     let clientToken = METAAPI_TOKEN;
     let accountState = 'UNKNOWN';
+    let connectionStatus = 'UNKNOWN';
+    console.log(`📍 Checking account ${METAAPI_ACCOUNT_ID}...`);
     try {
       const accountRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}`, {
         headers: { 'auth-token': METAAPI_TOKEN },
@@ -86,25 +88,41 @@ serve(async (req) => {
         const accountData = await accountRes.json();
         region = accountData.region || 'new-york';
         accountState = accountData.state || 'UNKNOWN';
+        connectionStatus = accountData.connectionStatus || 'UNKNOWN';
+        console.log(`📍 Region: ${region} | State: ${accountState} | Connection: ${connectionStatus}`);
         
         // Auto-deploy if undeployed
         if (accountState === 'UNDEPLOYED') {
           console.log('🔄 Account is UNDEPLOYED, deploying...');
-          const deployRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}/deploy`, {
-            method: 'POST',
-            headers: { 'auth-token': METAAPI_TOKEN },
-          });
-          if (deployRes.ok) {
-            console.log('✅ Deploy request sent. Waiting for connection...');
-            // Wait a bit for deployment
-            await new Promise(r => setTimeout(r, 5000));
-          } else {
-            const errText = await deployRes.text();
-            console.error(`❌ Deploy failed: ${errText}`);
+          try {
+            const deployRes = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}/deploy`, {
+              method: 'POST',
+              headers: { 'auth-token': METAAPI_TOKEN },
+            });
+            const deployText = await deployRes.text();
+            console.log(`Deploy response: ${deployRes.status} ${deployText}`);
+            if (deployRes.ok || deployRes.status === 204) {
+              console.log('✅ Deploy request sent. Account will connect shortly.');
+              // Wait for deployment
+              await new Promise(r => setTimeout(r, 8000));
+              // Re-check state
+              const recheck = await safeFetch(`${PROVISIONING_URL}/users/current/accounts/${METAAPI_ACCOUNT_ID}`, {
+                headers: { 'auth-token': METAAPI_TOKEN },
+              });
+              if (recheck.ok) {
+                const recheckData = await recheck.json();
+                accountState = recheckData.state || accountState;
+                connectionStatus = recheckData.connectionStatus || connectionStatus;
+                console.log(`📍 After deploy - State: ${accountState} | Connection: ${connectionStatus}`);
+              } else { await recheck.text(); }
+            }
+          } catch (deployErr) {
+            console.error('❌ Deploy error:', deployErr);
           }
         }
       } else {
-        await accountRes.text();
+        const errText = await accountRes.text();
+        console.error(`❌ Account check failed: ${accountRes.status} ${errText}`);
       }
     } catch (e) {
       console.error('Error checking account:', e);

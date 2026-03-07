@@ -117,9 +117,26 @@ export function MT5BankManagementCard() {
     }
   };
 
+  const fetchBalance = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('metaapi-monitor-positions');
+      if (!error && data) {
+        setMt5Balance({
+          balance: data.balance ?? null,
+          equity: data.equity ?? null,
+          currency: data.currency || 'USD',
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching MT5 balance:', e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
+    fetchBalance();
     const interval = setInterval(fetchStats, 15000);
+    const balanceInterval = setInterval(fetchBalance, 30000);
 
     const channel = supabase
       .channel('mt5-bank-stats')
@@ -130,9 +147,10 @@ export function MT5BankManagementCard() {
 
     return () => {
       clearInterval(interval);
+      clearInterval(balanceInterval);
       supabase.removeChannel(channel);
     };
-  }, [fetchStats]);
+  }, [fetchStats, fetchBalance]);
 
   const totalDecided = stats.wins + stats.losses;
   const winRate = totalDecided > 0 ? (stats.wins / totalDecided) * 100 : 0;

@@ -896,14 +896,27 @@ serve(async (req) => {
         console.error('❌ IQ Option failed:', e);
       }
 
-      // ============= COPY TRADE TO MT5 VIA METAAPI (USD PAIRS ONLY) =============
+      // ============= COPY TRADE TO MT5 VIA METAAPI (EURUSD ONLY + SESSION FILTER) =============
       try {
-        // Only trade USD pairs on MT5
         const assetNormalized = bestSignal.asset.replace('/', '').replace('-OTC', '').replace(' ', '').toUpperCase();
-        const isUsdPair = assetNormalized.includes('USD');
         
-        if (!isUsdPair) {
-          console.log(`⏭️ MT5: Skipping ${bestSignal.asset} — not a USD pair`);
+        // MT5 Strategy: ONLY trade EURUSD (tightest spread, most liquid)
+        const isEurusd = assetNormalized === 'EURUSD';
+        
+        // Session filter: Only trade during London+NY overlap (12:00-16:00 UTC) = best liquidity
+        const utcHour = new Date().getUTCHours();
+        const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16); // London open to NY afternoon
+        
+        // MT5 requires higher confluence than IQ Option
+        const MT5_MIN_CONFLUENCE = 95;
+        const hasHighConfluence = bestSignal.indicators.confluenceScore >= MT5_MIN_CONFLUENCE;
+        
+        if (!isEurusd) {
+          console.log(`⏭️ MT5: Skipping ${bestSignal.asset} — MT5 opera APENAS EUR/USD (menor spread)`);
+        } else if (!isHighLiquiditySession) {
+          console.log(`⏭️ MT5: Skipping ${bestSignal.asset} — Fora da sessão de alta liquidez (${utcHour}h UTC, permitido: 7-16h)`);
+        } else if (!hasHighConfluence) {
+          console.log(`⏭️ MT5: Skipping ${bestSignal.asset} — Confluência ${bestSignal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}% mínimo MT5`);
         } else {
           const { data: metaConfig } = await supabase
             .from('metaapi_config')
@@ -921,7 +934,7 @@ serve(async (req) => {
             
             const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
 
-            console.log(`📡 MT5: ${bestSignal.asset} ${bestSignal.type} $${mt5TradeAmount} | Volume: ${metaConfig.volume || 0.01}`);
+            console.log(`📡 MT5 EURUSD: ${bestSignal.type} $${mt5TradeAmount} | Volume: ${metaConfig.volume || 0.01} | Score: ${bestSignal.indicators.confluenceScore}% | Session: ${utcHour}h UTC`);
             
             const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
               body: {
@@ -936,7 +949,7 @@ serve(async (req) => {
 
             if (!mt5Error && mt5Data?.success) {
               totalMT5++;
-              console.log(`✅ MT5 Trade: ${mt5Data.symbol} ${mt5Data.direction}`);
+              console.log(`✅ MT5 Trade: ${mt5Data.symbol} ${mt5Data.direction} | EURUSD spread strategy`);
             } else {
               console.error(`❌ MT5 Trade falhou: ${mt5Error?.message || mt5Data?.error}`);
             }

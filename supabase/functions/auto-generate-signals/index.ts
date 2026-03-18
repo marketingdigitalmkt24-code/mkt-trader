@@ -826,7 +826,18 @@ serve(async (req) => {
           console.log(`⏭️ IQ Option: Skipping ${bestSignal.asset} — não é par de moedas (apenas forex permitido)`);
         } else if (hasAnyPendingIQTrade) {
           console.log(`🚫 IQ Option: BLOQUEADO — operação anterior ainda pendente. Aguardando finalizar.`);
-        } else if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
+        } else {
+          // RE-CHECK pending RIGHT BEFORE execution (prevents race condition between concurrent cron/manual calls)
+          const { data: freshPending } = await supabase
+            .from('operation_results')
+            .select('id')
+            .eq('result', 'pending')
+            .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+            .limit(1);
+          
+          if (freshPending && freshPending.length > 0) {
+            console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente. Race condition prevenida.`);
+          } else if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
           console.log(`⏭️ IQ Scalping: Skipping ${bestSignal.asset} — confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% mínimo`);
         } else {
           const { data: iqConfig } = await supabase

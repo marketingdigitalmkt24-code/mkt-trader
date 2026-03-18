@@ -388,13 +388,14 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
   }
 
-  // 3. HORÁRIO PÉSSIMO → BLOQUEAR
+  // 3. HORÁRIO PÉSSIMO → apenas penalizar, não bloquear
   if (model.worstHours.includes(currentHour)) {
     const hourData = model.hourlyPerformance.get(currentHour);
     if (hourData) {
       const total = hourData.wins + hourData.losses;
       const wr = Math.round((hourData.wins / total) * 100);
-      return { score: 0, adjustments: [`HORÁRIO RUIM: ${currentHour}h UTC (WR: ${wr}%)`], shouldSkip: true, skipReason: `Horário ${currentHour}h desfavorável` };
+      score -= 10;
+      adjustments.push(`⚠️ HORÁRIO FRACO: ${currentHour}h UTC (WR: ${wr}%)`);
     }
   }
 

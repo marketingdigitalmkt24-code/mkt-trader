@@ -860,6 +860,19 @@ serve(async (req) => {
 
             console.log(`📡 IQ Scalping Turbo: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount} | Exp: ${expiration}min | Score: ${bestSignal.indicators.confluenceScore}%`);
             
+            // INSERT PENDING RESULT FIRST to prevent race conditions (concurrent calls will see this)
+            await supabase.from('operation_results').insert({
+              signal_id: bestSignal.id,
+              asset: bestSignal.asset,
+              direction: bestSignal.type,
+              result: 'pending',
+              profit: 0,
+              entry_price: iqTradeAmount,
+              is_auto_trade: true,
+              is_ai_analyzed: !!bestSignal.aiConfidence,
+              timeframe: 'M1',
+            });
+
             // Save to trade_queue for tracking
             await supabase.from('trade_queue').insert({
               asset: bestSignal.asset,

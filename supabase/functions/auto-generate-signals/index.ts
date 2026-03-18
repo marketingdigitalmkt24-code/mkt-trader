@@ -759,13 +759,6 @@ serve(async (req) => {
     const originalCount = assets.length;
     assets = assets.filter(asset => {
       const key = asset.symbol.toUpperCase();
-      const isEurusd = asset.symbol === 'EUR/USD';
-
-      if (isEurusd) {
-        if (assetsWithPendingTrades.has(key) || assetsWithRecentSignals.has(key)) return false;
-        console.log(`🎯 EUR/USD: LIBERADO (estratégia spread MT5)`);
-        return true;
-      }
 
       if (assetsWithPendingTrades.has(key)) return false;
       if (assetsWithRecentSignals.has(key)) return false;

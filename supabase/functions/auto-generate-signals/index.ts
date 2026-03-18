@@ -586,25 +586,31 @@ async function analyzeAssetWithRealData(
   const sr = calculateSupportResistance(prices);
   const macd = calculateMACD(prices);
 
-  // ============= DETERMINE DIRECTION FROM REAL INDICATORS (NOT RANDOM!) =============
+  // ============= DETERMINE DIRECTION FROM REAL INDICATORS =============
   let type: 'CALL' | 'PUT' | null = null;
 
-  // CALL: RSI oversold + near support + stochastic oversold → exhaustion at bottom
-  if (rsiValue <= RSI_CALL_MAX && sr.pricePosition === 'near_support' && stoch.k <= 25) {
+  // CALL: RSI oversold (primary signal)
+  if (rsiValue <= RSI_CALL_MAX) {
     type = 'CALL';
-    console.log(`📉 ${asset.symbol}: Exaustão REAL no FUNDO detectada — RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition}`);
+    console.log(`📉 ${asset.symbol}: RSI oversold ${rsiValue.toFixed(1)} — sinal CALL`);
   }
-  // PUT: RSI overbought + near resistance + stochastic overbought → exhaustion at top
-  else if (rsiValue >= RSI_PUT_MIN && sr.pricePosition === 'near_resistance' && stoch.k >= 75) {
+  // PUT: RSI overbought (primary signal)
+  else if (rsiValue >= RSI_PUT_MIN) {
     type = 'PUT';
-    console.log(`📈 ${asset.symbol}: Exaustão REAL no TOPO detectada — RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition}`);
+    console.log(`📈 ${asset.symbol}: RSI overbought ${rsiValue.toFixed(1)} — sinal PUT`);
+  }
+  // Secondary: Strong support/resistance position
+  else if (sr.pricePosition === 'near_support' && stoch.k <= 30) {
+    type = 'CALL';
+    console.log(`📉 ${asset.symbol}: Near support + Stoch ${stoch.k.toFixed(1)} — sinal CALL`);
+  }
+  else if (sr.pricePosition === 'near_resistance' && stoch.k >= 70) {
+    type = 'PUT';
+    console.log(`📈 ${asset.symbol}: Near resistance + Stoch ${stoch.k.toFixed(1)} — sinal PUT`);
   }
 
   if (!type) {
-    // Log why no signal (for debugging)
-    if (rsiValue <= 35 || rsiValue >= 65) {
-      console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — aguardando exaustão completa`);
-    }
+    console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — sem sinal`);
     return null;
   }
 
@@ -625,35 +631,30 @@ async function analyzeAssetWithRealData(
     ema21,
     sma50,
     trend: isCall
-      ? (ema9 < ema21 ? 'bullish' : 'neutral')  // Price below MAs = potential bullish reversal
-      : (ema9 > ema21 ? 'bearish' : 'neutral'),   // Price above MAs = potential bearish reversal
+      ? (ema9 < ema21 ? 'bullish' : 'neutral')
+      : (ema9 > ema21 ? 'bearish' : 'neutral'),
   };
 
   // Count confluences from REAL data
   let confluenceCount = 0;
   if (isCall ? rsiValue < RSI_CALL_MAX : rsiValue > RSI_PUT_MIN) confluenceCount++;
+  if (isCall ? rsiValue < RSI_ULTRA_CALL : rsiValue > RSI_ULTRA_PUT) confluenceCount++; // Bonus for ultra-extreme
   if (isCall ? bollinger.position === 'below_lower' : bollinger.position === 'above_upper') confluenceCount++;
   if (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') confluenceCount++;
   if (movingAverages.trend !== 'neutral') confluenceCount++;
-  if (atr.volatility === 'low') confluenceCount++;
+  if (isCall ? stoch.k <= 25 : stoch.k >= 75) confluenceCount++;
 
-  // Detect REAL reversal candle patterns from price action
+  // Detect reversal candle patterns
   const { hasReversal, pattern } = detectReversalPattern(prices, type);
   if (hasReversal) confluenceCount++;
 
-  // RIGOROSO: Mínimo 5 de 6 confirmações
+  // Minimum 3 of 7 confirmations
   if (confluenceCount < MIN_CONFIRMATIONS) {
-    console.log(`⚠️ ${asset.symbol} ${type}: Confluência insuficiente ${confluenceCount}/6 (mínimo ${MIN_CONFIRMATIONS})`);
+    console.log(`⚠️ ${asset.symbol} ${type}: Confluência ${confluenceCount}/7 < ${MIN_CONFIRMATIONS}`);
     return null;
   }
 
-  // Exigir padrão de candle de reversão
-  if (!hasReversal) {
-    console.log(`⚠️ ${asset.symbol} ${type}: Sem padrão de reversão nos candles reais`);
-    return null;
-  }
-
-  const confluenceScore = Math.round((confluenceCount / 6) * 100);
+  const confluenceScore = Math.round((confluenceCount / 7) * 100);
 
   const indicators = {
     rsi,

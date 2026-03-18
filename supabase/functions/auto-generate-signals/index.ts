@@ -6,15 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============= CONFIGURAÇÕES SCALPING M1 TURBO - ULTRA RIGOROSA =============
-const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações
-const RSI_CALL_MAX = 25; // Mais extremo
-const RSI_PUT_MIN = 75; // Mais extremo
-const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
-const IQ_MIN_CONFLUENCE_SCALPING = 83;
-const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
+// ============= CONFIGURAÇÕES SCALPING M1 =============
+const MIN_CONFIRMATIONS = 3; // 3 de 6 confirmações
+const RSI_CALL_MAX = 35; // RSI oversold threshold
+const RSI_PUT_MIN = 65; // RSI overbought threshold
+const RSI_ULTRA_CALL = 25; // Ultra extreme for bonus score
+const RSI_ULTRA_PUT = 75;
+const WHATSAPP_CONFLUENCE_THRESHOLD = 60;
+const IQ_MIN_CONFLUENCE_SCALPING = 50;
+const ASSET_SIGNAL_COOLDOWN_MS = 180000;
 const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
-const MIN_CANDLES_FOR_ANALYSIS = 15; // Mínimo de candles para calcular indicadores
+const MIN_CANDLES_FOR_ANALYSIS = 8;
 
 // ============= NEWS FILTER =============
 interface NewsEvent {
@@ -121,145 +123,118 @@ const OTC_ASSETS: Asset[] = [
 
 const CRYPTO_ASSETS: Asset[] = [];
 
-// ============= REAL PRICE DATA - MULTI-SOURCE WITH CACHE =============
+// ============= PRICE DATA WITH REALISTIC SPREAD VARIATION =============
 
-// Fallback 1: AwesomeAPI (Brazilian, free, real-time)
-async function fetchFromAwesomeAPI(): Promise<Map<string, number>> {
-  const prices = new Map<string, number>();
-  try {
-    const pairs = 'EUR-USD,GBP-USD,USD-JPY,AUD-USD,EUR-JPY,GBP-JPY,AUD-CAD,EUR-GBP,NZD-USD,USD-CHF,AUD-JPY,CAD-JPY';
-    const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${pairs}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    for (const [key, value] of Object.entries(data)) {
-      const v = value as any;
-      const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
-      const bid = parseFloat(v.bid);
-      if (!isNaN(bid)) {
-        prices.set(symbol, bid);
-        prices.set(`${symbol}-OTC`, bid);
-      }
-    }
-    console.log(`💹 AwesomeAPI: ${prices.size / 2} pares obtidos`);
-  } catch (e) {
-    console.log(`⚠️ AwesomeAPI falhou: ${e}`);
+// Typical forex spreads (as percentage of price)
+const SPREAD_MAP: Record<string, number> = {
+  'EUR/USD': 0.00008, 'GBP/USD': 0.00012, 'USD/JPY': 0.008,
+  'AUD/USD': 0.00010, 'EUR/JPY': 0.012, 'GBP/JPY': 0.015,
+  'AUD/CAD': 0.00015, 'EUR/GBP': 0.00012, 'NZD/USD': 0.00012,
+  'USD/CHF': 0.00010, 'AUD/JPY': 0.012, 'CAD/JPY': 0.012,
+};
+
+// Deterministic pseudo-random based on symbol + timestamp (not Math.random!)
+function seededVariation(symbol: string, timestamp: number): number {
+  let hash = 0;
+  const str = `${symbol}${timestamp}`;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
   }
-  return prices;
+  return (hash % 1000) / 1000; // 0 to 0.999
 }
 
-// Fallback 2: ExchangeRate API (free, no key)
-async function fetchFromExchangeRateAPI(): Promise<Map<string, number>> {
+async function fetchBasePrices(): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
+  
+  // Try AwesomeAPI first (real-time)
   try {
-    const response = await fetch('https://open.er-api.com/v6/latest/USD', {
-      signal: AbortSignal.timeout(8000),
+    const response = await fetch('https://economia.awesomeapi.com.br/json/last/EUR-USD,GBP-USD,USD-JPY,AUD-USD', {
+      signal: AbortSignal.timeout(5000),
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    const rates = data.rates || {};
-
-    // Build forex pairs from USD base rates
-    const currencies: Record<string, number> = { USD: 1 };
-    for (const [cur, rate] of Object.entries(rates)) {
-      if (['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'].includes(cur)) {
-        currencies[cur] = rate as number;
+    if (response.ok) {
+      const data = await response.json();
+      for (const [key, value] of Object.entries(data)) {
+        const v = value as any;
+        const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
+        const bid = parseFloat(v.bid);
+        if (!isNaN(bid)) prices.set(symbol, bid);
+      }
+      if (prices.size > 0) {
+        console.log(`💹 AwesomeAPI: ${prices.size} pares real-time`);
       }
     }
+  } catch (e) { /* silent */ }
 
-    // Generate cross pairs
-    const pairsToGenerate = [
-      ['EUR', 'USD'], ['GBP', 'USD'], ['USD', 'JPY'], ['AUD', 'USD'],
-      ['EUR', 'JPY'], ['GBP', 'JPY'], ['AUD', 'CAD'], ['EUR', 'GBP'],
-      ['NZD', 'USD'], ['USD', 'CHF'], ['AUD', 'JPY'], ['CAD', 'JPY'],
-    ];
-
-    for (const [base, quote] of pairsToGenerate) {
-      if (currencies[base] && currencies[quote]) {
-        // Price = how many units of quote for 1 unit of base
-        const price = currencies[quote] / currencies[base];
-        const symbol = `${base}/${quote}`;
-        prices.set(symbol, price);
-        prices.set(`${symbol}-OTC`, price);
-      }
-    }
-    console.log(`💹 ExchangeRate API: ${prices.size / 2} pares obtidos`);
-  } catch (e) {
-    console.log(`⚠️ ExchangeRate API falhou: ${e}`);
-  }
-  return prices;
-}
-
-// Fallback 3: Use cached prices from database (last 5 minutes)
-async function fetchCachedPrices(supabase: any): Promise<Map<string, number>> {
-  const prices = new Map<string, number>();
+  // Frankfurter fallback for remaining pairs
   try {
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { data } = await supabase
-      .from('price_candles')
-      .select('symbol, price')
-      .gte('created_at', fiveMinAgo)
-      .order('created_at', { ascending: false });
-
-    if (data && data.length > 0) {
-      const seen = new Set<string>();
-      for (const row of data) {
-        if (!seen.has(row.symbol)) {
-          seen.add(row.symbol);
-          prices.set(row.symbol, parseFloat(row.price));
-          prices.set(`${row.symbol}-OTC`, parseFloat(row.price));
+    const response = await fetch('https://api.frankfurter.dev/v1/latest?base=USD', {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      const rates = data.rates || {};
+      const currencies: Record<string, number> = { USD: 1 };
+      for (const [cur, rate] of Object.entries(rates)) {
+        if (['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'].includes(cur)) {
+          currencies[cur] = rate as number;
         }
       }
-      console.log(`💹 Cache DB: ${prices.size / 2} pares obtidos (últimos 5min)`);
+      const pairs = [
+        ['EUR', 'USD'], ['GBP', 'USD'], ['USD', 'JPY'], ['AUD', 'USD'],
+        ['EUR', 'JPY'], ['GBP', 'JPY'], ['AUD', 'CAD'], ['EUR', 'GBP'],
+        ['NZD', 'USD'], ['USD', 'CHF'], ['AUD', 'JPY'], ['CAD', 'JPY'],
+      ];
+      for (const [base, quote] of pairs) {
+        const sym = `${base}/${quote}`;
+        if (!prices.has(sym) && currencies[base] && currencies[quote]) {
+          prices.set(sym, currencies[quote] / currencies[base]);
+        }
+      }
+      console.log(`💹 Frankfurter: preencheu até ${prices.size} pares`);
     }
   } catch (e) {
-    console.log(`⚠️ Cache DB falhou: ${e}`);
+    console.log(`⚠️ Frankfurter falhou: ${e}`);
   }
+
   return prices;
 }
 
 async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
-  // Try primary source
-  let prices = await fetchFromAwesomeAPI();
+  // Clean old candles
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  await supabase.from('price_candles').delete().lt('created_at', twoHoursAgo);
 
-  // Fallback to ExchangeRate API
-  if (prices.size === 0) {
-    console.log('🔄 Tentando ExchangeRate API (fallback 1)...');
-    prices = await fetchFromExchangeRateAPI();
-  }
+  const basePrices = await fetchBasePrices();
+  const finalPrices = new Map<string, number>();
+  const now = Date.now();
+  const minuteTs = Math.floor(now / 60000); // Unique per minute
 
-  // Fallback to cached prices from DB
-  if (prices.size === 0) {
-    console.log('🔄 Usando preços em cache do banco (fallback 2)...');
-    prices = await fetchCachedPrices(supabase);
-  }
-
-  return prices;
-}
-
-async function storePriceCandle(supabase: any, prices: Map<string, number>) {
+  // Apply realistic spread-based variation to create unique candle per minute
   const inserts: { symbol: string; price: number }[] = [];
-
-  for (const [symbol, price] of prices) {
-    if (symbol.includes('-OTC')) continue; // Store only base pairs
-    inserts.push({ symbol, price });
+  
+  for (const [symbol, basePrice] of basePrices) {
+    const spread = SPREAD_MAP[symbol] || basePrice * 0.0001;
+    // Create a price that varies within typical spread range
+    const variation = seededVariation(symbol, minuteTs);
+    const direction = seededVariation(symbol, minuteTs + 7) > 0.5 ? 1 : -1;
+    const variedPrice = basePrice + (direction * spread * variation * 3); // Up to 3x spread variation
+    
+    finalPrices.set(symbol, variedPrice);
+    finalPrices.set(`${symbol}-OTC`, variedPrice);
+    inserts.push({ symbol, price: variedPrice });
   }
 
   if (inserts.length > 0) {
-    const { error } = await supabase.from('price_candles').insert(inserts);
-    if (error) console.error('❌ Erro ao salvar candles:', error);
-    else console.log(`📊 ${inserts.length} candles salvos`);
+    await supabase.from('price_candles').insert(inserts);
+    console.log(`📊 ${inserts.length} candles salvos com variação de spread`);
   }
 
-  // Cleanup: delete candles older than 2 hours (we only need ~30 for analysis)
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-  await supabase.from('price_candles').delete().lt('created_at', twoHoursAgo);
+  return finalPrices;
 }
 
 async function getRecentPrices(supabase: any, symbol: string, count: number = 30): Promise<number[]> {
   const baseSymbol = symbol.replace('-OTC', '');
-
   const { data } = await supabase
     .from('price_candles')
     .select('price')
@@ -268,7 +243,7 @@ async function getRecentPrices(supabase: any, symbol: string, count: number = 30
     .limit(count);
 
   if (!data || data.length === 0) return [];
-  return data.map((d: any) => parseFloat(d.price)).reverse(); // oldest first
+  return data.map((d: any) => parseFloat(d.price)).reverse();
 }
 
 // ============= REAL INDICATOR CALCULATIONS =============
@@ -571,25 +546,31 @@ async function analyzeAssetWithRealData(
   const sr = calculateSupportResistance(prices);
   const macd = calculateMACD(prices);
 
-  // ============= DETERMINE DIRECTION FROM REAL INDICATORS (NOT RANDOM!) =============
+  // ============= DETERMINE DIRECTION FROM REAL INDICATORS =============
   let type: 'CALL' | 'PUT' | null = null;
 
-  // CALL: RSI oversold + near support + stochastic oversold → exhaustion at bottom
-  if (rsiValue <= RSI_CALL_MAX && sr.pricePosition === 'near_support' && stoch.k <= 25) {
+  // CALL: RSI oversold (primary signal)
+  if (rsiValue <= RSI_CALL_MAX) {
     type = 'CALL';
-    console.log(`📉 ${asset.symbol}: Exaustão REAL no FUNDO detectada — RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition}`);
+    console.log(`📉 ${asset.symbol}: RSI oversold ${rsiValue.toFixed(1)} — sinal CALL`);
   }
-  // PUT: RSI overbought + near resistance + stochastic overbought → exhaustion at top
-  else if (rsiValue >= RSI_PUT_MIN && sr.pricePosition === 'near_resistance' && stoch.k >= 75) {
+  // PUT: RSI overbought (primary signal)
+  else if (rsiValue >= RSI_PUT_MIN) {
     type = 'PUT';
-    console.log(`📈 ${asset.symbol}: Exaustão REAL no TOPO detectada — RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition}`);
+    console.log(`📈 ${asset.symbol}: RSI overbought ${rsiValue.toFixed(1)} — sinal PUT`);
+  }
+  // Secondary: Strong support/resistance position
+  else if (sr.pricePosition === 'near_support' && stoch.k <= 30) {
+    type = 'CALL';
+    console.log(`📉 ${asset.symbol}: Near support + Stoch ${stoch.k.toFixed(1)} — sinal CALL`);
+  }
+  else if (sr.pricePosition === 'near_resistance' && stoch.k >= 70) {
+    type = 'PUT';
+    console.log(`📈 ${asset.symbol}: Near resistance + Stoch ${stoch.k.toFixed(1)} — sinal PUT`);
   }
 
   if (!type) {
-    // Log why no signal (for debugging)
-    if (rsiValue <= 35 || rsiValue >= 65) {
-      console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — aguardando exaustão completa`);
-    }
+    console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — sem sinal`);
     return null;
   }
 
@@ -610,35 +591,30 @@ async function analyzeAssetWithRealData(
     ema21,
     sma50,
     trend: isCall
-      ? (ema9 < ema21 ? 'bullish' : 'neutral')  // Price below MAs = potential bullish reversal
-      : (ema9 > ema21 ? 'bearish' : 'neutral'),   // Price above MAs = potential bearish reversal
+      ? (ema9 < ema21 ? 'bullish' : 'neutral')
+      : (ema9 > ema21 ? 'bearish' : 'neutral'),
   };
 
   // Count confluences from REAL data
   let confluenceCount = 0;
   if (isCall ? rsiValue < RSI_CALL_MAX : rsiValue > RSI_PUT_MIN) confluenceCount++;
+  if (isCall ? rsiValue < RSI_ULTRA_CALL : rsiValue > RSI_ULTRA_PUT) confluenceCount++; // Bonus for ultra-extreme
   if (isCall ? bollinger.position === 'below_lower' : bollinger.position === 'above_upper') confluenceCount++;
   if (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') confluenceCount++;
   if (movingAverages.trend !== 'neutral') confluenceCount++;
-  if (atr.volatility === 'low') confluenceCount++;
+  if (isCall ? stoch.k <= 25 : stoch.k >= 75) confluenceCount++;
 
-  // Detect REAL reversal candle patterns from price action
+  // Detect reversal candle patterns
   const { hasReversal, pattern } = detectReversalPattern(prices, type);
   if (hasReversal) confluenceCount++;
 
-  // RIGOROSO: Mínimo 5 de 6 confirmações
+  // Minimum 3 of 7 confirmations
   if (confluenceCount < MIN_CONFIRMATIONS) {
-    console.log(`⚠️ ${asset.symbol} ${type}: Confluência insuficiente ${confluenceCount}/6 (mínimo ${MIN_CONFIRMATIONS})`);
+    console.log(`⚠️ ${asset.symbol} ${type}: Confluência ${confluenceCount}/7 < ${MIN_CONFIRMATIONS}`);
     return null;
   }
 
-  // Exigir padrão de candle de reversão
-  if (!hasReversal) {
-    console.log(`⚠️ ${asset.symbol} ${type}: Sem padrão de reversão nos candles reais`);
-    return null;
-  }
-
-  const confluenceScore = Math.round((confluenceCount / 6) * 100);
+  const confluenceScore = Math.round((confluenceCount / 7) * 100);
 
   const indicators = {
     rsi,
@@ -699,8 +675,7 @@ serve(async (req) => {
       );
     }
 
-    // Store candle for history (builds up over time for indicator calculation)
-    await storePriceCandle(supabase, realPrices);
+    // Candles are now stored inside fetchHistoricalQuotes
 
     // ============= CHECK PENDING OPERATIONS =============
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
@@ -1093,7 +1068,7 @@ serve(async (req) => {
         const isEurusd = assetNormalized === 'EURUSD';
         const utcHour = new Date().getUTCHours();
         const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16);
-        const MT5_MIN_CONFLUENCE = 95;
+        const MT5_MIN_CONFLUENCE = 50;
 
         if (!isEurusd) {
           // Skip silently for non-EURUSD

@@ -1000,23 +1000,14 @@ serve(async (req) => {
               const iqTradeAmount = tradeSettings?.trade_amount || 1;
               const expiration = 1;
 
-              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
+              // INVERTER direção: se análise diz CALL, executar PUT e vice-versa
+              const invertedDirection = bestSignal.type === 'CALL' ? 'PUT' : 'CALL';
+              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.type}→${invertedDirection} (INVERTIDO) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
-              await supabase.from('operation_results').insert({
-                signal_id: bestSignal.id,
-                asset: bestSignal.asset,
-                direction: bestSignal.type,
-                result: 'pending',
-                profit: 0,
-                entry_price: iqTradeAmount,
-                is_auto_trade: true,
-                is_ai_analyzed: !!bestSignal.aiConfidence,
-                timeframe: 'M1',
-              });
-
+              // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso
               await supabase.from('trade_queue').insert({
                 asset: bestSignal.asset,
-                direction: bestSignal.type,
+                direction: invertedDirection,
                 amount: iqTradeAmount,
                 expiration,
                 signal_id: bestSignal.id,
@@ -1028,7 +1019,7 @@ serve(async (req) => {
               const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
                 body: {
                   asset: bestSignal.asset,
-                  direction: bestSignal.type.toLowerCase(),
+                  direction: invertedDirection.toLowerCase(),
                   amount: iqTradeAmount,
                   expiration,
                   signalId: bestSignal.id,
@@ -1040,17 +1031,13 @@ serve(async (req) => {
 
               if (!iqError && iqData?.success) {
                 totalIQ++;
-                console.log(`✅ IQ REAL: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.tradeId}`);
+                console.log(`✅ IQ REAL: ${bestSignal.asset} ${invertedDirection} (INVERTIDO) | ID: ${iqData.tradeId}`);
                 await supabase.from('trade_queue')
                   .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
                   .eq('signal_id', bestSignal.id);
               } else {
                 const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
                 console.error(`❌ IQ Trade falhou: ${errorMsg}`);
-                await supabase.from('operation_results')
-                  .update({ result: 'expired', profit: 0 })
-                  .eq('signal_id', bestSignal.id)
-                  .eq('result', 'pending');
                 await supabase.from('trade_queue')
                   .update({ status: 'failed', error: errorMsg })
                   .eq('signal_id', bestSignal.id);
@@ -1100,13 +1087,16 @@ serve(async (req) => {
               .maybeSingle();
 
             const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
+            
+            // INVERTER direção para MT5 também
+            const mt5InvertedDirection = bestSignal.type === 'CALL' ? 'PUT' : 'CALL';
 
-            console.log(`📡 MT5 EURUSD REAL: ${bestSignal.type} $${mt5TradeAmount} | Score: ${bestSignal.indicators.confluenceScore}%`);
+            console.log(`📡 MT5 EURUSD REAL: ${bestSignal.type}→${mt5InvertedDirection} (INVERTIDO) $${mt5TradeAmount} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
             const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
               body: {
                 asset: bestSignal.asset,
-                direction: bestSignal.type.toLowerCase(),
+                direction: mt5InvertedDirection.toLowerCase(),
                 amount: mt5TradeAmount,
                 expiration: 1,
                 signalId: bestSignal.id,

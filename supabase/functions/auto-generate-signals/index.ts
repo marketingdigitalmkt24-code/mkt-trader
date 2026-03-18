@@ -11,9 +11,9 @@ const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações
 const RSI_CALL_MAX = 25; // Mais extremo
 const RSI_PUT_MIN = 75; // Mais extremo
 const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
-const IQ_MIN_CONFLUENCE_SCALPING = 90; // Confluência mínima para IQ Option Scalping
+const IQ_MIN_CONFLUENCE_SCALPING = 83; // Confluência mínima para IQ Option Scalping (relaxado)
 const FORCE_EXTREME_PROBABILITY = 0.80; // 80% chance de indicadores extremos (era 98% = tudo passava)
-const ASSET_SIGNAL_COOLDOWN_MS = 300000; // 5 minutos de cooldown POR ATIVO (era 3min)
+const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
 const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
 
 // ============= NEWS FILTER - Avoid trading during high-impact news =============
@@ -517,9 +517,9 @@ serve(async (req) => {
     
     // Log blocked assets from history
     assetHistory.forEach((h, asset) => {
-      if (h.consecutiveLosses >= 3) {
+      if (h.consecutiveLosses >= 5) {
         console.log(`⛔ ${asset}: BLOQUEADO (${h.consecutiveLosses} losses consecutivos)`);
-      } else if (h.winRate < 40 && h.losses >= 3) {
+      } else if (h.winRate < 30 && h.losses >= 5) {
         console.log(`⚠️ ${asset}: Win Rate baixo ${h.winRate}% (${h.wins}W/${h.losses}L)`);
       }
     });
@@ -602,15 +602,15 @@ serve(async (req) => {
         return false;
       }
       
-      // Block assets with 2+ consecutive losses (era 3+)
+      // Block assets with 5+ consecutive losses (relaxado de 2)
       const history = assetHistory.get(asset.symbol);
-      if (history && history.consecutiveLosses >= 2) {
+      if (history && history.consecutiveLosses >= 5) {
         console.log(`⛔ ${asset.symbol}: BLOQUEADO por ${history.consecutiveLosses} losses consecutivos`);
         return false;
       }
       
-      // Block assets with bad win rate (< 45% with 3+ trades) - era < 35% com 5+
-      if (history && history.winRate < 45 && (history.wins + history.losses) >= 3) {
+      // Block assets with very bad win rate (< 30% with 5+ trades)
+      if (history && history.winRate < 30 && (history.wins + history.losses) >= 5) {
         console.log(`⛔ ${asset.symbol}: BLOQUEADO por WR ${history.winRate}% (${history.wins}W/${history.losses}L)`);
         return false;
       }

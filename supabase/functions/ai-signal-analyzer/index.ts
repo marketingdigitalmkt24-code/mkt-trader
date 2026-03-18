@@ -255,22 +255,22 @@ async function buildLearningModel(): Promise<LearnedPattern> {
       }
     }
 
-    // ===== NOVO: Ativos tóxicos (WR < 40% com 3+ trades) =====
+    // ===== NOVO: Ativos tóxicos (WR < 25% com 5+ trades) - relaxado =====
     for (const [asset, stats] of Object.entries(assetStats)) {
       const total = stats.wins + stats.losses;
-      if (total >= 3 && stats.wins / total < 0.4) {
+      if (total >= 5 && stats.wins / total < 0.25) {
         model.toxicAssets.add(asset);
       }
     }
 
-    // ===== NOVO: Direções tóxicas por ativo =====
+    // ===== NOVO: Direções tóxicas por ativo (relaxado) =====
     for (const [asset, ds] of Object.entries(dirStats)) {
       const callTotal = ds.callWins + ds.callLosses;
       const putTotal = ds.putWins + ds.putLosses;
-      if (callTotal >= 2 && ds.callWins / callTotal < 0.3) {
+      if (callTotal >= 4 && ds.callWins / callTotal < 0.2) {
         model.toxicDirections.set(asset + '|CALL', 'CALL');
       }
-      if (putTotal >= 2 && ds.putWins / putTotal < 0.3) {
+      if (putTotal >= 4 && ds.putWins / putTotal < 0.2) {
         model.toxicDirections.set(asset + '|PUT', 'PUT');
       }
     }
@@ -358,9 +358,9 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
   const adjustments: string[] = [];
   const currentHour = new Date().getUTCHours();
 
-  // 0. ATIVO TÓXICO → BLOQUEAR IMEDIATAMENTE
+  // 0. ATIVO TÓXICO → BLOQUEAR IMEDIATAMENTE (só com WR < 25% e 5+ trades)
   if (model.toxicAssets.has(s.asset)) {
-    return { score: 0, adjustments: ['☠️ ATIVO TÓXICO: só gera perda'], shouldSkip: true, skipReason: `Ativo tóxico (WR < 40%)` };
+    return { score: 0, adjustments: ['☠️ ATIVO TÓXICO: WR < 25%'], shouldSkip: true, skipReason: `Ativo tóxico (WR < 25%)` };
   }
 
   // 0b. DIREÇÃO TÓXICA para este ativo → BLOQUEAR
@@ -368,33 +368,34 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     return { score: 0, adjustments: [`☠️ DIREÇÃO TÓXICA: ${s.type} perde neste ativo`], shouldSkip: true, skipReason: `${s.type} tóxico em ${s.asset}` };
   }
 
-  // 0c. PADRÃO DE PERDA: mesmo ativo + direção + hora = perda repetida
+  // 0c. PADRÃO DE PERDA: mesmo ativo + direção + hora = perda repetida (relaxado para 4+)
   const matchingLossPattern = model.lossPatterns.find(lp => 
     lp.asset === s.asset && lp.direction === s.type && lp.hour === currentHour
   );
-  if (matchingLossPattern && matchingLossPattern.count >= 2) {
+  if (matchingLossPattern && matchingLossPattern.count >= 4) {
     return { score: 0, adjustments: [`🔴 PADRÃO DE PERDA: ${s.asset} ${s.type} às ${currentHour}h = ${matchingLossPattern.count} losses`], shouldSkip: true, skipReason: `Padrão de perda identificado` };
   }
 
-  // 1. ATIVO COM HISTÓRICO MUITO NEGATIVO → BLOQUEAR
+  // 1. ATIVO COM HISTÓRICO MUITO NEGATIVO → BLOQUEAR (relaxado)
   const assetPerf = model.assetPerformance.get(s.asset);
-  if (assetPerf && assetPerf.trades >= 5 && assetPerf.winRate < 30 && assetPerf.profit < -200) {
+  if (assetPerf && assetPerf.trades >= 8 && assetPerf.winRate < 20 && assetPerf.profit < -500) {
     return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico muito negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
   }
 
-  // 2. LOSS STREAK RECENTE → BLOQUEAR só com 3+
+  // 2. LOSS STREAK RECENTE → BLOQUEAR só com 5+ (relaxado de 3)
   const lossStreak = model.recentLossStreaks.get(s.asset) || 0;
-  if (lossStreak >= 3) {
+  if (lossStreak >= 5) {
     return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
   }
 
-  // 3. HORÁRIO PÉSSIMO → BLOQUEAR
+  // 3. HORÁRIO PÉSSIMO → apenas penalizar, não bloquear
   if (model.worstHours.includes(currentHour)) {
     const hourData = model.hourlyPerformance.get(currentHour);
     if (hourData) {
       const total = hourData.wins + hourData.losses;
       const wr = Math.round((hourData.wins / total) * 100);
-      return { score: 0, adjustments: [`HORÁRIO RUIM: ${currentHour}h UTC (WR: ${wr}%)`], shouldSkip: true, skipReason: `Horário ${currentHour}h desfavorável` };
+      score -= 10;
+      adjustments.push(`⚠️ HORÁRIO FRACO: ${currentHour}h UTC (WR: ${wr}%)`);
     }
   }
 
@@ -717,10 +718,10 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
     const finalScore = Math.min(Math.round(score + (model.hasSufficientData ? learned.score * 0.5 : 0)), 100);
     const finalRisk = Math.max(0, riskScore + (model.hasSufficientData && learned.score < 0 ? 10 : 0));
 
-    // Critérios adaptativos - Aceitar sinais com qualidade atual
-    const minScore = isTopAsset ? 85 : (model.hasSufficientData ? 88 : 85);
-    const maxRisk = isTopAsset ? 55 : (model.hasSufficientData ? 50 : 55);
-    const minCriteria = isTopAsset ? 3 : 4;
+    // Critérios adaptativos - RELAXADOS para permitir mais entradas
+    const minScore = isTopAsset ? 80 : (model.hasSufficientData ? 82 : 80);
+    const maxRisk = isTopAsset ? 65 : (model.hasSufficientData ? 60 : 65);
+    const minCriteria = isTopAsset ? 2 : 3;
 
     if (finalScore >= minScore && finalRisk <= maxRisk && criteriaCount >= minCriteria) {
       matches.push({

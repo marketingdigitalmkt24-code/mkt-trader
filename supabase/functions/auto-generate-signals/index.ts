@@ -759,13 +759,6 @@ serve(async (req) => {
     const originalCount = assets.length;
     assets = assets.filter(asset => {
       const key = asset.symbol.toUpperCase();
-      const isEurusd = asset.symbol === 'EUR/USD';
-
-      if (isEurusd) {
-        if (assetsWithPendingTrades.has(key) || assetsWithRecentSignals.has(key)) return false;
-        console.log(`🎯 EUR/USD: LIBERADO (estratégia spread MT5)`);
-        return true;
-      }
 
       if (assetsWithPendingTrades.has(key)) return false;
       if (assetsWithRecentSignals.has(key)) return false;
@@ -1061,78 +1054,98 @@ serve(async (req) => {
       });
     }
 
-    // ============= MT5 TRADE (EURUSD) — EXECUÇÃO INDEPENDENTE =============
-    // MT5 opera apenas EUR/USD, então buscamos o sinal de EUR/USD aprovado pela IA
-    // independentemente de qual foi o melhor para IQ Option
+    // ============= MT5 TRADE — MESMA ESTRATÉGIA DA IQ OPTION =============
+    // MT5 usa o mesmo melhor sinal da IQ Option, com uma operação por vez
     try {
-      const eurusdSignal = aiApprovedSignals.find((s: any) => {
-        const norm = s.asset.replace('/', '').replace('-OTC', '').replace(' ', '').toUpperCase();
-        return norm === 'EURUSD';
-      });
+      const bestMT5Signal = aiApprovedSignals[0]; // Mesmo melhor sinal
 
       const utcHour = new Date().getUTCHours();
       const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16);
       const MT5_MIN_CONFLUENCE = 50;
 
-      if (!eurusdSignal) {
-        console.log(`⏭️ MT5: Nenhum sinal EUR/USD aprovado pela IA neste ciclo`);
+      if (!bestMT5Signal) {
+        console.log(`⏭️ MT5: Nenhum sinal aprovado pela IA neste ciclo`);
       } else if (!isHighLiquiditySession) {
         console.log(`⏭️ MT5: Fora da sessão (${utcHour}h UTC)`);
-      } else if (eurusdSignal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
-        console.log(`⏭️ MT5: Confluência ${eurusdSignal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
+      } else if (bestMT5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
+        console.log(`⏭️ MT5: Confluência ${bestMT5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
       } else {
-        const { data: metaConfig } = await supabase
-          .from('metaapi_config')
-          .select('token, account_id, volume, is_active')
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle();
-
-        if (metaConfig && metaConfig.account_id) {
-          const { data: iqCfgForUser } = await supabase
-            .from('iqoption_config')
-            .select('user_id')
+        // Verificar se é ativo OTC (MT5 não opera OTC)
+        const isOTCAssetMT5 = bestMT5Signal.asset.toUpperCase().includes('OTC');
+        if (isOTCAssetMT5) {
+          console.log(`⏭️ MT5: ${bestMT5Signal.asset} é OTC — MT5 não opera OTC`);
+        } else {
+          const { data: metaConfig } = await supabase
+            .from('metaapi_config')
+            .select('token, account_id, volume, is_active')
             .eq('is_active', true)
             .limit(1)
             .maybeSingle();
 
-          const { data: tradeSettings } = await supabase
-            .from('user_trading_settings')
-            .select('mt5_trade_amount')
-            .eq('user_id', iqCfgForUser?.user_id || '')
-            .limit(1)
-            .maybeSingle();
+          if (metaConfig && metaConfig.account_id) {
+            // Verificar posições abertas no MT5 (uma operação por vez)
+            let hasPendingMT5 = false;
+            try {
+              const { data: mt5Check } = await supabase.functions.invoke('metaapi-monitor-positions', {
+                body: { checkOnly: true },
+              });
+              if (mt5Check?.positions && mt5Check.positions.length > 0) {
+                hasPendingMT5 = true;
+                console.log(`🚫 MT5: BLOQUEADO — ${mt5Check.positions.length} posição(ões) aberta(s)`);
+              }
+            } catch (e) {
+              console.log(`⚠️ MT5: Não foi possível verificar posições, tentando operar`);
+            }
 
-          const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
-          
-          // INVERTER direção para MT5
-          const mt5InvertedDirection = eurusdSignal.type === 'CALL' ? 'PUT' : 'CALL';
+            if (!hasPendingMT5) {
+              const { data: iqCfgForUser } = await supabase
+                .from('iqoption_config')
+                .select('user_id')
+                .eq('is_active', true)
+                .limit(1)
+                .maybeSingle();
 
-          console.log(`📡 MT5 EURUSD INDEPENDENTE: ${eurusdSignal.type}→${mt5InvertedDirection} (INVERTIDO) $${mt5TradeAmount} | Score: ${eurusdSignal.indicators.confluenceScore}%`);
+              const { data: tradeSettings } = await supabase
+                .from('user_trading_settings')
+                .select('mt5_trade_amount')
+                .eq('user_id', iqCfgForUser?.user_id || '')
+                .limit(1)
+                .maybeSingle();
 
-          const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
-            body: {
-              asset: eurusdSignal.asset,
-              direction: mt5InvertedDirection.toLowerCase(),
-              amount: mt5TradeAmount,
-              expiration: 1,
-              signalId: eurusdSignal.id,
-              confluenceScore: eurusdSignal.indicators.confluenceScore,
-            },
-          });
+              const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
+              
+              // INVERTER direção para MT5 (mesma lógica da IQ Option)
+              const mt5InvertedDirection = bestMT5Signal.type === 'CALL' ? 'PUT' : 'CALL';
 
-          if (!mt5Error && mt5Data?.success) {
-            totalMT5++;
-            console.log(`✅ MT5 REAL: ${mt5Data.symbol} ${mt5Data.direction}`);
+              console.log(`📡 MT5: ${bestMT5Signal.asset} ${bestMT5Signal.type}→${mt5InvertedDirection} (INVERTIDO) $${mt5TradeAmount} | Score: ${bestMT5Signal.indicators.confluenceScore}%`);
+
+              const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
+                body: {
+                  asset: bestMT5Signal.asset,
+                  direction: mt5InvertedDirection.toLowerCase(),
+                  amount: mt5TradeAmount,
+                  expiration: 1,
+                  signalId: bestMT5Signal.id,
+                  confluenceScore: bestMT5Signal.indicators.confluenceScore,
+                },
+              });
+
+              if (!mt5Error && mt5Data?.success) {
+                totalMT5++;
+                console.log(`✅ MT5 REAL: ${mt5Data.symbol} ${mt5Data.direction}`);
+              } else if (mt5Data?.skipped) {
+                console.log(`⏭️ MT5: ${mt5Data.error}`);
+              } else {
+                console.error(`❌ MT5 falhou: ${mt5Error?.message || mt5Data?.error}`);
+              }
+            }
           } else {
-            console.error(`❌ MT5 falhou: ${mt5Error?.message || mt5Data?.error}`);
+            console.log(`⏭️ MT5: Nenhuma configuração MetaAPI ativa`);
           }
-        } else {
-          console.log(`⏭️ MT5: Nenhuma configuração MetaAPI ativa`);
         }
       }
     } catch (e) {
-      console.error('❌ MT5 independent execution failed:', e);
+      console.error('❌ MT5 execution failed:', e);
     }
 
     console.log(`\n📊 RESUMO (DADOS REAIS): ${executedSignals.length} sinais | IQ: ${totalIQ} | MT5: ${totalMT5} | WhatsApp: ${totalWhatsApp}`);

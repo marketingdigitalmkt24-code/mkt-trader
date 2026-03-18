@@ -121,34 +121,118 @@ const OTC_ASSETS: Asset[] = [
 
 const CRYPTO_ASSETS: Asset[] = [];
 
-// ============= REAL PRICE DATA FROM AWESOMEAPI =============
-async function fetchRealPrices(): Promise<Map<string, number>> {
-  const prices = new Map<string, number>();
+// ============= REAL PRICE DATA - MULTI-SOURCE WITH CACHE =============
 
+// Fallback 1: AwesomeAPI (Brazilian, free, real-time)
+async function fetchFromAwesomeAPI(): Promise<Map<string, number>> {
+  const prices = new Map<string, number>();
   try {
     const pairs = 'EUR-USD,GBP-USD,USD-JPY,AUD-USD,EUR-JPY,GBP-JPY,AUD-CAD,EUR-GBP,NZD-USD,USD-CHF,AUD-JPY,CAD-JPY';
     const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${pairs}`, {
       signal: AbortSignal.timeout(8000),
     });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    for (const [key, value] of Object.entries(data)) {
+      const v = value as any;
+      const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
+      const bid = parseFloat(v.bid);
+      if (!isNaN(bid)) {
+        prices.set(symbol, bid);
+        prices.set(`${symbol}-OTC`, bid);
+      }
+    }
+    console.log(`💹 AwesomeAPI: ${prices.size / 2} pares obtidos`);
+  } catch (e) {
+    console.log(`⚠️ AwesomeAPI falhou: ${e}`);
+  }
+  return prices;
+}
 
-    if (response.ok) {
-      const data = await response.json();
-      for (const [key, value] of Object.entries(data)) {
-        const v = value as any;
-        // Key format: "EURUSD" → "EUR/USD"
-        const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
-        const bid = parseFloat(v.bid);
-        if (!isNaN(bid)) {
-          prices.set(symbol, bid);
-          prices.set(`${symbol}-OTC`, bid); // OTC uses same base price
+// Fallback 2: ExchangeRate API (free, no key)
+async function fetchFromExchangeRateAPI(): Promise<Map<string, number>> {
+  const prices = new Map<string, number>();
+  try {
+    const response = await fetch('https://open.er-api.com/v6/latest/USD', {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const rates = data.rates || {};
+
+    // Build forex pairs from USD base rates
+    const currencies: Record<string, number> = { USD: 1 };
+    for (const [cur, rate] of Object.entries(rates)) {
+      if (['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'].includes(cur)) {
+        currencies[cur] = rate as number;
+      }
+    }
+
+    // Generate cross pairs
+    const pairsToGenerate = [
+      ['EUR', 'USD'], ['GBP', 'USD'], ['USD', 'JPY'], ['AUD', 'USD'],
+      ['EUR', 'JPY'], ['GBP', 'JPY'], ['AUD', 'CAD'], ['EUR', 'GBP'],
+      ['NZD', 'USD'], ['USD', 'CHF'], ['AUD', 'JPY'], ['CAD', 'JPY'],
+    ];
+
+    for (const [base, quote] of pairsToGenerate) {
+      if (currencies[base] && currencies[quote]) {
+        // Price = how many units of quote for 1 unit of base
+        const price = currencies[quote] / currencies[base];
+        const symbol = `${base}/${quote}`;
+        prices.set(symbol, price);
+        prices.set(`${symbol}-OTC`, price);
+      }
+    }
+    console.log(`💹 ExchangeRate API: ${prices.size / 2} pares obtidos`);
+  } catch (e) {
+    console.log(`⚠️ ExchangeRate API falhou: ${e}`);
+  }
+  return prices;
+}
+
+// Fallback 3: Use cached prices from database (last 5 minutes)
+async function fetchCachedPrices(supabase: any): Promise<Map<string, number>> {
+  const prices = new Map<string, number>();
+  try {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data } = await supabase
+      .from('price_candles')
+      .select('symbol, price')
+      .gte('created_at', fiveMinAgo)
+      .order('created_at', { ascending: false });
+
+    if (data && data.length > 0) {
+      const seen = new Set<string>();
+      for (const row of data) {
+        if (!seen.has(row.symbol)) {
+          seen.add(row.symbol);
+          prices.set(row.symbol, parseFloat(row.price));
+          prices.set(`${row.symbol}-OTC`, parseFloat(row.price));
         }
       }
-      console.log(`💹 Preços reais obtidos: ${prices.size / 2} pares da AwesomeAPI`);
-    } else {
-      console.error(`❌ AwesomeAPI HTTP ${response.status}`);
+      console.log(`💹 Cache DB: ${prices.size / 2} pares obtidos (últimos 5min)`);
     }
   } catch (e) {
-    console.error('❌ Erro ao buscar preços reais:', e);
+    console.log(`⚠️ Cache DB falhou: ${e}`);
+  }
+  return prices;
+}
+
+async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
+  // Try primary source
+  let prices = await fetchFromAwesomeAPI();
+
+  // Fallback to ExchangeRate API
+  if (prices.size === 0) {
+    console.log('🔄 Tentando ExchangeRate API (fallback 1)...');
+    prices = await fetchFromExchangeRateAPI();
+  }
+
+  // Fallback to cached prices from DB
+  if (prices.size === 0) {
+    console.log('🔄 Usando preços em cache do banco (fallback 2)...');
+    prices = await fetchCachedPrices(supabase);
   }
 
   return prices;

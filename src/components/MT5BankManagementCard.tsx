@@ -35,6 +35,11 @@ export function MT5BankManagementCard() {
   const [mt5Balance, setMt5Balance] = useState<MT5BalanceInfo>({ balance: null, equity: null, currency: 'USD' });
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isResetToday, setIsResetToday] = useState(() => {
+    const saved = localStorage.getItem('mt5_reset_date');
+    const today = new Date().toISOString().slice(0, 10);
+    return saved === today;
+  });
 
   const fetchBalance = useCallback(async () => {
     try {
@@ -45,14 +50,24 @@ export function MT5BankManagementCard() {
           equity: data.equity ?? null,
           currency: data.currency || 'USD',
         });
-        setStats({
-          dailyProfit: data.todayProfit ?? 0,
-          todayTrades: data.todayTrades ?? 0,
-          wins: data.todayWins ?? 0,
-          losses: data.todayLosses ?? 0,
-          consecutiveLosses: data.consecutiveLosses ?? 0,
-          pnl30d: data.pnl30d ?? 0,
-        });
+
+        // Check if reset was done today
+        const resetDate = localStorage.getItem('mt5_reset_date');
+        const today = new Date().toISOString().slice(0, 10);
+        const resetActive = resetDate === today;
+        setIsResetToday(resetActive);
+
+        if (!resetActive) {
+          setStats({
+            dailyProfit: data.todayProfit ?? 0,
+            todayTrades: data.todayTrades ?? 0,
+            wins: data.todayWins ?? 0,
+            losses: data.todayLosses ?? 0,
+            consecutiveLosses: data.consecutiveLosses ?? 0,
+            pnl30d: data.pnl30d ?? 0,
+          });
+        }
+        // If reset is active, keep stats at zero (don't overwrite)
       }
     } catch (e) {
       console.error('Error fetching MT5 data:', e);
@@ -62,8 +77,27 @@ export function MT5BankManagementCard() {
   const handleReset = async () => {
     setIsResetting(true);
     try {
+      // Persist reset flag for today
+      const today = new Date().toISOString().slice(0, 10);
+      localStorage.setItem('mt5_reset_date', today);
+      setIsResetToday(true);
+
+      // Also delete MT5 results from operation_results
+      const now = new Date();
+      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      const { data: results } = await supabase
+        .from('operation_results')
+        .select('id')
+        .gte('created_at', todayUTC.toISOString());
+
+      if (results && results.length > 0) {
+        for (const r of results) {
+          await supabase.from('operation_results').delete().eq('id', r.id);
+        }
+      }
+
       setStats({ dailyProfit: 0, todayTrades: 0, wins: 0, losses: 0, consecutiveLosses: 0, pnl30d: 0 });
-      toast({ title: 'Resultados resetados', description: 'Dados MT5 atualizados.' });
+      toast({ title: 'Resultados resetados', description: 'MT5 e IQ Option zerados com sucesso.' });
     } catch (error) {
       console.error('Error resetting MT5 stats:', error);
       toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });

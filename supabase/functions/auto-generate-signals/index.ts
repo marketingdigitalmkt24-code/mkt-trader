@@ -689,7 +689,7 @@ serve(async (req) => {
     console.log(`\n🕐 ===== GERAÇÃO DE SINAIS COM DADOS REAIS ===== | Weekend: ${weekend}`);
 
     // ============= FETCH REAL PRICES =============
-    const realPrices = await fetchRealPrices();
+    const realPrices = await fetchRealPrices(supabase);
 
     if (realPrices.size === 0) {
       console.error('❌ Nenhum preço real obtido — abortando geração');

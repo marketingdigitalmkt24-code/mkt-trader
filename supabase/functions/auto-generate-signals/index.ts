@@ -13,7 +13,7 @@ const RSI_PUT_MIN = 75; // Mais extremo
 const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
 const IQ_MIN_CONFLUENCE_SCALPING = 83; // Confluência mínima para IQ Option Scalping (relaxado)
 const FORCE_EXTREME_PROBABILITY = 0.80; // 80% chance de indicadores extremos (era 98% = tudo passava)
-const ASSET_SIGNAL_COOLDOWN_MS = 300000; // 5 minutos de cooldown POR ATIVO (era 3min)
+const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
 const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
 
 // ============= NEWS FILTER - Avoid trading during high-impact news =============

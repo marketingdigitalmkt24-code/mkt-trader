@@ -34,7 +34,7 @@ export function useIQOptionConnection() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const hasConnected = useRef(false);
-  const balanceRefreshInterval = useRef<NodeJS.Timeout | null>(null);
+  const balanceRefreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch balance from IQ Option API via Edge Function
   const refreshBalanceFromAPI = useCallback(async () => {

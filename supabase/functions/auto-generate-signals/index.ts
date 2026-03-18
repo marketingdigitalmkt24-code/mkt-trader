@@ -6,15 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============= CONFIGURAÇÕES SCALPING M1 TURBO - ULTRA RIGOROSA =============
-const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações
-const RSI_CALL_MAX = 25; // Mais extremo
-const RSI_PUT_MIN = 75; // Mais extremo
-const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
-const IQ_MIN_CONFLUENCE_SCALPING = 83;
-const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
+// ============= CONFIGURAÇÕES SCALPING M1 =============
+const MIN_CONFIRMATIONS = 3; // 3 de 6 confirmações
+const RSI_CALL_MAX = 35; // RSI oversold threshold
+const RSI_PUT_MIN = 65; // RSI overbought threshold
+const RSI_ULTRA_CALL = 25; // Ultra extreme for bonus score
+const RSI_ULTRA_PUT = 75;
+const WHATSAPP_CONFLUENCE_THRESHOLD = 60;
+const IQ_MIN_CONFLUENCE_SCALPING = 50;
+const ASSET_SIGNAL_COOLDOWN_MS = 180000;
 const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
-const MIN_CANDLES_FOR_ANALYSIS = 15; // Mínimo de candles para calcular indicadores
+const MIN_CANDLES_FOR_ANALYSIS = 8;
 
 // ============= NEWS FILTER =============
 interface NewsEvent {

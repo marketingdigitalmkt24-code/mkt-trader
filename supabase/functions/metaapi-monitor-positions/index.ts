@@ -293,11 +293,18 @@ serve(async (req) => {
           const isEurusd = symbol === 'EURUSD';
           const effectiveTp = isEurusd ? tpCurrency * EURUSD_SPREAD_MULTIPLIER : tpCurrency;
 
-          const shouldClose = closeAll || (effectiveTp > 0 && unrealizedProfit >= effectiveTp);
+          // ===== TAKE PROFIT =====
+          const shouldTakeProfit = effectiveTp > 0 && unrealizedProfit >= effectiveTp;
+          
+          // ===== STOP LOSS: Fechar se perda atingir limite =====
+          const shouldStopLoss = slCurrency > 0 && unrealizedProfit <= -slCurrency;
+
+          const shouldClose = closeAll || shouldTakeProfit || shouldStopLoss;
 
           if (shouldClose) {
-            const reason = closeAll ? 'CLOSE_ALL' : (isEurusd ? 'TP_SPREAD' : 'TP');
-            console.log(`🎯 ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | TP: $${effectiveTp.toFixed(2)}${isEurusd ? ' (EURUSD spread)' : ''}`);
+            const reason = closeAll ? 'CLOSE_ALL' : shouldStopLoss ? 'STOP_LOSS' : (isEurusd ? 'TP_SPREAD' : 'TP');
+            const emoji = shouldStopLoss ? '🛑' : '🎯';
+            console.log(`${emoji} ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | TP: $${effectiveTp.toFixed(2)} | SL: -$${slCurrency.toFixed(2)}${isEurusd ? ' (EURUSD spread)' : ''}`);
             try {
               const closeRes = await safeFetch(`${baseUrl}/trade`, {
                 method: 'POST',
@@ -309,7 +316,7 @@ serve(async (req) => {
               });
               const closeResult = await closeRes.json();
               if (closeRes.ok) {
-                console.log(`✅ Posição ${posId} (${symbol}) fechada! P/L: $${unrealizedProfit.toFixed(2)}`);
+                console.log(`✅ Posição ${posId} (${symbol}) fechada por ${reason}! P/L: $${unrealizedProfit.toFixed(2)}`);
                 allClosed.push({ id: posId, symbol, profit: unrealizedProfit, reason });
               } else {
                 console.error(`❌ Erro ao fechar ${posId}: ${JSON.stringify(closeResult)}`);

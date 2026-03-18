@@ -123,95 +123,94 @@ const OTC_ASSETS: Asset[] = [
 
 const CRYPTO_ASSETS: Asset[] = [];
 
-// ============= REAL PRICE DATA - MULTI-SOURCE WITH ROTATION =============
+// ============= REAL PRICE DATA - HISTORICAL + REAL-TIME =============
 
-const PAIR_GROUPS = [
-  ['EUR-USD', 'GBP-USD', 'USD-JPY', 'AUD-USD'],
-  ['EUR-JPY', 'GBP-JPY', 'AUD-CAD', 'EUR-GBP'],
-  ['NZD-USD', 'USD-CHF', 'AUD-JPY', 'CAD-JPY'],
+const ALL_PAIRS = [
+  'EUR-USD', 'GBP-USD', 'USD-JPY', 'AUD-USD',
+  'EUR-JPY', 'GBP-JPY', 'AUD-CAD', 'EUR-GBP',
+  'NZD-USD', 'USD-CHF', 'AUD-JPY', 'CAD-JPY',
 ];
 
-function getCurrentPairGroup(): string[] {
-  // Rotate groups every minute to reduce API load
-  const minuteOfHour = new Date().getUTCMinutes();
-  const groupIndex = minuteOfHour % PAIR_GROUPS.length;
-  return PAIR_GROUPS[groupIndex];
-}
-
-// Source 1: AwesomeAPI with rotation (only 4 pairs per call)
-async function fetchFromAwesomeAPI(): Promise<Map<string, number>> {
+// Fetch historical quotes from AwesomeAPI (multiple data points per call)
+async function fetchHistoricalQuotes(supabase: any): Promise<{ prices: Map<string, number>; isRealTime: boolean }> {
   const prices = new Map<string, number>();
-  const group = getCurrentPairGroup();
-  const pairsStr = group.join(',');
-  
-  try {
-    const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${pairsStr}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    for (const [key, value] of Object.entries(data)) {
-      const v = value as any;
-      const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
-      const bid = parseFloat(v.bid);
-      const ask = parseFloat(v.ask);
-      if (!isNaN(bid)) {
-        // Use mid price between bid and ask for more accurate tick
-        const midPrice = !isNaN(ask) ? (bid + ask) / 2 : bid;
-        prices.set(symbol, midPrice);
-        prices.set(`${symbol}-OTC`, midPrice);
-      }
-    }
-    console.log(`💹 AwesomeAPI (grupo ${getCurrentPairGroup().length} pares): ${prices.size / 2} obtidos`);
-  } catch (e) {
-    console.log(`⚠️ AwesomeAPI falhou: ${e}`);
-  }
-  return prices;
-}
+  let isRealTime = false;
 
-// Source 2: Try remaining pairs from AwesomeAPI individually
-async function fetchRemainingPairsFromAwesome(existing: Map<string, number>): Promise<Map<string, number>> {
-  const allPairs = PAIR_GROUPS.flat();
-  const missing = allPairs.filter(p => {
-    const sym = p.replace('-', '/');
-    return !existing.has(sym);
-  });
-  
-  if (missing.length === 0) return existing;
-  
-  // Fetch missing pairs one group at a time with delay
-  for (const group of PAIR_GROUPS) {
-    const groupMissing = group.filter(p => !existing.has(p.replace('-', '/')));
-    if (groupMissing.length === 0) continue;
-    
+  // Strategy: fetch 2 pairs at a time with delay to avoid rate limiting
+  const pairChunks: string[][] = [];
+  for (let i = 0; i < ALL_PAIRS.length; i += 2) {
+    pairChunks.push(ALL_PAIRS.slice(i, i + 2));
+  }
+
+  // Only fetch 2 chunks per cycle (4 pairs), rotate based on minute
+  const minuteOfHour = new Date().getUTCMinutes();
+  const startChunk = (minuteOfHour * 2) % pairChunks.length;
+  const chunksToFetch = [
+    pairChunks[startChunk % pairChunks.length],
+    pairChunks[(startChunk + 1) % pairChunks.length],
+  ];
+
+  for (const chunk of chunksToFetch) {
     try {
-      await new Promise(r => setTimeout(r, 300)); // Rate limit delay
-      const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${groupMissing.join(',')}`, {
-        signal: AbortSignal.timeout(6000),
-      });
-      if (!response.ok) break; // Stop if rate limited
-      const data = await response.json();
-      for (const [key, value] of Object.entries(data)) {
-        const v = value as any;
-        const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
-        const bid = parseFloat(v.bid);
-        const ask = parseFloat(v.ask);
-        if (!isNaN(bid)) {
-          const midPrice = !isNaN(ask) ? (bid + ask) / 2 : bid;
-          existing.set(symbol, midPrice);
-          existing.set(`${symbol}-OTC`, midPrice);
+      // Fetch last 15 quotes for each pair (gives us price history in one call!)
+      for (const pair of chunk) {
+        try {
+          const response = await fetch(`https://economia.awesomeapi.com.br/json/${pair}/15`, {
+            signal: AbortSignal.timeout(6000),
+          });
+          if (!response.ok) {
+            if (response.status === 429) {
+              console.log(`⚠️ AwesomeAPI 429 em ${pair}, pausando...`);
+              break;
+            }
+            continue;
+          }
+          const quotes = await response.json();
+          if (Array.isArray(quotes) && quotes.length > 0) {
+            const symbol = pair.replace('-', '/');
+            
+            // Store historical quotes as candles (oldest first)
+            const candles: { symbol: string; price: number; created_at: string }[] = [];
+            for (let i = quotes.length - 1; i >= 0; i--) {
+              const q = quotes[i];
+              const bid = parseFloat(q.bid);
+              const ask = parseFloat(q.ask);
+              if (!isNaN(bid)) {
+                const midPrice = !isNaN(ask) ? (bid + ask) / 2 : bid;
+                const timestamp = q.timestamp ? new Date(parseInt(q.timestamp) * 1000).toISOString() : new Date(Date.now() - i * 60000).toISOString();
+                candles.push({ symbol, price: midPrice, created_at: timestamp });
+              }
+            }
+
+            if (candles.length > 0) {
+              // Store candles in DB
+              await supabase.from('price_candles').insert(candles);
+              
+              // Use latest price
+              const latestBid = parseFloat(quotes[0].bid);
+              const latestAsk = parseFloat(quotes[0].ask);
+              const latestPrice = !isNaN(latestAsk) ? (latestBid + latestAsk) / 2 : latestBid;
+              prices.set(symbol, latestPrice);
+              prices.set(`${symbol}-OTC`, latestPrice);
+              isRealTime = true;
+              console.log(`💹 ${symbol}: ${candles.length} quotes históricos + preço atual ${latestPrice.toFixed(5)}`);
+            }
+          }
+          await new Promise(r => setTimeout(r, 200)); // Small delay between pairs
+        } catch (e) {
+          console.log(`⚠️ ${pair}: ${e}`);
         }
       }
     } catch (e) {
-      break; // Stop on any error
+      console.log(`⚠️ Chunk falhou: ${e}`);
     }
   }
-  
-  return existing;
+
+  return { prices, isRealTime };
 }
 
-// Source 3: Frankfurter API (ECB rates, free, updates hourly — better than ExchangeRate daily)
-async function fetchFromFrankfurterAPI(): Promise<Map<string, number>> {
+// Fallback: Frankfurter API for current price only (NOT for candles)
+async function fetchCurrentPricesFromFrankfurter(): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
   try {
     const response = await fetch('https://api.frankfurter.dev/v1/latest?base=USD', {
@@ -237,90 +236,40 @@ async function fetchFromFrankfurterAPI(): Promise<Map<string, number>> {
     for (const [base, quote] of pairsToGenerate) {
       if (currencies[base] && currencies[quote]) {
         const price = currencies[quote] / currencies[base];
-        const symbol = `${base}/${quote}`;
-        prices.set(symbol, price);
-        prices.set(`${symbol}-OTC`, price);
+        prices.set(`${base}/${quote}`, price);
+        prices.set(`${base}/${quote}-OTC`, price);
       }
     }
-    console.log(`💹 Frankfurter API: ${prices.size / 2} pares obtidos`);
+    console.log(`💹 Frankfurter: ${prices.size / 2} pares (preço atual apenas)`);
   } catch (e) {
-    console.log(`⚠️ Frankfurter API falhou: ${e}`);
-  }
-  return prices;
-}
-
-// Cached prices from DB (last 5 minutes)
-async function fetchCachedPrices(supabase: any): Promise<Map<string, number>> {
-  const prices = new Map<string, number>();
-  try {
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { data } = await supabase
-      .from('price_candles')
-      .select('symbol, price')
-      .gte('created_at', fiveMinAgo)
-      .order('created_at', { ascending: false });
-
-    if (data && data.length > 0) {
-      const seen = new Set<string>();
-      for (const row of data) {
-        if (!seen.has(row.symbol)) {
-          seen.add(row.symbol);
-          prices.set(row.symbol, parseFloat(row.price));
-          prices.set(`${row.symbol}-OTC`, parseFloat(row.price));
-        }
-      }
-      console.log(`💹 Cache DB: ${prices.size / 2} pares obtidos (últimos 5min)`);
-    }
-  } catch (e) {
-    console.log(`⚠️ Cache DB falhou: ${e}`);
+    console.log(`⚠️ Frankfurter falhou: ${e}`);
   }
   return prices;
 }
 
 async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
-  // Primary: AwesomeAPI with pair rotation
-  let prices = await fetchFromAwesomeAPI();
-  
-  // Try to fill remaining pairs
-  if (prices.size > 0 && prices.size < 24) {
-    prices = await fetchRemainingPairsFromAwesome(prices);
-  }
+  // Clean old candles first
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  await supabase.from('price_candles').delete().lt('created_at', twoHoursAgo);
 
-  // Fallback: Frankfurter API (fill gaps only)
+  // Primary: AwesomeAPI historical (gets multiple varying prices per call)
+  const { prices, isRealTime } = await fetchHistoricalQuotes(supabase);
+
+  // Fill gaps with Frankfurter (current price only, NOT stored as candles)
   if (prices.size < 12) {
-    console.log('🔄 Tentando Frankfurter API (fallback)...');
-    const fallbackPrices = await fetchFromFrankfurterAPI();
-    for (const [sym, price] of fallbackPrices) {
+    const fallback = await fetchCurrentPricesFromFrankfurter();
+    for (const [sym, price] of fallback) {
       if (!prices.has(sym)) prices.set(sym, price);
     }
   }
 
-  // Last resort: cached prices from DB
-  if (prices.size === 0) {
-    console.log('🔄 Usando preços em cache do banco (último recurso)...');
-    prices = await fetchCachedPrices(supabase);
+  if (isRealTime) {
+    console.log(`✅ Preços real-time obtidos: ${prices.size / 2} pares`);
+  } else {
+    console.log(`⚠️ Usando preços de fallback (sem dados real-time neste ciclo)`);
   }
 
   return prices;
-}
-
-async function storePriceCandle(supabase: any, prices: Map<string, number>) {
-  const inserts: { symbol: string; price: number }[] = [];
-
-  for (const [symbol, price] of prices) {
-    if (symbol.includes('-OTC')) continue; // Store only base pairs
-    inserts.push({ symbol, price });
-  }
-
-  if (inserts.length > 0) {
-    const { error } = await supabase.from('price_candles').insert(inserts);
-    if (error) console.error('❌ Erro ao salvar candles:', error);
-    else console.log(`📊 ${inserts.length} candles salvos`);
-  }
-
-  // Cleanup: delete candles older than 2 hours (we only need ~30 for analysis)
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-  await supabase.from('price_candles').delete().lt('created_at', twoHoursAgo);
 }
 
 async function getRecentPrices(supabase: any, symbol: string, count: number = 30): Promise<number[]> {
@@ -334,7 +283,7 @@ async function getRecentPrices(supabase: any, symbol: string, count: number = 30
     .limit(count);
 
   if (!data || data.length === 0) return [];
-  return data.map((d: any) => parseFloat(d.price)).reverse(); // oldest first
+  return data.map((d: any) => parseFloat(d.price)).reverse();
 }
 
 // ============= REAL INDICATOR CALCULATIONS =============

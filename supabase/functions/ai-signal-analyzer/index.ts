@@ -358,9 +358,9 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
   const adjustments: string[] = [];
   const currentHour = new Date().getUTCHours();
 
-  // 0. ATIVO TÓXICO → BLOQUEAR IMEDIATAMENTE
+  // 0. ATIVO TÓXICO → BLOQUEAR IMEDIATAMENTE (só com WR < 25% e 5+ trades)
   if (model.toxicAssets.has(s.asset)) {
-    return { score: 0, adjustments: ['☠️ ATIVO TÓXICO: só gera perda'], shouldSkip: true, skipReason: `Ativo tóxico (WR < 40%)` };
+    return { score: 0, adjustments: ['☠️ ATIVO TÓXICO: WR < 25%'], shouldSkip: true, skipReason: `Ativo tóxico (WR < 25%)` };
   }
 
   // 0b. DIREÇÃO TÓXICA para este ativo → BLOQUEAR

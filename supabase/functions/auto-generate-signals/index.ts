@@ -844,6 +844,8 @@ serve(async (req) => {
             .from('iqoption_config')
             .select('*')
             .eq('is_active', true)
+            .not('user_id', 'is', null)
+            .order('last_connected_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 

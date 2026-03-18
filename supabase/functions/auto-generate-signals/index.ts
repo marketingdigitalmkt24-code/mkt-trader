@@ -517,9 +517,9 @@ serve(async (req) => {
     
     // Log blocked assets from history
     assetHistory.forEach((h, asset) => {
-      if (h.consecutiveLosses >= 3) {
+      if (h.consecutiveLosses >= 5) {
         console.log(`⛔ ${asset}: BLOQUEADO (${h.consecutiveLosses} losses consecutivos)`);
-      } else if (h.winRate < 40 && h.losses >= 3) {
+      } else if (h.winRate < 30 && h.losses >= 5) {
         console.log(`⚠️ ${asset}: Win Rate baixo ${h.winRate}% (${h.wins}W/${h.losses}L)`);
       }
     });

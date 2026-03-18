@@ -903,6 +903,7 @@ serve(async (req) => {
             }
           }
         }
+        }
       } catch (e) {
         console.error('❌ IQ Option failed:', e);
       }

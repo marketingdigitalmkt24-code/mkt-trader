@@ -717,10 +717,10 @@ function detectPatterns(signals: SignalData[], model: LearnedPattern): PatternMa
     const finalScore = Math.min(Math.round(score + (model.hasSufficientData ? learned.score * 0.5 : 0)), 100);
     const finalRisk = Math.max(0, riskScore + (model.hasSufficientData && learned.score < 0 ? 10 : 0));
 
-    // Critérios adaptativos - Aceitar sinais com qualidade atual
-    const minScore = isTopAsset ? 85 : (model.hasSufficientData ? 88 : 85);
-    const maxRisk = isTopAsset ? 55 : (model.hasSufficientData ? 50 : 55);
-    const minCriteria = isTopAsset ? 3 : 4;
+    // Critérios adaptativos - RELAXADOS para permitir mais entradas
+    const minScore = isTopAsset ? 80 : (model.hasSufficientData ? 82 : 80);
+    const maxRisk = isTopAsset ? 65 : (model.hasSufficientData ? 60 : 65);
+    const minCriteria = isTopAsset ? 2 : 3;
 
     if (finalScore >= minScore && finalRisk <= maxRisk && criteriaCount >= minCriteria) {
       matches.push({

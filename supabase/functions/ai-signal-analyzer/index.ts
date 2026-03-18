@@ -263,14 +263,14 @@ async function buildLearningModel(): Promise<LearnedPattern> {
       }
     }
 
-    // ===== NOVO: Direções tóxicas por ativo =====
+    // ===== NOVO: Direções tóxicas por ativo (relaxado) =====
     for (const [asset, ds] of Object.entries(dirStats)) {
       const callTotal = ds.callWins + ds.callLosses;
       const putTotal = ds.putWins + ds.putLosses;
-      if (callTotal >= 2 && ds.callWins / callTotal < 0.3) {
+      if (callTotal >= 4 && ds.callWins / callTotal < 0.2) {
         model.toxicDirections.set(asset + '|CALL', 'CALL');
       }
-      if (putTotal >= 2 && ds.putWins / putTotal < 0.3) {
+      if (putTotal >= 4 && ds.putWins / putTotal < 0.2) {
         model.toxicDirections.set(asset + '|PUT', 'PUT');
       }
     }

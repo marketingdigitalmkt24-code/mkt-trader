@@ -959,10 +959,18 @@ serve(async (req) => {
             .maybeSingle();
           
           if (metaConfig && metaConfig.account_id) {
+            // Get user_id from iqoption_config for settings lookup
+            const { data: iqCfgForUser } = await supabase
+              .from('iqoption_config')
+              .select('user_id')
+              .eq('is_active', true)
+              .limit(1)
+              .maybeSingle();
+            
             const { data: tradeSettings } = await supabase
               .from('user_trading_settings')
               .select('mt5_trade_amount')
-              .eq('user_id', iqConfig?.user_id || '')
+              .eq('user_id', iqCfgForUser?.user_id || '')
               .limit(1)
               .maybeSingle();
             

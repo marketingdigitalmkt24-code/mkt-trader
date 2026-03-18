@@ -715,8 +715,7 @@ serve(async (req) => {
       );
     }
 
-    // Store candle for history (builds up over time for indicator calculation)
-    await storePriceCandle(supabase, realPrices);
+    // Candles are now stored inside fetchHistoricalQuotes
 
     // ============= CHECK PENDING OPERATIONS =============
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();

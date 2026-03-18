@@ -1087,13 +1087,16 @@ serve(async (req) => {
               .maybeSingle();
 
             const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
+            
+            // INVERTER direção para MT5 também
+            const mt5InvertedDirection = bestSignal.type === 'CALL' ? 'PUT' : 'CALL';
 
-            console.log(`📡 MT5 EURUSD REAL: ${bestSignal.type} $${mt5TradeAmount} | Score: ${bestSignal.indicators.confluenceScore}%`);
+            console.log(`📡 MT5 EURUSD REAL: ${bestSignal.type}→${mt5InvertedDirection} (INVERTIDO) $${mt5TradeAmount} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
             const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
               body: {
                 asset: bestSignal.asset,
-                direction: bestSignal.type.toLowerCase(),
+                direction: mt5InvertedDirection.toLowerCase(),
                 amount: mt5TradeAmount,
                 expiration: 1,
                 signalId: bestSignal.id,

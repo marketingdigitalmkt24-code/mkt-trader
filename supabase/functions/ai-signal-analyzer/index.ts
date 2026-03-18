@@ -376,15 +376,15 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     return { score: 0, adjustments: [`🔴 PADRÃO DE PERDA: ${s.asset} ${s.type} às ${currentHour}h = ${matchingLossPattern.count} losses`], shouldSkip: true, skipReason: `Padrão de perda identificado` };
   }
 
-  // 1. ATIVO COM HISTÓRICO MUITO NEGATIVO → BLOQUEAR
+  // 1. ATIVO COM HISTÓRICO MUITO NEGATIVO → BLOQUEAR (relaxado)
   const assetPerf = model.assetPerformance.get(s.asset);
-  if (assetPerf && assetPerf.trades >= 5 && assetPerf.winRate < 30 && assetPerf.profit < -200) {
+  if (assetPerf && assetPerf.trades >= 8 && assetPerf.winRate < 20 && assetPerf.profit < -500) {
     return { score: 0, adjustments: ['ATIVO BLOQUEADO: histórico muito negativo'], shouldSkip: true, skipReason: `WR ${assetPerf.winRate}% | $${assetPerf.profit}` };
   }
 
-  // 2. LOSS STREAK RECENTE → BLOQUEAR só com 3+
+  // 2. LOSS STREAK RECENTE → BLOQUEAR só com 5+ (relaxado de 3)
   const lossStreak = model.recentLossStreaks.get(s.asset) || 0;
-  if (lossStreak >= 3) {
+  if (lossStreak >= 5) {
     return { score: 0, adjustments: [`BLOQUEADO: ${lossStreak} losses consecutivos`], shouldSkip: true, skipReason: `${lossStreak} losses seguidos` };
   }
 

@@ -1000,23 +1000,14 @@ serve(async (req) => {
               const iqTradeAmount = tradeSettings?.trade_amount || 1;
               const expiration = 1;
 
-              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
+              // INVERTER direção: se análise diz CALL, executar PUT e vice-versa
+              const invertedDirection = bestSignal.type === 'CALL' ? 'PUT' : 'CALL';
+              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.type}→${invertedDirection} (INVERTIDO) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
-              await supabase.from('operation_results').insert({
-                signal_id: bestSignal.id,
-                asset: bestSignal.asset,
-                direction: bestSignal.type,
-                result: 'pending',
-                profit: 0,
-                entry_price: iqTradeAmount,
-                is_auto_trade: true,
-                is_ai_analyzed: !!bestSignal.aiConfidence,
-                timeframe: 'M1',
-              });
-
+              // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso
               await supabase.from('trade_queue').insert({
                 asset: bestSignal.asset,
-                direction: bestSignal.type,
+                direction: invertedDirection,
                 amount: iqTradeAmount,
                 expiration,
                 signal_id: bestSignal.id,
@@ -1028,7 +1019,7 @@ serve(async (req) => {
               const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
                 body: {
                   asset: bestSignal.asset,
-                  direction: bestSignal.type.toLowerCase(),
+                  direction: invertedDirection.toLowerCase(),
                   amount: iqTradeAmount,
                   expiration,
                   signalId: bestSignal.id,

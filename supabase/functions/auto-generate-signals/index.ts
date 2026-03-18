@@ -1108,7 +1108,7 @@ serve(async (req) => {
         const isEurusd = assetNormalized === 'EURUSD';
         const utcHour = new Date().getUTCHours();
         const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16);
-        const MT5_MIN_CONFLUENCE = 95;
+        const MT5_MIN_CONFLUENCE = 50;
 
         if (!isEurusd) {
           // Skip silently for non-EURUSD

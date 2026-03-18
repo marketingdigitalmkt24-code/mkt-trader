@@ -848,9 +848,11 @@ serve(async (req) => {
             .maybeSingle();
 
           if (iqConfig) {
+            const settingsUserId = iqConfig.user_id;
             const { data: tradeSettings } = await supabase
               .from('user_trading_settings')
               .select('trade_amount, mt5_trade_amount')
+              .eq('user_id', settingsUserId)
               .limit(1)
               .maybeSingle();
             

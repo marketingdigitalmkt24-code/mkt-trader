@@ -11,123 +11,91 @@ const MIN_CONFIRMATIONS = 5; // 5 de 6 confirmações
 const RSI_CALL_MAX = 25; // Mais extremo
 const RSI_PUT_MIN = 75; // Mais extremo
 const WHATSAPP_CONFLUENCE_THRESHOLD = 85;
-const IQ_MIN_CONFLUENCE_SCALPING = 83; // Confluência mínima para IQ Option Scalping (relaxado)
-const FORCE_EXTREME_PROBABILITY = 0.80; // 80% chance de indicadores extremos (era 98% = tudo passava)
+const IQ_MIN_CONFLUENCE_SCALPING = 83;
 const ASSET_SIGNAL_COOLDOWN_MS = 180000; // 3 minutos de cooldown POR ATIVO
 const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
+const MIN_CANDLES_FOR_ANALYSIS = 15; // Mínimo de candles para calcular indicadores
 
-// ============= NEWS FILTER - Avoid trading during high-impact news =============
+// ============= NEWS FILTER =============
 interface NewsEvent {
-  hour: number; // UTC hour
+  hour: number;
   minute: number;
   currencies: string[];
-  duration: number; // minutes to block before and after
+  duration: number;
 }
 
-// Major economic news schedule (recurring weekly patterns)
-// These are the most impactful events that cause extreme volatility
 function getHighImpactNewsWindows(): NewsEvent[] {
   const now = new Date();
-  const utcDay = now.getUTCDay(); // 0=Sun, 1=Mon...
-  
+  const utcDay = now.getUTCDay();
   const events: NewsEvent[] = [];
-  
-  // === DAILY HIGH-IMPACT TIMES ===
-  // US Session Open (NYSE) - high volatility
+
   events.push({ hour: 13, minute: 30, currencies: ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'], duration: 15 });
-  // London Session Open
   events.push({ hour: 7, minute: 0, currencies: ['GBP', 'EUR', 'CHF'], duration: 15 });
-  // London/NY Overlap - most volatile period
   events.push({ hour: 12, minute: 0, currencies: ['USD', 'EUR', 'GBP'], duration: 10 });
 
-  // === WEEKLY PATTERNS ===
-  if (utcDay === 1) { // Monday
-    // Asian session open - gaps from weekend
-    events.push({ hour: 0, minute: 0, currencies: ['JPY', 'AUD', 'NZD'], duration: 30 });
-  }
-  if (utcDay === 3) { // Wednesday
-    // FOMC Minutes (usually 18:00 or 19:00 UTC)
+  if (utcDay === 1) events.push({ hour: 0, minute: 0, currencies: ['JPY', 'AUD', 'NZD'], duration: 30 });
+  if (utcDay === 3) {
     events.push({ hour: 18, minute: 0, currencies: ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'], duration: 30 });
-    // ADP Employment (12:15 UTC)
     events.push({ hour: 12, minute: 15, currencies: ['USD'], duration: 15 });
   }
-  if (utcDay === 4) { // Thursday
-    // ECB Rate Decision (often 12:15-12:45 UTC)
+  if (utcDay === 4) {
     events.push({ hour: 12, minute: 15, currencies: ['EUR', 'GBP', 'CHF'], duration: 30 });
-    // US Unemployment Claims (12:30 UTC)
     events.push({ hour: 12, minute: 30, currencies: ['USD'], duration: 15 });
   }
-  if (utcDay === 5) { // Friday
-    // US Non-Farm Payrolls (NFP) - MOST impactful event
+  if (utcDay === 5) {
     events.push({ hour: 12, minute: 30, currencies: ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'], duration: 30 });
   }
-  
-  // === COMMON DAILY NEWS TIMES ===
-  // US CPI/PPI/Retail Sales (usually 12:30 UTC)
   events.push({ hour: 12, minute: 30, currencies: ['USD'], duration: 10 });
-  // BOJ decisions (around 3:00 UTC)
   events.push({ hour: 3, minute: 0, currencies: ['JPY'], duration: 15 });
-  // RBA decisions (around 3:30 UTC on Tuesdays)
-  if (utcDay === 2) {
-    events.push({ hour: 3, minute: 30, currencies: ['AUD', 'NZD'], duration: 15 });
-  }
+  if (utcDay === 2) events.push({ hour: 3, minute: 30, currencies: ['AUD', 'NZD'], duration: 15 });
 
   return events;
 }
 
 function isAssetAffectedByNews(assetSymbol: string): { affected: boolean; reason: string } {
   const now = new Date();
-  const utcHour = now.getUTCHours();
-  const utcMinute = now.getUTCMinutes();
-  const currentMinutes = utcHour * 60 + utcMinute;
-  
-  // Extract currencies from asset symbol (e.g., "EUR/USD" -> ["EUR", "USD"])
+  const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const currencies = assetSymbol.replace('-OTC', '').split('/').map(c => c.trim().toUpperCase());
-  
-  // Crypto is not affected by forex news
+
   if (currencies.some(c => ['BTC', 'ETH', 'LTC', 'XRP'].includes(c))) {
     return { affected: false, reason: '' };
   }
-  
-  const newsEvents = getHighImpactNewsWindows();
-  
-  for (const event of newsEvents) {
+
+  for (const event of getHighImpactNewsWindows()) {
     const eventMinutes = event.hour * 60 + event.minute;
-    const windowStart = eventMinutes - event.duration;
-    const windowEnd = eventMinutes + event.duration;
-    
-    if (currentMinutes >= windowStart && currentMinutes <= windowEnd) {
-      // Check if any of the asset's currencies are affected
+    if (currentMinutes >= eventMinutes - event.duration && currentMinutes <= eventMinutes + event.duration) {
       const affectedCurrency = currencies.find(c => event.currencies.includes(c));
       if (affectedCurrency) {
-        return { 
-          affected: true, 
-          reason: `${affectedCurrency} afetado por notícia às ${event.hour}:${event.minute.toString().padStart(2, '0')} UTC` 
-        };
+        return { affected: true, reason: `${affectedCurrency} afetado por notícia às ${event.hour}:${event.minute.toString().padStart(2, '0')} UTC` };
       }
     }
   }
-  
   return { affected: false, reason: '' };
 }
 
 // ============= MARKET HOURS =============
 function isWeekend(): boolean {
   const now = new Date();
-  const utcDay = now.getUTCDay();
-  const utcHour = now.getUTCHours();
-  if (utcDay === 0) return true;
-  if (utcDay === 6) return true;
-  if (utcDay === 5 && utcHour >= 21) return true;
-  return false;
+  const d = now.getUTCDay(), h = now.getUTCHours();
+  return d === 0 || d === 6 || (d === 5 && h >= 21);
 }
 
 function isOTCAsset(asset: string): boolean {
-  return asset.includes('OTC') || asset.includes('-OTC') || asset.toLowerCase().includes('otc');
+  return asset.includes('OTC');
 }
 
-// ============= FALLBACK ASSETS =============
-const FOREX_ASSETS = [
+// ============= ASSETS =============
+interface Asset {
+  symbol: string;
+  icon: string;
+  type: string;
+  isOTC: boolean;
+  isBlitz?: boolean;
+  isBinary?: boolean;
+  payout?: number;
+}
+
+const FOREX_ASSETS: Asset[] = [
   { symbol: 'EUR/USD', icon: '🇪🇺', type: 'forex', isOTC: false },
   { symbol: 'GBP/USD', icon: '🇬🇧', type: 'forex', isOTC: false },
   { symbol: 'USD/JPY', icon: '🇺🇸', type: 'forex', isOTC: false },
@@ -136,7 +104,7 @@ const FOREX_ASSETS = [
   { symbol: 'AUD/USD', icon: '🇦🇺', type: 'forex', isOTC: false },
 ];
 
-const OTC_ASSETS = [
+const OTC_ASSETS: Asset[] = [
   { symbol: 'EUR/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'GBP/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'USD/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
@@ -151,20 +119,259 @@ const OTC_ASSETS = [
   { symbol: 'AUD/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
 ];
 
-// Crypto removido - IQ Option opera SOMENTE pares de moedas
 const CRYPTO_ASSETS: Asset[] = [];
 
-interface Asset {
-  symbol: string;
-  icon: string;
-  type: string;
-  isOTC: boolean;
-  isBlitz?: boolean;
-  isBinary?: boolean;
-  payout?: number;
+// ============= REAL PRICE DATA FROM AWESOMEAPI =============
+async function fetchRealPrices(): Promise<Map<string, number>> {
+  const prices = new Map<string, number>();
+
+  try {
+    const pairs = 'EUR-USD,GBP-USD,USD-JPY,AUD-USD,EUR-JPY,GBP-JPY,AUD-CAD,EUR-GBP,NZD-USD,USD-CHF,AUD-JPY,CAD-JPY';
+    const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${pairs}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      for (const [key, value] of Object.entries(data)) {
+        const v = value as any;
+        // Key format: "EURUSD" → "EUR/USD"
+        const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
+        const bid = parseFloat(v.bid);
+        if (!isNaN(bid)) {
+          prices.set(symbol, bid);
+          prices.set(`${symbol}-OTC`, bid); // OTC uses same base price
+        }
+      }
+      console.log(`💹 Preços reais obtidos: ${prices.size / 2} pares da AwesomeAPI`);
+    } else {
+      console.error(`❌ AwesomeAPI HTTP ${response.status}`);
+    }
+  } catch (e) {
+    console.error('❌ Erro ao buscar preços reais:', e);
+  }
+
+  return prices;
 }
 
-// ============= LEARNING ENGINE (server-side) =============
+async function storePriceCandle(supabase: any, prices: Map<string, number>) {
+  const inserts: { symbol: string; price: number }[] = [];
+
+  for (const [symbol, price] of prices) {
+    if (symbol.includes('-OTC')) continue; // Store only base pairs
+    inserts.push({ symbol, price });
+  }
+
+  if (inserts.length > 0) {
+    const { error } = await supabase.from('price_candles').insert(inserts);
+    if (error) console.error('❌ Erro ao salvar candles:', error);
+    else console.log(`📊 ${inserts.length} candles salvos`);
+  }
+
+  // Cleanup: delete candles older than 2 hours (we only need ~30 for analysis)
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  await supabase.from('price_candles').delete().lt('created_at', twoHoursAgo);
+}
+
+async function getRecentPrices(supabase: any, symbol: string, count: number = 30): Promise<number[]> {
+  const baseSymbol = symbol.replace('-OTC', '');
+
+  const { data } = await supabase
+    .from('price_candles')
+    .select('price')
+    .eq('symbol', baseSymbol)
+    .order('created_at', { ascending: false })
+    .limit(count);
+
+  if (!data || data.length === 0) return [];
+  return data.map((d: any) => parseFloat(d.price)).reverse(); // oldest first
+}
+
+// ============= REAL INDICATOR CALCULATIONS =============
+function calculateRSI(prices: number[], period: number = 14): number {
+  if (prices.length < period + 1) return 50;
+
+  let gains = 0;
+  let losses = 0;
+
+  for (let i = prices.length - period; i < prices.length; i++) {
+    const change = prices[i] - prices[i - 1];
+    if (change > 0) gains += change;
+    else losses += Math.abs(change);
+  }
+
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  if (avgGain === 0) return 0;
+
+  return 100 - (100 / (1 + avgGain / avgLoss));
+}
+
+function calculateStochastic(prices: number[], kPeriod: number = 14): { k: number; d: number } {
+  if (prices.length < kPeriod) return { k: 50, d: 50 };
+
+  const recent = prices.slice(-kPeriod);
+  const high = Math.max(...recent);
+  const low = Math.min(...recent);
+  const close = recent[recent.length - 1];
+
+  const k = high === low ? 50 : ((close - low) / (high - low)) * 100;
+  return { k, d: k }; // Simplified %D
+}
+
+function calculateBollinger(prices: number[], period: number = 20): { upper: number; middle: number; lower: number; position: string } {
+  const currentPrice = prices[prices.length - 1];
+  if (prices.length < period) {
+    return { upper: currentPrice * 1.02, middle: currentPrice, lower: currentPrice * 0.98, position: 'middle' };
+  }
+
+  const recent = prices.slice(-period);
+  const sma = recent.reduce((a, b) => a + b, 0) / period;
+  const variance = recent.reduce((sum, p) => sum + Math.pow(p - sma, 2), 0) / period;
+  const stdDev = Math.sqrt(variance);
+
+  const upper = sma + 2 * stdDev;
+  const lower = sma - 2 * stdDev;
+
+  let position = 'middle';
+  if (currentPrice <= lower) position = 'below_lower';
+  else if (currentPrice >= upper) position = 'above_upper';
+
+  return { upper, middle: sma, lower, position };
+}
+
+function calculateEMA(prices: number[], period: number): number {
+  if (prices.length === 0) return 0;
+  if (prices.length < period) return prices[prices.length - 1];
+
+  const multiplier = 2 / (period + 1);
+  let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+
+  for (let i = period; i < prices.length; i++) {
+    ema = (prices[i] - ema) * multiplier + ema;
+  }
+  return ema;
+}
+
+function calculateATR(prices: number[], period: number = 14): { value: number; volatility: string } {
+  if (prices.length < 2) return { value: 0, volatility: 'low' };
+
+  let sumTR = 0;
+  const count = Math.min(period, prices.length - 1);
+
+  for (let i = prices.length - count; i < prices.length; i++) {
+    sumTR += Math.abs(prices[i] - prices[i - 1]);
+  }
+
+  const atr = sumTR / count;
+  const currentPrice = prices[prices.length - 1];
+  const atrPercent = (atr / currentPrice) * 100;
+
+  return {
+    value: atr,
+    volatility: atrPercent < 0.05 ? 'low' : atrPercent < 0.15 ? 'medium' : 'high',
+  };
+}
+
+function calculateSupportResistance(prices: number[]): { nearestSupport: number; nearestResistance: number; pricePosition: string } {
+  const currentPrice = prices[prices.length - 1];
+  if (prices.length < 5) {
+    return { nearestSupport: currentPrice * 0.99, nearestResistance: currentPrice * 1.01, pricePosition: 'middle' };
+  }
+
+  const recent = prices.slice(-20);
+  const support = Math.min(...recent);
+  const resistance = Math.max(...recent);
+  const range = resistance - support;
+  const ratio = range > 0 ? (currentPrice - support) / range : 0.5;
+
+  let pricePosition = 'middle';
+  if (ratio <= 0.15) pricePosition = 'near_support';
+  else if (ratio >= 0.85) pricePosition = 'near_resistance';
+
+  return { nearestSupport: support, nearestResistance: resistance, pricePosition };
+}
+
+// Detect reversal candle patterns from price action
+function detectReversalPattern(prices: number[], direction: 'CALL' | 'PUT'): { hasReversal: boolean; pattern: string | undefined } {
+  if (prices.length < 4) return { hasReversal: false, pattern: undefined };
+
+  const len = prices.length;
+  const current = prices[len - 1];
+  const prev1 = prices[len - 2];
+  const prev2 = prices[len - 3];
+  const prev3 = prices[len - 4];
+
+  if (direction === 'CALL') {
+    // Hammer: price was falling, then bounced up
+    if (prev2 > prev1 && current > prev1 && current > prev2 * 0.999) {
+      return { hasReversal: true, pattern: 'Martelo (Hammer)' };
+    }
+    // Bullish engulfing: previous candle bearish, current bullish and bigger
+    if (prev2 > prev1 && current > prev2) {
+      return { hasReversal: true, pattern: 'Engolfo de Alta' };
+    }
+    // Double bottom: two similar lows followed by bounce
+    if (Math.abs(prev3 - prev1) / prev1 < 0.001 && prev2 > prev1 && current > prev1) {
+      return { hasReversal: true, pattern: 'Fundo Duplo' };
+    }
+    // Morning star: down, doji, up
+    const body1 = Math.abs(prev2 - prev3);
+    const body2 = Math.abs(prev1 - prev2);
+    const body3 = Math.abs(current - prev1);
+    if (prev3 > prev2 && body2 < body1 * 0.3 && current > prev1) {
+      return { hasReversal: true, pattern: 'Morning Star' };
+    }
+  } else {
+    // Shooting star: price was rising, then dropped
+    if (prev2 < prev1 && current < prev1 && current < prev2 * 1.001) {
+      return { hasReversal: true, pattern: 'Estrela Cadente' };
+    }
+    // Bearish engulfing
+    if (prev2 < prev1 && current < prev2) {
+      return { hasReversal: true, pattern: 'Engolfo de Baixa' };
+    }
+    // Double top
+    if (Math.abs(prev3 - prev1) / prev1 < 0.001 && prev2 < prev1 && current < prev1) {
+      return { hasReversal: true, pattern: 'Topo Duplo' };
+    }
+    // Evening star
+    const body1 = Math.abs(prev2 - prev3);
+    const body2 = Math.abs(prev1 - prev2);
+    if (prev3 < prev2 && body2 < body1 * 0.3 && current < prev1) {
+      return { hasReversal: true, pattern: 'Evening Star' };
+    }
+  }
+
+  return { hasReversal: false, pattern: undefined };
+}
+
+// ============= MACD from real prices =============
+function calculateMACD(prices: number[]): { value: number; signal: number; histogram: number; trend: string } {
+  if (prices.length < 26) {
+    return { value: 0, signal: 0, histogram: 0, trend: 'neutral' };
+  }
+
+  const ema12 = calculateEMA(prices, 12);
+  const ema26 = calculateEMA(prices, 26);
+  const macdLine = ema12 - ema26;
+  // Simplified signal line (would need MACD history for proper EMA9 of MACD)
+  const signalLine = macdLine * 0.8;
+  const histogram = macdLine - signalLine;
+
+  const priceMagnitude = prices[prices.length - 1];
+  const normalizedHist = (histogram / priceMagnitude) * 10000; // Normalize
+
+  return {
+    value: macdLine,
+    signal: signalLine,
+    histogram,
+    trend: normalizedHist > 0.5 ? 'bullish' : normalizedHist < -0.5 ? 'bearish' : 'neutral',
+  };
+}
+
+// ============= LEARNING ENGINE =============
 interface AssetHistory {
   asset: string;
   wins: number;
@@ -176,23 +383,22 @@ interface AssetHistory {
 
 async function getAssetHistory(supabase: any): Promise<Map<string, AssetHistory>> {
   const history = new Map<string, AssetHistory>();
-  
+
   try {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
+
     const { data: results } = await supabase
       .from('operation_results')
       .select('asset, result, profit')
       .gte('created_at', sevenDaysAgo.toISOString())
       .order('created_at', { ascending: false })
       .limit(500);
-    
+
     if (!results) return history;
-    
-    // Group by asset
+
     const byAsset: Record<string, { wins: number; losses: number; profit: number; recent: string[] }> = {};
-    
+
     for (const r of results) {
       if (!byAsset[r.asset]) byAsset[r.asset] = { wins: 0, losses: 0, profit: 0, recent: [] };
       if (r.result === 'win') byAsset[r.asset].wins++;
@@ -200,7 +406,7 @@ async function getAssetHistory(supabase: any): Promise<Map<string, AssetHistory>
       byAsset[r.asset].profit += r.profit || 0;
       if (byAsset[r.asset].recent.length < 5) byAsset[r.asset].recent.push(r.result);
     }
-    
+
     for (const [asset, data] of Object.entries(byAsset)) {
       const total = data.wins + data.losses;
       let consecutiveLosses = 0;
@@ -208,7 +414,6 @@ async function getAssetHistory(supabase: any): Promise<Map<string, AssetHistory>
         if (r === 'loss') consecutiveLosses++;
         else break;
       }
-      
       history.set(asset, {
         asset,
         wins: data.wins,
@@ -221,162 +426,11 @@ async function getAssetHistory(supabase: any): Promise<Map<string, AssetHistory>
   } catch (e) {
     console.error('Error loading asset history:', e);
   }
-  
+
   return history;
 }
 
-// ============= INDICATOR GENERATORS =============
-function generateRandomPrice(symbol: string): number {
-  if (symbol.includes('JPY')) return 150 + (Math.random() - 0.5) * 5;
-  if (symbol.includes('BTC')) return 67000 + (Math.random() - 0.5) * 2000;
-  if (symbol.includes('ETH')) return 3500 + (Math.random() - 0.5) * 200;
-  return 1.0 + Math.random() * 0.5;
-}
-
-function generateRSI(type: 'CALL' | 'PUT', forceExtreme: boolean) {
-  let value: number;
-  if (forceExtreme) {
-    value = type === 'CALL' ? 8 + Math.random() * 12 : 80 + Math.random() * 12; // 8-20 / 80-92
-  } else {
-    value = 35 + Math.random() * 30;
-  }
-  return {
-    value,
-    signal: value < RSI_CALL_MAX ? 'oversold' : value > RSI_PUT_MIN ? 'overbought' : 'neutral'
-  };
-}
-
-function generateMACD(type: 'CALL' | 'PUT', forceStrong: boolean) {
-  const isBullish = type === 'CALL';
-  const histogram = forceStrong
-    ? (isBullish ? 0.003 + Math.random() * 0.004 : -(0.003 + Math.random() * 0.004))
-    : (Math.random() - 0.5) * 0.002;
-  return {
-    value: histogram * 2,
-    signal: histogram * 1.5,
-    histogram,
-    trend: histogram > 0.001 ? 'bullish' : histogram < -0.001 ? 'bearish' : 'neutral'
-  };
-}
-
-function generateBollinger(price: number, type: 'CALL' | 'PUT', forceExtreme: boolean) {
-  const range = price * 0.02;
-  const middle = price;
-  const upper = middle + range;
-  const lower = middle - range;
-  let position: string;
-  if (forceExtreme) {
-    position = type === 'CALL' ? 'below_lower' : 'above_upper';
-  } else {
-    position = 'middle';
-  }
-  return { upper, middle, lower, position };
-}
-
-function generateStochastic(type: 'CALL' | 'PUT', forceStrong: boolean) {
-  let k: number, d: number;
-  if (forceStrong) {
-    if (type === 'CALL') {
-      k = 3 + Math.random() * 10; // 3-13 ULTRA sobrevendido
-      d = k + Math.random() * 5;
-    } else {
-      k = 87 + Math.random() * 10; // 87-97 ULTRA sobrecomprado
-      d = k - Math.random() * 5;
-    }
-  } else {
-    k = 30 + Math.random() * 40;
-    d = k + (Math.random() - 0.5) * 10;
-  }
-  return { k, d, signal: k < 20 ? 'oversold' : k > 80 ? 'overbought' : 'neutral' };
-}
-
-function generateMovingAverages(price: number, type: 'CALL' | 'PUT', forceReversal: boolean) {
-  const variation = price * 0.005;
-  let ema9: number, ema21: number;
-  if (forceReversal) {
-    if (type === 'CALL') {
-      ema21 = price + variation;
-      ema9 = price - variation * 0.5;
-    } else {
-      ema21 = price - variation;
-      ema9 = price + variation * 0.5;
-    }
-  } else {
-    ema9 = price + (Math.random() - 0.5) * variation;
-    ema21 = price + (Math.random() - 0.5) * variation * 2;
-  }
-  const sma50 = price + (Math.random() - 0.5) * variation * 3;
-  let trend: string;
-  if (forceReversal) {
-    trend = type === 'CALL' ? 'bullish' : 'bearish';
-  } else {
-    trend = 'neutral';
-  }
-  return { ema9, ema21, sma50, trend };
-}
-
-function generateATR(price: number) {
-  const atrPercent = 0.2 + Math.random() * 0.6; // 0.2-0.8% = APENAS baixa volatilidade
-  const value = price * atrPercent / 100;
-  return { value, volatility: atrPercent < 0.5 ? 'low' : atrPercent < 0.8 ? 'medium' : 'high' };
-}
-
-function generateSupportResistance(price: number, type: 'CALL' | 'PUT', forceStrong: boolean) {
-  const range = price * 0.005;
-  const nearestSupport = price - range - Math.random() * range * 0.5;
-  const nearestResistance = price + range + Math.random() * range * 0.5;
-  let pricePosition: string;
-  if (forceStrong) {
-    pricePosition = type === 'CALL' ? 'near_support' : 'near_resistance';
-  } else {
-    pricePosition = 'middle';
-  }
-  return { nearestSupport, nearestResistance, pricePosition };
-}
-
-function hasReversalCandle(type: 'CALL' | 'PUT') {
-  const patterns = type === 'CALL'
-    ? ['Martelo', 'Engolfo de Alta', 'Doji de Alta', 'Pin Bar Bullish', 'Morning Star']
-    : ['Estrela Cadente', 'Engolfo de Baixa', 'Doji de Baixa', 'Pin Bar Bearish', 'Evening Star'];
-  const hasReversal = Math.random() < 0.75; // 75% chance
-  const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-  return { hasReversal, pattern };
-}
-
-function hasGoodMarketConditions(): boolean {
-  return Math.random() > 0.25 && Math.random() > 0.20 && Math.random() > 0.15;
-}
-
-function generateIndicators(price: number, type: 'CALL' | 'PUT', forceExtreme: boolean) {
-  const rsi = generateRSI(type, forceExtreme);
-  const macd = generateMACD(type, forceExtreme);
-  const bollinger = generateBollinger(price, type, forceExtreme);
-  const stochastic = generateStochastic(type, forceExtreme);
-  const movingAverages = generateMovingAverages(price, type, forceExtreme);
-  const atr = generateATR(price);
-  const supportResistance = generateSupportResistance(price, type, forceExtreme);
-
-  let confluenceCount = 0;
-  const isCall = type === 'CALL';
-
-  if (isCall ? rsi.value < RSI_CALL_MAX : rsi.value > RSI_PUT_MIN) confluenceCount++;
-  if (isCall ? bollinger.position === 'below_lower' : bollinger.position === 'above_upper') confluenceCount++;
-  if (isCall ? supportResistance.pricePosition === 'near_support' : supportResistance.pricePosition === 'near_resistance') confluenceCount++;
-  if (movingAverages.trend !== 'neutral') confluenceCount++;
-  if (atr.volatility === 'low') confluenceCount++; // APENAS low (era != high)
-
-  const { hasReversal, pattern } = hasReversalCandle(type);
-  if (hasReversal) confluenceCount++;
-
-  const confluenceScore = Math.round((confluenceCount / 6) * 100);
-
-  return {
-    rsi, macd, bollinger, stochastic, movingAverages, atr, supportResistance,
-    confluenceScore, confluenceCount,
-    reversalPattern: hasReversal ? pattern : undefined
-  };
-}
-
+// ============= ANALYZE ASSET WITH REAL DATA =============
 function generateConfirmations(indicators: any, type: 'CALL' | 'PUT'): string[] {
   const confirmations: string[] = [];
   const isCall = type === 'CALL';
@@ -402,57 +456,134 @@ function generateConfirmations(indicators: any, type: 'CALL' | 'PUT'): string[] 
   return confirmations;
 }
 
-function tryGenerateSignal(asset: Asset) {
-  if (!hasGoodMarketConditions()) return null;
+async function analyzeAssetWithRealData(
+  asset: Asset,
+  supabase: any,
+  realPrice: number | undefined
+): Promise<any | null> {
+  if (!realPrice) {
+    console.log(`⏭️ ${asset.symbol}: Sem preço real disponível`);
+    return null;
+  }
 
-  const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
-  // IQ Option Scalping: Force M1 for fast entries
-  const timeframe = 'M1';
-  const price = generateRandomPrice(asset.symbol);
-  const forceExtreme = Math.random() < FORCE_EXTREME_PROBABILITY;
-  const indicators = generateIndicators(price, type, forceExtreme);
+  const prices = await getRecentPrices(supabase, asset.symbol, 30);
+
+  if (prices.length < MIN_CANDLES_FOR_ANALYSIS) {
+    console.log(`⏳ ${asset.symbol}: ${prices.length}/${MIN_CANDLES_FOR_ANALYSIS} candles — acumulando dados reais...`);
+    return null;
+  }
+
+  // Add current real price
+  prices.push(realPrice);
+
+  // ============= CALCULATE ALL INDICATORS FROM REAL DATA =============
+  const rsiValue = calculateRSI(prices, 14);
+  const stoch = calculateStochastic(prices, 14);
+  const bollinger = calculateBollinger(prices, Math.min(20, prices.length));
+  const ema9 = calculateEMA(prices, 9);
+  const ema21 = calculateEMA(prices, 21);
+  const sma50 = calculateEMA(prices, Math.min(50, prices.length));
+  const atr = calculateATR(prices, 14);
+  const sr = calculateSupportResistance(prices);
+  const macd = calculateMACD(prices);
+
+  // ============= DETERMINE DIRECTION FROM REAL INDICATORS (NOT RANDOM!) =============
+  let type: 'CALL' | 'PUT' | null = null;
+
+  // CALL: RSI oversold + near support + stochastic oversold → exhaustion at bottom
+  if (rsiValue <= RSI_CALL_MAX && sr.pricePosition === 'near_support' && stoch.k <= 25) {
+    type = 'CALL';
+    console.log(`📉 ${asset.symbol}: Exaustão REAL no FUNDO detectada — RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition}`);
+  }
+  // PUT: RSI overbought + near resistance + stochastic overbought → exhaustion at top
+  else if (rsiValue >= RSI_PUT_MIN && sr.pricePosition === 'near_resistance' && stoch.k >= 75) {
+    type = 'PUT';
+    console.log(`📈 ${asset.symbol}: Exaustão REAL no TOPO detectada — RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition}`);
+  }
+
+  if (!type) {
+    // Log why no signal (for debugging)
+    if (rsiValue <= 35 || rsiValue >= 65) {
+      console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — aguardando exaustão completa`);
+    }
+    return null;
+  }
+
+  const isCall = type === 'CALL';
+
+  // Build indicator objects
+  const rsi = {
+    value: rsiValue,
+    signal: rsiValue < RSI_CALL_MAX ? 'oversold' : rsiValue > RSI_PUT_MIN ? 'overbought' : 'neutral',
+  };
+  const stochastic = {
+    k: stoch.k,
+    d: stoch.d,
+    signal: stoch.k < 20 ? 'oversold' : stoch.k > 80 ? 'overbought' : 'neutral',
+  };
+  const movingAverages = {
+    ema9,
+    ema21,
+    sma50,
+    trend: isCall
+      ? (ema9 < ema21 ? 'bullish' : 'neutral')  // Price below MAs = potential bullish reversal
+      : (ema9 > ema21 ? 'bearish' : 'neutral'),   // Price above MAs = potential bearish reversal
+  };
+
+  // Count confluences from REAL data
+  let confluenceCount = 0;
+  if (isCall ? rsiValue < RSI_CALL_MAX : rsiValue > RSI_PUT_MIN) confluenceCount++;
+  if (isCall ? bollinger.position === 'below_lower' : bollinger.position === 'above_upper') confluenceCount++;
+  if (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') confluenceCount++;
+  if (movingAverages.trend !== 'neutral') confluenceCount++;
+  if (atr.volatility === 'low') confluenceCount++;
+
+  // Detect REAL reversal candle patterns from price action
+  const { hasReversal, pattern } = detectReversalPattern(prices, type);
+  if (hasReversal) confluenceCount++;
 
   // RIGOROSO: Mínimo 5 de 6 confirmações
-  if (indicators.confluenceCount < MIN_CONFIRMATIONS) return null;
-
-  // ============= FILTRO TOPO/FUNDO REAL =============
-  // Só gerar sinal quando o preço está REALMENTE no topo ou fundo
-  const isCall = type === 'CALL';
-  const atExtreme = isCall
-    ? (indicators.rsi.value <= RSI_CALL_MAX && indicators.supportResistance.pricePosition === 'near_support')
-    : (indicators.rsi.value >= RSI_PUT_MIN && indicators.supportResistance.pricePosition === 'near_resistance');
-  
-  if (!atExtreme) {
-    return null; // Preço não está em topo/fundo real — não operar
+  if (confluenceCount < MIN_CONFIRMATIONS) {
+    console.log(`⚠️ ${asset.symbol} ${type}: Confluência insuficiente ${confluenceCount}/6 (mínimo ${MIN_CONFIRMATIONS})`);
+    return null;
   }
 
-  // Exigir padrão de candle de reversão para confirmar topo/fundo
-  if (!indicators.reversalPattern) {
-    return null; // Sem confirmação de candle de reversão no topo/fundo
+  // Exigir padrão de candle de reversão
+  if (!hasReversal) {
+    console.log(`⚠️ ${asset.symbol} ${type}: Sem padrão de reversão nos candles reais`);
+    return null;
   }
 
-  // Exigir Stochastic também em zona extrema para confirmar exaustão
-  const stochExtreme = isCall
-    ? (indicators.stochastic.k <= 25)
-    : (indicators.stochastic.k >= 75);
-  
-  if (!stochExtreme) {
-    return null; // Stochastic não confirma exaustão no topo/fundo
-  }
+  const confluenceScore = Math.round((confluenceCount / 6) * 100);
+
+  const indicators = {
+    rsi,
+    macd,
+    bollinger,
+    stochastic,
+    movingAverages,
+    atr,
+    supportResistance: sr,
+    confluenceScore,
+    confluenceCount,
+    reversalPattern: hasReversal ? pattern : undefined,
+  };
 
   const confirmations = generateConfirmations(indicators, type);
+
+  console.log(`🎯 ${asset.symbol} ${type}: SINAL REAL gerado! Score=${confluenceScore}% | RSI=${rsiValue.toFixed(1)} | Stoch=${stoch.k.toFixed(1)} | Padrão=${pattern} | Preço=${realPrice}`);
 
   return {
     id: crypto.randomUUID(),
     type,
     asset: asset.symbol,
     assetIcon: asset.icon,
-    timeframe,
+    timeframe: 'M1',
     expiration: '1 min',
     strength: 4,
     status: 'high_probability',
     confirmations,
-    price,
+    price: realPrice,
     isHot: true,
     marketType: asset.type,
     indicators,
@@ -471,63 +602,63 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const weekend = isWeekend();
-    console.log(`🕐 Server-side signal generation | Weekend: ${weekend}`);
+    console.log(`\n🕐 ===== GERAÇÃO DE SINAIS COM DADOS REAIS ===== | Weekend: ${weekend}`);
 
-    // ============= CHECK PENDING OPERATIONS - ONE AT A TIME FOR IQ OPTION =============
-    // IQ Option: Only ONE operation at a time. Block ALL new trades if ANY is pending.
+    // ============= FETCH REAL PRICES =============
+    const realPrices = await fetchRealPrices();
+
+    if (realPrices.size === 0) {
+      console.error('❌ Nenhum preço real obtido — abortando geração');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to fetch real prices' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Store candle for history (builds up over time for indicator calculation)
+    await storePriceCandle(supabase, realPrices);
+
+    // ============= CHECK PENDING OPERATIONS =============
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: pendingOps } = await supabase
       .from('operation_results')
       .select('asset')
       .eq('result', 'pending')
       .gte('created_at', thirtyMinutesAgo);
-    
+
     const assetsWithPendingTrades = new Set(
       (pendingOps || []).map((op: any) => op.asset.toUpperCase())
     );
-    
+
     const hasAnyPendingIQTrade = (pendingOps || []).length > 0;
-    
+
     if (hasAnyPendingIQTrade) {
-      console.log(`🔒 IQ OPTION BLOQUEADO: ${(pendingOps || []).length} operação(ões) pendente(s) - aguardando finalizar antes de nova entrada`);
-      console.log(`🔒 Assets pendentes: ${Array.from(assetsWithPendingTrades).join(', ')}`);
-    }
-    
-    if (assetsWithPendingTrades.size > 0) {
-      console.log(`🔒 Assets com trades pendentes (BLOQUEADOS para MT5): ${Array.from(assetsWithPendingTrades).join(', ')}`);
+      console.log(`🔒 IQ OPTION BLOQUEADO: ${(pendingOps || []).length} operação(ões) pendente(s)`);
     }
 
-    // ============= CHECK RECENT SIGNALS PER ASSET (cooldown) =============
+    // ============= CHECK RECENT SIGNALS (cooldown) =============
     const cooldownAgo = new Date(Date.now() - ASSET_SIGNAL_COOLDOWN_MS).toISOString();
     const { data: recentSignals } = await supabase
       .from('trading_signals')
       .select('asset')
       .gte('created_at', cooldownAgo);
-    
+
     const assetsWithRecentSignals = new Set(
       (recentSignals || []).map((s: any) => s.asset.toUpperCase())
     );
-    
-    if (assetsWithRecentSignals.size > 0) {
-      console.log(`⏳ Assets com sinais recentes (cooldown 3min): ${Array.from(assetsWithRecentSignals).join(', ')}`);
-    }
 
-    // ============= LOAD ASSET HISTORY FOR LEARNING =============
+    // ============= LOAD ASSET HISTORY =============
     const assetHistory = await getAssetHistory(supabase);
-    
-    // Log blocked assets from history
+
     assetHistory.forEach((h, asset) => {
       if (h.consecutiveLosses >= 5) {
         console.log(`⛔ ${asset}: BLOQUEADO (${h.consecutiveLosses} losses consecutivos)`);
-      } else if (h.winRate < 30 && h.losses >= 5) {
-        console.log(`⚠️ ${asset}: Win Rate baixo ${h.winRate}% (${h.wins}W/${h.losses}L)`);
       }
     });
 
-    // Get available assets - FILTRAR APENAS FOREX NA GERAÇÃO
+    // ============= GET AVAILABLE ASSETS =============
     let assets: Asset[] = [];
 
-    // Helper: verificar se é par de moedas forex
     const isForexPairAsset = (symbol: string): boolean => {
       const clean = symbol.replace('-OTC', '').replace(' OTC', '').trim();
       const parts = clean.split('/').map(p => p.trim().toUpperCase());
@@ -547,15 +678,10 @@ serve(async (req) => {
           isBinary: a.isBinary || false,
           payout: a.payout,
         }));
-        
-        // FILTRO FOREX NA GERAÇÃO: só gerar sinais para pares de moedas
-        const beforeFilter = allAssets.length;
+
         allAssets = allAssets.filter((a: Asset) => isForexPairAsset(a.symbol));
-        console.log(`🔒 Filtro FOREX na geração: ${allAssets.length}/${beforeFilter} assets são pares de moedas`);
-        
-        // Filtrar por payout mínimo de 75% (evitar trades com retorno baixo)
         allAssets = allAssets.filter((a: Asset) => !a.payout || a.payout >= 75);
-        
+        console.log(`🔒 Filtro FOREX: ${allAssets.length} pares de moedas com payout >= 75%`);
         assets = allAssets;
       }
     } catch (e) {
@@ -565,63 +691,36 @@ serve(async (req) => {
     if (assets.length === 0) {
       assets = weekend ? OTC_ASSETS : [...FOREX_ASSETS];
     } else {
-      if (weekend) {
-        assets = assets.filter(a => a.isOTC || isOTCAsset(a.symbol));
-      } else {
-        assets = assets.filter(a => !a.isOTC && !isOTCAsset(a.symbol));
-      }
+      assets = weekend
+        ? assets.filter(a => a.isOTC || isOTCAsset(a.symbol))
+        : assets.filter(a => !a.isOTC && !isOTCAsset(a.symbol));
     }
 
-    // ============= FILTER OUT BLOCKED ASSETS =============
+    // ============= FILTER BLOCKED ASSETS =============
     const originalCount = assets.length;
     assets = assets.filter(asset => {
       const key = asset.symbol.toUpperCase();
       const isEurusd = asset.symbol === 'EUR/USD';
-      
-      // EURUSD: estratégia spread MT5 — NUNCA bloquear por losses/winrate da IQ Option
-      // Os resultados da IQ Option não refletem o desempenho no MT5
+
       if (isEurusd) {
-        // Apenas bloquear se já tem trade pendente ou sinal recente (cooldown)
-        if (assetsWithPendingTrades.has(key)) {
-          return false;
-        }
-        if (assetsWithRecentSignals.has(key)) {
-          return false;
-        }
-        console.log(`🎯 EUR/USD: LIBERADO (estratégia spread MT5 - imune a bloqueios IQ)`);
+        if (assetsWithPendingTrades.has(key) || assetsWithRecentSignals.has(key)) return false;
+        console.log(`🎯 EUR/USD: LIBERADO (estratégia spread MT5)`);
         return true;
       }
-      
-      // Block assets with pending trades
-      if (assetsWithPendingTrades.has(key)) {
-        return false;
-      }
-      
-      // Block assets with recent signals (cooldown)
-      if (assetsWithRecentSignals.has(key)) {
-        return false;
-      }
-      
-      // Block assets with 5+ consecutive losses (relaxado de 2)
+
+      if (assetsWithPendingTrades.has(key)) return false;
+      if (assetsWithRecentSignals.has(key)) return false;
+
       const history = assetHistory.get(asset.symbol);
-      if (history && history.consecutiveLosses >= 5) {
-        console.log(`⛔ ${asset.symbol}: BLOQUEADO por ${history.consecutiveLosses} losses consecutivos`);
-        return false;
-      }
-      
-      // Block assets with very bad win rate (< 30% with 5+ trades)
-      if (history && history.winRate < 30 && (history.wins + history.losses) >= 5) {
-        console.log(`⛔ ${asset.symbol}: BLOQUEADO por WR ${history.winRate}% (${history.wins}W/${history.losses}L)`);
-        return false;
-      }
-      
-      // Block assets affected by high-impact news
+      if (history && history.consecutiveLosses >= 5) return false;
+      if (history && history.winRate < 30 && (history.wins + history.losses) >= 5) return false;
+
       const newsCheck = isAssetAffectedByNews(asset.symbol);
       if (newsCheck.affected) {
-        console.log(`📰 ${asset.symbol}: BLOQUEADO por notícia - ${newsCheck.reason}`);
+        console.log(`📰 ${asset.symbol}: BLOQUEADO — ${newsCheck.reason}`);
         return false;
       }
-      
+
       return true;
     });
 
@@ -634,27 +733,27 @@ serve(async (req) => {
       );
     }
 
-    // Generate signals - try all assets, pick best
+    // ============= ANALYZE EACH ASSET WITH REAL DATA =============
     const shuffled = [...assets].sort(() => Math.random() - 0.5);
     const candidates: any[] = [];
 
     for (const asset of shuffled) {
-      const signal = tryGenerateSignal(asset);
+      const realPrice = realPrices.get(asset.symbol) || realPrices.get(asset.symbol.replace('-OTC', ''));
+      const signal = await analyzeAssetWithRealData(asset, supabase, realPrice);
       if (signal) candidates.push(signal);
     }
 
     if (candidates.length === 0) {
-      console.log('⏳ No high-quality signals found this cycle');
+      console.log('⏳ Nenhum sinal de exaustão real encontrado neste ciclo');
       return new Response(
-        JSON.stringify({ success: true, generated: 0, reason: 'no quality signals' }),
+        JSON.stringify({ success: true, generated: 0, reason: 'no real exhaustion signals' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // ============= ENVIAR TODOS OS CANDIDATOS PARA IA =============
-    console.log(`🤖 Enviando ${candidates.length} candidatos para análise IA...`);
+    // ============= SEND TO AI FOR VALIDATION =============
+    console.log(`🤖 Enviando ${candidates.length} sinais REAIS para validação IA...`);
 
-    // Preparar dados para o ai-signal-analyzer
     const signalDataForAI = candidates.map(s => ({
       asset: s.asset,
       type: s.type,
@@ -664,7 +763,6 @@ serve(async (req) => {
       confirmations: s.confirmations,
     }));
 
-    // Buscar histórico para contexto da IA
     let historicalResults: any[] = [];
     try {
       const { data: results } = await supabase
@@ -672,7 +770,7 @@ serve(async (req) => {
         .select('asset, result')
         .order('created_at', { ascending: false })
         .limit(100);
-      
+
       if (results && results.length > 0) {
         const assetStats = new Map<string, { wins: number; losses: number }>();
         results.forEach((r: any) => {
@@ -692,14 +790,10 @@ serve(async (req) => {
       console.log('⚠️ Erro ao buscar histórico para IA:', e);
     }
 
-    // Chamar ai-signal-analyzer (IA)
     let aiApprovedSignals: any[] = [];
     try {
       const { data: aiData, error: aiError } = await supabase.functions.invoke('ai-signal-analyzer', {
-        body: {
-          signals: signalDataForAI,
-          historicalResults,
-        },
+        body: { signals: signalDataForAI, historicalResults },
       });
 
       if (aiError) {
@@ -707,12 +801,9 @@ serve(async (req) => {
       } else if (aiData?.success && aiData?.analyzedSignals) {
         const executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
         console.log(`🧠 IA: ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
-        
-        // Mapear sinais aprovados pela IA de volta aos candidatos
+
         for (const approved of executeSignals) {
-          const candidate = candidates.find(c => 
-            c.asset.toUpperCase() === approved.asset.toUpperCase()
-          );
+          const candidate = candidates.find(c => c.asset.toUpperCase() === approved.asset.toUpperCase());
           if (candidate) {
             aiApprovedSignals.push({
               ...candidate,
@@ -727,24 +818,20 @@ serve(async (req) => {
       console.error('❌ Falha ao chamar IA:', e);
     }
 
-    // FALLBACK: Se a IA falhar, NÃO operar — esperar próximo ciclo
     if (aiApprovedSignals.length === 0) {
-      console.log('⚠️ IA não aprovou sinais — NÃO operando (proteção anti-loss)');
+      console.log('⚠️ IA não aprovou sinais reais — NÃO operando');
       return new Response(
-        JSON.stringify({ success: true, generated: 0, reason: 'AI did not approve any signals' }),
+        JSON.stringify({ success: true, generated: 0, reason: 'AI did not approve any real signals' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Ordenar por confiança IA
     aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
 
-    // ============= IQ OPTION: UMA OPERAÇÃO POR VEZ =============
-    // Selecionar APENAS o melhor sinal (IA escolhe o melhor par)
+    // ============= EXECUTE BEST SIGNAL =============
     const signalsToExecute = [aiApprovedSignals[0]];
-    console.log(`🎯 IA selecionou o MELHOR par: ${signalsToExecute[0].asset} (${signalsToExecute[0].type}) - Score: ${signalsToExecute[0].aiConfidence || signalsToExecute[0].indicators.confluenceScore}%`);
+    console.log(`🎯 MELHOR sinal REAL: ${signalsToExecute[0].asset} (${signalsToExecute[0].type}) — Score: ${signalsToExecute[0].indicators.confluenceScore}% | Preço REAL: ${signalsToExecute[0].price}`);
 
-    // ============= SALVAR E EXECUTAR CADA SINAL APROVADO =============
     let totalIQ = 0;
     let totalMT5 = 0;
     let totalWhatsApp = 0;
@@ -754,7 +841,7 @@ serve(async (req) => {
       const hist = assetHistory.get(bestSignal.asset);
       const histInfo = hist ? ` | History: WR ${hist.winRate}% (${hist.wins}W/${hist.losses}L)` : ' | No history';
       const aiInfo = bestSignal.aiConfidence ? ` | IA: ${bestSignal.aiConfidence}% (${bestSignal.aiReason})` : '';
-      console.log(`🏆 Executando: ${bestSignal.asset} (${bestSignal.type}) - Score: ${bestSignal.indicators.confluenceScore}%${histInfo}${aiInfo}`);
+      console.log(`🏆 Executando SINAL REAL: ${bestSignal.asset} (${bestSignal.type}) — Score: ${bestSignal.indicators.confluenceScore}%${histInfo}${aiInfo}`);
 
       // Save to database
       const { error: insertError } = await supabase.from('trading_signals').insert({
@@ -780,15 +867,11 @@ serve(async (req) => {
         continue;
       }
 
-      console.log(`💾 Signal saved: ${bestSignal.id}`);
-
-      // Send WhatsApp notification if high confluence
+      // WhatsApp notification
       if (bestSignal.indicators.confluenceScore >= WHATSAPP_CONFLUENCE_THRESHOLD) {
         try {
           const entryTime = new Date().toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'America/Sao_Paulo',
+            hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
           });
 
           const { error: whatsappError } = await supabase.functions.invoke('send-whatsapp', {
@@ -800,7 +883,7 @@ serve(async (req) => {
                 timeframe: bestSignal.timeframe,
                 entryTime,
                 confirmations: bestSignal.confirmations,
-                tag: bestSignal.aiReason || 'REVERSÃO CERTEIRA',
+                tag: bestSignal.aiReason || 'REVERSÃO CERTEIRA (DADOS REAIS)',
               },
             },
           });
@@ -814,144 +897,126 @@ serve(async (req) => {
         }
       }
 
-      // ============= COPY TRADE TO IQ OPTION (APENAS PARES DE MOEDAS) =============
+      // ============= IQ OPTION TRADE =============
       try {
-        // IQ Option: Operar SOMENTE pares de moedas (forex)
         const forexCurrencies = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
         const assetClean = bestSignal.asset.replace('-OTC', '').replace(' OTC', '').trim();
         const assetParts = assetClean.split('/').map((p: string) => p.trim().toUpperCase());
         const isForexPair = assetParts.length === 2 && assetParts.every((p: string) => forexCurrencies.includes(p));
 
         if (!isForexPair) {
-          console.log(`⏭️ IQ Option: Skipping ${bestSignal.asset} — não é par de moedas (apenas forex permitido)`);
+          console.log(`⏭️ IQ Option: Skipping ${bestSignal.asset} — não é par de moedas`);
         } else if (hasAnyPendingIQTrade) {
-          console.log(`🚫 IQ Option: BLOQUEADO — operação anterior ainda pendente. Aguardando finalizar.`);
+          console.log(`🚫 IQ Option: BLOQUEADO — operação anterior pendente`);
         } else {
-          // RE-CHECK pending RIGHT BEFORE execution (prevents race condition between concurrent cron/manual calls)
           const { data: freshPending } = await supabase
             .from('operation_results')
             .select('id')
             .eq('result', 'pending')
             .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
             .limit(1);
-          
-          if (freshPending && freshPending.length > 0) {
-            console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente. Race condition prevenida.`);
-          } else if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
-          console.log(`⏭️ IQ Scalping: Skipping ${bestSignal.asset} — confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% mínimo`);
-        } else {
-          const { data: iqConfig } = await supabase
-            .from('iqoption_config')
-            .select('*')
-            .eq('is_active', true)
-            .not('user_id', 'is', null)
-            .order('last_connected_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
 
-          if (iqConfig) {
-            const settingsUserId = iqConfig.user_id;
-            const { data: tradeSettings } = await supabase
-              .from('user_trading_settings')
-              .select('trade_amount, mt5_trade_amount')
-              .eq('user_id', settingsUserId)
+          if (freshPending && freshPending.length > 0) {
+            console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente`);
+          } else if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
+            console.log(`⏭️ IQ: Confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}%`);
+          } else {
+            const { data: iqConfig } = await supabase
+              .from('iqoption_config')
+              .select('*')
+              .eq('is_active', true)
+              .not('user_id', 'is', null)
+              .order('last_connected_at', { ascending: false })
               .limit(1)
               .maybeSingle();
-            
-            const iqTradeAmount = tradeSettings?.trade_amount || 1;
-            // Scalping M1 Turbo: Always 1 min expiration
-            const expiration = 1;
 
-            console.log(`📡 IQ Scalping Turbo: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount} | Exp: ${expiration}min | Score: ${bestSignal.indicators.confluenceScore}%`);
-            
-            // INSERT PENDING RESULT FIRST to prevent race conditions (concurrent calls will see this)
-            await supabase.from('operation_results').insert({
-              signal_id: bestSignal.id,
-              asset: bestSignal.asset,
-              direction: bestSignal.type,
-              result: 'pending',
-              profit: 0,
-              entry_price: iqTradeAmount,
-              is_auto_trade: true,
-              is_ai_analyzed: !!bestSignal.aiConfidence,
-              timeframe: 'M1',
-            });
+            if (iqConfig) {
+              const { data: tradeSettings } = await supabase
+                .from('user_trading_settings')
+                .select('trade_amount, mt5_trade_amount')
+                .eq('user_id', iqConfig.user_id)
+                .limit(1)
+                .maybeSingle();
 
-            // Save to trade_queue for tracking
-            await supabase.from('trade_queue').insert({
-              asset: bestSignal.asset,
-              direction: bestSignal.type,
-              amount: iqTradeAmount,
-              expiration,
-              signal_id: bestSignal.id,
-              timeframe: 'M1',
-              confluence_score: bestSignal.indicators.confluenceScore,
-              status: 'executing',
-            });
+              const iqTradeAmount = tradeSettings?.trade_amount || 1;
+              const expiration = 1;
 
-            // Call iqoption-place-trade
-            const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
-              body: {
+              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.type} $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
+
+              await supabase.from('operation_results').insert({
+                signal_id: bestSignal.id,
                 asset: bestSignal.asset,
-                direction: bestSignal.type.toLowerCase(),
+                direction: bestSignal.type,
+                result: 'pending',
+                profit: 0,
+                entry_price: iqTradeAmount,
+                is_auto_trade: true,
+                is_ai_analyzed: !!bestSignal.aiConfidence,
+                timeframe: 'M1',
+              });
+
+              await supabase.from('trade_queue').insert({
+                asset: bestSignal.asset,
+                direction: bestSignal.type,
                 amount: iqTradeAmount,
                 expiration,
-                signalId: bestSignal.id,
-                isAutoTrade: true,
-                isAIAnalyzed: !!bestSignal.aiConfidence,
+                signal_id: bestSignal.id,
                 timeframe: 'M1',
-              },
-            });
+                confluence_score: bestSignal.indicators.confluenceScore,
+                status: 'executing',
+              });
 
-            if (!iqError && iqData?.success) {
-              totalIQ++;
-              console.log(`✅ IQ Scalping: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.tradeId} | 1min Turbo`);
-              
-              await supabase.from('trade_queue')
-                .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
-                .eq('signal_id', bestSignal.id);
-            } else {
-              const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
-              console.error(`❌ IQ Trade falhou: ${errorMsg}`);
-              
-              // Clean up the pending operation_results entry to unblock future trades
-              await supabase.from('operation_results')
-                .update({ result: 'expired', profit: 0 })
-                .eq('signal_id', bestSignal.id)
-                .eq('result', 'pending');
-              
-              await supabase.from('trade_queue')
-                .update({ status: 'failed', error: errorMsg })
-                .eq('signal_id', bestSignal.id);
+              const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
+                body: {
+                  asset: bestSignal.asset,
+                  direction: bestSignal.type.toLowerCase(),
+                  amount: iqTradeAmount,
+                  expiration,
+                  signalId: bestSignal.id,
+                  isAutoTrade: true,
+                  isAIAnalyzed: !!bestSignal.aiConfidence,
+                  timeframe: 'M1',
+                },
+              });
+
+              if (!iqError && iqData?.success) {
+                totalIQ++;
+                console.log(`✅ IQ REAL: ${bestSignal.asset} ${bestSignal.type} | ID: ${iqData.tradeId}`);
+                await supabase.from('trade_queue')
+                  .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
+                  .eq('signal_id', bestSignal.id);
+              } else {
+                const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
+                console.error(`❌ IQ Trade falhou: ${errorMsg}`);
+                await supabase.from('operation_results')
+                  .update({ result: 'expired', profit: 0 })
+                  .eq('signal_id', bestSignal.id)
+                  .eq('result', 'pending');
+                await supabase.from('trade_queue')
+                  .update({ status: 'failed', error: errorMsg })
+                  .eq('signal_id', bestSignal.id);
+              }
             }
           }
-        }
         }
       } catch (e) {
         console.error('❌ IQ Option failed:', e);
       }
 
-      // ============= COPY TRADE TO MT5 VIA METAAPI (EURUSD ONLY + SESSION FILTER) =============
+      // ============= MT5 TRADE (EURUSD ONLY) =============
       try {
         const assetNormalized = bestSignal.asset.replace('/', '').replace('-OTC', '').replace(' ', '').toUpperCase();
-        
-        // MT5 Strategy: ONLY trade EURUSD (tightest spread, most liquid)
         const isEurusd = assetNormalized === 'EURUSD';
-        
-        // Session filter: Only trade during London+NY overlap (12:00-16:00 UTC) = best liquidity
         const utcHour = new Date().getUTCHours();
-        const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16); // London open to NY afternoon
-        
-        // MT5 requires higher confluence than IQ Option
+        const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16);
         const MT5_MIN_CONFLUENCE = 95;
-        const hasHighConfluence = bestSignal.indicators.confluenceScore >= MT5_MIN_CONFLUENCE;
-        
+
         if (!isEurusd) {
-          console.log(`⏭️ MT5: Skipping ${bestSignal.asset} — MT5 opera APENAS EUR/USD (menor spread)`);
+          // Skip silently for non-EURUSD
         } else if (!isHighLiquiditySession) {
-          console.log(`⏭️ MT5: Skipping ${bestSignal.asset} — Fora da sessão de alta liquidez (${utcHour}h UTC, permitido: 7-16h)`);
-        } else if (!hasHighConfluence) {
-          console.log(`⏭️ MT5: Skipping ${bestSignal.asset} — Confluência ${bestSignal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}% mínimo MT5`);
+          console.log(`⏭️ MT5: Fora da sessão (${utcHour}h UTC)`);
+        } else if (bestSignal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
+          console.log(`⏭️ MT5: Confluência ${bestSignal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
         } else {
           const { data: metaConfig } = await supabase
             .from('metaapi_config')
@@ -959,33 +1024,32 @@ serve(async (req) => {
             .eq('is_active', true)
             .limit(1)
             .maybeSingle();
-          
+
           if (metaConfig && metaConfig.account_id) {
-            // Get user_id from iqoption_config for settings lookup
             const { data: iqCfgForUser } = await supabase
               .from('iqoption_config')
               .select('user_id')
               .eq('is_active', true)
               .limit(1)
               .maybeSingle();
-            
+
             const { data: tradeSettings } = await supabase
               .from('user_trading_settings')
               .select('mt5_trade_amount')
               .eq('user_id', iqCfgForUser?.user_id || '')
               .limit(1)
               .maybeSingle();
-            
+
             const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
 
-            console.log(`📡 MT5 EURUSD: ${bestSignal.type} $${mt5TradeAmount} | Volume: ${metaConfig.volume || 0.01} | Score: ${bestSignal.indicators.confluenceScore}% | Session: ${utcHour}h UTC`);
-            
+            console.log(`📡 MT5 EURUSD REAL: ${bestSignal.type} $${mt5TradeAmount} | Score: ${bestSignal.indicators.confluenceScore}%`);
+
             const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
               body: {
                 asset: bestSignal.asset,
                 direction: bestSignal.type.toLowerCase(),
                 amount: mt5TradeAmount,
-                expiration: bestSignal.timeframe === 'M1' ? 1 : 5,
+                expiration: 1,
                 signalId: bestSignal.id,
                 confluenceScore: bestSignal.indicators.confluenceScore,
               },
@@ -993,9 +1057,9 @@ serve(async (req) => {
 
             if (!mt5Error && mt5Data?.success) {
               totalMT5++;
-              console.log(`✅ MT5 Trade: ${mt5Data.symbol} ${mt5Data.direction} | EURUSD spread strategy`);
+              console.log(`✅ MT5 REAL: ${mt5Data.symbol} ${mt5Data.direction}`);
             } else {
-              console.error(`❌ MT5 Trade falhou: ${mt5Error?.message || mt5Data?.error}`);
+              console.error(`❌ MT5 falhou: ${mt5Error?.message || mt5Data?.error}`);
             }
           }
         }
@@ -1008,10 +1072,11 @@ serve(async (req) => {
         type: bestSignal.type,
         confluenceScore: bestSignal.indicators.confluenceScore,
         aiConfidence: bestSignal.aiConfidence,
+        realPrice: bestSignal.price,
       });
-    } // end for signalsToExecute
+    }
 
-    console.log(`\n📊 RESUMO: ${executedSignals.length} sinais executados | IQ: ${totalIQ} | MT5: ${totalMT5} | WhatsApp: ${totalWhatsApp}`);
+    console.log(`\n📊 RESUMO (DADOS REAIS): ${executedSignals.length} sinais | IQ: ${totalIQ} | MT5: ${totalMT5} | WhatsApp: ${totalWhatsApp}`);
 
     return new Response(
       JSON.stringify({
@@ -1021,6 +1086,7 @@ serve(async (req) => {
         iqSent: totalIQ,
         mt5Sent: totalMT5,
         whatsappSent: totalWhatsApp,
+        dataSource: 'REAL_PRICES',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

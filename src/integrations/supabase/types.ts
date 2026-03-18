@@ -173,6 +173,27 @@ export type Database = {
         }
         Relationships: []
       }
+      price_candles: {
+        Row: {
+          created_at: string
+          id: string
+          price: number
+          symbol: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          price: number
+          symbol: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          price?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
       trade_queue: {
         Row: {
           amount: number

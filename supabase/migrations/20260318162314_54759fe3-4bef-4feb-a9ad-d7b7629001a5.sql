@@ -1,0 +1,1 @@
+DELETE FROM price_candles WHERE 1=1;

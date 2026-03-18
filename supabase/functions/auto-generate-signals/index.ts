@@ -121,14 +121,29 @@ const OTC_ASSETS: Asset[] = [
 
 const CRYPTO_ASSETS: Asset[] = [];
 
-// ============= REAL PRICE DATA - MULTI-SOURCE WITH CACHE =============
+// ============= REAL PRICE DATA - MULTI-SOURCE WITH ROTATION =============
 
-// Fallback 1: AwesomeAPI (Brazilian, free, real-time)
+const PAIR_GROUPS = [
+  ['EUR-USD', 'GBP-USD', 'USD-JPY', 'AUD-USD'],
+  ['EUR-JPY', 'GBP-JPY', 'AUD-CAD', 'EUR-GBP'],
+  ['NZD-USD', 'USD-CHF', 'AUD-JPY', 'CAD-JPY'],
+];
+
+function getCurrentPairGroup(): string[] {
+  // Rotate groups every minute to reduce API load
+  const minuteOfHour = new Date().getUTCMinutes();
+  const groupIndex = minuteOfHour % PAIR_GROUPS.length;
+  return PAIR_GROUPS[groupIndex];
+}
+
+// Source 1: AwesomeAPI with rotation (only 4 pairs per call)
 async function fetchFromAwesomeAPI(): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
+  const group = getCurrentPairGroup();
+  const pairsStr = group.join(',');
+  
   try {
-    const pairs = 'EUR-USD,GBP-USD,USD-JPY,AUD-USD,EUR-JPY,GBP-JPY,AUD-CAD,EUR-GBP,NZD-USD,USD-CHF,AUD-JPY,CAD-JPY';
-    const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${pairs}`, {
+    const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${pairsStr}`, {
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -137,38 +152,80 @@ async function fetchFromAwesomeAPI(): Promise<Map<string, number>> {
       const v = value as any;
       const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
       const bid = parseFloat(v.bid);
+      const ask = parseFloat(v.ask);
       if (!isNaN(bid)) {
-        prices.set(symbol, bid);
-        prices.set(`${symbol}-OTC`, bid);
+        // Use mid price between bid and ask for more accurate tick
+        const midPrice = !isNaN(ask) ? (bid + ask) / 2 : bid;
+        prices.set(symbol, midPrice);
+        prices.set(`${symbol}-OTC`, midPrice);
       }
     }
-    console.log(`💹 AwesomeAPI: ${prices.size / 2} pares obtidos`);
+    console.log(`💹 AwesomeAPI (grupo ${getCurrentPairGroup().length} pares): ${prices.size / 2} obtidos`);
   } catch (e) {
     console.log(`⚠️ AwesomeAPI falhou: ${e}`);
   }
   return prices;
 }
 
-// Fallback 2: ExchangeRate API (free, no key)
-async function fetchFromExchangeRateAPI(): Promise<Map<string, number>> {
+// Source 2: Try remaining pairs from AwesomeAPI individually
+async function fetchRemainingPairsFromAwesome(existing: Map<string, number>): Promise<Map<string, number>> {
+  const allPairs = PAIR_GROUPS.flat();
+  const missing = allPairs.filter(p => {
+    const sym = p.replace('-', '/');
+    return !existing.has(sym);
+  });
+  
+  if (missing.length === 0) return existing;
+  
+  // Fetch missing pairs one group at a time with delay
+  for (const group of PAIR_GROUPS) {
+    const groupMissing = group.filter(p => !existing.has(p.replace('-', '/')));
+    if (groupMissing.length === 0) continue;
+    
+    try {
+      await new Promise(r => setTimeout(r, 300)); // Rate limit delay
+      const response = await fetch(`https://economia.awesomeapi.com.br/json/last/${groupMissing.join(',')}`, {
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!response.ok) break; // Stop if rate limited
+      const data = await response.json();
+      for (const [key, value] of Object.entries(data)) {
+        const v = value as any;
+        const symbol = key.replace(/^(\w{3})(\w{3})$/, '$1/$2');
+        const bid = parseFloat(v.bid);
+        const ask = parseFloat(v.ask);
+        if (!isNaN(bid)) {
+          const midPrice = !isNaN(ask) ? (bid + ask) / 2 : bid;
+          existing.set(symbol, midPrice);
+          existing.set(`${symbol}-OTC`, midPrice);
+        }
+      }
+    } catch (e) {
+      break; // Stop on any error
+    }
+  }
+  
+  return existing;
+}
+
+// Source 3: Frankfurter API (ECB rates, free, updates hourly — better than ExchangeRate daily)
+async function fetchFromFrankfurterAPI(): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
   try {
-    const response = await fetch('https://open.er-api.com/v6/latest/USD', {
+    const response = await fetch('https://api.frankfurter.dev/v1/latest?base=USD', {
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const rates = data.rates || {};
-
-    // Build forex pairs from USD base rates
+    
     const currencies: Record<string, number> = { USD: 1 };
     for (const [cur, rate] of Object.entries(rates)) {
-      if (['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'].includes(cur)) {
+      if (['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'].includes(cur)) {
         currencies[cur] = rate as number;
       }
     }
 
-    // Generate cross pairs
     const pairsToGenerate = [
       ['EUR', 'USD'], ['GBP', 'USD'], ['USD', 'JPY'], ['AUD', 'USD'],
       ['EUR', 'JPY'], ['GBP', 'JPY'], ['AUD', 'CAD'], ['EUR', 'GBP'],
@@ -177,21 +234,20 @@ async function fetchFromExchangeRateAPI(): Promise<Map<string, number>> {
 
     for (const [base, quote] of pairsToGenerate) {
       if (currencies[base] && currencies[quote]) {
-        // Price = how many units of quote for 1 unit of base
         const price = currencies[quote] / currencies[base];
         const symbol = `${base}/${quote}`;
         prices.set(symbol, price);
         prices.set(`${symbol}-OTC`, price);
       }
     }
-    console.log(`💹 ExchangeRate API: ${prices.size / 2} pares obtidos`);
+    console.log(`💹 Frankfurter API: ${prices.size / 2} pares obtidos`);
   } catch (e) {
-    console.log(`⚠️ ExchangeRate API falhou: ${e}`);
+    console.log(`⚠️ Frankfurter API falhou: ${e}`);
   }
   return prices;
 }
 
-// Fallback 3: Use cached prices from database (last 5 minutes)
+// Cached prices from DB (last 5 minutes)
 async function fetchCachedPrices(supabase: any): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
   try {
@@ -220,18 +276,26 @@ async function fetchCachedPrices(supabase: any): Promise<Map<string, number>> {
 }
 
 async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
-  // Try primary source
+  // Primary: AwesomeAPI with pair rotation
   let prices = await fetchFromAwesomeAPI();
-
-  // Fallback to ExchangeRate API
-  if (prices.size === 0) {
-    console.log('🔄 Tentando ExchangeRate API (fallback 1)...');
-    prices = await fetchFromExchangeRateAPI();
+  
+  // Try to fill remaining pairs
+  if (prices.size > 0 && prices.size < 24) {
+    prices = await fetchRemainingPairsFromAwesome(prices);
   }
 
-  // Fallback to cached prices from DB
+  // Fallback: Frankfurter API (fill gaps only)
+  if (prices.size < 12) {
+    console.log('🔄 Tentando Frankfurter API (fallback)...');
+    const fallbackPrices = await fetchFromFrankfurterAPI();
+    for (const [sym, price] of fallbackPrices) {
+      if (!prices.has(sym)) prices.set(sym, price);
+    }
+  }
+
+  // Last resort: cached prices from DB
   if (prices.size === 0) {
-    console.log('🔄 Usando preços em cache do banco (fallback 2)...');
+    console.log('🔄 Usando preços em cache do banco (último recurso)...');
     prices = await fetchCachedPrices(supabase);
   }
 

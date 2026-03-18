@@ -303,7 +303,7 @@ async function placeTradeFireAndForget(
           const nextMinute = Math.ceil(now / 60) * 60;
           const expirationTime = nextMinute + (trade.expiration * 60);
           
-          // For M1 trades, prefer turbo. For longer, prefer binary.
+          // For M1 trades, REQUIRE turbo. For longer, prefer binary.
           const isShortTerm = trade.expiration <= 5;
           let useId = foundAsset.id;
           let useType = foundAsset.optionType;
@@ -311,6 +311,12 @@ async function placeTradeFireAndForget(
           if (isShortTerm && hasTurbo) {
             useId = foundAsset.turboId!;
             useType = 3;
+          } else if (isShortTerm && !hasTurbo) {
+            // M1/short-term REQUIRES turbo mode - BINARY won't work for 1-5min
+            console.error(`❌ ${matchedName} has no TURBO mode available. Cannot place M1 trade on BINARY-only asset.`);
+            clearTimeout(timeout); ws.close();
+            resolve({ success: false, error: `${trade.asset} não tem modo TURBO disponível para M1` });
+            return;
           } else if (!isShortTerm && hasBinary) {
             useId = foundAsset.binaryId!;
             useType = 1;

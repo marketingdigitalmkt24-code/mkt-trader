@@ -73,6 +73,11 @@ serve(async (req) => {
 
     const tradeAmount = tradingSettings?.mt5_trade_amount || 1;
     const tpCurrency = tradeAmount * (tpPercent / 100);
+    
+    // ===== STOP LOSS: Limitar perdas a 2x o TP (Risk/Reward 1:2 favorecendo wins) =====
+    const slMultiplier = 2; // SL = 2x TP target
+    const slCurrency = tpCurrency * slMultiplier;
+    console.log(`📊 Config: TP: $${tpCurrency.toFixed(2)} (${tpPercent}%) | SL: $${slCurrency.toFixed(2)} (${tpPercent * slMultiplier}%) | TradeAmt: $${tradeAmount}`);
 
     // Get region and ensure account is deployed
     let region = 'new-york';

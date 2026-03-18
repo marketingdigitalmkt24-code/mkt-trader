@@ -255,10 +255,10 @@ async function buildLearningModel(): Promise<LearnedPattern> {
       }
     }
 
-    // ===== NOVO: Ativos tóxicos (WR < 40% com 3+ trades) =====
+    // ===== NOVO: Ativos tóxicos (WR < 25% com 5+ trades) - relaxado =====
     for (const [asset, stats] of Object.entries(assetStats)) {
       const total = stats.wins + stats.losses;
-      if (total >= 3 && stats.wins / total < 0.4) {
+      if (total >= 5 && stats.wins / total < 0.25) {
         model.toxicAssets.add(asset);
       }
     }

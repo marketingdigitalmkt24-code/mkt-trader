@@ -910,6 +910,12 @@ serve(async (req) => {
               const errorMsg = iqError?.message || iqData?.error || 'Unknown error';
               console.error(`❌ IQ Trade falhou: ${errorMsg}`);
               
+              // Clean up the pending operation_results entry to unblock future trades
+              await supabase.from('operation_results')
+                .update({ result: 'expired', profit: 0 })
+                .eq('signal_id', bestSignal.id)
+                .eq('result', 'pending');
+              
               await supabase.from('trade_queue')
                 .update({ status: 'failed', error: errorMsg })
                 .eq('signal_id', bestSignal.id);

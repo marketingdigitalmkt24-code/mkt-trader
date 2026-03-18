@@ -368,11 +368,11 @@ function calculateLearnedScore(s: SignalData, model: LearnedPattern): {
     return { score: 0, adjustments: [`☠️ DIREÇÃO TÓXICA: ${s.type} perde neste ativo`], shouldSkip: true, skipReason: `${s.type} tóxico em ${s.asset}` };
   }
 
-  // 0c. PADRÃO DE PERDA: mesmo ativo + direção + hora = perda repetida
+  // 0c. PADRÃO DE PERDA: mesmo ativo + direção + hora = perda repetida (relaxado para 4+)
   const matchingLossPattern = model.lossPatterns.find(lp => 
     lp.asset === s.asset && lp.direction === s.type && lp.hour === currentHour
   );
-  if (matchingLossPattern && matchingLossPattern.count >= 2) {
+  if (matchingLossPattern && matchingLossPattern.count >= 4) {
     return { score: 0, adjustments: [`🔴 PADRÃO DE PERDA: ${s.asset} ${s.type} às ${currentHour}h = ${matchingLossPattern.count} losses`], shouldSkip: true, skipReason: `Padrão de perda identificado` };
   }
 

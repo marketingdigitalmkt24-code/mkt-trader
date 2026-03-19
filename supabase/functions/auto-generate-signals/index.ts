@@ -1075,6 +1075,13 @@ serve(async (req) => {
         if (isOTCAssetMT5) {
           console.log(`⏭️ MT5: ${bestMT5Signal.asset} é OTC — MT5 não opera OTC`);
         } else {
+          // ===== FILTRO DE NOTÍCIAS PARA MT5 =====
+          const mt5NewsCheck = isAssetAffectedByNews(bestMT5Signal.asset);
+          if (mt5NewsCheck.affected) {
+            console.log(`🚫 MT5: BLOQUEADO por notícia — ${mt5NewsCheck.reason}`);
+          } else if (bestMT5Signal.indicators.atr?.volatility === 'high') {
+            console.log(`🚫 MT5: BLOQUEADO — volatilidade alta (ATR high), risco de stop`);
+          } else {
           const { data: metaConfig } = await supabase
             .from('metaapi_config')
             .select('token, account_id, volume, is_active')

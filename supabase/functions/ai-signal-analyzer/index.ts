@@ -515,15 +515,59 @@ serve(async (req) => {
       ...localAdaptiveScore(s, profile, currentHour),
     }));
 
-    // 3. Combinar
+    // 3. Combinar — com VALIDAÇÕES RÍGIDAS
     const analyzedSignals = signals.map(s => {
       const groqPick = groqDecisions?.find(d => d.asset?.toUpperCase() === s.asset.toUpperCase());
       const local = localResults.find(l => l.signal.asset === s.asset)!;
+      const ap = profile.assetProfiles[s.asset];
+      
+      // ===== BLOQUEIO ABSOLUTO: Groq NÃO pode aprovar ativos tóxicos =====
+      const isToxic = ap && (
+        ap.consecutiveLosses >= 3 ||
+        (ap.winRate < 40 && (ap.wins + ap.losses) >= 5)
+      );
+      
+      // RSI artefato check (RSI 0 ou 100 = dados ruins)
+      const rsi = s.indicators.rsi.value;
+      const isDataArtifact = rsi <= 1 || rsi >= 99;
+      
+      // WR geral muito baixo = parar de operar
+      const overallWRTooLow = profile.totalTrades >= 20 && profile.overallWinRate < 45;
+      
+      if (isToxic) {
+        console.log(`🚫 BLOQUEIO ${s.asset}: ${ap.consecutiveLosses}L seguidos | WR ${ap.winRate}% — Groq IGNORADO`);
+        return {
+          signalId: `${s.asset}-${Date.now()}`,
+          asset: s.asset,
+          recommendation: 'SKIP',
+          confidence: 0,
+          reason: `BLOCKED: ${ap.consecutiveLosses}L seguidos, WR ${ap.winRate}%`,
+          adjustedConfluence: 0,
+          riskLevel: 'HIGH',
+          bestDirection: s.type,
+        };
+      }
+      
+      if (isDataArtifact) {
+        console.log(`🚫 DADOS RUINS ${s.asset}: RSI=${rsi.toFixed(1)} é artefato — REJEITADO`);
+        return {
+          signalId: `${s.asset}-${Date.now()}`,
+          asset: s.asset,
+          recommendation: 'SKIP',
+          confidence: 0,
+          reason: `BLOCKED: RSI ${rsi.toFixed(1)} é artefato de dados`,
+          adjustedConfluence: 0,
+          riskLevel: 'HIGH',
+          bestDirection: s.type,
+        };
+      }
 
       if (groqPick) {
-        const shouldExecute = groqPick.execute && groqPick.confidence >= 60;
+        // Confiança mínima aumentada para 80% (era 60%)
+        const shouldExecute = groqPick.execute && groqPick.confidence >= 80 && !overallWRTooLow;
         const emoji = shouldExecute ? '✅' : '❌';
-        console.log(`🧠 GROQ ${emoji} ${s.asset} ${groqPick.best_direction} conf=${groqPick.confidence} [${groqPick.strategy}] ${groqPick.reason}`);
+        const skipReason = overallWRTooLow ? ' [WR GERAL BAIXO]' : groqPick.confidence < 80 ? ' [CONF<80]' : '';
+        console.log(`🧠 GROQ ${emoji} ${s.asset} ${groqPick.best_direction} conf=${groqPick.confidence} [${groqPick.strategy}] ${groqPick.reason}${skipReason}`);
         return {
           signalId: `${s.asset}-${Date.now()}`,
           asset: s.asset,
@@ -531,21 +575,22 @@ serve(async (req) => {
           confidence: groqPick.confidence,
           reason: `GROQ[${groqPick.strategy}]: ${groqPick.reason}`,
           adjustedConfluence: groqPick.confidence,
-          riskLevel: groqPick.confidence >= 75 ? 'LOW' : 'MEDIUM',
+          riskLevel: groqPick.confidence >= 85 ? 'LOW' : 'MEDIUM',
           bestDirection: groqPick.best_direction,
         };
       }
 
-      const emoji = local.shouldExecute ? '✅' : '❌';
+      const shouldExecLocal = local.shouldExecute && local.score >= 60 && !overallWRTooLow;
+      const emoji = shouldExecLocal ? '✅' : '❌';
       console.log(`📐 LOCAL ${emoji} ${s.asset} ${local.bestDirection} score=${local.score} [${local.strategy}] ${local.reason}`);
       return {
         signalId: `${s.asset}-${Date.now()}`,
         asset: s.asset,
-        recommendation: local.shouldExecute ? 'EXECUTE' : 'SKIP',
+        recommendation: shouldExecLocal ? 'EXECUTE' : 'SKIP',
         confidence: local.score,
         reason: `LOCAL[${local.strategy}]: ${local.reason}`,
         adjustedConfluence: local.score,
-        riskLevel: local.score >= 60 ? 'LOW' : 'MEDIUM',
+        riskLevel: local.score >= 70 ? 'LOW' : 'MEDIUM',
         bestDirection: local.bestDirection,
       };
     });

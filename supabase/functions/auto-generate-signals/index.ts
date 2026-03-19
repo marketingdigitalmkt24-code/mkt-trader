@@ -1134,10 +1134,10 @@ serve(async (req) => {
 
               const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
               
-              // INVERTER direção para MT5 (mesma lógica da IQ Option)
-              const mt5InvertedDirection = bestMT5Signal.type === 'CALL' ? 'PUT' : 'CALL';
+              // USAR DIREÇÃO DA IA (Groq decide a melhor direção para MT5 também)
+              const mt5Direction = bestMT5Signal.aiDirection || bestMT5Signal.type;
 
-              console.log(`📡 MT5: ${bestMT5Signal.asset} ${bestMT5Signal.type}→${mt5InvertedDirection} (INVERTIDO) $${mt5TradeAmount} | Score: ${bestMT5Signal.indicators.confluenceScore}%`);
+              console.log(`📡 MT5: ${bestMT5Signal.asset} ${bestMT5Signal.originalType || bestMT5Signal.type}→${mt5Direction} (IA) $${mt5TradeAmount} | Score: ${bestMT5Signal.indicators.confluenceScore}%`);
 
               const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
                 body: {

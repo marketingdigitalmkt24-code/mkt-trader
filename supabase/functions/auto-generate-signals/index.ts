@@ -1096,8 +1096,10 @@ serve(async (req) => {
 
           if (freshPending && freshPending.length > 0) {
             console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente`);
-          } else if (bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
-            console.log(`⏭️ IQ: Confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}%`);
+          } else if (!bestSignal.aiConfidence && bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
+            console.log(`⏭️ IQ: Confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% (sem IA)`);
+          } else if (bestSignal.aiConfidence && bestSignal.aiConfidence < 55) {
+            console.log(`⏭️ IQ: IA confiança ${bestSignal.aiConfidence}% < 55%`);
           } else {
             const { data: iqConfig } = await supabase
               .from('iqoption_config')
@@ -1190,8 +1192,10 @@ serve(async (req) => {
 
       if (!bestMT5Signal) {
         console.log(`⏭️ MT5: Nenhum sinal disponível (IA: ${aiApprovedSignals.length} | Técnico: ${mt5FallbackSignals.length})`);
-      } else if (bestMT5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
-        console.log(`⏭️ MT5: Confluência ${bestMT5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
+      } else if (!bestMT5Signal.aiConfidence && bestMT5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
+        console.log(`⏭️ MT5: Confluência ${bestMT5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}% (sem IA)`);
+      } else if (bestMT5Signal.aiConfidence && bestMT5Signal.aiConfidence < 55) {
+        console.log(`⏭️ MT5: IA confiança ${bestMT5Signal.aiConfidence}% < 55%`);
       } else {
         // Verificar se é ativo OTC (MT5 não opera OTC)
         const isOTCAssetMT5 = bestMT5Signal.asset.toUpperCase().includes('OTC');

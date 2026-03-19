@@ -1016,7 +1016,7 @@ serve(async (req) => {
               // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso
               await supabase.from('trade_queue').insert({
                 asset: bestSignal.asset,
-                direction: invertedDirection,
+                direction: executionDirection,
                 amount: iqTradeAmount,
                 expiration,
                 signal_id: bestSignal.id,

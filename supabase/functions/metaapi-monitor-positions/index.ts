@@ -250,14 +250,14 @@ serve(async (req) => {
     // EURUSD closes 15% earlier since spread cost is minimal — faster profit
     const EURUSD_SPREAD_MULTIPLIER = 0.85;
 
-    // Loop mode: run for ~55 seconds checking every 3 seconds
-    const maxIterations = loopMode ? 18 : 1; // 18 * 3s = 54s
+    // Loop mode: run for ~55 seconds checking every 1 second (spread strategy)
+    const maxIterations = loopMode ? 55 : 1; // 55 * 1s = 55s
     const allClosed: any[] = [];
     let lastOpenPositions: any[] = [];
 
     for (let i = 0; i < maxIterations; i++) {
       if (i > 0) {
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 1000)); // 1 segundo entre verificações
       }
 
       try {

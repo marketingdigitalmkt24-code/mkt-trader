@@ -1186,7 +1186,7 @@ serve(async (req) => {
       // MT5: usar sinal aprovado pela IA OU fallback técnico forte
       const bestMT5Signal = aiApprovedSignals[0] || mt5FallbackSignals[0];
 
-      const MT5_MIN_CONFLUENCE = 70; // MT5: confluência alta para compensar spread e garantir lucro
+      const MT5_MIN_CONFLUENCE = 60; // MT5: confluência mínima para operações lucrativas
 
       if (!bestMT5Signal) {
         console.log(`⏭️ MT5: Nenhum sinal disponível (IA: ${aiApprovedSignals.length} | Técnico: ${mt5FallbackSignals.length})`);

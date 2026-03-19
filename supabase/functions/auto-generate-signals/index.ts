@@ -870,26 +870,37 @@ serve(async (req) => {
       console.error('❌ Falha ao chamar IA:', e);
     }
 
-    if (aiApprovedSignals.length === 0) {
-      console.log('⚠️ IA não aprovou sinais reais — NÃO operando');
+    // Se IA não aprovou nenhum sinal, ainda permitir MT5 com sinais técnicos fortes
+    const mt5FallbackSignals = aiApprovedSignals.length === 0 ? candidates.filter(c => 
+      c.indicators.confluenceScore >= 65 && !c.asset.toUpperCase().includes('OTC')
+    ).sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore) : [];
+
+    if (aiApprovedSignals.length === 0 && mt5FallbackSignals.length === 0) {
+      console.log('⚠️ IA não aprovou sinais reais e nenhum sinal técnico forte para MT5');
       return new Response(
         JSON.stringify({ success: true, generated: 0, reason: 'AI did not approve any real signals' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
+    if (aiApprovedSignals.length === 0 && mt5FallbackSignals.length > 0) {
+      console.log(`⚠️ IA não aprovou sinais, mas MT5 tem ${mt5FallbackSignals.length} sinal(is) técnico(s) forte(s)`);
+    }
+
+    if (aiApprovedSignals.length > 0) {
+      aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
+    }
 
     // ============= EXECUTE BEST SIGNAL =============
-    const signalsToExecute = [aiApprovedSignals[0]];
-    console.log(`🎯 MELHOR sinal REAL: ${signalsToExecute[0].asset} (${signalsToExecute[0].type}) — Score: ${signalsToExecute[0].indicators.confluenceScore}% | Preço REAL: ${signalsToExecute[0].price}`);
-
+    const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
+    
     let totalIQ = 0;
     let totalMT5 = 0;
     let totalWhatsApp = 0;
     const executedSignals: any[] = [];
 
     for (const bestSignal of signalsToExecute) {
+      console.log(`🎯 MELHOR sinal REAL: ${bestSignal.asset} (${bestSignal.type}) — Score: ${bestSignal.indicators.confluenceScore}% | Preço REAL: ${bestSignal.price}`);
       const hist = assetHistory.get(bestSignal.asset);
       const histInfo = hist ? ` | History: WR ${hist.winRate}% (${hist.wins}W/${hist.losses}L)` : ' | No history';
       const aiInfo = bestSignal.aiConfidence ? ` | IA: ${bestSignal.aiConfidence}% (${bestSignal.aiReason})` : '';
@@ -1057,12 +1068,13 @@ serve(async (req) => {
     // ============= MT5 TRADE — MESMA ESTRATÉGIA DA IQ OPTION =============
     // MT5 usa o mesmo melhor sinal da IQ Option, com uma operação por vez
     try {
-      const bestMT5Signal = aiApprovedSignals[0]; // Mesmo melhor sinal
+      // MT5: usar sinal aprovado pela IA OU fallback técnico forte
+      const bestMT5Signal = aiApprovedSignals[0] || mt5FallbackSignals[0];
 
-      const MT5_MIN_CONFLUENCE = 70; // MT5: alta probabilidade — entrar apenas em trades seguros
+      const MT5_MIN_CONFLUENCE = 60; // MT5: confluência mínima para operações lucrativas
 
       if (!bestMT5Signal) {
-        console.log(`⏭️ MT5: Nenhum sinal aprovado pela IA neste ciclo`);
+        console.log(`⏭️ MT5: Nenhum sinal disponível (IA: ${aiApprovedSignals.length} | Técnico: ${mt5FallbackSignals.length})`);
       } else if (bestMT5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
         console.log(`⏭️ MT5: Confluência ${bestMT5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
       } else {

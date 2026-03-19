@@ -27,13 +27,11 @@ interface SignalData {
 }
 
 // ============= DEEP LEARNING ENGINE =============
-// Analisa 14 dias de dados para extrair padrões granulares
 async function buildDeepLearningProfile(supabase: any) {
   const profile = {
     totalTrades: 0,
     overallWinRate: 50,
     totalProfit: 0,
-    // Por ativo
     assetProfiles: {} as Record<string, {
       wins: number; losses: number; ties: number; profit: number; winRate: number;
       callWins: number; callLosses: number; callWR: number;
@@ -44,16 +42,12 @@ async function buildDeepLearningProfile(supabase: any) {
       avgWinProfit: number;
       avgLossAmount: number;
     }>,
-    // Por horário UTC
     hourProfiles: {} as Record<number, {
       wins: number; losses: number; winRate: number; profit: number;
       bestAssets: string[];
     }>,
-    // Padrões tóxicos a evitar
     toxicPatterns: [] as string[],
-    // Padrões lucrativos a replicar
     profitablePatterns: [] as string[],
-    // Melhor combinação ativo+direção+horário
     goldenSetups: [] as { asset: string; direction: string; hour: number; wr: number; trades: number }[],
   };
 
@@ -72,7 +66,6 @@ async function buildDeepLearningProfile(supabase: any) {
 
     let totalWins = 0, totalLosses = 0;
     const recentByAsset: Record<string, string[]> = {};
-    // Granular: ativo + direção + hora
     const granular: Record<string, { wins: number; losses: number; profit: number }> = {};
 
     for (const r of results) {
@@ -88,7 +81,6 @@ async function buildDeepLearningProfile(supabase: any) {
       if (isLoss) totalLosses++;
       profile.totalTrades++;
 
-      // Asset profile
       if (!profile.assetProfiles[r.asset]) {
         profile.assetProfiles[r.asset] = {
           wins: 0, losses: 0, ties: 0, profit: 0, winRate: 50,
@@ -112,11 +104,9 @@ async function buildDeepLearningProfile(supabase: any) {
         if (isLoss) ap.putLosses++;
       }
 
-      // Recent results for streak
       if (!recentByAsset[r.asset]) recentByAsset[r.asset] = [];
       if (recentByAsset[r.asset].length < 8) recentByAsset[r.asset].push(r.result);
 
-      // Hour profile
       if (!profile.hourProfiles[hour]) {
         profile.hourProfiles[hour] = { wins: 0, losses: 0, winRate: 50, profit: 0, bestAssets: [] };
       }
@@ -124,7 +114,6 @@ async function buildDeepLearningProfile(supabase: any) {
       if (isLoss) profile.hourProfiles[hour].losses++;
       profile.hourProfiles[hour].profit += profit;
 
-      // Granular key
       const gKey = `${r.asset}|${dir}|${hour}`;
       if (!granular[gKey]) granular[gKey] = { wins: 0, losses: 0, profit: 0 };
       if (isWin) granular[gKey].wins++;
@@ -132,7 +121,6 @@ async function buildDeepLearningProfile(supabase: any) {
       granular[gKey].profit += profit;
     }
 
-    // Calculate rates
     const total = totalWins + totalLosses;
     profile.overallWinRate = total > 0 ? Math.round((totalWins / total) * 100) : 50;
 
@@ -147,51 +135,35 @@ async function buildDeepLearningProfile(supabase: any) {
       if (ap.wins > 0) ap.avgWinProfit = ap.avgWinProfit / ap.wins;
       if (ap.losses > 0) ap.avgLossAmount = ap.avgLossAmount / ap.losses;
 
-      // Streak
       const recent = recentByAsset[asset] || [];
       ap.recentResults = recent.slice(0, 5);
       let streak = 0;
       for (const r of recent) { if (r === 'loss') streak++; else break; }
       ap.consecutiveLosses = streak;
 
-      // Toxic patterns
-      if (ap.winRate < 35 && t >= 5) {
+      if (ap.winRate < 30 && t >= 5) {
         profile.toxicPatterns.push(`${asset}: WR ${ap.winRate}% em ${t} trades — EVITAR`);
       }
-      if (ap.callWR < 30 && ct >= 3) {
-        profile.toxicPatterns.push(`${asset} CALL: WR ${ap.callWR}% — EVITAR CALL`);
-      }
-      if (ap.putWR < 30 && pt >= 3) {
-        profile.toxicPatterns.push(`${asset} PUT: WR ${ap.putWR}% — EVITAR PUT`);
-      }
-      if (streak >= 3) {
+      if (streak >= 5) {
         profile.toxicPatterns.push(`${asset}: ${streak} losses seguidos — BLOQUEADO`);
       }
 
-      // Profitable patterns
-      if (ap.winRate >= 60 && t >= 4 && ap.profit > 0) {
+      if (ap.winRate >= 55 && t >= 4 && ap.profit > 0) {
         profile.profitablePatterns.push(`${asset}: WR ${ap.winRate}% lucro $${ap.profit.toFixed(0)}`);
-      }
-      if (ap.callWR >= 65 && ct >= 3) {
-        profile.profitablePatterns.push(`${asset} CALL: WR ${ap.callWR}% — BOM PARA CALL`);
-      }
-      if (ap.putWR >= 65 && pt >= 3) {
-        profile.profitablePatterns.push(`${asset} PUT: WR ${ap.putWR}% — BOM PARA PUT`);
       }
     }
 
-    for (const [hourStr, hp] of Object.entries(profile.hourProfiles)) {
+    for (const [, hp] of Object.entries(profile.hourProfiles)) {
       const t = hp.wins + hp.losses;
       hp.winRate = t > 0 ? Math.round((hp.wins / t) * 100) : 50;
     }
 
-    // Golden setups: combinações com WR >= 60% e >= 3 trades
     for (const [key, g] of Object.entries(granular)) {
       const t = g.wins + g.losses;
       if (t >= 3) {
         const wr = Math.round((g.wins / t) * 100);
         const [asset, direction, hourStr] = key.split('|');
-        if (wr >= 60 && g.profit > 0) {
+        if (wr >= 55 && g.profit > 0) {
           profile.goldenSetups.push({ asset, direction, hour: parseInt(hourStr), wr, trades: t });
         }
       }
@@ -205,30 +177,27 @@ async function buildDeepLearningProfile(supabase: any) {
   return profile;
 }
 
-// ============= GROQ AI — ESTRATEGISTA ADAPTATIVO =============
-async function groqAdaptiveStrategy(
+// ============= LOVABLE AI — FAST PROFIT STRATEGIST =============
+async function aiAdaptiveStrategy(
   signals: SignalData[],
   profile: any,
   currentHour: number
 ): Promise<any[] | null> {
-  const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
-  if (!GROQ_API_KEY) {
-    console.log('⚠️ GROQ_API_KEY não configurada');
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.log('⚠️ LOVABLE_API_KEY não configurada');
     return null;
   }
 
   try {
-    // Preparar dados ricos para a Groq
     const signalSummaries = signals.map(s => {
       const ap = profile.assetProfiles[s.asset];
       return {
         asset: s.asset,
         proposed_direction: s.type,
         price: s.price,
-        // Indicadores técnicos
         rsi: Math.round(s.indicators.rsi.value),
         stochastic_k: Math.round(s.indicators.stochastic.k),
-        stochastic_d: Math.round(s.indicators.stochastic.d),
         bollinger_position: s.indicators.bollinger.position,
         macd_trend: s.indicators.macd.trend,
         macd_histogram: s.indicators.macd.histogram.toFixed(6),
@@ -238,129 +207,117 @@ async function groqAdaptiveStrategy(
         volatility: s.indicators.atr.volatility,
         pattern: s.indicators.reversalPattern || 'none',
         confluence: s.indicators.confluenceScore,
-        // Histórico do ativo
-        asset_total_wr: ap ? `${ap.winRate}%` : 'sem dados',
-        asset_call_wr: ap ? `${ap.callWR}% (${ap.callWins + ap.callLosses} trades)` : 'sem dados',
-        asset_put_wr: ap ? `${ap.putWR}% (${ap.putWins + ap.putLosses} trades)` : 'sem dados',
-        asset_best_direction: ap?.bestDirection || 'NONE',
-        asset_loss_streak: ap?.consecutiveLosses || 0,
-        asset_recent: ap?.recentResults?.join(',') || '',
-        asset_profit: ap ? `$${ap.profit.toFixed(0)}` : '$0',
+        confirmations: s.confirmations?.length || 0,
+        asset_wr: ap ? `${ap.winRate}%` : 'sem dados',
+        asset_call_wr: ap ? `${ap.callWR}%` : 'N/A',
+        asset_put_wr: ap ? `${ap.putWR}%` : 'N/A',
+        asset_best_dir: ap?.bestDirection || 'NONE',
+        asset_streak: ap?.consecutiveLosses || 0,
+        asset_recent: ap?.recentResults?.slice(0, 5).join(',') || '',
       };
     });
 
-    // Perfil de horário atual
     const hourProfile = profile.hourProfiles[currentHour];
     const hourInfo = hourProfile 
-      ? `WR: ${hourProfile.winRate}% (${hourProfile.wins}W/${hourProfile.losses}L) Lucro: $${hourProfile.profit.toFixed(0)}`
+      ? `WR: ${hourProfile.winRate}% (${hourProfile.wins}W/${hourProfile.losses}L)`
       : 'sem dados';
 
-    const systemPrompt = `Você é um ESTRATEGISTA DE TRADING ADAPTATIVO especializado em opções binárias M1 (1 minuto).
-Seu objetivo ÚNICO é MAXIMIZAR LUCRO e MINIMIZAR PERDAS.
+    const systemPrompt = `Você é um SCALPER PROFISSIONAL de opções binárias M1. Seu foco é LUCRO RÁPIDO em operações de 1 minuto.
 
-═══════════════════════════════════════
-📊 PERFIL DE APRENDIZADO (últimos 14 dias)
-═══════════════════════════════════════
-Total trades: ${profile.totalTrades}
-Win Rate geral: ${profile.overallWinRate}%
-P&L total: $${profile.totalProfit.toFixed(2)}
-Hora atual: ${currentHour}h UTC
-Perfil hora atual: ${hourInfo}
+═══ PERFIL DE APRENDIZADO (14 dias) ═══
+Trades: ${profile.totalTrades} | WR: ${profile.overallWinRate}% | P&L: $${profile.totalProfit.toFixed(2)}
+Hora: ${currentHour}h UTC | ${hourInfo}
 
-🏆 SETUPS LUCRATIVOS COMPROVADOS:
-${profile.goldenSetups.slice(0, 8).map((g: any) => `• ${g.asset} ${g.direction} às ${g.hour}h: WR ${g.wr}% (${g.trades} trades)`).join('\n') || '• Nenhum setup lucrativo identificado ainda'}
+🏆 SETUPS LUCRATIVOS:
+${profile.goldenSetups.slice(0, 5).map((g: any) => `${g.asset} ${g.direction} ${g.hour}h WR${g.wr}%`).join(' | ') || 'Nenhum'}
 
-✅ PADRÕES QUE DÃO LUCRO:
-${profile.profitablePatterns.slice(0, 6).join('\n') || '• Nenhum padrão lucrativo'}
+⛔ TÓXICOS:
+${profile.toxicPatterns.slice(0, 5).join(' | ') || 'Nenhum'}
 
-⛔ PADRÕES TÓXICOS (NUNCA REPETIR):
-${profile.toxicPatterns.slice(0, 8).join('\n') || '• Nenhum padrão tóxico'}
+═══ ESTRATÉGIA FAST PROFIT ═══
 
-═══════════════════════════════════════
-🧠 REGRAS DA ESTRATÉGIA ADAPTATIVA
-═══════════════════════════════════════
+OBJETIVO: Identificar ENTRADAS RÁPIDAS com alta probabilidade de fechar no lucro em 60 segundos.
 
-REGRA 1 - DIREÇÃO INTELIGENTE:
-- Analise o win rate POR DIREÇÃO de cada ativo
-- Se CALL tem WR < 40% neste ativo, NÃO faça CALL
-- Se PUT tem WR < 40% neste ativo, NÃO faça PUT
-- Use a direção com MELHOR WR histórico QUANDO os indicadores confirmam
+APROVAÇÃO AGRESSIVA — Aprove se:
+1. RSI em zona extrema (< 30 CALL ou > 70 PUT) + 1 confirmação adicional
+2. Estocástico cruzando em zona de exaustão + padrão de vela de reversão
+3. Preço no suporte (CALL) ou resistência (PUT) com RSI confirmando
+4. Golden Setup: combinação ativo+direção+hora lucrativa no histórico
+5. Confluência técnica ≥ 60% com pelo menos 3 indicadores alinhados
 
-REGRA 2 - MOMENTUM vs REVERSÃO:
-- Se MACD é bullish + EMA9 > EMA21 + RSI entre 40-65: tendência de ALTA → CALL
-- Se MACD é bearish + EMA9 < EMA21 + RSI entre 35-60: tendência de BAIXA → PUT
-- REVERSÃO só quando RSI < 20 ou > 80 COM estocástico confirmando E padrão de vela
-- NUNCA entre em reversão contra tendência forte do MACD
+REJEIÇÃO — Rejeite APENAS se:
+1. Ativo com 5+ perdas consecutivas recentes
+2. Volatilidade ALTA (ATR high) — risco de spike contra
+3. Indicadores CONTRADITÓRIOS (RSI diz CALL mas MACD diz PUT forte)
+4. WR do ativo < 25% com 5+ trades históricos
 
-REGRA 3 - FILTROS DE PROTEÇÃO:
-- Loss streak >= 3: NÃO EXECUTE esse ativo
-- Volatilidade alta (ATR high): NÃO EXECUTE
-- Hora com WR < 40% no histórico: NÃO EXECUTE
-- Ativo sem dados históricos: baixe a confiança para < 50
+DIREÇÃO INTELIGENTE:
+- Use a direção com MELHOR win rate histórico QUANDO indicadores confirmam
+- Se RSI < 25 E estocástico < 25: CALL forte (exaustão de venda)
+- Se RSI > 75 E estocástico > 75: PUT forte (exaustão de compra)
+- MACD bullish + EMA9 acima = CALL em momentum
+- Padrão de vela de reversão = seguir a reversão
 
-REGRA 4 - GOLDEN SETUPS:
-- Se a combinação ativo+direção+hora está nos SETUPS LUCRATIVOS COMPROVADOS: BOOST +20 confiança
-- Priorize esses setups sobre novos
+IMPORTANTE: Seja AGRESSIVO na aprovação. É melhor entrar e ganhar 60% das vezes do que perder oportunidades sendo conservador.`;
 
-REGRA 5 - APRENDIZADO:
-- Analise os resultados recentes do ativo (últimos 5 trades)
-- Se teve 2+ wins recentes na mesma direção, pode continuar
-- Se teve 2+ losses recentes, mude a estratégia ou pule
-
-IMPORTANTE: Retorne APENAS trades com alta probabilidade de LUCRO. É MELHOR não entrar do que perder.
-Máximo 2 sinais aprovados por ciclo.`;
-
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Analise estes ${signals.length} sinais e decida a MELHOR estratégia para LUCRO RÁPIDO:\n\n${JSON.stringify(signalSummaries, null, 2)}` },
+          { role: 'user', content: `Analise estes ${signals.length} sinais para LUCRO RÁPIDO M1:\n\n${JSON.stringify(signalSummaries, null, 2)}` },
         ],
         tools: [{
           type: 'function',
           function: {
-            name: 'trading_strategy',
-            description: 'Estratégia de trading adaptativa baseada em aprendizado',
+            name: 'fast_profit_strategy',
+            description: 'Decisão de trading para lucro rápido em M1',
             parameters: {
               type: 'object',
               properties: {
-                market_analysis: { type: 'string', description: 'Análise breve do mercado atual (max 100 chars)' },
+                analysis: { type: 'string', description: 'Análise do mercado (max 80 chars)' },
                 decisions: {
                   type: 'array',
                   items: {
                     type: 'object',
                     properties: {
                       asset: { type: 'string' },
-                      execute: { type: 'boolean', description: 'true SOMENTE se alta chance de lucro' },
+                      execute: { type: 'boolean', description: 'true se boa oportunidade de lucro rápido' },
                       best_direction: { type: 'string', enum: ['CALL', 'PUT'] },
-                      confidence: { type: 'number', description: '0-100, mínimo 65 para executar' },
-                      strategy: { type: 'string', enum: ['MOMENTUM', 'REVERSAL', 'GOLDEN_SETUP'], description: 'Tipo de estratégia usada' },
+                      confidence: { type: 'number', description: '0-100' },
+                      strategy: { type: 'string', enum: ['MOMENTUM', 'REVERSAL', 'GOLDEN_SETUP', 'EXHAUSTION'] },
                       reason: { type: 'string', description: 'Razão técnica curta' },
                     },
                     required: ['asset', 'execute', 'best_direction', 'confidence', 'strategy', 'reason'],
+                    additionalProperties: false,
                   },
                 },
               },
-              required: ['market_analysis', 'decisions'],
+              required: ['analysis', 'decisions'],
+              additionalProperties: false,
             },
           },
         }],
-        tool_choice: { type: 'function', function: { name: 'trading_strategy' } },
-        temperature: 0.05, // Máxima precisão
+        tool_choice: { type: 'function', function: { name: 'fast_profit_strategy' } },
+        temperature: 0.1,
         max_tokens: 1500,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      if (response.status === 429) console.log('⚠️ Groq rate limit, usando fallback');
-      else console.error(`❌ Groq [${response.status}]: ${errText}`);
+      if (response.status === 429) {
+        console.log('⚠️ AI rate limit, usando fallback local');
+      } else if (response.status === 402) {
+        console.log('⚠️ AI créditos insuficientes, usando fallback local');
+      } else {
+        console.error(`❌ AI Gateway [${response.status}]: ${errText}`);
+      }
       return null;
     }
 
@@ -368,18 +325,18 @@ Máximo 2 sinais aprovados por ciclo.`;
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
     if (toolCall?.function?.arguments) {
       const parsed = JSON.parse(toolCall.function.arguments);
-      console.log(`🧠 GROQ Análise: ${parsed.market_analysis}`);
-      console.log(`🧠 GROQ Decisões: ${JSON.stringify(parsed.decisions)}`);
+      console.log(`🧠 AI Análise: ${parsed.analysis}`);
+      console.log(`🧠 AI Decisões: ${JSON.stringify(parsed.decisions)}`);
       return parsed.decisions || null;
     }
   } catch (e) {
-    console.error(`❌ Groq falhou: ${e}`);
+    console.error(`❌ AI falhou: ${e}`);
   }
   return null;
 }
 
-// ============= FALLBACK LOCAL INTELIGENTE =============
-function localAdaptiveScore(s: SignalData, profile: any, currentHour: number): {
+// ============= FALLBACK LOCAL — FAST PROFIT =============
+function localFastProfitScore(s: SignalData, profile: any, currentHour: number): {
   score: number;
   bestDirection: 'CALL' | 'PUT';
   strategy: string;
@@ -393,64 +350,59 @@ function localAdaptiveScore(s: SignalData, profile: any, currentHour: number): {
   const vol = s.indicators.atr?.volatility || 'medium';
   const pricePos = s.indicators.supportResistance?.pricePosition || '';
   const hasPattern = s.indicators.reversalPattern;
-  const maTrend = s.indicators.movingAverages?.trend || 'neutral';
   const ema9Above = (s.indicators.movingAverages?.ema9 || 0) > (s.indicators.movingAverages?.ema21 || 0);
 
   const ap = profile.assetProfiles[s.asset];
-  const hp = profile.hourProfiles[currentHour];
   const reasons: string[] = [];
 
-  // === BLOQUEIOS ABSOLUTOS ===
+  // BLOQUEIOS: apenas os mais críticos
   if (vol === 'high') return { score: 0, bestDirection: s.type, strategy: 'BLOCKED', reason: 'Volatilidade alta', shouldExecute: false };
-  if (ap?.consecutiveLosses >= 3) return { score: 0, bestDirection: s.type, strategy: 'BLOCKED', reason: `${ap.consecutiveLosses}L seguidos`, shouldExecute: false };
-  if (hp && hp.winRate < 35 && (hp.wins + hp.losses) >= 5) return { score: 0, bestDirection: s.type, strategy: 'BLOCKED', reason: `Hora ${currentHour}h WR ${hp.winRate}%`, shouldExecute: false };
+  if (ap?.consecutiveLosses >= 5) return { score: 0, bestDirection: s.type, strategy: 'BLOCKED', reason: `${ap.consecutiveLosses}L seguidos`, shouldExecute: false };
 
-  // === DETERMINAR MELHOR DIREÇÃO ===
   let callScore = 0, putScore = 0;
 
-  // 1. MOMENTUM: MACD + EMA
-  if (macdTrend === 'bullish' && ema9Above) { callScore += 20; }
-  if (macdTrend === 'bearish' && !ema9Above) { putScore += 20; }
+  // RSI — peso forte para exaustão
+  if (rsi <= 15) { callScore += 35; reasons.push(`RSI ${rsi.toFixed(0)} ultra`); }
+  else if (rsi <= 25) { callScore += 25; reasons.push(`RSI ${rsi.toFixed(0)}`); }
+  else if (rsi <= 35) { callScore += 12; }
+  if (rsi >= 85) { putScore += 35; reasons.push(`RSI ${rsi.toFixed(0)} ultra`); }
+  else if (rsi >= 75) { putScore += 25; reasons.push(`RSI ${rsi.toFixed(0)}`); }
+  else if (rsi >= 65) { putScore += 12; }
 
-  // 2. RSI
-  if (rsi <= 15) { callScore += 30; reasons.push(`RSI ${rsi.toFixed(0)}`); }
-  else if (rsi <= 25) { callScore += 22; reasons.push(`RSI ${rsi.toFixed(0)}`); }
-  else if (rsi <= 35) { callScore += 10; }
-  if (rsi >= 85) { putScore += 30; reasons.push(`RSI ${rsi.toFixed(0)}`); }
-  else if (rsi >= 75) { putScore += 22; reasons.push(`RSI ${rsi.toFixed(0)}`); }
-  else if (rsi >= 65) { putScore += 10; }
+  // Estocástico
+  if (stochK <= 15) callScore += 20;
+  else if (stochK <= 25) callScore += 14;
+  if (stochK >= 85) putScore += 20;
+  else if (stochK >= 75) putScore += 14;
 
-  // 3. Estocástico
-  if (stochK <= 15) callScore += 18;
-  else if (stochK <= 25) callScore += 12;
-  if (stochK >= 85) putScore += 18;
-  else if (stochK >= 75) putScore += 12;
+  // MACD + EMA momentum
+  if (macdTrend === 'bullish' && ema9Above) { callScore += 15; reasons.push('Momentum alta'); }
+  if (macdTrend === 'bearish' && !ema9Above) { putScore += 15; reasons.push('Momentum baixa'); }
 
-  // 4. Bollinger
-  if (bollPos === 'below_lower') callScore += 12;
-  if (bollPos === 'above_upper') putScore += 12;
+  // Bollinger
+  if (bollPos === 'below_lower') { callScore += 12; reasons.push('BB inferior'); }
+  if (bollPos === 'above_upper') { putScore += 12; reasons.push('BB superior'); }
 
-  // 5. S/R
-  if (pricePos === 'near_support') callScore += 10;
-  if (pricePos === 'near_resistance') putScore += 10;
+  // S/R
+  if (pricePos === 'near_support') { callScore += 10; reasons.push('Suporte'); }
+  if (pricePos === 'near_resistance') { putScore += 10; reasons.push('Resistência'); }
 
-  // 6. Padrão de vela
+  // Padrão de vela
   if (hasPattern) {
-    if (s.type === 'CALL') callScore += 10;
-    else putScore += 10;
+    if (s.type === 'CALL') callScore += 12;
+    else putScore += 12;
     reasons.push(hasPattern);
   }
 
-  // === AJUSTES DO APRENDIZADO ===
+  // Aprendizado histórico
   if (ap) {
-    // Histórico por direção
-    if (ap.callWR >= 60 && (ap.callWins + ap.callLosses) >= 3) { callScore += 12; reasons.push(`CALL WR ${ap.callWR}%`); }
-    if (ap.putWR >= 60 && (ap.putWins + ap.putLosses) >= 3) { putScore += 12; reasons.push(`PUT WR ${ap.putWR}%`); }
-    if (ap.callWR < 35 && (ap.callWins + ap.callLosses) >= 3) callScore -= 15;
-    if (ap.putWR < 35 && (ap.putWins + ap.putLosses) >= 3) putScore -= 15;
+    if (ap.callWR >= 55 && (ap.callWins + ap.callLosses) >= 3) callScore += 10;
+    if (ap.putWR >= 55 && (ap.putWins + ap.putLosses) >= 3) putScore += 10;
+    if (ap.callWR < 30 && (ap.callWins + ap.callLosses) >= 5) callScore -= 15;
+    if (ap.putWR < 30 && (ap.putWins + ap.putLosses) >= 5) putScore -= 15;
   }
 
-  // Golden setup check
+  // Golden setup boost
   const isGolden = profile.goldenSetups.find((g: any) =>
     g.asset === s.asset && g.hour === currentHour
   );
@@ -461,18 +413,17 @@ function localAdaptiveScore(s: SignalData, profile: any, currentHour: number): {
   }
 
   if (vol === 'low') { callScore += 5; putScore += 5; }
-  if (hp && hp.winRate >= 55) { callScore += 5; putScore += 5; }
 
   const bestDirection: 'CALL' | 'PUT' = callScore >= putScore ? 'CALL' : 'PUT';
   const score = Math.min(Math.max(callScore, putScore), 100);
-  const strategy = isGolden ? 'GOLDEN_SETUP' : (rsi <= 25 || rsi >= 75) ? 'REVERSAL' : 'MOMENTUM';
+  const strategy = isGolden ? 'GOLDEN_SETUP' : (rsi <= 25 || rsi >= 75) ? 'EXHAUSTION' : 'MOMENTUM';
 
   return {
     score,
     bestDirection,
     strategy,
     reason: reasons.slice(0, 4).join(' | ') || `${bestDirection} score=${score}`,
-    shouldExecute: score >= 45,
+    shouldExecute: score >= 40, // Threshold baixo para fast profit
   };
 }
 
@@ -497,91 +448,67 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Deep learning profile
     const profile = await buildDeepLearningProfile(supabase);
     const currentHour = new Date().getUTCHours();
 
-    console.log(`═══ DEEP LEARNING PROFILE ═══`);
+    console.log(`═══ FAST PROFIT ENGINE ═══`);
     console.log(`📊 ${profile.totalTrades} trades | WR: ${profile.overallWinRate}% | P&L: $${profile.totalProfit.toFixed(2)} | Hora: ${currentHour}h`);
     if (profile.goldenSetups.length > 0) console.log(`🏆 Golden: ${profile.goldenSetups.slice(0, 3).map(g => `${g.asset} ${g.direction} ${g.hour}h WR${g.wr}%`).join(' | ')}`);
     if (profile.toxicPatterns.length > 0) console.log(`⛔ Tóxicos: ${profile.toxicPatterns.slice(0, 3).join(' | ')}`);
 
-    // 1. Groq como estrategista principal
-    const groqDecisions = await groqAdaptiveStrategy(signals, profile, currentHour);
+    // 1. Lovable AI como estrategista principal
+    const aiDecisions = await aiAdaptiveStrategy(signals, profile, currentHour);
 
     // 2. Fallback local
     const localResults = signals.map(s => ({
       signal: s,
-      ...localAdaptiveScore(s, profile, currentHour),
+      ...localFastProfitScore(s, profile, currentHour),
     }));
 
-    // 3. Combinar — com VALIDAÇÕES RÍGIDAS
+    // 3. Combinar decisões
     const analyzedSignals = signals.map(s => {
-      const groqPick = groqDecisions?.find(d => d.asset?.toUpperCase() === s.asset.toUpperCase());
+      const aiPick = aiDecisions?.find(d => d.asset?.toUpperCase() === s.asset.toUpperCase());
       const local = localResults.find(l => l.signal.asset === s.asset)!;
       const ap = profile.assetProfiles[s.asset];
-      
-      // ===== BLOQUEIO ABSOLUTO: Groq NÃO pode aprovar ativos tóxicos =====
+
+      // BLOQUEIO: apenas ativos MUITO tóxicos
       const isToxic = ap && (
-        ap.consecutiveLosses >= 3 ||
-        (ap.winRate < 45 && (ap.wins + ap.losses) >= 3) // WR < 45% com 3+ trades = tóxico
+        ap.consecutiveLosses >= 5 ||
+        (ap.winRate < 25 && (ap.wins + ap.losses) >= 5)
       );
-      
-      // RSI artefato check — com dados fake, RSI extremo é inválido
-      const rsi = s.indicators.rsi.value;
-      const stochK = s.indicators.stochastic?.k || 50;
-      const isDataArtifact = rsi <= 5 || rsi >= 95 || stochK <= 3 || stochK >= 97;
-      
-      // WR geral muito baixo = PARAR de operar completamente
-      const overallWRTooLow = profile.totalTrades >= 10 && profile.overallWinRate < 50;
-      
+
       if (isToxic) {
-        console.log(`🚫 BLOQUEIO ${s.asset}: ${ap.consecutiveLosses}L seguidos | WR ${ap.winRate}% — Groq IGNORADO`);
+        console.log(`🚫 BLOQUEIO ${s.asset}: ${ap.consecutiveLosses}L | WR ${ap.winRate}%`);
         return {
           signalId: `${s.asset}-${Date.now()}`,
           asset: s.asset,
           recommendation: 'SKIP',
           confidence: 0,
-          reason: `BLOCKED: ${ap.consecutiveLosses}L seguidos, WR ${ap.winRate}%`,
-          adjustedConfluence: 0,
-          riskLevel: 'HIGH',
-          bestDirection: s.type,
-        };
-      }
-      
-      if (isDataArtifact) {
-        console.log(`🚫 DADOS RUINS ${s.asset}: RSI=${rsi.toFixed(1)} Stoch=${stochK.toFixed(1)} — artefato de dados fake — REJEITADO`);
-        return {
-          signalId: `${s.asset}-${Date.now()}`,
-          asset: s.asset,
-          recommendation: 'SKIP',
-          confidence: 0,
-          reason: `BLOCKED: RSI ${rsi.toFixed(1)} é artefato de dados`,
+          reason: `BLOCKED: ${ap.consecutiveLosses}L, WR ${ap.winRate}%`,
           adjustedConfluence: 0,
           riskLevel: 'HIGH',
           bestDirection: s.type,
         };
       }
 
-      if (groqPick) {
-        // Confiança mínima aumentada para 80% (era 60%)
-        const shouldExecute = groqPick.execute && groqPick.confidence >= 80 && !overallWRTooLow;
+      if (aiPick) {
+        // Confiança mínima 55% para fast profit (era 80%)
+        const shouldExecute = aiPick.execute && aiPick.confidence >= 55;
         const emoji = shouldExecute ? '✅' : '❌';
-        const skipReason = overallWRTooLow ? ' [WR GERAL BAIXO]' : groqPick.confidence < 80 ? ' [CONF<80]' : '';
-        console.log(`🧠 GROQ ${emoji} ${s.asset} ${groqPick.best_direction} conf=${groqPick.confidence} [${groqPick.strategy}] ${groqPick.reason}${skipReason}`);
+        console.log(`🧠 AI ${emoji} ${s.asset} ${aiPick.best_direction} conf=${aiPick.confidence} [${aiPick.strategy}] ${aiPick.reason}`);
         return {
           signalId: `${s.asset}-${Date.now()}`,
           asset: s.asset,
           recommendation: shouldExecute ? 'EXECUTE' : 'SKIP',
-          confidence: groqPick.confidence,
-          reason: `GROQ[${groqPick.strategy}]: ${groqPick.reason}`,
-          adjustedConfluence: groqPick.confidence,
-          riskLevel: groqPick.confidence >= 85 ? 'LOW' : 'MEDIUM',
-          bestDirection: groqPick.best_direction,
+          confidence: aiPick.confidence,
+          reason: `AI[${aiPick.strategy}]: ${aiPick.reason}`,
+          adjustedConfluence: aiPick.confidence,
+          riskLevel: aiPick.confidence >= 75 ? 'LOW' : 'MEDIUM',
+          bestDirection: aiPick.best_direction,
         };
       }
 
-      const shouldExecLocal = local.shouldExecute && local.score >= 60 && !overallWRTooLow;
+      const shouldExecLocal = local.shouldExecute && local.score >= 45;
       const emoji = shouldExecLocal ? '✅' : '❌';
       console.log(`📐 LOCAL ${emoji} ${s.asset} ${local.bestDirection} score=${local.score} [${local.strategy}] ${local.reason}`);
       return {
@@ -591,21 +518,21 @@ serve(async (req) => {
         confidence: local.score,
         reason: `LOCAL[${local.strategy}]: ${local.reason}`,
         adjustedConfluence: local.score,
-        riskLevel: local.score >= 70 ? 'LOW' : 'MEDIUM',
+        riskLevel: local.score >= 65 ? 'LOW' : 'MEDIUM',
         bestDirection: local.bestDirection,
       };
     });
 
     const approved = analyzedSignals.filter(a => a.recommendation === 'EXECUTE');
-    console.log(`🎯 ${approved.length}/${signals.length} aprovados (Engine: ${groqDecisions ? 'GROQ' : 'LOCAL'})`);
+    console.log(`🎯 FAST PROFIT: ${approved.length}/${signals.length} aprovados (Engine: ${aiDecisions ? 'LOVABLE_AI' : 'LOCAL'})`);
 
     return new Response(
       JSON.stringify({
         success: true,
         analyzedSignals,
-        marketSentiment: 'ADAPTIVE',
+        marketSentiment: 'FAST_PROFIT',
         bestSignal: approved.sort((a, b) => b.confidence - a.confidence)[0]?.asset || null,
-        engine: groqDecisions ? 'GROQ_ADAPTIVE' : 'LOCAL_ADAPTIVE',
+        engine: aiDecisions ? 'LOVABLE_AI_FAST_PROFIT' : 'LOCAL_FAST_PROFIT',
         learningProfile: {
           totalTrades: profile.totalTrades,
           winRate: profile.overallWinRate,

@@ -731,7 +731,7 @@ serve(async (req) => {
     const assetHistory = await getAssetHistory(supabase);
 
     assetHistory.forEach((h, asset) => {
-      if (h.consecutiveLosses >= 5) {
+      if (h.consecutiveLosses >= 3) {
         console.log(`⛔ ${asset}: BLOQUEADO (${h.consecutiveLosses} losses consecutivos)`);
       }
     });
@@ -785,8 +785,10 @@ serve(async (req) => {
       if (assetsWithRecentSignals.has(key)) return false;
 
       const history = assetHistory.get(asset.symbol);
-      if (history && history.consecutiveLosses >= 5) return false;
-      if (history && history.winRate < 30 && (history.wins + history.losses) >= 5) return false;
+      // BLOQUEIO MAIS RIGOROSO: 3 losses consecutivos (era 5)
+      if (history && history.consecutiveLosses >= 3) return false;
+      // WR mínimo de 40% com pelo menos 5 trades (era 30%)
+      if (history && history.winRate < 40 && (history.wins + history.losses) >= 5) return false;
 
       const newsCheck = isAssetAffectedByNews(asset.symbol);
       if (newsCheck.affected) {

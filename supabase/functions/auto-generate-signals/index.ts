@@ -123,31 +123,116 @@ const OTC_ASSETS: Asset[] = [
 
 const CRYPTO_ASSETS: Asset[] = [];
 
-// ============= PRICE DATA WITH REALISTIC SPREAD VARIATION =============
+// ============= METAAPI REAL CANDLES =============
 
-// Typical forex spreads (as percentage of price)
-const SPREAD_MAP: Record<string, number> = {
-  'EUR/USD': 0.00008, 'GBP/USD': 0.00012, 'USD/JPY': 0.008,
-  'AUD/USD': 0.00010, 'EUR/JPY': 0.012, 'GBP/JPY': 0.015,
-  'AUD/CAD': 0.00015, 'EUR/GBP': 0.00012, 'NZD/USD': 0.00012,
-  'USD/CHF': 0.00010, 'AUD/JPY': 0.012, 'CAD/JPY': 0.012,
+const PROVISIONING_URL = 'https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai';
+
+// XM symbol mapping (IQ Option format → MT5/XM format)
+const xmSymbolMap: Record<string, string> = {
+  'EUR/USD': 'EURUSD', 'GBP/USD': 'GBPUSD', 'USD/JPY': 'USDJPY',
+  'GBP/JPY': 'GBPJPY', 'EUR/JPY': 'EURJPY', 'AUD/USD': 'AUDUSD',
+  'AUD/CAD': 'AUDCAD', 'EUR/GBP': 'EURGBP', 'NZD/USD': 'NZDUSD',
+  'USD/CHF': 'USDCHF', 'AUD/JPY': 'AUDJPY', 'CAD/JPY': 'CADJPY',
 };
 
-// Deterministic pseudo-random based on symbol + timestamp (not Math.random!)
-function seededVariation(symbol: string, timestamp: number): number {
-  let hash = 0;
-  const str = `${symbol}${timestamp}`;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
+async function safeFetchMetaApi(url: string, options: RequestInit = {}): Promise<Response> {
+  try {
+    return await fetch(url, options);
+  } catch (e: any) {
+    if (e.message?.includes('certificate') || e.message?.includes('peer')) {
+      // @ts-ignore
+      const client = Deno.createHttpClient({ caCerts: [] });
+      return await fetch(url, { ...options, client } as any);
+    }
+    throw e;
   }
-  return (hash % 1000) / 1000; // 0 to 0.999
 }
 
-async function fetchBasePrices(): Promise<Map<string, number>> {
+async function getMetaApiAccountInfo(supabase: any): Promise<{ accountId: string; region: string; token: string } | null> {
+  const METAAPI_TOKEN = Deno.env.get('METAAPI_TOKEN');
+  if (!METAAPI_TOKEN) {
+    console.log('⚠️ METAAPI_TOKEN não configurado');
+    return null;
+  }
+
+  // Get account ID from metaapi_config
+  const { data: config } = await supabase
+    .from('metaapi_config')
+    .select('account_id')
+    .eq('is_active', true)
+    .limit(1)
+    .single();
+
+  if (!config?.account_id) {
+    console.log('⚠️ Nenhuma conta MT5 ativa configurada');
+    return null;
+  }
+
+  // Detect region from provisioning API
+  let region = 'new-york';
+  try {
+    const listRes = await safeFetchMetaApi(`${PROVISIONING_URL}/users/current/accounts`, {
+      headers: { 'auth-token': METAAPI_TOKEN },
+    });
+    if (listRes.ok) {
+      const accounts = await listRes.json();
+      const match = accounts.find((a: any) => (a.id || a._id) === config.account_id);
+      if (match?.region) {
+        region = match.region;
+        console.log(`🌐 MetaAPI região detectada: ${region}`);
+      }
+    }
+  } catch (e) {
+    console.log('⚠️ Usando região padrão new-york');
+  }
+
+  return { accountId: config.account_id, region, token: METAAPI_TOKEN };
+}
+
+async function fetchMetaApiCandles(
+  accountId: string,
+  region: string,
+  token: string,
+  symbol: string,
+  count: number = 30
+): Promise<{ time: string; open: number; high: number; low: number; close: number }[]> {
+  const mt5Symbol = xmSymbolMap[symbol];
+  if (!mt5Symbol) return [];
+
+  const marketDataUrl = `https://mt-market-data-client-api-v1.${region}.agiliumtrade.ai`;
+  const url = `${marketDataUrl}/users/current/accounts/${accountId}/historical-market-data/symbols/${mt5Symbol}/timeframes/1m/candles?limit=${count}`;
+
+  try {
+    const res = await safeFetchMetaApi(url, {
+      headers: { 'auth-token': token, 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) {
+      console.log(`⚠️ MetaAPI candles ${mt5Symbol} [${res.status}]: ${await res.text()}`);
+      return [];
+    }
+
+    const candles = await res.json();
+    if (!Array.isArray(candles) || candles.length === 0) return [];
+
+    console.log(`📊 MetaAPI: ${candles.length} candles reais para ${mt5Symbol}`);
+    return candles.map((c: any) => ({
+      time: c.time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
+  } catch (e) {
+    console.log(`⚠️ MetaAPI candles ${mt5Symbol} erro: ${e}`);
+    return [];
+  }
+}
+
+// Fallback: AwesomeAPI for base prices when MetaAPI unavailable
+async function fetchFallbackPrices(): Promise<Map<string, number>> {
   const prices = new Map<string, number>();
-  
-  // Try AwesomeAPI first (real-time)
   try {
     const response = await fetch('https://economia.awesomeapi.com.br/json/last/EUR-USD,GBP-USD,USD-JPY,AUD-USD', {
       signal: AbortSignal.timeout(5000),
@@ -160,74 +245,71 @@ async function fetchBasePrices(): Promise<Map<string, number>> {
         const bid = parseFloat(v.bid);
         if (!isNaN(bid)) prices.set(symbol, bid);
       }
-      if (prices.size > 0) {
-        console.log(`💹 AwesomeAPI: ${prices.size} pares real-time`);
-      }
     }
   } catch (e) { /* silent */ }
-
-  // Frankfurter fallback for remaining pairs
-  try {
-    const response = await fetch('https://api.frankfurter.dev/v1/latest?base=USD', {
-      signal: AbortSignal.timeout(6000),
-    });
-    if (response.ok) {
-      const data = await response.json();
-      const rates = data.rates || {};
-      const currencies: Record<string, number> = { USD: 1 };
-      for (const [cur, rate] of Object.entries(rates)) {
-        if (['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'].includes(cur)) {
-          currencies[cur] = rate as number;
-        }
-      }
-      const pairs = [
-        ['EUR', 'USD'], ['GBP', 'USD'], ['USD', 'JPY'], ['AUD', 'USD'],
-        ['EUR', 'JPY'], ['GBP', 'JPY'], ['AUD', 'CAD'], ['EUR', 'GBP'],
-        ['NZD', 'USD'], ['USD', 'CHF'], ['AUD', 'JPY'], ['CAD', 'JPY'],
-      ];
-      for (const [base, quote] of pairs) {
-        const sym = `${base}/${quote}`;
-        if (!prices.has(sym) && currencies[base] && currencies[quote]) {
-          prices.set(sym, currencies[quote] / currencies[base]);
-        }
-      }
-      console.log(`💹 Frankfurter: preencheu até ${prices.size} pares`);
-    }
-  } catch (e) {
-    console.log(`⚠️ Frankfurter falhou: ${e}`);
-  }
-
   return prices;
 }
 
 async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
-  // Clean old candles
+  // Clean old candles (2h+)
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   await supabase.from('price_candles').delete().lt('created_at', twoHoursAgo);
 
-  const basePrices = await fetchBasePrices();
   const finalPrices = new Map<string, number>();
-  const now = Date.now();
-  const minuteTs = Math.floor(now / 60000); // Unique per minute
-
-  // Apply realistic spread-based variation to create unique candle per minute
   const inserts: { symbol: string; price: number }[] = [];
-  
-  for (const [symbol, basePrice] of basePrices) {
-    const spread = SPREAD_MAP[symbol] || basePrice * 0.0001;
-    // Create a price that varies within typical spread range
-    const variation = seededVariation(symbol, minuteTs);
-    const direction = seededVariation(symbol, minuteTs + 7) > 0.5 ? 1 : -1;
-    const variedPrice = basePrice + (direction * spread * variation * 3); // Up to 3x spread variation
-    
-    finalPrices.set(symbol, variedPrice);
-    finalPrices.set(`${symbol}-OTC`, variedPrice);
-    inserts.push({ symbol, price: variedPrice });
+
+  // Try MetaAPI real candles first
+  const metaInfo = await getMetaApiAccountInfo(supabase);
+
+  if (metaInfo) {
+    console.log('🔗 Buscando candles REAIS via MetaAPI...');
+    const allSymbols = Object.keys(xmSymbolMap);
+
+    // Fetch candles for all symbols (sequentially to avoid rate limits)
+    for (const symbol of allSymbols) {
+      const candles = await fetchMetaApiCandles(metaInfo.accountId, metaInfo.region, metaInfo.token, symbol, 30);
+
+      if (candles.length > 0) {
+        // Store all close prices as candles in DB
+        for (const candle of candles) {
+          inserts.push({ symbol, price: candle.close });
+        }
+        // Current price = last candle close
+        const lastClose = candles[candles.length - 1].close;
+        finalPrices.set(symbol, lastClose);
+        finalPrices.set(`${symbol}-OTC`, lastClose); // OTC uses same underlying price
+      }
+    }
+
+    if (finalPrices.size > 0) {
+      console.log(`✅ MetaAPI: ${finalPrices.size / 2} pares com candles REAIS de 1 minuto`);
+    }
   }
 
+  // Fallback for any missing pairs
+  if (finalPrices.size === 0) {
+    console.log('⚠️ MetaAPI indisponível — fallback AwesomeAPI');
+    const fallbackPrices = await fetchFallbackPrices();
+    for (const [symbol, price] of fallbackPrices) {
+      finalPrices.set(symbol, price);
+      finalPrices.set(`${symbol}-OTC`, price);
+      inserts.push({ symbol, price });
+    }
+  }
+
+  // Save candles to DB (delete old ones for same symbols first, then insert fresh)
   if (inserts.length > 0) {
-    await supabase.from('price_candles').insert(inserts);
-    console.log(`📊 ${inserts.length} candles salvos com variação de spread`);
+    // Delete existing candles for these symbols to replace with fresh MetaAPI data
+    const uniqueSymbols = [...new Set(inserts.map(i => i.symbol))];
+    for (const sym of uniqueSymbols) {
+      await supabase.from('price_candles').delete().eq('symbol', sym);
+    }
+    // Insert fresh candles in batches
+    const batchSize = 50;
+    for (let i = 0; i < inserts.length; i += batchSize) {
+      await supabase.from('price_candles').insert(inserts.slice(i, i + batchSize));
+    }
+    console.log(`📊 ${inserts.length} candles reais salvos no banco`);
   }
 
   return finalPrices;

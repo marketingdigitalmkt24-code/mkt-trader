@@ -543,8 +543,8 @@ async function analyzeAssetWithRealData(
   const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
   const variationPct = (priceRange / avgPrice) * 100;
   
-  // Se a variação total dos preços é menor que 0.01%, os dados são estáticos/fake
-  if (variationPct < 0.01) {
+  // Se a variação total dos preços é menor que 0.05%, os dados são estáticos/fake
+  if (variationPct < 0.05) {
     console.log(`⚠️ ${asset.symbol}: Dados de preço SEM VARIAÇÃO REAL (${variationPct.toFixed(4)}%) — REJEITADO`);
     return null;
   }
@@ -560,10 +560,15 @@ async function analyzeAssetWithRealData(
   const sr = calculateSupportResistance(prices);
   const macd = calculateMACD(prices);
 
-  // ============= REJEITAR RSI ARTEFATOS =============
-  // RSI exatamente 0 ou 100 indica dados insuficientes/inválidos, NÃO sinal real
-  if (rsiValue <= 1 || rsiValue >= 99) {
-    console.log(`⚠️ ${asset.symbol}: RSI=${rsiValue.toFixed(1)} é ARTEFATO de dados ruins — REJEITADO`);
+  // ============= REJEITAR INDICADORES EXTREMOS (ARTEFATOS DE DADOS RUINS) =============
+  // Com dados fake (Frankfurter/diários), RSI e Stoch atingem valores extremos irreais
+  // RSI < 5 ou > 95 com Stoch < 5 ou > 95 = certeza de dado fake
+  if (rsiValue <= 5 || rsiValue >= 95) {
+    console.log(`⚠️ ${asset.symbol}: RSI=${rsiValue.toFixed(1)} EXTREMO — ARTEFATO de dados ruins — REJEITADO`);
+    return null;
+  }
+  if (stoch.k <= 3 || stoch.k >= 97) {
+    console.log(`⚠️ ${asset.symbol}: Stoch=${stoch.k.toFixed(1)} EXTREMO — ARTEFATO de dados ruins — REJEITADO`);
     return null;
   }
 

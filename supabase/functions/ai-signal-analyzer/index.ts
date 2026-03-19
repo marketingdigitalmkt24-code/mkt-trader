@@ -499,7 +499,7 @@ serve(async (req) => {
         analyzedSignals,
         marketSentiment: 'FAST_PROFIT',
         bestSignal: approved.sort((a, b) => b.confidence - a.confidence)[0]?.asset || null,
-        engine: aiDecisions ? 'LOVABLE_AI_FAST_PROFIT' : 'LOCAL_FAST_PROFIT',
+        engine: aiDecisions ? 'GROQ_AI_FAST_PROFIT' : 'LOCAL_FAST_PROFIT',
         learningProfile: {
           totalTrades: profile.totalTrades,
           winRate: profile.overallWinRate,

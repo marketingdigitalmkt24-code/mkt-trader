@@ -1149,6 +1149,8 @@ serve(async (req) => {
           } else {
             console.log(`⏭️ MT5: Nenhuma configuração MetaAPI ativa`);
           }
+        } // end volatility check
+        } // end news check
         }
       }
     } catch (e) {

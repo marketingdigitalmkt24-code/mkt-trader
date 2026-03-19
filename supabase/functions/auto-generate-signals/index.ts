@@ -1098,8 +1098,8 @@ serve(async (req) => {
             console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente`);
           } else if (!bestSignal.aiConfidence && bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
             console.log(`⏭️ IQ: Confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% (sem IA)`);
-          } else if (bestSignal.aiConfidence && bestSignal.aiConfidence < 55) {
-            console.log(`⏭️ IQ: IA confiança ${bestSignal.aiConfidence}% < 55%`);
+          } else if (bestSignal.aiConfidence && bestSignal.aiConfidence < 50) {
+            console.log(`⏭️ IQ: IA confiança ${bestSignal.aiConfidence}% < 50%`);
           } else {
             const { data: iqConfig } = await supabase
               .from('iqoption_config')

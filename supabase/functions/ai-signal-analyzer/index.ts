@@ -462,8 +462,8 @@ serve(async (req) => {
       }
 
       if (aiPick) {
-        // Confiança mínima 55% para fast profit (era 80%)
-        const shouldExecute = aiPick.execute && aiPick.confidence >= 55;
+        // Confiança mínima 50% para operação certeira
+        const shouldExecute = aiPick.execute && aiPick.confidence >= 50;
         const emoji = shouldExecute ? '✅' : '❌';
         console.log(`🧠 AI ${emoji} ${s.asset} ${aiPick.best_direction} conf=${aiPick.confidence} [${aiPick.strategy}] ${aiPick.reason}`);
         return {

@@ -852,16 +852,21 @@ serve(async (req) => {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
         const executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
-        console.log(`🧠 IA: ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
+        console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
 
         for (const approved of executeSignals) {
           const candidate = candidates.find(c => c.asset.toUpperCase() === approved.asset.toUpperCase());
           if (candidate) {
+            // USAR DIREÇÃO RECOMENDADA PELA GROQ/IA (não inverter cegamente)
+            const bestDir = approved.bestDirection || candidate.type;
             aiApprovedSignals.push({
               ...candidate,
+              type: bestDir, // Direção corrigida pela IA
+              originalType: candidate.type,
               aiConfidence: approved.confidence,
               aiReason: approved.reason,
               aiRiskLevel: approved.riskLevel,
+              aiDirection: bestDir,
             });
           }
         }
@@ -1004,14 +1009,14 @@ serve(async (req) => {
               const iqTradeAmount = tradeSettings?.trade_amount || 1;
               const expiration = 1;
 
-              // INVERTER direção: se análise diz CALL, executar PUT e vice-versa
-              const invertedDirection = bestSignal.type === 'CALL' ? 'PUT' : 'CALL';
-              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.type}→${invertedDirection} (INVERTIDO) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
+              // USAR DIREÇÃO DA IA (Groq decide a melhor direção)
+              const executionDirection = bestSignal.aiDirection || bestSignal.type;
+              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
               // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso
               await supabase.from('trade_queue').insert({
                 asset: bestSignal.asset,
-                direction: invertedDirection,
+                direction: executionDirection,
                 amount: iqTradeAmount,
                 expiration,
                 signal_id: bestSignal.id,
@@ -1023,7 +1028,7 @@ serve(async (req) => {
               const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
                 body: {
                   asset: bestSignal.asset,
-                  direction: invertedDirection.toLowerCase(),
+                  direction: executionDirection.toLowerCase(),
                   amount: iqTradeAmount,
                   expiration,
                   signalId: bestSignal.id,
@@ -1035,7 +1040,7 @@ serve(async (req) => {
 
               if (!iqError && iqData?.success) {
                 totalIQ++;
-                console.log(`✅ IQ REAL: ${bestSignal.asset} ${invertedDirection} (INVERTIDO) | ID: ${iqData.tradeId}`);
+                console.log(`✅ IQ REAL: ${bestSignal.asset} ${executionDirection} (IA) | ID: ${iqData.tradeId}`);
                 await supabase.from('trade_queue')
                   .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
                   .eq('signal_id', bestSignal.id);
@@ -1129,15 +1134,15 @@ serve(async (req) => {
 
               const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
               
-              // INVERTER direção para MT5 (mesma lógica da IQ Option)
-              const mt5InvertedDirection = bestMT5Signal.type === 'CALL' ? 'PUT' : 'CALL';
+              // USAR DIREÇÃO DA IA (Groq decide a melhor direção para MT5 também)
+              const mt5Direction = bestMT5Signal.aiDirection || bestMT5Signal.type;
 
-              console.log(`📡 MT5: ${bestMT5Signal.asset} ${bestMT5Signal.type}→${mt5InvertedDirection} (INVERTIDO) $${mt5TradeAmount} | Score: ${bestMT5Signal.indicators.confluenceScore}%`);
+              console.log(`📡 MT5: ${bestMT5Signal.asset} ${bestMT5Signal.originalType || bestMT5Signal.type}→${mt5Direction} (IA) $${mt5TradeAmount} | Score: ${bestMT5Signal.indicators.confluenceScore}%`);
 
               const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
                 body: {
                   asset: bestMT5Signal.asset,
-                  direction: mt5InvertedDirection.toLowerCase(),
+                  direction: mt5Direction.toLowerCase(),
                   amount: mt5TradeAmount,
                   expiration: 1,
                   signalId: bestMT5Signal.id,

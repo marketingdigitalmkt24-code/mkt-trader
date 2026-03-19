@@ -177,15 +177,15 @@ async function buildDeepLearningProfile(supabase: any) {
   return profile;
 }
 
-// ============= LOVABLE AI — FAST PROFIT STRATEGIST =============
+// ============= GROQ AI — FAST PROFIT STRATEGIST =============
 async function aiAdaptiveStrategy(
   signals: SignalData[],
   profile: any,
   currentHour: number
 ): Promise<any[] | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.log('⚠️ LOVABLE_API_KEY não configurada');
+  const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
+  if (!GROQ_API_KEY) {
+    console.log('⚠️ GROQ_API_KEY não configurada');
     return null;
   }
 

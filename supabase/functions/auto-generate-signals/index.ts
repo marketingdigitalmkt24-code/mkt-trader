@@ -1028,7 +1028,7 @@ serve(async (req) => {
               const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
                 body: {
                   asset: bestSignal.asset,
-                  direction: invertedDirection.toLowerCase(),
+                  direction: executionDirection.toLowerCase(),
                   amount: iqTradeAmount,
                   expiration,
                   signalId: bestSignal.id,

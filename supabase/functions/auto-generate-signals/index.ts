@@ -1142,7 +1142,7 @@ serve(async (req) => {
               const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
                 body: {
                   asset: bestMT5Signal.asset,
-                  direction: mt5InvertedDirection.toLowerCase(),
+                  direction: mt5Direction.toLowerCase(),
                   amount: mt5TradeAmount,
                   expiration: 1,
                   signalId: bestMT5Signal.id,

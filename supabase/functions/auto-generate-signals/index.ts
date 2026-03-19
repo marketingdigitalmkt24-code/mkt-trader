@@ -1182,100 +1182,122 @@ serve(async (req) => {
       });
     }
 
-    // ============= MT5 TRADE — MESMA ESTRATÉGIA DA IQ OPTION =============
-    // MT5 usa o mesmo melhor sinal da IQ Option, com uma operação por vez
+    // ============= MT5 SPREAD STRATEGY — ATÉ 5 OPERAÇÕES SIMULTÂNEAS =============
+    // MT5 usa estratégia de spread com entrada rápida e 10% de lucro
+    // Permite até 5 posições simultâneas para maximizar oportunidades
+    const MAX_MT5_POSITIONS = 5;
     try {
-      // MT5: usar sinal aprovado pela IA OU fallback técnico forte
-      const bestMT5Signal = aiApprovedSignals[0] || mt5FallbackSignals[0];
+      // Combinar sinais IA + fallback técnico para MT5
+      const allMT5Candidates = [
+        ...aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC')),
+        ...mt5FallbackSignals,
+      ];
 
-      const MT5_MIN_CONFLUENCE = 60; // MT5: confluência mínima para operações lucrativas
+      // Remover duplicatas por ativo
+      const seenAssets = new Set<string>();
+      const uniqueMT5Candidates = allMT5Candidates.filter(s => {
+        const key = s.asset.toUpperCase();
+        if (seenAssets.has(key)) return false;
+        seenAssets.add(key);
+        return true;
+      });
 
-      if (!bestMT5Signal) {
-        console.log(`⏭️ MT5: Nenhum sinal disponível (IA: ${aiApprovedSignals.length} | Técnico: ${mt5FallbackSignals.length})`);
-      } else if (!bestMT5Signal.aiConfidence && bestMT5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
-        console.log(`⏭️ MT5: Confluência ${bestMT5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}% (sem IA)`);
-      } else if (bestMT5Signal.aiConfidence && bestMT5Signal.aiConfidence < 55) {
-        console.log(`⏭️ MT5: IA confiança ${bestMT5Signal.aiConfidence}% < 55%`);
+      const MT5_MIN_CONFLUENCE = 60;
+
+      if (uniqueMT5Candidates.length === 0) {
+        console.log(`⏭️ MT5: Nenhum sinal disponível`);
       } else {
-        // Verificar se é ativo OTC (MT5 não opera OTC)
-        const isOTCAssetMT5 = bestMT5Signal.asset.toUpperCase().includes('OTC');
-        if (isOTCAssetMT5) {
-          console.log(`⏭️ MT5: ${bestMT5Signal.asset} é OTC — MT5 não opera OTC`);
+        const { data: metaConfig } = await supabase
+          .from('metaapi_config')
+          .select('token, account_id, volume, is_active')
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (!metaConfig || !metaConfig.account_id) {
+          console.log(`⏭️ MT5: Nenhuma configuração MetaAPI ativa`);
         } else {
-          // ===== FILTRO DE NOTÍCIAS PARA MT5 =====
-          const mt5NewsCheck = isAssetAffectedByNews(bestMT5Signal.asset);
-          if (mt5NewsCheck.affected) {
-            console.log(`🚫 MT5: BLOQUEADO por notícia — ${mt5NewsCheck.reason}`);
-          } else if (bestMT5Signal.indicators.atr?.volatility === 'high') {
-            console.log(`🚫 MT5: BLOQUEADO — volatilidade alta (ATR high), risco de stop`);
+          // Verificar quantas posições já estão abertas
+          let currentOpenPositions = 0;
+          try {
+            const { data: mt5Check } = await supabase.functions.invoke('metaapi-monitor-positions', {
+              body: { checkOnly: true },
+            });
+            currentOpenPositions = mt5Check?.totalOpen || mt5Check?.openPositions?.length || 0;
+            console.log(`📊 MT5: ${currentOpenPositions}/${MAX_MT5_POSITIONS} posições abertas`);
+          } catch (e) {
+            console.log(`⚠️ MT5: Não foi possível verificar posições`);
+          }
+
+          const slotsAvailable = MAX_MT5_POSITIONS - currentOpenPositions;
+          
+          if (slotsAvailable <= 0) {
+            console.log(`🚫 MT5: Limite de ${MAX_MT5_POSITIONS} posições atingido`);
           } else {
-          const { data: metaConfig } = await supabase
-            .from('metaapi_config')
-            .select('token, account_id, volume, is_active')
-            .eq('is_active', true)
-            .limit(1)
-            .maybeSingle();
+            const { data: iqCfgForUser } = await supabase
+              .from('iqoption_config')
+              .select('user_id')
+              .eq('is_active', true)
+              .limit(1)
+              .maybeSingle();
 
-          if (metaConfig && metaConfig.account_id) {
-            // Verificar posições abertas no MT5 (uma operação por vez)
-            let hasPendingMT5 = false;
-            try {
-              const { data: mt5Check } = await supabase.functions.invoke('metaapi-monitor-positions', {
-                body: { checkOnly: true },
-              });
-              if (mt5Check?.positions && mt5Check.positions.length > 0) {
-                hasPendingMT5 = true;
-                console.log(`🚫 MT5: BLOQUEADO — ${mt5Check.positions.length} posição(ões) aberta(s)`);
+            const { data: tradeSettings } = await supabase
+              .from('user_trading_settings')
+              .select('mt5_trade_amount')
+              .eq('user_id', iqCfgForUser?.user_id || '')
+              .limit(1)
+              .maybeSingle();
+
+            const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
+
+            // Enviar até slotsAvailable sinais para MT5
+            const mt5ToExecute = uniqueMT5Candidates.slice(0, slotsAvailable);
+            
+            for (const mt5Signal of mt5ToExecute) {
+              // Validar confluência/confiança
+              if (!mt5Signal.aiConfidence && mt5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
+                console.log(`⏭️ MT5: ${mt5Signal.asset} confluência ${mt5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
+                continue;
               }
-            } catch (e) {
-              console.log(`⚠️ MT5: Não foi possível verificar posições, tentando operar`);
-            }
+              if (mt5Signal.aiConfidence && mt5Signal.aiConfidence < 55) {
+                console.log(`⏭️ MT5: ${mt5Signal.asset} IA confiança ${mt5Signal.aiConfidence}% < 55%`);
+                continue;
+              }
 
-            if (!hasPendingMT5) {
-              const { data: iqCfgForUser } = await supabase
-                .from('iqoption_config')
-                .select('user_id')
-                .eq('is_active', true)
-                .limit(1)
-                .maybeSingle();
+              // Filtros: notícias e volatilidade
+              const mt5NewsCheck = isAssetAffectedByNews(mt5Signal.asset);
+              if (mt5NewsCheck.affected) {
+                console.log(`🚫 MT5: ${mt5Signal.asset} BLOQUEADO — ${mt5NewsCheck.reason}`);
+                continue;
+              }
+              if (mt5Signal.indicators.atr?.volatility === 'high') {
+                console.log(`🚫 MT5: ${mt5Signal.asset} BLOQUEADO — volatilidade alta`);
+                continue;
+              }
 
-              const { data: tradeSettings } = await supabase
-                .from('user_trading_settings')
-                .select('mt5_trade_amount')
-                .eq('user_id', iqCfgForUser?.user_id || '')
-                .limit(1)
-                .maybeSingle();
-
-              const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
-              
-              // USAR DIREÇÃO DA IA (Groq decide a melhor direção para MT5 também)
-              const mt5Direction = bestMT5Signal.aiDirection || bestMT5Signal.type;
-
-              console.log(`📡 MT5: ${bestMT5Signal.asset} ${bestMT5Signal.originalType || bestMT5Signal.type}→${mt5Direction} (IA) $${mt5TradeAmount} | Score: ${bestMT5Signal.indicators.confluenceScore}%`);
+              const mt5Direction = mt5Signal.aiDirection || mt5Signal.type;
+              console.log(`📡 MT5 SPREAD: ${mt5Signal.asset} ${mt5Direction} $${mt5TradeAmount} | Score: ${mt5Signal.indicators.confluenceScore}%`);
 
               const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
                 body: {
-                  asset: bestMT5Signal.asset,
+                  asset: mt5Signal.asset,
                   direction: mt5Direction.toLowerCase(),
                   amount: mt5TradeAmount,
                   expiration: 1,
-                  signalId: bestMT5Signal.id,
-                  confluenceScore: bestMT5Signal.indicators.confluenceScore,
+                  signalId: mt5Signal.id,
+                  confluenceScore: mt5Signal.indicators.confluenceScore,
                 },
               });
 
               if (!mt5Error && mt5Data?.success) {
                 totalMT5++;
-                console.log(`✅ MT5 REAL: ${mt5Data.symbol} ${mt5Data.direction}`);
+                console.log(`✅ MT5 SPREAD: ${mt5Data.symbol} ${mt5Data.direction} — slot ${currentOpenPositions + totalMT5}/${MAX_MT5_POSITIONS}`);
               } else if (mt5Data?.skipped) {
                 console.log(`⏭️ MT5: ${mt5Data.error}`);
               } else {
                 console.error(`❌ MT5 falhou: ${mt5Error?.message || mt5Data?.error}`);
               }
             }
-          } else {
-            console.log(`⏭️ MT5: Nenhuma configuração MetaAPI ativa`);
-          }
           }
         }
       }

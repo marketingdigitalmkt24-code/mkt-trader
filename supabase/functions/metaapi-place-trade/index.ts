@@ -157,26 +157,41 @@ serve(async (req) => {
 
     console.log(`✅ Símbolo mapeado: ${asset} → ${mt5Symbol}`);
 
-    // ===== Step 2: Check for existing open positions on this symbol =====
+    // ===== Step 2: Check total open positions (max 5 simultaneous) =====
+    const MAX_MT5_POSITIONS = 5;
     try {
       const positionsRes = await safeFetch(`${baseUrl}/positions`, {
         headers: authHeaders,
       });
       if (positionsRes.ok) {
         const positions = await positionsRes.json();
-        const activeForSymbol = positions.filter((p: any) => p.symbol === mt5Symbol);
-        if (activeForSymbol.length > 0) {
-          console.log(`⛔ Symbol ${mt5Symbol} already has ${activeForSymbol.length} active position(s). Skipping trade.`);
+        if (positions.length >= MAX_MT5_POSITIONS) {
+          console.log(`⛔ MT5 já tem ${positions.length}/${MAX_MT5_POSITIONS} posições abertas. Limite atingido.`);
           return new Response(
             JSON.stringify({
               success: false,
-              error: `Já existe posição aberta para ${mt5Symbol}. Aguardando fechamento.`,
+              error: `Limite de ${MAX_MT5_POSITIONS} posições simultâneas atingido.`,
+              skipped: true,
+              activePositions: positions.length,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // Still block duplicate symbols
+        const activeForSymbol = positions.filter((p: any) => p.symbol === mt5Symbol);
+        if (activeForSymbol.length > 0) {
+          console.log(`⛔ ${mt5Symbol} já tem posição aberta. Aguardando fechamento.`);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `Já existe posição aberta para ${mt5Symbol}.`,
               skipped: true,
               activePositions: activeForSymbol.length,
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+        console.log(`✅ MT5: ${positions.length}/${MAX_MT5_POSITIONS} posições abertas — espaço disponível`);
       }
     } catch (e) {
       console.log(`⚠️ Could not check open positions, proceeding with trade`);

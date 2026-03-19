@@ -1006,8 +1006,30 @@ serve(async (req) => {
       aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
     }
 
-    // ============= EXECUTE BEST SIGNAL =============
+    // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 5) =============
     const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
+    
+    // Salvar TODOS os sinais aprovados pela IA no banco (não só o melhor)
+    for (let i = 1; i < aiApprovedSignals.length; i++) {
+      const extraSignal = aiApprovedSignals[i];
+      await supabase.from('trading_signals').insert({
+        signal_id: extraSignal.id,
+        asset: extraSignal.asset,
+        asset_icon: extraSignal.assetIcon,
+        type: extraSignal.type,
+        timeframe: extraSignal.timeframe,
+        expiration: extraSignal.expiration,
+        strength: extraSignal.strength,
+        status: extraSignal.status,
+        price: extraSignal.price,
+        is_hot: extraSignal.isHot,
+        market_type: extraSignal.marketType,
+        confluence_score: extraSignal.indicators.confluenceScore,
+        confluence_count: extraSignal.indicators.confluenceCount,
+        confirmations: extraSignal.confirmations,
+        indicators: extraSignal.indicators,
+      });
+    }
     
     let totalIQ = 0;
     let totalMT5 = 0;

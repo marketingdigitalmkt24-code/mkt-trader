@@ -1272,54 +1272,69 @@ serve(async (req) => {
 
             const mt5TradeAmount = tradeSettings?.mt5_trade_amount || 1;
 
-            // Enviar até slotsAvailable sinais para MT5
+            // Enviar até slotsAvailable sinais para MT5 EM PARALELO
             const mt5ToExecute = uniqueMT5Candidates.slice(0, slotsAvailable);
             
-            for (const mt5Signal of mt5ToExecute) {
-              // Validar confluência/confiança
+            // Preparar trades válidos
+            const validMT5Trades = mt5ToExecute.filter(mt5Signal => {
               if (!mt5Signal.aiConfidence && mt5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
                 console.log(`⏭️ MT5: ${mt5Signal.asset} confluência ${mt5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
-                continue;
+                return false;
               }
               if (mt5Signal.aiConfidence && mt5Signal.aiConfidence < 50) {
                 console.log(`⏭️ MT5: ${mt5Signal.asset} IA confiança ${mt5Signal.aiConfidence}% < 50%`);
-                continue;
+                return false;
               }
-
-              // Filtros: notícias e volatilidade
               const mt5NewsCheck = isAssetAffectedByNews(mt5Signal.asset);
               if (mt5NewsCheck.affected) {
                 console.log(`🚫 MT5: ${mt5Signal.asset} BLOQUEADO — ${mt5NewsCheck.reason}`);
-                continue;
+                return false;
               }
               if (mt5Signal.indicators.atr?.volatility === 'high') {
                 console.log(`🚫 MT5: ${mt5Signal.asset} BLOQUEADO — volatilidade alta`);
-                continue;
+                return false;
               }
+              return true;
+            });
 
+            console.log(`🚀 MT5: Enviando ${validMT5Trades.length} trades em PARALELO (slots: ${slotsAvailable})`);
+
+            // Executar TODOS os trades MT5 em paralelo
+            const mt5Promises = validMT5Trades.map(async (mt5Signal) => {
               const mt5Direction = mt5Signal.aiDirection || mt5Signal.type;
               console.log(`📡 MT5 SPREAD: ${mt5Signal.asset} ${mt5Direction} $${mt5TradeAmount} | Score: ${mt5Signal.indicators.confluenceScore}%`);
 
-              const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
-                body: {
-                  asset: mt5Signal.asset,
-                  direction: mt5Direction.toLowerCase(),
-                  amount: mt5TradeAmount,
-                  expiration: 1,
-                  signalId: mt5Signal.id,
-                  confluenceScore: mt5Signal.indicators.confluenceScore,
-                },
-              });
+              try {
+                const { data: mt5Data, error: mt5Error } = await supabase.functions.invoke('metaapi-place-trade', {
+                  body: {
+                    asset: mt5Signal.asset,
+                    direction: mt5Direction.toLowerCase(),
+                    amount: mt5TradeAmount,
+                    expiration: 1,
+                    signalId: mt5Signal.id,
+                    confluenceScore: mt5Signal.indicators.confluenceScore,
+                  },
+                });
 
-              if (!mt5Error && mt5Data?.success) {
-                totalMT5++;
-                console.log(`✅ MT5 SPREAD: ${mt5Data.symbol} ${mt5Data.direction} — slot ${currentOpenPositions + totalMT5}/${MAX_MT5_POSITIONS}`);
-              } else if (mt5Data?.skipped) {
-                console.log(`⏭️ MT5: ${mt5Data.error}`);
-              } else {
-                console.error(`❌ MT5 falhou: ${mt5Error?.message || mt5Data?.error}`);
+                if (!mt5Error && mt5Data?.success) {
+                  console.log(`✅ MT5 SPREAD: ${mt5Data.symbol} ${mt5Data.direction} — OK`);
+                  return { success: true, symbol: mt5Data.symbol };
+                } else if (mt5Data?.skipped) {
+                  console.log(`⏭️ MT5: ${mt5Data.error}`);
+                  return { success: false, skipped: true };
+                } else {
+                  console.error(`❌ MT5 falhou: ${mt5Error?.message || mt5Data?.error}`);
+                  return { success: false };
+                }
+              } catch (e) {
+                console.error(`❌ MT5 ${mt5Signal.asset} erro:`, e);
+                return { success: false };
               }
-            }
+            });
+
+            const mt5Results = await Promise.all(mt5Promises);
+            totalMT5 = mt5Results.filter(r => r.success).length;
+            console.log(`📊 MT5 PARALELO: ${totalMT5}/${validMT5Trades.length} trades executados com sucesso`);
           }
         }
       }

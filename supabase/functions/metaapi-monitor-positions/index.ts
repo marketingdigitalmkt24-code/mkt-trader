@@ -300,15 +300,12 @@ serve(async (req) => {
           // ===== TAKE PROFIT =====
           const shouldTakeProfit = effectiveTp > 0 && unrealizedProfit >= effectiveTp;
           
-          // ===== STOP LOSS: Fechar se perda atingir limite =====
-          const shouldStopLoss = slCurrency > 0 && unrealizedProfit <= -slCurrency;
-
-          const shouldClose = closeAll || shouldTakeProfit || shouldStopLoss;
+          // SEM STOP LOSS — IA Groq seleciona apenas operações certeiras
+          const shouldClose = closeAll || shouldTakeProfit;
 
           if (shouldClose) {
-            const reason = closeAll ? 'CLOSE_ALL' : shouldStopLoss ? 'STOP_LOSS' : (isEurusd ? 'TP_SPREAD' : 'TP');
-            const emoji = shouldStopLoss ? '🛑' : '🎯';
-            console.log(`${emoji} ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | TP: $${effectiveTp.toFixed(2)} | SL: -$${slCurrency.toFixed(2)}${isEurusd ? ' (EURUSD spread)' : ''}`);
+            const reason = closeAll ? 'CLOSE_ALL' : (isEurusd ? 'TP_SPREAD' : 'TP');
+            console.log(`🎯 ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | TP: $${effectiveTp.toFixed(2)}${isEurusd ? ' (EURUSD spread)' : ''}`);
             try {
               const closeRes = await safeFetch(`${baseUrl}/trade`, {
                 method: 'POST',

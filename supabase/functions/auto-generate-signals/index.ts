@@ -1059,7 +1059,7 @@ serve(async (req) => {
     try {
       const bestMT5Signal = aiApprovedSignals[0]; // Mesmo melhor sinal
 
-      const MT5_MIN_CONFLUENCE = 50; // MT5: confluência mínima para operar em qualquer horário
+      const MT5_MIN_CONFLUENCE = 70; // MT5: alta probabilidade — entrar apenas em trades seguros
 
       if (!bestMT5Signal) {
         console.log(`⏭️ MT5: Nenhum sinal aprovado pela IA neste ciclo`);

@@ -535,6 +535,20 @@ async function analyzeAssetWithRealData(
   // Add current real price
   prices.push(realPrice);
 
+  // ============= VALIDAÇÃO DE QUALIDADE DE DADOS =============
+  // Verificar se os preços têm variação real (não são dados estáticos/fake)
+  const priceMin = Math.min(...prices);
+  const priceMax = Math.max(...prices);
+  const priceRange = priceMax - priceMin;
+  const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+  const variationPct = (priceRange / avgPrice) * 100;
+  
+  // Se a variação total dos preços é menor que 0.01%, os dados são estáticos/fake
+  if (variationPct < 0.01) {
+    console.log(`⚠️ ${asset.symbol}: Dados de preço SEM VARIAÇÃO REAL (${variationPct.toFixed(4)}%) — REJEITADO`);
+    return null;
+  }
+
   // ============= CALCULATE ALL INDICATORS FROM REAL DATA =============
   const rsiValue = calculateRSI(prices, 14);
   const stoch = calculateStochastic(prices, 14);
@@ -545,6 +559,13 @@ async function analyzeAssetWithRealData(
   const atr = calculateATR(prices, 14);
   const sr = calculateSupportResistance(prices);
   const macd = calculateMACD(prices);
+
+  // ============= REJEITAR RSI ARTEFATOS =============
+  // RSI exatamente 0 ou 100 indica dados insuficientes/inválidos, NÃO sinal real
+  if (rsiValue <= 1 || rsiValue >= 99) {
+    console.log(`⚠️ ${asset.symbol}: RSI=${rsiValue.toFixed(1)} é ARTEFATO de dados ruins — REJEITADO`);
+    return null;
+  }
 
   // ============= DETERMINE DIRECTION FROM REAL INDICATORS =============
   let type: 'CALL' | 'PUT' | null = null;
@@ -710,7 +731,7 @@ serve(async (req) => {
     const assetHistory = await getAssetHistory(supabase);
 
     assetHistory.forEach((h, asset) => {
-      if (h.consecutiveLosses >= 5) {
+      if (h.consecutiveLosses >= 3) {
         console.log(`⛔ ${asset}: BLOQUEADO (${h.consecutiveLosses} losses consecutivos)`);
       }
     });
@@ -764,8 +785,10 @@ serve(async (req) => {
       if (assetsWithRecentSignals.has(key)) return false;
 
       const history = assetHistory.get(asset.symbol);
-      if (history && history.consecutiveLosses >= 5) return false;
-      if (history && history.winRate < 30 && (history.wins + history.losses) >= 5) return false;
+      // BLOQUEIO MAIS RIGOROSO: 3 losses consecutivos (era 5)
+      if (history && history.consecutiveLosses >= 3) return false;
+      // WR mínimo de 40% com pelo menos 5 trades (era 30%)
+      if (history && history.winRate < 40 && (history.wins + history.losses) >= 5) return false;
 
       const newsCheck = isAssetAffectedByNews(asset.symbol);
       if (newsCheck.affected) {

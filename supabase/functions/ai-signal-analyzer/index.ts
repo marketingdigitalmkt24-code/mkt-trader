@@ -260,73 +260,40 @@ DIREÇÃO INTELIGENTE:
 
 IMPORTANTE: Seja AGRESSIVO na aprovação. É melhor entrar e ganhar 60% das vezes do que perder oportunidades sendo conservador.`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Analise estes ${signals.length} sinais para LUCRO RÁPIDO M1:\n\n${JSON.stringify(signalSummaries, null, 2)}` },
+          { role: 'user', content: `Analise estes ${signals.length} sinais para LUCRO RÁPIDO M1:\n\n${JSON.stringify(signalSummaries, null, 2)}\n\nResponda APENAS com JSON no formato: {"analysis":"...","decisions":[{"asset":"...","execute":true/false,"best_direction":"CALL/PUT","confidence":0-100,"strategy":"MOMENTUM/REVERSAL/GOLDEN_SETUP/EXHAUSTION","reason":"..."}]}` },
         ],
-        tools: [{
-          type: 'function',
-          function: {
-            name: 'fast_profit_strategy',
-            description: 'Decisão de trading para lucro rápido em M1',
-            parameters: {
-              type: 'object',
-              properties: {
-                analysis: { type: 'string', description: 'Análise do mercado (max 80 chars)' },
-                decisions: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      asset: { type: 'string' },
-                      execute: { type: 'boolean', description: 'true se boa oportunidade de lucro rápido' },
-                      best_direction: { type: 'string', enum: ['CALL', 'PUT'] },
-                      confidence: { type: 'number', description: '0-100' },
-                      strategy: { type: 'string', enum: ['MOMENTUM', 'REVERSAL', 'GOLDEN_SETUP', 'EXHAUSTION'] },
-                      reason: { type: 'string', description: 'Razão técnica curta' },
-                    },
-                    required: ['asset', 'execute', 'best_direction', 'confidence', 'strategy', 'reason'],
-                    additionalProperties: false,
-                  },
-                },
-              },
-              required: ['analysis', 'decisions'],
-              additionalProperties: false,
-            },
-          },
-        }],
-        tool_choice: { type: 'function', function: { name: 'fast_profit_strategy' } },
         temperature: 0.1,
         max_tokens: 1500,
+        response_format: { type: 'json_object' },
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
       if (response.status === 429) {
-        console.log('⚠️ AI rate limit, usando fallback local');
-      } else if (response.status === 402) {
-        console.log('⚠️ AI créditos insuficientes, usando fallback local');
+        console.log('⚠️ Groq rate limit, usando fallback local');
       } else {
-        console.error(`❌ AI Gateway [${response.status}]: ${errText}`);
+        console.error(`❌ Groq API [${response.status}]: ${errText}`);
       }
       return null;
     }
 
     const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      const parsed = JSON.parse(toolCall.function.arguments);
-      console.log(`🧠 AI Análise: ${parsed.analysis}`);
-      console.log(`🧠 AI Decisões: ${JSON.stringify(parsed.decisions)}`);
+    const content = data.choices?.[0]?.message?.content;
+    if (content) {
+      const parsed = JSON.parse(content);
+      console.log(`🧠 Groq Análise: ${parsed.analysis}`);
+      console.log(`🧠 Groq Decisões: ${JSON.stringify(parsed.decisions)}`);
       return parsed.decisions || null;
     }
   } catch (e) {

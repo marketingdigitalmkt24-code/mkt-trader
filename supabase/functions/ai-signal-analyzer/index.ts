@@ -550,7 +550,7 @@ serve(async (req) => {
       }
       
       if (isDataArtifact) {
-        console.log(`🚫 DADOS RUINS ${s.asset}: RSI=${rsi.toFixed(1)} é artefato — REJEITADO`);
+        console.log(`🚫 DADOS RUINS ${s.asset}: RSI=${rsi.toFixed(1)} Stoch=${stochK.toFixed(1)} — artefato de dados fake — REJEITADO`);
         return {
           signalId: `${s.asset}-${Date.now()}`,
           asset: s.asset,

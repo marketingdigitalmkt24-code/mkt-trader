@@ -524,15 +524,16 @@ serve(async (req) => {
       // ===== BLOQUEIO ABSOLUTO: Groq NÃO pode aprovar ativos tóxicos =====
       const isToxic = ap && (
         ap.consecutiveLosses >= 3 ||
-        (ap.winRate < 40 && (ap.wins + ap.losses) >= 5)
+        (ap.winRate < 45 && (ap.wins + ap.losses) >= 3) // WR < 45% com 3+ trades = tóxico
       );
       
-      // RSI artefato check (RSI 0 ou 100 = dados ruins)
+      // RSI artefato check — com dados fake, RSI extremo é inválido
       const rsi = s.indicators.rsi.value;
-      const isDataArtifact = rsi <= 1 || rsi >= 99;
+      const stochK = s.indicators.stochastic?.k || 50;
+      const isDataArtifact = rsi <= 5 || rsi >= 95 || stochK <= 3 || stochK >= 97;
       
-      // WR geral muito baixo = parar de operar
-      const overallWRTooLow = profile.totalTrades >= 20 && profile.overallWinRate < 45;
+      // WR geral muito baixo = PARAR de operar completamente
+      const overallWRTooLow = profile.totalTrades >= 10 && profile.overallWinRate < 50;
       
       if (isToxic) {
         console.log(`🚫 BLOQUEIO ${s.asset}: ${ap.consecutiveLosses}L seguidos | WR ${ap.winRate}% — Groq IGNORADO`);
@@ -549,7 +550,7 @@ serve(async (req) => {
       }
       
       if (isDataArtifact) {
-        console.log(`🚫 DADOS RUINS ${s.asset}: RSI=${rsi.toFixed(1)} é artefato — REJEITADO`);
+        console.log(`🚫 DADOS RUINS ${s.asset}: RSI=${rsi.toFixed(1)} Stoch=${stochK.toFixed(1)} — artefato de dados fake — REJEITADO`);
         return {
           signalId: `${s.asset}-${Date.now()}`,
           asset: s.asset,

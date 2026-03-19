@@ -182,10 +182,11 @@ serve(async (req) => {
       console.log(`⚠️ Could not check open positions, proceeding with trade`);
     }
 
-    // ===== Step 3: Get symbol specification for min volume =====
+    // ===== Step 3: Get symbol specification — SEMPRE usar volume MÍNIMO =====
+    // Estratégia: menor margem possível para proteger a banca
     const dir = direction.toUpperCase();
     const actionType = dir === 'CALL' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL';
-    let volume = metaConfig.volume || 0.01;
+    let volume = 0.01; // Sempre começar com o mínimo absoluto
     const tpPercent = metaConfig.take_profit_pips || 10;
     const investmentAmount = body.amount || 1;
     const tpCurrency = investmentAmount * (tpPercent / 100);
@@ -199,14 +200,12 @@ serve(async (req) => {
         const spec = await specRes.json();
         const minVolume = spec.minVolume || spec.minLot || 0.01;
         const volumeStep = spec.volumeStep || spec.lotStep || 0.01;
-        if (volume < minVolume) {
-          console.log(`📐 ${mt5Symbol}: Volume ${volume} < minVolume ${minVolume}. Ajustando para ${minVolume}`);
-          volume = minVolume;
-        }
-        // Ensure volume is aligned to volumeStep
+        // SEMPRE usar o volume MÍNIMO permitido — preserva margem da banca
+        volume = minVolume;
+        // Alinhar ao step
         volume = Math.max(minVolume, Math.round(volume / volumeStep) * volumeStep);
         volume = parseFloat(volume.toFixed(4));
-        console.log(`📐 ${mt5Symbol}: Volume final: ${volume} (min: ${minVolume}, step: ${volumeStep})`);
+        console.log(`📐 ${mt5Symbol}: Volume MÍNIMO: ${volume} (min: ${minVolume}, step: ${volumeStep}) — MARGEM PROTEGIDA`);
       } else {
         const errText = await specRes.text();
         console.log(`⚠️ Symbol spec not available for ${mt5Symbol}: ${errText}`);

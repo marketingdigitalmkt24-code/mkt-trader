@@ -73,21 +73,17 @@ serve(async (req) => {
 
     const tradeAmount = tradingSettings?.mt5_trade_amount || 1;
     
-    // ============= TP/SL CALCULADOS COM BASE NO SPREAD =============
-    // Spread típico para 0.01 lotes: ~$0.10-$0.20
-    // TP deve ser MAIOR que o spread para ser lucrativo
-    // Mínimo: $0.30 (3 pips) para cobrir spread + lucro real
-    const rawTpCurrency = tradeAmount * (tpPercent / 100);
-    const MIN_TP_DOLLARS = 0.30; // Mínimo $0.30 para cobrir spread
-    const tpCurrency = Math.max(rawTpCurrency, MIN_TP_DOLLARS);
+    // ============= ESTRATÉGIA SPREAD: 10% DE LUCRO RÁPIDO =============
+    // Entrada: $1.00 → TP: $0.10 (10%) — fechar imediatamente ao atingir
+    // Verificação a cada 1 segundo para capturar lucro instantâneo
+    const tpCurrency = tradeAmount * (tpPercent / 100); // 10% = $0.10 em $1.00
     
-    // Stop Loss: 2x o TP para proteger contra perdas infinitas
+    // Stop Loss: 2x o TP para proteger capital
     const slCurrency = tpCurrency * 2;
     
-    if (rawTpCurrency < MIN_TP_DOLLARS) {
-      console.log(`⚠️ TP original $${rawTpCurrency.toFixed(2)} é menor que o spread! Ajustado para $${tpCurrency.toFixed(2)}`);
-    }
-    console.log(`📊 Config: TP: $${tpCurrency.toFixed(2)} (ajustado) | SL: -$${slCurrency.toFixed(2)} | TradeAmt: $${tradeAmount}`);
+    const MAX_MT5_POSITIONS = 5; // Máximo 5 operações simultâneas
+    
+    console.log(`📊 SPREAD STRATEGY: TP: $${tpCurrency.toFixed(2)} (${tpPercent}%) | SL: -$${slCurrency.toFixed(2)} | TradeAmt: $${tradeAmount} | Max: ${MAX_MT5_POSITIONS} pos`);
 
     // Get region and ensure account is deployed
     let region = 'new-york';

@@ -1061,7 +1061,7 @@ serve(async (req) => {
 
       const utcHour = new Date().getUTCHours();
       const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16);
-      const MT5_MIN_CONFLUENCE = 50;
+      const MT5_MIN_CONFLUENCE = 65; // MT5: confluência mínima alta para operações rápidas e lucrativas
 
       if (!bestMT5Signal) {
         console.log(`⏭️ MT5: Nenhum sinal aprovado pela IA neste ciclo`);
@@ -1075,6 +1075,13 @@ serve(async (req) => {
         if (isOTCAssetMT5) {
           console.log(`⏭️ MT5: ${bestMT5Signal.asset} é OTC — MT5 não opera OTC`);
         } else {
+          // ===== FILTRO DE NOTÍCIAS PARA MT5 =====
+          const mt5NewsCheck = isAssetAffectedByNews(bestMT5Signal.asset);
+          if (mt5NewsCheck.affected) {
+            console.log(`🚫 MT5: BLOQUEADO por notícia — ${mt5NewsCheck.reason}`);
+          } else if (bestMT5Signal.indicators.atr?.volatility === 'high') {
+            console.log(`🚫 MT5: BLOQUEADO — volatilidade alta (ATR high), risco de stop`);
+          } else {
           const { data: metaConfig } = await supabase
             .from('metaapi_config')
             .select('token, account_id, volume, is_active')
@@ -1142,6 +1149,8 @@ serve(async (req) => {
           } else {
             console.log(`⏭️ MT5: Nenhuma configuração MetaAPI ativa`);
           }
+        } // end volatility check
+        } // end news check
         }
       }
     } catch (e) {

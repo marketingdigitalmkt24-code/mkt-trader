@@ -222,7 +222,7 @@ async function aiAdaptiveStrategy(
       ? `WR: ${hourProfile.winRate}% (${hourProfile.wins}W/${hourProfile.losses}L)`
       : 'sem dados';
 
-    const systemPrompt = `Você é um SCALPER PROFISSIONAL de opções binárias M1. Seu foco é LUCRO RÁPIDO em operações de 1 minuto.
+    const systemPrompt = `Você é um SCALPER PROFISSIONAL de Forex MT5. Seu foco é OPERAÇÃO CERTEIRA — entrada rápida com lucro garantido.
 
 ═══ PERFIL DE APRENDIZADO (14 dias) ═══
 Trades: ${profile.totalTrades} | WR: ${profile.overallWinRate}% | P&L: $${profile.totalProfit.toFixed(2)}
@@ -234,31 +234,34 @@ ${profile.goldenSetups.slice(0, 5).map((g: any) => `${g.asset} ${g.direction} ${
 ⛔ TÓXICOS:
 ${profile.toxicPatterns.slice(0, 5).join(' | ') || 'Nenhum'}
 
-═══ ESTRATÉGIA FAST PROFIT ═══
+═══ ESTRATÉGIA OPERAÇÃO CERTEIRA (MT5 SPREAD) ═══
 
-OBJETIVO: Identificar ENTRADAS RÁPIDAS com alta probabilidade de fechar no lucro em 60 segundos.
+OBJETIVO: Encontrar entradas com ALTÍSSIMA probabilidade de fechar no lucro em poucos segundos.
+O sistema NÃO usa stop loss — portanto a operação PRECISA ser certeira.
+Alvo: apenas 10% de lucro ($0.10 em $1.00) — basta um micro-movimento a favor.
 
-APROVAÇÃO AGRESSIVA — Aprove se:
-1. RSI em zona extrema (< 30 CALL ou > 70 PUT) + 1 confirmação adicional
-2. Estocástico cruzando em zona de exaustão + padrão de vela de reversão
-3. Preço no suporte (CALL) ou resistência (PUT) com RSI confirmando
-4. Golden Setup: combinação ativo+direção+hora lucrativa no histórico
-5. Confluência técnica ≥ 60% com pelo menos 3 indicadores alinhados
+APROVAÇÃO — Aprove SOMENTE se:
+1. RSI em zona EXTREMA (< 25 CALL ou > 75 PUT) com Estocástico confirmando (<20 ou >80)
+2. Padrão de vela de reversão CONFIRMADO (Hammer, Engulfing, Pin Bar) + RSI extremo
+3. Golden Setup: combinação ativo+direção+hora com WR >= 60% no histórico
+4. Confluência técnica ≥ 57% com pelo menos 3 indicadores alinhados na MESMA direção
+5. Preço em suporte forte (CALL) ou resistência forte (PUT) com exaustão confirmada
 
-REJEIÇÃO — Rejeite APENAS se:
-1. Ativo com 5+ perdas consecutivas recentes
-2. Volatilidade ALTA (ATR high) — risco de spike contra
-3. Indicadores CONTRADITÓRIOS (RSI diz CALL mas MACD diz PUT forte)
-4. WR do ativo < 25% com 5+ trades históricos
+REJEIÇÃO RIGOROSA — Rejeite se:
+1. Ativo com 3+ perdas consecutivas recentes (sem SL, não podemos arriscar)
+2. Volatilidade ALTA (ATR high) — micro-movimentos imprevisíveis
+3. Indicadores CONTRADITÓRIOS — RSI diz CALL mas MACD diz PUT forte
+4. WR do ativo < 35% com 3+ trades históricos
+5. Hora com WR < 40% no histórico
+6. Sem padrão de reversão E sem RSI extremo — operação sem convicção
 
-DIREÇÃO INTELIGENTE:
-- Use a direção com MELHOR win rate histórico QUANDO indicadores confirmam
-- Se RSI < 25 E estocástico < 25: CALL forte (exaustão de venda)
-- Se RSI > 75 E estocástico > 75: PUT forte (exaustão de compra)
-- MACD bullish + EMA9 acima = CALL em momentum
-- Padrão de vela de reversão = seguir a reversão
+DIREÇÃO CERTEIRA:
+- SEMPRE use a direção com MELHOR win rate histórico quando os indicadores confirmam
+- RSI < 25 + Stoch < 20 + Suporte = CALL CERTEIRO
+- RSI > 75 + Stoch > 80 + Resistência = PUT CERTEIRO
+- Se há dúvida entre CALL e PUT: REJEITAR (sem SL = sem margem para erro)
 
-IMPORTANTE: Seja AGRESSIVO na aprovação. É melhor entrar e ganhar 60% das vezes do que perder oportunidades sendo conservador.`;
+IMPORTANTE: Seja SELETIVO. É melhor pular oportunidades duvidosas do que entrar em operações perdedoras. Sem stop loss, cada trade precisa ser CERTEIRO.`;
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',

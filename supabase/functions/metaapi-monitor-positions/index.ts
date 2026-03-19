@@ -76,14 +76,12 @@ serve(async (req) => {
     // ============= ESTRATÉGIA SPREAD: 10% DE LUCRO RÁPIDO =============
     // Entrada: $1.00 → TP: $0.10 (10%) — fechar imediatamente ao atingir
     // Verificação a cada 1 segundo para capturar lucro instantâneo
+    // SEM STOP LOSS — IA Groq garante operações certeiras
     const tpCurrency = tradeAmount * (tpPercent / 100); // 10% = $0.10 em $1.00
-    
-    // Stop Loss: 2x o TP para proteger capital
-    const slCurrency = tpCurrency * 2;
     
     const MAX_MT5_POSITIONS = 5; // Máximo 5 operações simultâneas
     
-    console.log(`📊 SPREAD STRATEGY: TP: $${tpCurrency.toFixed(2)} (${tpPercent}%) | SL: -$${slCurrency.toFixed(2)} | TradeAmt: $${tradeAmount} | Max: ${MAX_MT5_POSITIONS} pos`);
+    console.log(`📊 SPREAD STRATEGY: TP: $${tpCurrency.toFixed(2)} (${tpPercent}%) | SEM SL | TradeAmt: $${tradeAmount} | Max: ${MAX_MT5_POSITIONS} pos`);
 
     // Get region and ensure account is deployed
     let region = 'new-york';
@@ -302,15 +300,12 @@ serve(async (req) => {
           // ===== TAKE PROFIT =====
           const shouldTakeProfit = effectiveTp > 0 && unrealizedProfit >= effectiveTp;
           
-          // ===== STOP LOSS: Fechar se perda atingir limite =====
-          const shouldStopLoss = slCurrency > 0 && unrealizedProfit <= -slCurrency;
-
-          const shouldClose = closeAll || shouldTakeProfit || shouldStopLoss;
+          // SEM STOP LOSS — IA Groq seleciona apenas operações certeiras
+          const shouldClose = closeAll || shouldTakeProfit;
 
           if (shouldClose) {
-            const reason = closeAll ? 'CLOSE_ALL' : shouldStopLoss ? 'STOP_LOSS' : (isEurusd ? 'TP_SPREAD' : 'TP');
-            const emoji = shouldStopLoss ? '🛑' : '🎯';
-            console.log(`${emoji} ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | TP: $${effectiveTp.toFixed(2)} | SL: -$${slCurrency.toFixed(2)}${isEurusd ? ' (EURUSD spread)' : ''}`);
+            const reason = closeAll ? 'CLOSE_ALL' : (isEurusd ? 'TP_SPREAD' : 'TP');
+            console.log(`🎯 ${reason}: Fechando ${symbol} (${posId}) | P/L: $${unrealizedProfit.toFixed(2)} | TP: $${effectiveTp.toFixed(2)}${isEurusd ? ' (EURUSD spread)' : ''}`);
             try {
               const closeRes = await safeFetch(`${baseUrl}/trade`, {
                 method: 'POST',

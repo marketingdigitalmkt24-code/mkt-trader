@@ -1,0 +1,1 @@
+UPDATE metaapi_config SET take_profit_pips = 5 WHERE is_active = true

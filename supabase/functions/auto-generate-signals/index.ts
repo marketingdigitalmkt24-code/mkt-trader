@@ -1059,14 +1059,10 @@ serve(async (req) => {
     try {
       const bestMT5Signal = aiApprovedSignals[0]; // Mesmo melhor sinal
 
-      const utcHour = new Date().getUTCHours();
-      const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16);
-      const MT5_MIN_CONFLUENCE = 65; // MT5: confluência mínima alta para operações rápidas e lucrativas
+      const MT5_MIN_CONFLUENCE = 50; // MT5: confluência mínima para operar em qualquer horário
 
       if (!bestMT5Signal) {
         console.log(`⏭️ MT5: Nenhum sinal aprovado pela IA neste ciclo`);
-      } else if (!isHighLiquiditySession) {
-        console.log(`⏭️ MT5: Fora da sessão (${utcHour}h UTC)`);
       } else if (bestMT5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
         console.log(`⏭️ MT5: Confluência ${bestMT5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
       } else {

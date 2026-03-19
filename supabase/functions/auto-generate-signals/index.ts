@@ -1040,7 +1040,7 @@ serve(async (req) => {
 
               if (!iqError && iqData?.success) {
                 totalIQ++;
-                console.log(`✅ IQ REAL: ${bestSignal.asset} ${invertedDirection} (INVERTIDO) | ID: ${iqData.tradeId}`);
+                console.log(`✅ IQ REAL: ${bestSignal.asset} ${executionDirection} (IA) | ID: ${iqData.tradeId}`);
                 await supabase.from('trade_queue')
                   .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
                   .eq('signal_id', bestSignal.id);

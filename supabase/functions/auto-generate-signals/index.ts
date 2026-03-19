@@ -1061,7 +1061,7 @@ serve(async (req) => {
 
       const utcHour = new Date().getUTCHours();
       const isHighLiquiditySession = (utcHour >= 7 && utcHour <= 16);
-      const MT5_MIN_CONFLUENCE = 50;
+      const MT5_MIN_CONFLUENCE = 65; // MT5: confluência mínima alta para operações rápidas e lucrativas
 
       if (!bestMT5Signal) {
         console.log(`⏭️ MT5: Nenhum sinal aprovado pela IA neste ciclo`);

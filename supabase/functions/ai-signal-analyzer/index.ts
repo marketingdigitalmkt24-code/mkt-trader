@@ -28,27 +28,12 @@ interface SignalData {
 
 interface AnalysisRequest {
   signals: SignalData[];
-  historicalResults?: {
-    asset: string;
-    wins: number;
-    losses: number;
-    winRate: number;
-  }[];
+  historicalResults?: any[];
 }
 
-// ============= BUSCAR HISTÓRICO REAL DO BANCO =============
-async function getRecentPerformance(supabase: any): Promise<{
-  summary: string;
-  bestAssets: string[];
-  worstAssets: string[];
-  bestHours: number[];
-  worstHours: number[];
-  overallWinRate: number;
-  totalProfit: number;
-  recentLossStreaks: Record<string, number>;
-}> {
+// ============= BUSCAR HISTÓRICO REAL =============
+async function getRecentPerformance(supabase: any) {
   const result = {
-    summary: '',
     bestAssets: [] as string[],
     worstAssets: [] as string[],
     bestHours: [] as number[],
@@ -56,6 +41,7 @@ async function getRecentPerformance(supabase: any): Promise<{
     overallWinRate: 50,
     totalProfit: 0,
     recentLossStreaks: {} as Record<string, number>,
+    assetWinRates: {} as Record<string, { wr: number; trades: number; profit: number }>,
   };
 
   try {
@@ -84,20 +70,17 @@ async function getRecentPerformance(supabase: any): Promise<{
       if (isWin) totalWins++;
       if (isLoss) totalLosses++;
 
-      // Asset
       if (!assetStats[r.asset]) assetStats[r.asset] = { wins: 0, losses: 0, profit: 0 };
       if (isWin) assetStats[r.asset].wins++;
       if (isLoss) assetStats[r.asset].losses++;
       assetStats[r.asset].profit += profit;
 
-      // Hour
       const hour = new Date(r.created_at).getUTCHours();
       if (!hourStats[hour]) hourStats[hour] = { wins: 0, losses: 0, profit: 0 };
       if (isWin) hourStats[hour].wins++;
       if (isLoss) hourStats[hour].losses++;
       hourStats[hour].profit += profit;
 
-      // Loss streaks
       if (!recentByAsset[r.asset]) recentByAsset[r.asset] = [];
       if (recentByAsset[r.asset].length < 5) recentByAsset[r.asset].push(r.result);
     }
@@ -105,26 +88,24 @@ async function getRecentPerformance(supabase: any): Promise<{
     const total = totalWins + totalLosses;
     result.overallWinRate = total > 0 ? Math.round((totalWins / total) * 100) : 50;
 
-    // Best/worst assets
     for (const [asset, stats] of Object.entries(assetStats)) {
       const t = stats.wins + stats.losses;
       if (t < 2) continue;
-      const wr = (stats.wins / t) * 100;
+      const wr = Math.round((stats.wins / t) * 100);
+      result.assetWinRates[asset] = { wr, trades: t, profit: Math.round(stats.profit * 100) / 100 };
       if (wr >= 60 && stats.profit > 0) result.bestAssets.push(asset);
-      if (wr < 40 && stats.profit < -50) result.worstAssets.push(asset);
+      if (wr < 35 && stats.profit < -100) result.worstAssets.push(asset);
     }
 
-    // Best/worst hours
     for (const [hourStr, stats] of Object.entries(hourStats)) {
       const t = stats.wins + stats.losses;
-      if (t < 2) continue;
+      if (t < 3) continue;
       const wr = (stats.wins / t) * 100;
       const hour = parseInt(hourStr);
-      if (wr >= 60 && stats.profit > 0) result.bestHours.push(hour);
-      if (wr < 35 && stats.profit < 0) result.worstHours.push(hour);
+      if (wr >= 55 && stats.profit > 0) result.bestHours.push(hour);
+      if (wr < 40 && stats.profit < -50) result.worstHours.push(hour);
     }
 
-    // Loss streaks
     for (const [asset, recent] of Object.entries(recentByAsset)) {
       let streak = 0;
       for (const r of recent) {
@@ -133,14 +114,223 @@ async function getRecentPerformance(supabase: any): Promise<{
       }
       if (streak >= 2) result.recentLossStreaks[asset] = streak;
     }
-
-    result.summary = `Últimos 7 dias: ${totalWins}W/${totalLosses}L (WR: ${result.overallWinRate}%) | P&L: $${result.totalProfit.toFixed(2)}`;
-    
   } catch (e) {
     console.error('Erro ao buscar performance:', e);
   }
 
   return result;
+}
+
+// ============= SMART SIGNAL SCORING =============
+// Nova lógica inteligente que busca LUCRO rápido
+function scoreSignal(s: SignalData, perf: any, currentHour: number): {
+  score: number;
+  reason: string;
+  risk: string;
+  shouldExecute: boolean;
+} {
+  let score = 0;
+  const reasons: string[] = [];
+  let riskLevel = 'MEDIUM';
+
+  const rsi = s.indicators.rsi.value;
+  const stochK = s.indicators.stochastic?.k || 50;
+  const stochD = s.indicators.stochastic?.d || 50;
+  const bollPos = s.indicators.bollinger?.position || '';
+  const macdHist = s.indicators.macd?.histogram || 0;
+  const macdTrend = s.indicators.macd?.trend || 'neutral';
+  const vol = s.indicators.atr?.volatility || 'medium';
+  const conf = s.indicators.confluenceScore;
+  const confCount = s.indicators.confluenceCount;
+  const pricePos = s.indicators.supportResistance?.pricePosition || '';
+  const hasPattern = s.indicators.reversalPattern;
+  const maTrend = s.indicators.movingAverages?.trend || 'neutral';
+
+  // === BLOQUEIOS ABSOLUTOS ===
+  
+  // 1. Volatilidade alta = perigo
+  if (vol === 'high') {
+    return { score: 0, reason: 'Volatilidade alta — risco de spike', risk: 'HIGH', shouldExecute: false };
+  }
+
+  // 2. Loss streak >= 4 neste ativo
+  const lossStreak = perf.recentLossStreaks[s.asset] || 0;
+  if (lossStreak >= 4) {
+    return { score: 0, reason: `${lossStreak} losses consecutivos neste ativo`, risk: 'HIGH', shouldExecute: false };
+  }
+
+  // 3. Ativo com WR muito ruim e muitos trades
+  const assetPerf = perf.assetWinRates[s.asset];
+  if (assetPerf && assetPerf.trades >= 5 && assetPerf.wr < 30) {
+    return { score: 0, reason: `Ativo com WR ${assetPerf.wr}% (${assetPerf.trades} trades)`, risk: 'HIGH', shouldExecute: false };
+  }
+
+  // === PONTUAÇÃO POSITIVA ===
+
+  // RSI em zona extrema (principal indicador de reversão)
+  if (s.type === 'CALL') {
+    if (rsi <= 15) { score += 30; reasons.push(`RSI ultra-oversold ${rsi.toFixed(0)}`); }
+    else if (rsi <= 20) { score += 25; reasons.push(`RSI oversold ${rsi.toFixed(0)}`); }
+    else if (rsi <= 25) { score += 18; reasons.push(`RSI ${rsi.toFixed(0)}`); }
+    else if (rsi <= 30) { score += 10; reasons.push(`RSI ${rsi.toFixed(0)}`); }
+    else if (rsi <= 35) { score += 5; }
+  } else {
+    if (rsi >= 85) { score += 30; reasons.push(`RSI ultra-overbought ${rsi.toFixed(0)}`); }
+    else if (rsi >= 80) { score += 25; reasons.push(`RSI overbought ${rsi.toFixed(0)}`); }
+    else if (rsi >= 75) { score += 18; reasons.push(`RSI ${rsi.toFixed(0)}`); }
+    else if (rsi >= 70) { score += 10; reasons.push(`RSI ${rsi.toFixed(0)}`); }
+    else if (rsi >= 65) { score += 5; }
+  }
+
+  // Estocástico confirmando
+  if (s.type === 'CALL' && stochK <= 20) { score += 15; reasons.push(`Stoch ${stochK.toFixed(0)}`); }
+  else if (s.type === 'CALL' && stochK <= 30) { score += 8; }
+  else if (s.type === 'PUT' && stochK >= 80) { score += 15; reasons.push(`Stoch ${stochK.toFixed(0)}`); }
+  else if (s.type === 'PUT' && stochK >= 70) { score += 8; }
+
+  // Bollinger confirmando
+  if (s.type === 'CALL' && bollPos === 'below_lower') { score += 12; reasons.push('Bollinger ↓'); }
+  else if (s.type === 'PUT' && bollPos === 'above_upper') { score += 12; reasons.push('Bollinger ↑'); }
+
+  // Suporte/Resistência
+  if (s.type === 'CALL' && pricePos === 'near_support') { score += 10; reasons.push('Suporte'); }
+  else if (s.type === 'PUT' && pricePos === 'near_resistance') { score += 10; reasons.push('Resistência'); }
+
+  // Padrão de reversão (vela)
+  if (hasPattern) { score += 12; reasons.push(hasPattern); }
+
+  // MACD confirmando
+  if (s.type === 'CALL' && macdHist > 0) { score += 7; }
+  else if (s.type === 'PUT' && macdHist < 0) { score += 7; }
+
+  // Volatilidade baixa = melhor para scalping
+  if (vol === 'low') { score += 8; reasons.push('Vol baixa'); riskLevel = 'LOW'; }
+
+  // Confluência alta
+  if (conf >= 85) { score += 10; }
+  else if (conf >= 75) { score += 5; }
+
+  // === AJUSTES BASEADOS NO HISTÓRICO ===
+
+  // Ativo com bom histórico
+  if (assetPerf && assetPerf.wr >= 60 && assetPerf.profit > 0) {
+    score += 10;
+    reasons.push(`Ativo WR ${assetPerf.wr}%`);
+  }
+
+  // Ativo com loss streak leve (2-3)
+  if (lossStreak >= 2) {
+    score -= 10;
+    reasons.push(`${lossStreak}L seguidos`);
+  }
+
+  // Horário bom
+  if (perf.bestHours.includes(currentHour)) {
+    score += 8;
+    reasons.push(`Hora boa (${currentHour}h)`);
+  }
+
+  // Horário ruim
+  if (perf.worstHours.includes(currentHour)) {
+    score -= 12;
+    reasons.push(`Hora ruim (${currentHour}h)`);
+  }
+
+  // === DECISÃO FINAL ===
+  // Score >= 50 = EXECUTE (indicadores técnicos fortes)
+  // Score >= 40 = EXECUTE se ativo tem bom histórico
+  const threshold = assetPerf && assetPerf.wr >= 55 ? 40 : 50;
+  const shouldExecute = score >= threshold;
+
+  return {
+    score: Math.min(score, 100),
+    reason: reasons.slice(0, 4).join(' | ') || 'Score insuficiente',
+    risk: riskLevel,
+    shouldExecute,
+  };
+}
+
+// ============= TENTAR LOVABLE AI COMO BÔNUS =============
+async function tryLovableAI(signals: SignalData[], perf: any, currentHour: number): Promise<any[] | null> {
+  try {
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) return null;
+
+    const signalSummaries = signals.map(s => ({
+      asset: s.asset,
+      direction: s.type,
+      rsi: Math.round(s.indicators.rsi.value),
+      stoch: Math.round(s.indicators.stochastic.k),
+      bollinger: s.indicators.bollinger.position,
+      support_resistance: s.indicators.supportResistance.pricePosition,
+      volatility: s.indicators.atr.volatility,
+      confluence: s.indicators.confluenceScore,
+      pattern: s.indicators.reversalPattern || 'none',
+      loss_streak: perf.recentLossStreaks[s.asset] || 0,
+    }));
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        messages: [
+          { role: 'system', content: `Analista de opções binárias M1. Hora: ${currentHour}h UTC. WR geral: ${perf.overallWinRate}%. Retorne APENAS sinais com alta chance de lucro rápido.` },
+          { role: 'user', content: `Sinais: ${JSON.stringify(signalSummaries)}` },
+        ],
+        tools: [{
+          type: 'function',
+          function: {
+            name: 'decide',
+            description: 'Trading decisions',
+            parameters: {
+              type: 'object',
+              properties: {
+                picks: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      asset: { type: 'string' },
+                      execute: { type: 'boolean' },
+                      boost: { type: 'number', description: 'Score adjustment -20 to +20' },
+                    },
+                    required: ['asset', 'execute', 'boost'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ['picks'],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: 'function', function: { name: 'decide' } },
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      if (response.status === 402) console.log('⚠️ Lovable AI: créditos insuficientes, usando análise local');
+      else if (response.status === 429) console.log('⚠️ Lovable AI: rate limit, usando análise local');
+      else console.log(`⚠️ Lovable AI [${response.status}]: ${errText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (toolCall?.function?.arguments) {
+      const parsed = JSON.parse(toolCall.function.arguments);
+      console.log(`🧠 Lovable AI respondeu: ${JSON.stringify(parsed.picks)}`);
+      return parsed.picks || null;
+    }
+  } catch (e) {
+    console.log(`⚠️ Lovable AI falhou: ${e}`);
+  }
+  return null;
 }
 
 // ============= MAIN HANDLER =============
@@ -151,9 +341,6 @@ serve(async (req) => {
 
   try {
     const { signals }: AnalysisRequest = await req.json();
-    
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
     if (!signals || signals.length === 0) {
       return new Response(
@@ -167,204 +354,67 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Buscar performance real
     const perf = await getRecentPerformance(supabase);
-    console.log(`📊 Performance: ${perf.summary}`);
-    if (perf.bestAssets.length > 0) console.log(`✅ Melhores ativos: ${perf.bestAssets.join(', ')}`);
-    if (perf.worstAssets.length > 0) console.log(`❌ Piores ativos: ${perf.worstAssets.join(', ')}`);
-
     const currentHour = new Date().getUTCHours();
-    const isWorstHour = perf.worstHours.includes(currentHour);
 
-    // Preparar dados dos sinais para a IA
-    const signalSummaries = signals.map(s => ({
-      asset: s.asset,
-      direction: s.type,
-      price: s.price,
-      rsi: Math.round(s.indicators.rsi.value * 10) / 10,
-      stochastic_k: Math.round(s.indicators.stochastic.k * 10) / 10,
-      macd_trend: s.indicators.macd.trend,
-      bollinger_position: s.indicators.bollinger.position,
-      support_resistance: s.indicators.supportResistance.pricePosition,
-      ma_trend: s.indicators.movingAverages.trend,
-      volatility: s.indicators.atr.volatility,
-      confluence_score: s.indicators.confluenceScore,
-      confluence_count: s.indicators.confluenceCount,
-      reversal_pattern: s.indicators.reversalPattern || 'none',
-      confirmations: s.confirmations.length,
-      recent_loss_streak: perf.recentLossStreaks[s.asset] || 0,
-      is_worst_asset: perf.worstAssets.includes(s.asset),
-      is_best_asset: perf.bestAssets.includes(s.asset),
+    console.log(`📊 WR: ${perf.overallWinRate}% | P&L: $${perf.totalProfit.toFixed(2)} | Hora: ${currentHour}h UTC`);
+    if (perf.bestAssets.length > 0) console.log(`✅ Top: ${perf.bestAssets.join(', ')}`);
+    if (perf.worstAssets.length > 0) console.log(`❌ Evitar: ${perf.worstAssets.join(', ')}`);
+
+    // 1. Score local inteligente
+    const scored = signals.map(s => ({
+      signal: s,
+      ...scoreSignal(s, perf, currentHour),
     }));
 
-    // ============= CHAMAR LOVABLE AI (Gemini) =============
-    const systemPrompt = `Você é um analista de trading de OPÇÕES BINÁRIAS especializado em operações M1 (1 minuto).
-Sua meta é LUCRO RÁPIDO e CONSISTENTE. Analise os sinais e decida quais executar.
+    // 2. Tentar Lovable AI como ajuste (opcional)
+    const aiPicks = await tryLovableAI(
+      signals.filter((_, i) => scored[i].shouldExecute || scored[i].score >= 35),
+      perf,
+      currentHour
+    );
 
-REGRAS CRÍTICAS:
-1. PRIORIZE sinais com RSI em zona extrema (< 25 para CALL, > 75 para PUT)
-2. Estocástico deve confirmar a exaustão (< 25 CALL, > 75 PUT)  
-3. EVITE volatilidade alta (ATR high) — risco de spike
-4. Bollinger abaixo da banda inferior = forte sinal CALL, acima = forte PUT
-5. Padrão de reversão (Hammer, Engulfing) aumenta a confiança
-6. Se o ativo teve 3+ losses consecutivos recentes, NÃO EXECUTE
-7. Se o ativo é marcado como "worst_asset", exija confirmações EXTRAS
-8. Horário atual: ${currentHour}h UTC${isWorstHour ? ' (HORÁRIO RUIM - seja mais exigente)' : ''}
-
-PERFORMANCE RECENTE DO SISTEMA:
-${perf.summary}
-${perf.bestAssets.length > 0 ? `Melhores ativos: ${perf.bestAssets.join(', ')}` : 'Sem ativos destaque'}
-${perf.worstAssets.length > 0 ? `EVITAR: ${perf.worstAssets.join(', ')}` : ''}
-
-ESTRATÉGIA: Busque a MELHOR oportunidade de reversão certeira. Prefira 1 trade muito bom a 3 medianos.
-Se NENHUM sinal é realmente bom, não execute nenhum — é melhor não operar do que perder.
-
-IMPORTANTE: A inversão será aplicada DEPOIS — analise os sinais como estão (CALL = espera subir, PUT = espera cair).`;
-
-    const userPrompt = `Analise estes ${signalSummaries.length} sinais e retorne APENAS os que devem ser executados:
-
-${JSON.stringify(signalSummaries, null, 2)}
-
-Responda usando a tool "analyze_signals".`;
-
-    console.log(`🤖 Enviando ${signals.length} sinais para Lovable AI (Gemini)...`);
-
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        tools: [{
-          type: 'function',
-          function: {
-            name: 'analyze_signals',
-            description: 'Return analysis results for trading signals',
-            parameters: {
-              type: 'object',
-              properties: {
-                decisions: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      asset: { type: 'string', description: 'Asset symbol e.g. EUR/USD' },
-                      action: { type: 'string', enum: ['EXECUTE', 'SKIP'] },
-                      confidence: { type: 'number', description: 'Confidence 0-100' },
-                      reason: { type: 'string', description: 'Short reason in Portuguese' },
-                      risk: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'] },
-                    },
-                    required: ['asset', 'action', 'confidence', 'reason', 'risk'],
-                    additionalProperties: false,
-                  },
-                },
-              },
-              required: ['decisions'],
-              additionalProperties: false,
-            },
-          },
-        }],
-        tool_choice: { type: 'function', function: { name: 'analyze_signals' } },
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error(`❌ Lovable AI error [${aiResponse.status}]: ${errText}`);
-      
-      // Fallback: aprovar sinais com confluência >= 75% e sem loss streak
-      const fallbackApproved = signals
-        .filter(s => 
-          s.indicators.confluenceScore >= 75 && 
-          !perf.worstAssets.includes(s.asset) &&
-          (perf.recentLossStreaks[s.asset] || 0) < 3
-        )
-        .sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore)
-        .slice(0, 2);
-
-      console.log(`⚠️ Fallback: ${fallbackApproved.length} sinais aprovados por confluência`);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          analyzedSignals: signals.map(s => {
-            const approved = fallbackApproved.find(f => f.asset === s.asset);
-            return {
-              signalId: `${s.asset}-${Date.now()}`,
-              asset: s.asset,
-              recommendation: approved ? 'EXECUTE' : 'SKIP',
-              confidence: s.indicators.confluenceScore,
-              reason: approved ? `Fallback: confluência ${s.indicators.confluenceScore}%` : 'Não aprovado',
-              adjustedConfluence: s.indicators.confluenceScore,
-              riskLevel: s.indicators.atr.volatility === 'high' ? 'HIGH' : 'MEDIUM',
-            };
-          }),
-          marketSentiment: 'NEUTRAL',
-          bestSignal: fallbackApproved[0]?.asset || null,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const aiData = await aiResponse.json();
-    
-    // Parse tool call response
-    let decisions: any[] = [];
-    try {
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-      if (toolCall?.function?.arguments) {
-        const parsed = JSON.parse(toolCall.function.arguments);
-        decisions = parsed.decisions || [];
+    // 3. Aplicar boost da IA se disponível
+    if (aiPicks) {
+      for (const pick of aiPicks) {
+        const idx = scored.findIndex(s => s.signal.asset.toUpperCase() === pick.asset?.toUpperCase());
+        if (idx >= 0) {
+          scored[idx].score = Math.min(100, Math.max(0, scored[idx].score + (pick.boost || 0)));
+          if (pick.execute === false && scored[idx].shouldExecute) {
+            scored[idx].shouldExecute = false;
+            scored[idx].reason += ' | IA vetou';
+          } else if (pick.execute === true && !scored[idx].shouldExecute && scored[idx].score >= 35) {
+            scored[idx].shouldExecute = true;
+            scored[idx].reason += ' | IA aprovou';
+          }
+        }
       }
-    } catch (e) {
-      console.error('❌ Erro ao parsear resposta IA:', e);
     }
 
-    console.log(`🧠 IA retornou ${decisions.length} decisões`);
+    // 4. Selecionar os melhores (max 3)
+    const approved = scored
+      .filter(s => s.shouldExecute)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
 
-    const executeDecisions = decisions.filter((d: any) => d.action === 'EXECUTE');
-    const skipDecisions = decisions.filter((d: any) => d.action === 'SKIP');
-
-    console.log(`✅ EXECUTE: ${executeDecisions.length} | ⏭️ SKIP: ${skipDecisions.length}`);
-    for (const d of executeDecisions) {
-      console.log(`   ✅ ${d.asset}: ${d.reason} (${d.confidence}% conf, ${d.risk} risk)`);
+    console.log(`🎯 ${approved.length}/${signals.length} sinais aprovados para execução`);
+    for (const a of approved) {
+      console.log(`   ✅ ${a.signal.asset} (${a.signal.type}): Score ${a.score} | ${a.reason}`);
     }
-    for (const d of skipDecisions) {
-      console.log(`   ⏭️ ${d.asset}: ${d.reason}`);
+    for (const s of scored.filter(s => !s.shouldExecute)) {
+      console.log(`   ⏭️ ${s.signal.asset}: Score ${s.score} | ${s.reason}`);
     }
 
-    // Mapear resposta
     const analyzedSignals = signals.map(s => {
-      const decision = decisions.find((d: any) => 
-        d.asset?.toUpperCase() === s.asset.toUpperCase()
-      );
-
-      if (decision && decision.action === 'EXECUTE') {
-        return {
-          signalId: `${s.asset}-${Date.now()}`,
-          asset: s.asset,
-          recommendation: 'EXECUTE',
-          confidence: decision.confidence || s.indicators.confluenceScore,
-          reason: decision.reason || 'IA aprovou',
-          adjustedConfluence: decision.confidence || s.indicators.confluenceScore,
-          riskLevel: decision.risk || 'MEDIUM',
-        };
-      }
-
+      const result = scored.find(sc => sc.signal.asset === s.asset)!;
       return {
         signalId: `${s.asset}-${Date.now()}`,
         asset: s.asset,
-        recommendation: 'SKIP',
-        confidence: s.indicators.confluenceScore,
-        reason: decision?.reason || 'IA não aprovou',
-        adjustedConfluence: s.indicators.confluenceScore,
-        riskLevel: 'HIGH',
+        recommendation: result.shouldExecute ? 'EXECUTE' : 'SKIP',
+        confidence: result.score,
+        reason: result.reason,
+        adjustedConfluence: result.score,
+        riskLevel: result.risk,
       };
     });
 
@@ -373,7 +423,7 @@ Responda usando a tool "analyze_signals".`;
         success: true,
         analyzedSignals,
         marketSentiment: 'NEUTRAL',
-        bestSignal: executeDecisions[0]?.asset || null,
+        bestSignal: approved[0]?.signal.asset || null,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -491,7 +491,7 @@ serve(async (req) => {
     });
 
     const approved = analyzedSignals.filter(a => a.recommendation === 'EXECUTE');
-    console.log(`🎯 FAST PROFIT: ${approved.length}/${signals.length} aprovados (Engine: ${aiDecisions ? 'LOVABLE_AI' : 'LOCAL'})`);
+    console.log(`🎯 FAST PROFIT: ${approved.length}/${signals.length} aprovados (Engine: ${aiDecisions ? 'GROQ_AI' : 'LOCAL'})`);
 
     return new Response(
       JSON.stringify({

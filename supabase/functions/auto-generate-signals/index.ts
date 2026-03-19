@@ -1259,8 +1259,8 @@ serve(async (req) => {
                 console.log(`⏭️ MT5: ${mt5Signal.asset} confluência ${mt5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
                 continue;
               }
-              if (mt5Signal.aiConfidence && mt5Signal.aiConfidence < 55) {
-                console.log(`⏭️ MT5: ${mt5Signal.asset} IA confiança ${mt5Signal.aiConfidence}% < 55%`);
+              if (mt5Signal.aiConfidence && mt5Signal.aiConfidence < 50) {
+                console.log(`⏭️ MT5: ${mt5Signal.asset} IA confiança ${mt5Signal.aiConfidence}% < 50%`);
                 continue;
               }
 

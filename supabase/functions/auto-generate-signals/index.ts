@@ -870,12 +870,21 @@ serve(async (req) => {
       console.error('❌ Falha ao chamar IA:', e);
     }
 
-    if (aiApprovedSignals.length === 0) {
-      console.log('⚠️ IA não aprovou sinais reais — NÃO operando');
+    // Se IA não aprovou nenhum sinal, ainda permitir MT5 com sinais técnicos fortes
+    const mt5FallbackSignals = aiApprovedSignals.length === 0 ? candidates.filter(c => 
+      c.indicators.confluenceScore >= 65 && !c.asset.toUpperCase().includes('OTC')
+    ).sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore) : [];
+
+    if (aiApprovedSignals.length === 0 && mt5FallbackSignals.length === 0) {
+      console.log('⚠️ IA não aprovou sinais reais e nenhum sinal técnico forte para MT5');
       return new Response(
         JSON.stringify({ success: true, generated: 0, reason: 'AI did not approve any real signals' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    if (aiApprovedSignals.length === 0 && mt5FallbackSignals.length > 0) {
+      console.log(`⚠️ IA não aprovou sinais, mas MT5 tem ${mt5FallbackSignals.length} sinal(is) técnico(s) forte(s)`);
     }
 
     aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));

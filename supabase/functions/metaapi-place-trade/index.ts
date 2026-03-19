@@ -223,8 +223,9 @@ serve(async (req) => {
       comment: `S${(signalId || '').slice(0, 8)}|${confluenceScore || 0}`,
     };
 
+    // Operações rápidas: TP agressivo para fechar rápido com lucro
     if (tpPercent > 0 && tpCurrency > 0) {
-      console.log(`🎯 Take Profit alvo: $${tpCurrency.toFixed(2)} (${tpPercent}% de $${investmentAmount}) — será fechado manualmente ao atingir`);
+      console.log(`🎯 TP rápido: $${tpCurrency.toFixed(2)} (${tpPercent}% de $${investmentAmount}) — fechamento automático ao atingir`);
     }
 
     console.log(`📤 Sending trade to MT5: ${tradeUrl}`);

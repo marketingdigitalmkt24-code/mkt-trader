@@ -73,21 +73,21 @@ serve(async (req) => {
 
     const tradeAmount = tradingSettings?.mt5_trade_amount || 1;
     
-    // ============= TP/SL CALCULADOS COM BASE NO SPREAD =============
-    // Spread típico para 0.01 lotes: ~$0.10-$0.20
-    // TP deve ser MAIOR que o spread para ser lucrativo
-    // Mínimo: $0.30 (3 pips) para cobrir spread + lucro real
+    // ============= TP/SL COM RISK/REWARD FAVORÁVEL =============
+    // REGRA: TP deve ser MAIOR que SL para lucro consistente
+    // Risk/Reward mínimo 1:1.5 (arrisca $1, busca $1.50)
     const rawTpCurrency = tradeAmount * (tpPercent / 100);
     const MIN_TP_DOLLARS = 0.30; // Mínimo $0.30 para cobrir spread
     const tpCurrency = Math.max(rawTpCurrency, MIN_TP_DOLLARS);
     
-    // Stop Loss: 2x o TP para proteger contra perdas infinitas
-    const slCurrency = tpCurrency * 2;
+    // Stop Loss: 70% do TP — arrisca MENOS do que busca lucrar
+    // Se TP = $0.30, SL = $0.21 → perde menos nas perdas
+    const slCurrency = tpCurrency * 0.7;
     
     if (rawTpCurrency < MIN_TP_DOLLARS) {
       console.log(`⚠️ TP original $${rawTpCurrency.toFixed(2)} é menor que o spread! Ajustado para $${tpCurrency.toFixed(2)}`);
     }
-    console.log(`📊 Config: TP: $${tpCurrency.toFixed(2)} (ajustado) | SL: -$${slCurrency.toFixed(2)} | TradeAmt: $${tradeAmount}`);
+    console.log(`📊 Config: TP: $${tpCurrency.toFixed(2)} | SL: -$${slCurrency.toFixed(2)} | R:R 1:${(tpCurrency/slCurrency).toFixed(1)} | TradeAmt: $${tradeAmount}`);
 
     // Get region and ensure account is deployed
     let region = 'new-york';

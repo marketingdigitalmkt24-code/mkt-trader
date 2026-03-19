@@ -852,16 +852,21 @@ serve(async (req) => {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
         const executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
-        console.log(`🧠 IA: ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
+        console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
 
         for (const approved of executeSignals) {
           const candidate = candidates.find(c => c.asset.toUpperCase() === approved.asset.toUpperCase());
           if (candidate) {
+            // USAR DIREÇÃO RECOMENDADA PELA GROQ/IA (não inverter cegamente)
+            const bestDir = approved.bestDirection || candidate.type;
             aiApprovedSignals.push({
               ...candidate,
+              type: bestDir, // Direção corrigida pela IA
+              originalType: candidate.type,
               aiConfidence: approved.confidence,
               aiReason: approved.reason,
               aiRiskLevel: approved.riskLevel,
+              aiDirection: bestDir,
             });
           }
         }

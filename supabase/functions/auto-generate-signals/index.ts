@@ -1009,9 +1009,9 @@ serve(async (req) => {
               const iqTradeAmount = tradeSettings?.trade_amount || 1;
               const expiration = 1;
 
-              // INVERTER direção: se análise diz CALL, executar PUT e vice-versa
-              const invertedDirection = bestSignal.type === 'CALL' ? 'PUT' : 'CALL';
-              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.type}→${invertedDirection} (INVERTIDO) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
+              // USAR DIREÇÃO DA IA (Groq decide a melhor direção)
+              const executionDirection = bestSignal.aiDirection || bestSignal.type;
+              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
               // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso
               await supabase.from('trade_queue').insert({

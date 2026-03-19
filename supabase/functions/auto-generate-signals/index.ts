@@ -1192,8 +1192,10 @@ serve(async (req) => {
 
       if (!bestMT5Signal) {
         console.log(`⏭️ MT5: Nenhum sinal disponível (IA: ${aiApprovedSignals.length} | Técnico: ${mt5FallbackSignals.length})`);
-      } else if (bestMT5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
-        console.log(`⏭️ MT5: Confluência ${bestMT5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
+      } else if (!bestMT5Signal.aiConfidence && bestMT5Signal.indicators.confluenceScore < MT5_MIN_CONFLUENCE) {
+        console.log(`⏭️ MT5: Confluência ${bestMT5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}% (sem IA)`);
+      } else if (bestMT5Signal.aiConfidence && bestMT5Signal.aiConfidence < 55) {
+        console.log(`⏭️ MT5: IA confiança ${bestMT5Signal.aiConfidence}% < 55%`);
       } else {
         // Verificar se é ativo OTC (MT5 não opera OTC)
         const isOTCAssetMT5 = bestMT5Signal.asset.toUpperCase().includes('OTC');

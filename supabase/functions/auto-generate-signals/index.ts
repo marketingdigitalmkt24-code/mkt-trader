@@ -887,18 +887,20 @@ serve(async (req) => {
       console.log(`⚠️ IA não aprovou sinais, mas MT5 tem ${mt5FallbackSignals.length} sinal(is) técnico(s) forte(s)`);
     }
 
-    aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
+    if (aiApprovedSignals.length > 0) {
+      aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
+    }
 
     // ============= EXECUTE BEST SIGNAL =============
-    const signalsToExecute = [aiApprovedSignals[0]];
-    console.log(`🎯 MELHOR sinal REAL: ${signalsToExecute[0].asset} (${signalsToExecute[0].type}) — Score: ${signalsToExecute[0].indicators.confluenceScore}% | Preço REAL: ${signalsToExecute[0].price}`);
-
+    const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
+    
     let totalIQ = 0;
     let totalMT5 = 0;
     let totalWhatsApp = 0;
     const executedSignals: any[] = [];
 
     for (const bestSignal of signalsToExecute) {
+      console.log(`🎯 MELHOR sinal REAL: ${bestSignal.asset} (${bestSignal.type}) — Score: ${bestSignal.indicators.confluenceScore}% | Preço REAL: ${bestSignal.price}`);
       const hist = assetHistory.get(bestSignal.asset);
       const histInfo = hist ? ` | History: WR ${hist.winRate}% (${hist.wins}W/${hist.losses}L)` : ' | No history';
       const aiInfo = bestSignal.aiConfidence ? ` | IA: ${bestSignal.aiConfidence}% (${bestSignal.aiReason})` : '';

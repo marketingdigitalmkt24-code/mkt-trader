@@ -1201,11 +1201,8 @@ serve(async (req) => {
     // Permite até 5 posições simultâneas para maximizar oportunidades
     const MAX_MT5_POSITIONS = 5;
     try {
-      // Combinar sinais IA + fallback técnico para MT5
-      const allMT5Candidates = [
-        ...aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC')),
-        ...mt5FallbackSignals,
-      ];
+      // MT5 SOMENTE com sinais aprovados pela IA (sem fallback técnico)
+      const allMT5Candidates = aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC'));
 
       // Remover duplicatas por ativo
       const seenAssets = new Set<string>();

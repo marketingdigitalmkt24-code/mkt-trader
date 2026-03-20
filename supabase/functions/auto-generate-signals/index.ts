@@ -985,21 +985,13 @@ serve(async (req) => {
       console.error('❌ Falha ao chamar IA:', e);
     }
 
-    // Se IA não aprovou nenhum sinal, ainda permitir MT5 com sinais técnicos fortes
-    const mt5FallbackSignals = aiApprovedSignals.length === 0 ? candidates.filter(c => 
-      c.indicators.confluenceScore >= 65 && !c.asset.toUpperCase().includes('OTC')
-    ).sort((a, b) => b.indicators.confluenceScore - a.indicators.confluenceScore) : [];
-
-    if (aiApprovedSignals.length === 0 && mt5FallbackSignals.length === 0) {
-      console.log('⚠️ IA não aprovou sinais reais e nenhum sinal técnico forte para MT5');
+    // MT5 SÓ opera com aprovação da IA — sem fallback técnico
+    if (aiApprovedSignals.length === 0) {
+      console.log('⚠️ IA não aprovou nenhum sinal — MT5 e IQ bloqueados (somente sinais aprovados pela IA)');
       return new Response(
-        JSON.stringify({ success: true, generated: 0, reason: 'AI did not approve any real signals' }),
+        JSON.stringify({ success: true, generated: 0, reason: 'AI did not approve any signals' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
-    }
-
-    if (aiApprovedSignals.length === 0 && mt5FallbackSignals.length > 0) {
-      console.log(`⚠️ IA não aprovou sinais, mas MT5 tem ${mt5FallbackSignals.length} sinal(is) técnico(s) forte(s)`);
     }
 
     if (aiApprovedSignals.length > 0) {
@@ -1209,11 +1201,8 @@ serve(async (req) => {
     // Permite até 5 posições simultâneas para maximizar oportunidades
     const MAX_MT5_POSITIONS = 5;
     try {
-      // Combinar sinais IA + fallback técnico para MT5
-      const allMT5Candidates = [
-        ...aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC')),
-        ...mt5FallbackSignals,
-      ];
+      // MT5 SOMENTE com sinais aprovados pela IA (sem fallback técnico)
+      const allMT5Candidates = aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC'));
 
       // Remover duplicatas por ativo
       const seenAssets = new Set<string>();

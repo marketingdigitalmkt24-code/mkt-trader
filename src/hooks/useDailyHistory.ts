@@ -84,7 +84,7 @@ export function useDailyHistory(days: number = 7, source?: 'iq' | 'mt5') {
     } finally {
       setIsLoading(false);
     }
-  }, [days]);
+  }, [days, source]);
 
   useEffect(() => {
     fetchHistory();

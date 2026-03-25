@@ -77,19 +77,24 @@ export function useIQOptionConnection() {
     }
   }, [user]);
 
-  // Fetch daily stats from database
+  // Fetch daily stats from database (IQ Option only, exclude MT5)
   const fetchDailyStats = useCallback(async () => {
     try {
-      // Use LOCAL midnight to match user's "today"
+      // Use Brasília midnight (UTC-3) for "today"
       const now = new Date();
-      const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      
-      console.log('📊 Fetching stats from (local):', localMidnight.toISOString());
+      const brasiliaNow = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+      const year = brasiliaNow.getUTCFullYear();
+      const month = brasiliaNow.getUTCMonth();
+      const day = brasiliaNow.getUTCDate();
+      const brasiliaMidnightUtc = new Date(Date.UTC(year, month, day, 3, 0, 0, 0));
+
+      console.log('📊 IQ Option stats from (BRT midnight):', brasiliaMidnightUtc.toISOString());
 
       const { data: results, error } = await supabase
         .from('operation_results')
-        .select('result, profit, entry_price')
-        .gte('created_at', localMidnight.toISOString())
+        .select('result, profit, entry_price, timeframe')
+        .gte('created_at', brasiliaMidnightUtc.toISOString())
+        .neq('timeframe', 'MT5')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -118,13 +123,9 @@ export function useIQOptionConnection() {
         }
       }
 
-      console.log('📊 Daily stats calculated:', { 
+      console.log('📊 IQ Option daily stats:', { 
         todayTrades: (results || []).filter(r => r.result !== 'pending').length,
-        wins, 
-        losses, 
-        ties,
-        profit,
-        consecutiveLosses 
+        wins, losses, ties, profit, consecutiveLosses 
       });
 
       setDailyStats({

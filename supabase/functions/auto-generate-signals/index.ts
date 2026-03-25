@@ -1181,7 +1181,7 @@ serve(async (req) => {
 
               // USAR DIREÇÃO DA IA (Groq decide a melhor direção)
               const executionDirection = bestSignal.aiDirection || bestSignal.type;
-              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
+              console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount.toFixed(2)}${martingaleLevel > 0 ? ` [MG${martingaleLevel}]` : ''} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
               // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso
               await supabase.from('trade_queue').insert({

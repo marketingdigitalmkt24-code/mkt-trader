@@ -32,16 +32,15 @@ export function useTradingStats() {
     
     switch (p) {
       case 'today':
-        // Use UTC to match database timestamps
-        return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+        // Use LOCAL midnight to match user's "today"
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
       case 'week':
         const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
-        return new Date(Date.UTC(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate(), 0, 0, 0, 0));
+        return weekStart;
       case 'month':
-        const monthStart = startOfMonth(now);
-        return new Date(Date.UTC(monthStart.getFullYear(), monthStart.getMonth(), monthStart.getDate(), 0, 0, 0, 0));
+        return startOfMonth(now);
       default:
-        return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     }
   }, []);
 

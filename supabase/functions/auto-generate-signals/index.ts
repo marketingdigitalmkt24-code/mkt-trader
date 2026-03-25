@@ -1132,7 +1132,51 @@ serve(async (req) => {
                 .limit(1)
                 .maybeSingle();
 
-              const iqTradeAmount = tradeSettings?.trade_amount || 1;
+              const baseAmount = tradeSettings?.trade_amount || 1;
+              
+              // ============= MARTINGALE: RECUPERAÇÃO DE PERDA =============
+              // Verifica últimas operações para calcular valor de recuperação
+              let iqTradeAmount = baseAmount;
+              let martingaleLevel = 0;
+              try {
+                const { data: recentOps } = await supabase
+                  .from('operation_results')
+                  .select('result, entry_price, profit')
+                  .order('created_at', { ascending: false })
+                  .limit(10);
+
+                if (recentOps && recentOps.length > 0) {
+                  // Calcular perdas consecutivas acumuladas (desde a última vitória)
+                  let accumulatedLoss = 0;
+                  for (const op of recentOps) {
+                    const r = op.result?.toLowerCase();
+                    if (r === 'win') break; // Para na última vitória
+                    if (r === 'loss' || r === 'loose') {
+                      accumulatedLoss += op.entry_price || baseAmount;
+                      martingaleLevel++;
+                    }
+                    // Tie = ignora, continua verificando
+                  }
+
+                  if (accumulatedLoss > 0 && martingaleLevel > 0) {
+                    // Payout médio IQ Option ~85% — precisa recuperar a perda + lucro normal
+                    const estimatedPayout = 0.85;
+                    // Fórmula: (perda_acumulada + lucro_desejado) / payout
+                    iqTradeAmount = Math.ceil(((accumulatedLoss + baseAmount * estimatedPayout) / estimatedPayout) * 100) / 100;
+                    
+                    // Limite de segurança: máximo 5x o valor base (evitar risco extremo)
+                    const maxMultiplier = 5;
+                    if (iqTradeAmount > baseAmount * maxMultiplier) {
+                      console.log(`⚠️ MARTINGALE: Valor $${iqTradeAmount.toFixed(2)} excede ${maxMultiplier}x — limitando a $${(baseAmount * maxMultiplier).toFixed(2)}`);
+                      iqTradeAmount = baseAmount * maxMultiplier;
+                    }
+                    
+                    console.log(`🔄 MARTINGALE NÍVEL ${martingaleLevel}: Perda acumulada $${accumulatedLoss.toFixed(2)} → Entrada: $${iqTradeAmount.toFixed(2)} (base: $${baseAmount})`);
+                  }
+                }
+              } catch (e) {
+                console.log('⚠️ Erro ao calcular Martingale, usando valor base:', e);
+              }
               const expiration = 1;
 
               // USAR DIREÇÃO DA IA (Groq decide a melhor direção)

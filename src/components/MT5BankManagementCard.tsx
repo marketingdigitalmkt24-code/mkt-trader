@@ -311,9 +311,6 @@ export function MT5BankManagementCard() {
           )}
         </div>
       )}
-
-      {/* Daily History */}
-      <DailyHistoryList history={history} formatCurrency={formatCurrency} />
     </section>
   );
 }

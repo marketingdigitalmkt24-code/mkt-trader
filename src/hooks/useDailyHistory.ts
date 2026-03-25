@@ -75,7 +75,7 @@ export function useDailyHistory(days: number = 7) {
     } finally {
       setIsLoading(false);
     }
-  }, [days, source]);
+  }, [days]);
 
   useEffect(() => {
     fetchHistory();

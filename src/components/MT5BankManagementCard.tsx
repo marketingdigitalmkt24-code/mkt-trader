@@ -313,7 +313,7 @@ export function MT5BankManagementCard() {
       )}
 
       {/* Daily History */}
-      <MT5DailyHistory />
+      <DailyHistory title="Histórico Diário MT5" timeframeFilter="MT5" />
     </section>
   );
 }

@@ -21,13 +21,19 @@ export function useDailyHistory(days: number = 7, source: 'all' | 'iq' | 'mt5' =
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - days);
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('operation_results')
         .select('result, profit, entry_price, created_at')
-        .is('iq_option_id', source === 'mt5' ? null : undefined)
         .gte('created_at', cutoff.toISOString())
-        .in('result', ['win', 'loss', 'loose', 'tie', 'equal'])
-        .order('created_at', { ascending: false });
+        .in('result', ['win', 'loss', 'loose', 'tie', 'equal']);
+
+      if (source === 'mt5') {
+        query = query.is('iq_option_id', null);
+      } else if (source === 'iq') {
+        query = query.not('iq_option_id', 'is', null);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
 

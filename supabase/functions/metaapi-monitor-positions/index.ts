@@ -254,6 +254,41 @@ serve(async (req) => {
       pnl30d += deal.profit ?? 0;
     }
 
+    // ============= PERSIST MT5 DEALS TO DATABASE =============
+    // Save closed deals to operation_results so daily history is available
+    for (const deal of todayDeals) {
+      const dealId = `mt5-${deal.id || deal.orderId || deal.positionId}`;
+      const profit = deal.profit ?? 0;
+      const result = profit > 0 ? 'win' : profit < 0 ? 'loss' : 'draw';
+      const direction = (deal.type === 'DEAL_TYPE_BUY' || deal.type === 'DEAL_TYPE_SELL')
+        ? (deal.type === 'DEAL_TYPE_BUY' ? 'CALL' : 'PUT')
+        : 'CALL';
+
+      try {
+        // Upsert by signal_id to avoid duplicates
+        const { error: upsertErr } = await supabase
+          .from('operation_results')
+          .upsert({
+            signal_id: dealId,
+            asset: deal.symbol || 'UNKNOWN',
+            direction,
+            result,
+            profit: parseFloat(profit.toFixed(2)),
+            entry_price: deal.price ?? null,
+            exit_price: null,
+            is_auto_trade: true,
+            is_ai_analyzed: true,
+            timeframe: 'MT5',
+            created_at: deal.time || new Date().toISOString(),
+          }, { onConflict: 'signal_id' });
+        if (upsertErr) {
+          console.error(`❌ Error saving deal ${dealId}:`, upsertErr.message);
+        }
+      } catch (e) {
+        console.error(`❌ Error persisting deal ${dealId}:`, e);
+      }
+    }
+
     // Spread advantage: ONLY for EURUSD (tightest spread ~1 pip)
     // EURUSD closes 15% earlier since spread cost is minimal — faster profit
     const EURUSD_SPREAD_MULTIPLIER = 0.85;

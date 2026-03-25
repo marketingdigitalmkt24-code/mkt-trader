@@ -60,22 +60,15 @@ export function MT5BankManagementCard() {
           currency: data.currency || 'USD',
         });
 
-        // Check if reset was done today (Brasília time)
-        const resetDate = localStorage.getItem('mt5_reset_date');
-        const resetActive = resetDate === getBrasiliaDateKey();
-        setIsResetToday(resetActive);
-
-        if (!resetActive) {
-          setStats({
-            dailyProfit: data.todayProfit ?? 0,
-            todayTrades: data.todayTrades ?? 0,
-            wins: data.todayWins ?? 0,
-            losses: data.todayLosses ?? 0,
-            consecutiveLosses: data.consecutiveLosses ?? 0,
-            pnl30d: data.pnl30d ?? 0,
-          });
-        }
-        // If reset is active, keep stats at zero (don't overwrite)
+        // Always show real MT5 stats from broker
+        setStats({
+          dailyProfit: data.todayProfit ?? 0,
+          todayTrades: data.todayTrades ?? 0,
+          wins: data.todayWins ?? 0,
+          losses: data.todayLosses ?? 0,
+          consecutiveLosses: data.consecutiveLosses ?? 0,
+          pnl30d: data.pnl30d ?? 0,
+        });
       }
     } catch (e) {
       console.error('Error fetching MT5 data:', e);

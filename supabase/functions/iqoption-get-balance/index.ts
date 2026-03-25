@@ -243,9 +243,11 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     let userId: string | null = null;
+    let timezoneOffset = 0; // minutes, e.g. 180 for BRT (UTC-3)
     try {
       const body = await req.json();
       userId = body?.userId || null;
+      timezoneOffset = body?.timezoneOffset || 0;
     } catch {
       // No body
     }
@@ -292,15 +294,25 @@ serve(async (req) => {
       );
     }
 
-    // Get today's stats from database (ONLY auto trades)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Get today's stats using user's local midnight (converted to UTC)
+    const now = new Date();
+    // timezoneOffset is in minutes (positive = behind UTC, e.g. 180 for BRT)
+    const localMidnightUTC = new Date(now.getTime());
+    localMidnightUTC.setUTCHours(0, 0, 0, 0);
+    // Adjust: local midnight in UTC = UTC midnight + offset
+    localMidnightUTC.setUTCMinutes(localMidnightUTC.getUTCMinutes() + timezoneOffset);
+    // Go back one day if the adjusted time is in the future
+    if (localMidnightUTC.getTime() > now.getTime()) {
+      localMidnightUTC.setUTCDate(localMidnightUTC.getUTCDate() - 1);
+    }
+    
+    console.log(`📅 Stats filter: from ${localMidnightUTC.toISOString()} (offset: ${timezoneOffset}min)`);
     
     const { data: todayResults } = await supabase
       .from('operation_results')
       .select('result, profit, entry_price')
-      .gte('created_at', today.toISOString())
-      .eq('is_auto_trade', true); // Only count auto trading results
+      .gte('created_at', localMidnightUTC.toISOString())
+      .order('created_at', { ascending: true });
 
     let dailyProfit = 0;
     let todayTrades = 0;

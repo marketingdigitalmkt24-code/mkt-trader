@@ -11,7 +11,7 @@ export interface DailyResult {
   winRate: number;
 }
 
-export function useDailyHistory(days: number = 7, source?: 'iq' | 'mt5') {
+export function useDailyHistory(days: number = 7) {
   const [history, setHistory] = useState<DailyResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 

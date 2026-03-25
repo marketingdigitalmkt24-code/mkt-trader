@@ -1,6 +1,8 @@
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DailyResult } from '@/hooks/useDailyHistory';
+import { Button } from '@/components/ui/button';
 
 interface DailyHistoryListProps {
   history: DailyResult[];
@@ -8,7 +10,12 @@ interface DailyHistoryListProps {
 }
 
 export function DailyHistoryList({ history, formatCurrency }: DailyHistoryListProps) {
+  const [expanded, setExpanded] = useState(false);
+  
   if (history.length === 0) return null;
+
+  const visibleHistory = expanded ? history : history.slice(0, 3);
+  const hasMore = history.length > 3;
 
   const formatDate = (dateStr: string) => {
     const [year, month, day] = dateStr.split('-');
@@ -33,7 +40,7 @@ export function DailyHistoryList({ history, formatCurrency }: DailyHistoryListPr
         Histórico por Dia
       </div>
       <div className="space-y-1.5">
-        {history.map((day) => {
+        {visibleHistory.map((day) => {
           const isProfit = day.profit >= 0;
           return (
             <div
@@ -79,6 +86,26 @@ export function DailyHistoryList({ history, formatCurrency }: DailyHistoryListPr
           );
         })}
       </div>
+      {hasMore && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full mt-2 text-xs text-muted-foreground h-7"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? (
+            <>
+              <ChevronUp className="w-3 h-3 mr-1" />
+              Mostrar menos
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-3 h-3 mr-1" />
+              Ver mais {history.length - 3} dias
+            </>
+          )}
+        </Button>
+      )}
     </div>
   );
 }

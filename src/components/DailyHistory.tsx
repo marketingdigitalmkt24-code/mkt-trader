@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { History, TrendingUp, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { History, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
 
 interface DayResult {
   date: string;
@@ -11,9 +12,31 @@ interface DayResult {
   trades: number;
 }
 
-export function MT5DailyHistory() {
+interface DailyHistoryProps {
+  title: string;
+  timeframeFilter?: string; // 'MT5' for MT5, undefined for IQ Option (M1, M5, etc.)
+  excludeTimeframe?: string; // exclude specific timeframe
+  daysToFetch?: number;
+  perPage?: number;
+}
+
+const getBrasiliaDateKey = (date: Date) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+
+export function DailyHistory({
+  title,
+  timeframeFilter,
+  excludeTimeframe,
+  daysToFetch = 30,
+  perPage = 3,
+}: DailyHistoryProps) {
   const [days, setDays] = useState<DayResult[]>([]);
-  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     fetchHistory();
@@ -22,28 +45,28 @@ export function MT5DailyHistory() {
   }, []);
 
   const fetchHistory = async () => {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysToFetch);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('operation_results')
-      .select('created_at, profit, result')
-      .eq('timeframe', 'MT5')
-      .gte('created_at', sevenDaysAgo.toISOString())
+      .select('created_at, profit, result, timeframe')
+      .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false });
 
+    if (timeframeFilter) {
+      query = query.eq('timeframe', timeframeFilter);
+    }
+    if (excludeTimeframe) {
+      query = query.neq('timeframe', excludeTimeframe);
+    }
+
+    const { data, error } = await query;
     if (error || !data) return;
 
-    // Group by Brasília date
     const grouped: Record<string, { profit: number; wins: number; losses: number; trades: number }> = {};
     for (const r of data) {
-      const date = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Sao_Paulo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(new Date(r.created_at));
-
+      const date = getBrasiliaDateKey(new Date(r.created_at));
       if (!grouped[date]) grouped[date] = { profit: 0, wins: 0, losses: 0, trades: 0 };
       grouped[date].profit += r.profit;
       grouped[date].trades++;
@@ -58,30 +81,51 @@ export function MT5DailyHistory() {
     setDays(result);
   };
 
-  // Show today excluded (already shown above), only past days
-  const todayKey = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-
+  // Exclude today
+  const todayKey = getBrasiliaDateKey(new Date());
   const pastDays = days.filter(d => d.date !== todayKey);
-  const visible = expanded ? pastDays : pastDays.slice(0, 3);
 
   if (pastDays.length === 0) return null;
 
+  const totalPages = Math.ceil(pastDays.length / perPage);
+  const visible = pastDays.slice(page * perPage, (page + 1) * perPage);
+
   const formatCurrency = (v: number) => `$ ${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   const formatDate = (d: string) => {
-    const [y, m, day] = d.split('-');
+    const [, m, day] = d.split('-');
     return `${day}/${m}`;
   };
 
   return (
     <div className="mt-4">
-      <div className="flex items-center gap-2 mb-2">
-        <History className="w-4 h-4 text-muted-foreground" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Histórico Diário MT5</span>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <History className="w-4 h-4 text-muted-foreground" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</span>
+        </div>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+            >
+              <ChevronLeft className="w-3 h-3" />
+            </Button>
+            <span className="text-[10px] font-mono text-muted-foreground">{page + 1}/{totalPages}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+            >
+              <ChevronRight className="w-3 h-3" />
+            </Button>
+          </div>
+        )}
       </div>
       <div className="space-y-1.5">
         {visible.map((day) => {
@@ -115,15 +159,6 @@ export function MT5DailyHistory() {
           );
         })}
       </div>
-      {pastDays.length > 3 && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1 mx-auto mt-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          {expanded ? 'Mostrar menos' : `Ver todos (${pastDays.length} dias)`}
-        </button>
-      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
+import { DailyHistory } from './DailyHistory';
 
 export function BankManagementCard() {
   const { toast } = useToast();
@@ -262,6 +263,9 @@ export function BankManagementCard() {
           )}
         </div>
       )}
+
+      {/* Daily History */}
+      <DailyHistory title="Histórico Diário IQ Option" excludeTimeframe="MT5" />
     </section>
   );
 }

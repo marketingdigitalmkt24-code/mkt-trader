@@ -254,6 +254,53 @@ serve(async (req) => {
       pnl30d += deal.profit ?? 0;
     }
 
+    // ===== SYNC MT5 DEALS TO operation_results (last 7 days) =====
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const syncDeals = monthDeals.filter((d: any) => new Date(d.time || d.brokerTime) >= sevenDaysAgo);
+      
+      if (syncDeals.length > 0) {
+        // Get existing MT5 signal_ids to avoid duplicates
+        const mt5SignalIds = syncDeals.map((d: any) => `mt5-${d.id}`);
+        const { data: existing } = await supabase
+          .from('operation_results')
+          .select('signal_id')
+          .in('signal_id', mt5SignalIds);
+        
+        const existingSet = new Set((existing || []).map((r: any) => r.signal_id));
+        
+        const newDeals = syncDeals.filter((d: any) => !existingSet.has(`mt5-${d.id}`));
+        
+        if (newDeals.length > 0) {
+          const rows = newDeals.map((d: any) => ({
+            signal_id: `mt5-${d.id}`,
+            asset: d.symbol || 'UNKNOWN',
+            direction: d.type === 'DEAL_TYPE_BUY' ? 'call' : 'put',
+            result: (d.profit ?? 0) > 0 ? 'win' : (d.profit ?? 0) < 0 ? 'loss' : 'tie',
+            profit: Math.abs(d.profit ?? 0),
+            entry_price: d.volume ?? 0,
+            is_auto_trade: true,
+            iq_option_id: null,
+            created_at: d.time || d.brokerTime || new Date().toISOString(),
+            timeframe: 'M1',
+          }));
+          
+          const { error: insertErr } = await supabase
+            .from('operation_results')
+            .insert(rows);
+          
+          if (insertErr) {
+            console.error('❌ Error syncing MT5 deals:', insertErr);
+          } else {
+            console.log(`✅ Synced ${newDeals.length} MT5 deals to operation_results`);
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.error('❌ MT5 deal sync error:', syncErr);
+    }
+
     // Spread advantage: ONLY for EURUSD (tightest spread ~1 pip)
     // EURUSD closes 15% earlier since spread cost is minimal — faster profit
     const EURUSD_SPREAD_MULTIPLIER = 0.85;

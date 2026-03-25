@@ -21,12 +21,21 @@ export function useDailyHistory(days: number = 7, source?: 'iq' | 'mt5') {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - days);
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('operation_results')
-        .select('result, profit, entry_price, created_at')
+        .select('result, profit, entry_price, created_at, iq_option_id')
         .gte('created_at', cutoff.toISOString())
         .in('result', ['win', 'loss', 'loose', 'tie', 'equal'])
         .order('created_at', { ascending: false });
+
+      // Filter by source platform
+      if (source === 'iq') {
+        query = query.not('iq_option_id', 'is', null);
+      } else if (source === 'mt5') {
+        query = query.is('iq_option_id', null);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 

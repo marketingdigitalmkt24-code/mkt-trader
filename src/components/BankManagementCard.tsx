@@ -183,43 +183,45 @@ export function BankManagementCard() {
         )}
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-secondary/50 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Target className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Risco/Trade</span>
-          </div>
-          <div className="font-mono font-bold text-call">{riskPerTrade}%</div>
-          <div className="text-xs text-muted-foreground">
-            {formatCurrency(suggestedBet)}
-          </div>
+      {/* Win Rate Bar */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between text-sm mb-2">
+          <span className="text-muted-foreground">Win Rate</span>
+          <span className={cn(
+            'font-bold font-mono',
+            winRate >= 60 ? 'text-call' : winRate >= 50 ? 'text-gold' : 'text-put'
+          )}>
+            {winRate.toFixed(1)}%
+          </span>
         </div>
-
-        <div className="bg-secondary/50 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Activity className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Trades (Hoje)</span>
-          </div>
-          <div className={cn('font-mono font-bold', isOvertrading ? 'text-gold' : 'text-foreground')}>
-            {trades}/{maxDailyTrades}
-          </div>
-        </div>
+        <Progress 
+          value={winRate} 
+          className={cn(
+            "h-2.5 rounded-full",
+            winRate >= 60 ? '[&>div]:bg-call' : winRate >= 50 ? '[&>div]:bg-gold' : '[&>div]:bg-put'
+          )}
+        />
       </div>
 
-      {/* Win/Loss Stats */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-call/10 rounded-lg p-2 text-center">
-          <div className="text-lg font-bold text-call">{wins}</div>
-          <div className="text-xs text-muted-foreground">Wins</div>
+      {/* Win/Loss/Trades Stats */}
+      <div className="grid grid-cols-4 gap-2 mb-4">
+        <div className="bg-call/10 border border-call/20 rounded-lg p-2.5 text-center">
+          <div className="text-xl font-bold font-mono text-call">{wins}</div>
+          <div className="text-[10px] uppercase tracking-wider text-call/70 font-semibold">Wins</div>
         </div>
-        <div className="bg-put/10 rounded-lg p-2 text-center">
-          <div className="text-lg font-bold text-put">{losses}</div>
-          <div className="text-xs text-muted-foreground">Losses</div>
+        <div className="bg-put/10 border border-put/20 rounded-lg p-2.5 text-center">
+          <div className="text-xl font-bold font-mono text-put">{losses}</div>
+          <div className="text-[10px] uppercase tracking-wider text-put/70 font-semibold">Losses</div>
         </div>
-        <div className="bg-primary/10 rounded-lg p-2 text-center">
-          <div className="text-lg font-bold text-primary">{winRate.toFixed(1)}%</div>
-          <div className="text-xs text-muted-foreground">Win Rate</div>
+        <div className="bg-secondary/50 border border-border/30 rounded-lg p-2.5 text-center">
+          <div className={cn('text-xl font-bold font-mono', isOvertrading ? 'text-gold' : 'text-foreground')}>
+            {trades}
+          </div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Trades</div>
+        </div>
+        <div className="bg-secondary/50 border border-border/30 rounded-lg p-2.5 text-center">
+          <div className="text-xl font-bold font-mono text-primary">{riskPerTrade}%</div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Risco</div>
         </div>
       </div>
 
@@ -227,7 +229,7 @@ export function BankManagementCard() {
       <div className="mb-4">
         <div className="flex justify-between text-xs text-muted-foreground mb-2">
           <span>Progresso Diário</span>
-          <span>{tradeProgress.toFixed(0)}%</span>
+          <span className="font-mono">{trades}/{maxDailyTrades}</span>
         </div>
         <Progress
           value={tradeProgress}

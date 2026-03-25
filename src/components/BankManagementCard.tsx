@@ -13,7 +13,7 @@ import { DailyHistoryList } from '@/components/DailyHistoryList';
 export function BankManagementCard() {
   const { toast } = useToast();
   const [isResetting, setIsResetting] = useState(false);
-  const { history } = useDailyHistory(7);
+  const { history } = useDailyHistory(7, 'iq');
   const {
     balance,
     dailyStats,

@@ -21,6 +21,16 @@ async function safeFetch(url: string, options: RequestInit = {}): Promise<Respon
   }
 }
 
+function getBrasiliaDayStartUtc() {
+  const now = new Date();
+  const brasiliaNow = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const year = brasiliaNow.getUTCFullYear();
+  const month = brasiliaNow.getUTCMonth();
+  const day = brasiliaNow.getUTCDate();
+
+  return new Date(Date.UTC(year, month, day, 3, 0, 0, 0));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -188,9 +198,9 @@ serve(async (req) => {
     let monthDeals: any[] = [];
     try {
       const now = new Date();
-      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      const todayStart = getBrasiliaDayStartUtc();
       const thirtyDaysAgo = new Date(todayStart);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
       const endTime = new Date(now.getTime() + 60000); // +1min buffer
 
       const [todayRes, monthRes] = await Promise.all([

@@ -22,6 +22,15 @@ interface MT5BalanceInfo {
   currency: string;
 }
 
+const getBrasiliaDateKey = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+};
+
 export function MT5BankManagementCard() {
   const { toast } = useToast();
   const [stats, setStats] = useState<MT5DailyStats>({
@@ -37,8 +46,7 @@ export function MT5BankManagementCard() {
   const [isResetting, setIsResetting] = useState(false);
   const [isResetToday, setIsResetToday] = useState(() => {
     const saved = localStorage.getItem('mt5_reset_date');
-    const today = new Date().toISOString().slice(0, 10);
-    return saved === today;
+    return saved === getBrasiliaDateKey();
   });
 
   const fetchBalance = useCallback(async () => {
@@ -51,10 +59,9 @@ export function MT5BankManagementCard() {
           currency: data.currency || 'USD',
         });
 
-        // Check if reset was done today
+        // Check if reset was done today (Brasília time)
         const resetDate = localStorage.getItem('mt5_reset_date');
-        const today = new Date().toISOString().slice(0, 10);
-        const resetActive = resetDate === today;
+        const resetActive = resetDate === getBrasiliaDateKey();
         setIsResetToday(resetActive);
 
         if (!resetActive) {
@@ -77,8 +84,8 @@ export function MT5BankManagementCard() {
   const handleReset = async () => {
     setIsResetting(true);
     try {
-      // Persist reset flag for today
-      const today = new Date().toISOString().slice(0, 10);
+      // Persist reset flag for today (Brasília time)
+      const today = getBrasiliaDateKey();
       localStorage.setItem('mt5_reset_date', today);
       setIsResetToday(true);
 

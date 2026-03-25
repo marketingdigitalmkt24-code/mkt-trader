@@ -11,7 +11,7 @@ export interface DailyResult {
   winRate: number;
 }
 
-export function useDailyHistory(days: number = 7) {
+export function useDailyHistory(days: number = 7, source: 'all' | 'iq' | 'mt5' = 'all') {
   const [history, setHistory] = useState<DailyResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -24,6 +24,7 @@ export function useDailyHistory(days: number = 7) {
       const { data, error } = await supabase
         .from('operation_results')
         .select('result, profit, entry_price, created_at')
+        .is('iq_option_id', source === 'mt5' ? null : undefined)
         .gte('created_at', cutoff.toISOString())
         .in('result', ['win', 'loss', 'loose', 'tie', 'equal'])
         .order('created_at', { ascending: false });

@@ -180,104 +180,110 @@ export function MT5BankManagementCard() {
         </div>
       </div>
 
-      {/* Balance + Stats (same style as IQ Option) */}
+      {/* Balance Header */}
       <div className="bg-secondary/50 rounded-xl p-4 mb-4">
-        <div className="text-sm text-muted-foreground mb-1">Saldo Atual</div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm text-muted-foreground">Saldo Atual</span>
+          {mt5Balance.equity !== null && mt5Balance.equity !== mt5Balance.balance && (
+            <span className={cn("text-xs font-semibold", (mt5Balance.equity ?? 0) >= (mt5Balance.balance ?? 0) ? "text-call" : "text-put")}>
+              Equity: {formatCurrency(mt5Balance.equity)}
+            </span>
+          )}
+        </div>
         <div className="text-2xl font-bold font-mono text-foreground">
           {mt5Balance.balance !== null ? formatCurrency(mt5Balance.balance) : '—'}
         </div>
-        {mt5Balance.equity !== null && mt5Balance.equity !== mt5Balance.balance && (
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-muted-foreground">Equity:</span>
-            <span className={cn("text-sm font-semibold", (mt5Balance.equity ?? 0) >= (mt5Balance.balance ?? 0) ? "text-call" : "text-put")}>
-              {formatCurrency(mt5Balance.equity)}
-            </span>
-          </div>
-        )}
-
-        {/* Stats label - Today only */}
-        <div className="flex items-center justify-center gap-1 mt-3 mb-2">
-          <Calendar className="w-4 h-4 text-muted-foreground mr-1" />
-          <span className="text-xs text-muted-foreground">Estatísticas de Hoje</span>
-        </div>
-
-        {/* Profit/Loss indicator */}
-        <div className={cn(
-          "p-2 rounded-lg flex items-center justify-center gap-2",
-          stats.dailyProfit >= 0
-            ? "bg-call/20 border border-call/30"
-            : "bg-put/20 border border-put/30"
-        )}>
-          {stats.dailyProfit >= 0 ? (
-            <>
-              <TrendingUp className="w-5 h-5 text-call" />
-              <span className="text-lg font-bold text-call">+{formatCurrency(stats.dailyProfit)}</span>
-              <span className="text-sm text-call/80">hoje</span>
-            </>
-          ) : (
-            <>
-              <TrendingDown className="w-5 h-5 text-put" />
-              <span className="text-lg font-bold text-put">{formatCurrency(stats.dailyProfit)}</span>
-              <span className="text-sm text-put/80">hoje</span>
-            </>
-          )}
-        </div>
       </div>
 
-      {/* Win Rate Bar */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between text-sm mb-2">
-          <span className="text-muted-foreground">Win Rate</span>
-          <span className={cn(
-            'font-bold font-mono',
-            winRate >= 60 ? 'text-call' : winRate >= 50 ? 'text-gold' : 'text-put'
+      {/* Today's Performance Card */}
+      <div className={cn(
+        "rounded-xl p-4 mb-4 border",
+        stats.dailyProfit >= 0 
+          ? "bg-call/5 border-call/20" 
+          : "bg-put/5 border-put/20"
+      )}>
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar className="w-4 h-4 text-muted-foreground" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resultado de Hoje</span>
+        </div>
+
+        {/* Main P&L */}
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <div className={cn(
+            "w-10 h-10 rounded-full flex items-center justify-center",
+            stats.dailyProfit >= 0 ? "bg-call/20" : "bg-put/20"
           )}>
-            {winRate.toFixed(1)}%
+            {stats.dailyProfit >= 0 ? (
+              <TrendingUp className="w-5 h-5 text-call" />
+            ) : (
+              <TrendingDown className="w-5 h-5 text-put" />
+            )}
+          </div>
+          <span className={cn(
+            "text-3xl font-bold font-mono",
+            stats.dailyProfit >= 0 ? "text-call" : "text-put"
+          )}>
+            {stats.dailyProfit >= 0 ? '+' : ''}{formatCurrency(stats.dailyProfit)}
           </span>
         </div>
-        <Progress 
-          value={winRate} 
-          className={cn(
-            "h-2.5 rounded-full",
-            winRate >= 60 ? '[&>div]:bg-call' : winRate >= 50 ? '[&>div]:bg-gold' : '[&>div]:bg-put'
-          )}
-        />
-      </div>
 
-      {/* Win/Loss/Trades/P&L Stats */}
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        <div className="bg-call/10 border border-call/20 rounded-lg p-2.5 text-center">
-          <div className="text-xl font-bold font-mono text-call">{stats.wins}</div>
-          <div className="text-[10px] uppercase tracking-wider text-call/70 font-semibold">Wins</div>
-        </div>
-        <div className="bg-put/10 border border-put/20 rounded-lg p-2.5 text-center">
-          <div className="text-xl font-bold font-mono text-put">{stats.losses}</div>
-          <div className="text-[10px] uppercase tracking-wider text-put/70 font-semibold">Losses</div>
-        </div>
-        <div className="bg-secondary/50 border border-border/30 rounded-lg p-2.5 text-center">
-          <div className={cn('text-xl font-bold font-mono', isOvertrading ? 'text-gold' : 'text-foreground')}>
-            {stats.todayTrades}
+        {/* Win Rate Bar */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="text-muted-foreground font-medium">Win Rate</span>
+            <span className={cn(
+              'font-bold font-mono text-sm',
+              winRate >= 60 ? 'text-call' : winRate >= 50 ? 'text-gold' : 'text-put'
+            )}>
+              {winRate.toFixed(1)}%
+            </span>
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Trades</div>
-        </div>
-        <div className="bg-secondary/50 border border-border/30 rounded-lg p-2.5 text-center">
-          <div className={cn('text-lg font-bold font-mono', stats.pnl30d >= 0 ? 'text-call' : 'text-put')}>
-            {stats.pnl30d >= 0 ? '+' : ''}{formatCurrency(stats.pnl30d).replace('$ ', '')}
+          <div className="relative h-3 bg-secondary/80 rounded-full overflow-hidden">
+            <div 
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                winRate >= 60 ? 'bg-call' : winRate >= 50 ? 'bg-gold' : 'bg-put'
+              )}
+              style={{ width: `${Math.min(winRate, 100)}%` }}
+            />
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">30d</div>
         </div>
-      </div>
 
-      {/* Trade Progress */}
-      <div className="mb-4">
-        <div className="flex justify-between text-xs text-muted-foreground mb-2">
-          <span>Progresso Diário</span>
-          <span className="font-mono">{stats.todayTrades}/{maxDailyTrades}</span>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-4 gap-1.5">
+          <div className="bg-call/10 rounded-lg p-2 text-center">
+            <div className="text-lg font-bold font-mono text-call leading-tight">{stats.wins}</div>
+            <div className="text-[9px] uppercase tracking-widest text-call/60 font-bold mt-0.5">Wins</div>
+          </div>
+          <div className="bg-put/10 rounded-lg p-2 text-center">
+            <div className="text-lg font-bold font-mono text-put leading-tight">{stats.losses}</div>
+            <div className="text-[9px] uppercase tracking-widest text-put/60 font-bold mt-0.5">Losses</div>
+          </div>
+          <div className="bg-secondary/60 rounded-lg p-2 text-center">
+            <div className={cn('text-lg font-bold font-mono leading-tight', isOvertrading ? 'text-gold' : 'text-foreground')}>
+              {stats.todayTrades}
+            </div>
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mt-0.5">Trades</div>
+          </div>
+          <div className="bg-secondary/60 rounded-lg p-2 text-center">
+            <div className={cn('text-base font-bold font-mono leading-tight', stats.pnl30d >= 0 ? 'text-call' : 'text-put')}>
+              {stats.pnl30d >= 0 ? '+' : ''}{formatCurrency(stats.pnl30d).replace('$ ', '')}
+            </div>
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mt-0.5">30d</div>
+          </div>
         </div>
-        <Progress
-          value={tradeProgress}
-          className={cn('h-2', isOvertrading && '[&>div]:bg-gold')}
-        />
+
+        {/* Trade Limit Progress */}
+        <div className="mt-3 pt-3 border-t border-border/30">
+          <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+            <span>Limite diário</span>
+            <span className="font-mono">{stats.todayTrades}/{maxDailyTrades}</span>
+          </div>
+          <Progress
+            value={tradeProgress}
+            className={cn('h-1.5', isOvertrading && '[&>div]:bg-gold')}
+          />
+        </div>
       </div>
 
       {/* Alerts */}

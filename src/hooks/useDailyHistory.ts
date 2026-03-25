@@ -11,7 +11,7 @@ export interface DailyResult {
   winRate: number;
 }
 
-export function useDailyHistory(days: number = 7, source?: 'iq' | 'mt5') {
+export function useDailyHistory(days: number = 7) {
   const [history, setHistory] = useState<DailyResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -21,21 +21,12 @@ export function useDailyHistory(days: number = 7, source?: 'iq' | 'mt5') {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - days);
 
-      let query = supabase
+      const { data, error } = await supabase
         .from('operation_results')
-        .select('result, profit, entry_price, created_at, iq_option_id')
+        .select('result, profit, entry_price, created_at')
         .gte('created_at', cutoff.toISOString())
         .in('result', ['win', 'loss', 'loose', 'tie', 'equal'])
         .order('created_at', { ascending: false });
-
-      // Filter by source platform
-      if (source === 'iq') {
-        query = query.not('iq_option_id', 'is', null);
-      } else if (source === 'mt5') {
-        query = query.is('iq_option_id', null);
-      }
-
-      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -84,7 +75,7 @@ export function useDailyHistory(days: number = 7, source?: 'iq' | 'mt5') {
     } finally {
       setIsLoading(false);
     }
-  }, [days, source]);
+  }, [days]);
 
   useEffect(() => {
     fetchHistory();

@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useDailyHistory } from '@/hooks/useDailyHistory';
+import { DailyHistoryList } from '@/components/DailyHistoryList';
 
 interface MT5DailyStats {
   dailyProfit: number;

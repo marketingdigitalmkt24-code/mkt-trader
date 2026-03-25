@@ -263,6 +263,9 @@ export function BankManagementCard() {
           )}
         </div>
       )}
+
+      {/* Daily History */}
+      <DailyHistory title="Histórico Diário IQ Option" excludeTimeframe="MT5" />
     </section>
   );
 }

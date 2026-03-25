@@ -33,7 +33,6 @@ const getBrasiliaDateKey = () => {
 
 export function MT5BankManagementCard() {
   const { toast } = useToast();
-  
   const [stats, setStats] = useState<MT5DailyStats>({
     dailyProfit: 0,
     todayTrades: 0,

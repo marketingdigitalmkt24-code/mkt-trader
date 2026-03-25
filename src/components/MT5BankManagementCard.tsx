@@ -59,10 +59,9 @@ export function MT5BankManagementCard() {
           currency: data.currency || 'USD',
         });
 
-        // Check if reset was done today
+        // Check if reset was done today (Brasília time)
         const resetDate = localStorage.getItem('mt5_reset_date');
-        const today = new Date().toISOString().slice(0, 10);
-        const resetActive = resetDate === today;
+        const resetActive = resetDate === getBrasiliaDateKey();
         setIsResetToday(resetActive);
 
         if (!resetActive) {

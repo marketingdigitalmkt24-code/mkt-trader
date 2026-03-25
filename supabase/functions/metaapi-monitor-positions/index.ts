@@ -21,6 +21,16 @@ async function safeFetch(url: string, options: RequestInit = {}): Promise<Respon
   }
 }
 
+function getBrasiliaDayStartUtc() {
+  const now = new Date();
+  const brasiliaNow = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const year = brasiliaNow.getUTCFullYear();
+  const month = brasiliaNow.getUTCMonth();
+  const day = brasiliaNow.getUTCDate();
+
+  return new Date(Date.UTC(year, month, day, 3, 0, 0, 0));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });

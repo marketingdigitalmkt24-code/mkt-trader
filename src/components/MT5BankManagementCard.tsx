@@ -22,6 +22,15 @@ interface MT5BalanceInfo {
   currency: string;
 }
 
+const getBrasiliaDateKey = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+};
+
 export function MT5BankManagementCard() {
   const { toast } = useToast();
   const [stats, setStats] = useState<MT5DailyStats>({
@@ -37,8 +46,7 @@ export function MT5BankManagementCard() {
   const [isResetting, setIsResetting] = useState(false);
   const [isResetToday, setIsResetToday] = useState(() => {
     const saved = localStorage.getItem('mt5_reset_date');
-    const today = new Date().toISOString().slice(0, 10);
-    return saved === today;
+    return saved === getBrasiliaDateKey();
   });
 
   const fetchBalance = useCallback(async () => {

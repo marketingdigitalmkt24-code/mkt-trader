@@ -1164,13 +1164,7 @@ serve(async (req) => {
                     // Fórmula: (perda_acumulada + lucro_desejado) / payout
                     iqTradeAmount = Math.ceil(((accumulatedLoss + baseAmount * estimatedPayout) / estimatedPayout) * 100) / 100;
                     
-                    // Limite de segurança: máximo 5x o valor base (evitar risco extremo)
-                    const maxMultiplier = 5;
-                    if (iqTradeAmount > baseAmount * maxMultiplier) {
-                      console.log(`⚠️ MARTINGALE: Valor $${iqTradeAmount.toFixed(2)} excede ${maxMultiplier}x — limitando a $${(baseAmount * maxMultiplier).toFixed(2)}`);
-                      iqTradeAmount = baseAmount * maxMultiplier;
-                    }
-                    
+                    // Sem limite de segurança — recuperação total até zerar perda
                     console.log(`🔄 MARTINGALE NÍVEL ${martingaleLevel}: Perda acumulada $${accumulatedLoss.toFixed(2)} → Entrada: $${iqTradeAmount.toFixed(2)} (base: $${baseAmount})`);
                   }
                 }

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS operation_results_signal_id_unique ON public.operation_results (signal_id);

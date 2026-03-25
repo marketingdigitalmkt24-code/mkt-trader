@@ -7,10 +7,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
+import { useDailyHistory } from '@/hooks/useDailyHistory';
+import { DailyHistoryList } from '@/components/DailyHistoryList';
 
 export function BankManagementCard() {
   const { toast } = useToast();
   const [isResetting, setIsResetting] = useState(false);
+  const { history } = useDailyHistory(7);
   const {
     balance,
     dailyStats,
@@ -262,6 +265,9 @@ export function BankManagementCard() {
           )}
         </div>
       )}
+
+      {/* Daily History */}
+      <DailyHistoryList history={history} formatCurrency={formatCurrency} />
     </section>
   );
 }

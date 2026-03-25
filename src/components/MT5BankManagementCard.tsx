@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useDailyHistory } from '@/hooks/useDailyHistory';
+import { DailyHistoryList } from '@/components/DailyHistoryList';
 
 interface MT5DailyStats {
   dailyProfit: number;
@@ -33,6 +35,7 @@ const getBrasiliaDateKey = () => {
 
 export function MT5BankManagementCard() {
   const { toast } = useToast();
+  const { history } = useDailyHistory(7);
   const [stats, setStats] = useState<MT5DailyStats>({
     dailyProfit: 0,
     todayTrades: 0,
@@ -310,6 +313,9 @@ export function MT5BankManagementCard() {
           )}
         </div>
       )}
+
+      {/* Daily History */}
+      <DailyHistoryList history={history} formatCurrency={formatCurrency} />
     </section>
   );
 }

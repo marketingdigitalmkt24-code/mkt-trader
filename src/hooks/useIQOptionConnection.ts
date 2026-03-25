@@ -80,17 +80,16 @@ export function useIQOptionConnection() {
   // Fetch daily stats from database
   const fetchDailyStats = useCallback(async () => {
     try {
-      // Use UTC date to match database timestamps
+      // Use LOCAL midnight to match user's "today"
       const now = new Date();
-      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
       
-      console.log('📊 Fetching stats from:', todayUTC.toISOString());
+      console.log('📊 Fetching stats from (local):', localMidnight.toISOString());
 
       const { data: results, error } = await supabase
         .from('operation_results')
         .select('result, profit, entry_price')
-        .gte('created_at', todayUTC.toISOString())
-        .eq('is_auto_trade', true) // Only count auto trading results
+        .gte('created_at', localMidnight.toISOString())
         .order('created_at', { ascending: true });
 
       if (error) throw error;

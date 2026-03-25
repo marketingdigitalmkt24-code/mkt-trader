@@ -198,9 +198,9 @@ serve(async (req) => {
     let monthDeals: any[] = [];
     try {
       const now = new Date();
-      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      const todayStart = getBrasiliaDayStartUtc();
       const thirtyDaysAgo = new Date(todayStart);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
       const endTime = new Date(now.getTime() + 60000); // +1min buffer
 
       const [todayRes, monthRes] = await Promise.all([

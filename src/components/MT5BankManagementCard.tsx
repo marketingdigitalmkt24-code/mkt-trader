@@ -84,8 +84,8 @@ export function MT5BankManagementCard() {
   const handleReset = async () => {
     setIsResetting(true);
     try {
-      // Persist reset flag for today
-      const today = new Date().toISOString().slice(0, 10);
+      // Persist reset flag for today (Brasília time)
+      const today = getBrasiliaDateKey();
       localStorage.setItem('mt5_reset_date', today);
       setIsResetToday(true);
 

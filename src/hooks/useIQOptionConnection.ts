@@ -42,8 +42,10 @@ export function useIQOptionConnection() {
 
     try {
       console.log('🔄 Fetching balance from IQ Option API...');
+      // Send local timezone offset so the server filters by user's local day
+      const timezoneOffset = new Date().getTimezoneOffset();
       const { data, error } = await supabase.functions.invoke('iqoption-get-balance', {
-        body: { userId: user.id },
+        body: { userId: user.id, timezoneOffset },
       });
 
       if (!error && data?.success) {

@@ -61,14 +61,8 @@ export function useIQOptionConnection() {
         
         console.log('✅ Balance updated from API:', newBalance);
         
-        // Also update daily stats from the API response
-        setDailyStats({
-          dailyProfit: data.dailyProfit || 0,
-          todayTrades: data.todayTrades || 0,
-          wins: data.wins || 0,
-          losses: data.losses || 0,
-          consecutiveLosses: data.consecutiveLosses || 0,
-        });
+        // Daily stats are fetched separately from the database (fetchDailyStats)
+        // to ensure proper MT5 filtering. Do NOT overwrite them here.
       } else {
         console.error('❌ Failed to fetch balance:', error || data?.error);
       }

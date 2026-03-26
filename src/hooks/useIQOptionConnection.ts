@@ -108,7 +108,7 @@ export function useIQOptionConnection() {
           currentStreak = 0;
         } else if (resultType === 'loss' || resultType === 'loose') {
           losses++;
-          profit -= result.entry_price || 0;
+          profit += result.profit || 0; // profit is already negative for losses
           currentStreak++;
           consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
         } else if (resultType === 'tie' || resultType === 'equal') {

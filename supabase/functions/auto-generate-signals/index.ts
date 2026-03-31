@@ -666,14 +666,32 @@ async function analyzeAssetWithRealData(
     type = 'PUT';
     console.log(`📈 ${asset.symbol}: RSI overbought ${rsiValue.toFixed(1)} — sinal PUT`);
   }
-  // Secondary: Strong support/resistance position
-  else if (sr.pricePosition === 'near_support' && stoch.k <= 30) {
+  // Secondary: Stochastic extremo (mesmo sem RSI extremo)
+  else if (stoch.k <= 15) {
+    type = 'CALL';
+    console.log(`📉 ${asset.symbol}: Stoch extremo ${stoch.k.toFixed(1)} — sinal CALL`);
+  }
+  else if (stoch.k >= 85) {
+    type = 'PUT';
+    console.log(`📈 ${asset.symbol}: Stoch extremo ${stoch.k.toFixed(1)} — sinal PUT`);
+  }
+  // Tertiary: Strong support/resistance position
+  else if (sr.pricePosition === 'near_support' && stoch.k <= 35) {
     type = 'CALL';
     console.log(`📉 ${asset.symbol}: Near support + Stoch ${stoch.k.toFixed(1)} — sinal CALL`);
   }
-  else if (sr.pricePosition === 'near_resistance' && stoch.k >= 70) {
+  else if (sr.pricePosition === 'near_resistance' && stoch.k >= 65) {
     type = 'PUT';
     console.log(`📈 ${asset.symbol}: Near resistance + Stoch ${stoch.k.toFixed(1)} — sinal PUT`);
+  }
+  // MACD trend signal (broader opportunity capture)
+  else if (macd.trend === 'bullish' && bollinger.position === 'below_lower') {
+    type = 'CALL';
+    console.log(`📉 ${asset.symbol}: MACD bullish + Bollinger lower — sinal CALL`);
+  }
+  else if (macd.trend === 'bearish' && bollinger.position === 'above_upper') {
+    type = 'PUT';
+    console.log(`📈 ${asset.symbol}: MACD bearish + Bollinger upper — sinal PUT`);
   }
 
   if (!type) {

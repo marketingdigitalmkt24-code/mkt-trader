@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // ============= CONFIGURAÇÕES SCALPING M1 =============
-const MIN_CONFIRMATIONS = 4; // 4 de 7 confirmações (mais rigoroso)
+const MIN_CONFIRMATIONS = 3; // 3 de 7 confirmações (IA faz validação final)
 const RSI_CALL_MAX = 30; // RSI oversold threshold (era 35)
 const RSI_PUT_MIN = 70; // RSI overbought threshold (era 65)
 const RSI_ULTRA_CALL = 20; // Ultra extreme for bonus score (era 25)
@@ -645,16 +645,13 @@ async function analyzeAssetWithRealData(
   const macd = calculateMACD(prices);
 
   // ============= REJEITAR INDICADORES EXTREMOS (ARTEFATOS DE DADOS RUINS) =============
-  // Com dados fake (Frankfurter/diários), RSI e Stoch atingem valores extremos irreais
-  // RSI < 5 ou > 95 com Stoch < 5 ou > 95 = certeza de dado fake
-  if (rsiValue <= 5 || rsiValue >= 95) {
+  // RSI < 3 ou > 97 = certeza de dado fake (relaxado — em M1 real, Stoch pode atingir 100)
+  if (rsiValue <= 3 || rsiValue >= 97) {
     console.log(`⚠️ ${asset.symbol}: RSI=${rsiValue.toFixed(1)} EXTREMO — ARTEFATO de dados ruins — REJEITADO`);
     return null;
   }
-  if (stoch.k <= 3 || stoch.k >= 97) {
-    console.log(`⚠️ ${asset.symbol}: Stoch=${stoch.k.toFixed(1)} EXTREMO — ARTEFATO de dados ruins — REJEITADO`);
-    return null;
-  }
+  // Stochastic 100 ou 0 é LEGÍTIMO em tendência forte de M1 — NÃO rejeitar
+  // Apenas rejeitar se RSI TAMBÉM for extremo (ambos extremos = dado fake)
 
   // ============= DETERMINE DIRECTION FROM REAL INDICATORS =============
   let type: 'CALL' | 'PUT' | null = null;
@@ -669,14 +666,32 @@ async function analyzeAssetWithRealData(
     type = 'PUT';
     console.log(`📈 ${asset.symbol}: RSI overbought ${rsiValue.toFixed(1)} — sinal PUT`);
   }
-  // Secondary: Strong support/resistance position
-  else if (sr.pricePosition === 'near_support' && stoch.k <= 30) {
+  // Secondary: Stochastic extremo (mesmo sem RSI extremo)
+  else if (stoch.k <= 15) {
+    type = 'CALL';
+    console.log(`📉 ${asset.symbol}: Stoch extremo ${stoch.k.toFixed(1)} — sinal CALL`);
+  }
+  else if (stoch.k >= 85) {
+    type = 'PUT';
+    console.log(`📈 ${asset.symbol}: Stoch extremo ${stoch.k.toFixed(1)} — sinal PUT`);
+  }
+  // Tertiary: Strong support/resistance position
+  else if (sr.pricePosition === 'near_support' && stoch.k <= 35) {
     type = 'CALL';
     console.log(`📉 ${asset.symbol}: Near support + Stoch ${stoch.k.toFixed(1)} — sinal CALL`);
   }
-  else if (sr.pricePosition === 'near_resistance' && stoch.k >= 70) {
+  else if (sr.pricePosition === 'near_resistance' && stoch.k >= 65) {
     type = 'PUT';
     console.log(`📈 ${asset.symbol}: Near resistance + Stoch ${stoch.k.toFixed(1)} — sinal PUT`);
+  }
+  // MACD trend signal (broader opportunity capture)
+  else if (macd.trend === 'bullish' && bollinger.position === 'below_lower') {
+    type = 'CALL';
+    console.log(`📉 ${asset.symbol}: MACD bullish + Bollinger lower — sinal CALL`);
+  }
+  else if (macd.trend === 'bearish' && bollinger.position === 'above_upper') {
+    type = 'PUT';
+    console.log(`📈 ${asset.symbol}: MACD bearish + Bollinger upper — sinal PUT`);
   }
 
   if (!type) {
@@ -849,8 +864,8 @@ serve(async (req) => {
         }));
 
         allAssets = allAssets.filter((a: Asset) => isForexPairAsset(a.symbol));
-        allAssets = allAssets.filter((a: Asset) => !a.payout || a.payout >= 75);
-        console.log(`🔒 Filtro FOREX: ${allAssets.length} pares de moedas com payout >= 75%`);
+        allAssets = allAssets.filter((a: Asset) => !a.payout || a.payout >= 60);
+        console.log(`🔒 Filtro FOREX: ${allAssets.length} pares de moedas com payout >= 60%`);
         assets = allAssets;
       }
     } catch (e) {
@@ -874,10 +889,10 @@ serve(async (req) => {
       if (assetsWithRecentSignals.has(key)) return false;
 
       const history = assetHistory.get(asset.symbol);
-      // BLOQUEIO RIGOROSO: 3 losses consecutivos
-      if (history && history.consecutiveLosses >= 3) return false;
-      // WR mínimo de 45% com pelo menos 5 trades (era 40%)
-      if (history && history.winRate < 45 && (history.wins + history.losses) >= 5) return false;
+      // Bloqueio por 5 losses consecutivos (era 3 — muito restritivo)
+      if (history && history.consecutiveLosses >= 5) return false;
+      // WR mínimo de 30% com pelo menos 8 trades
+      if (history && history.winRate < 30 && (history.wins + history.losses) >= 8) return false;
 
       const newsCheck = isAssetAffectedByNews(asset.symbol);
       if (newsCheck.affected) {

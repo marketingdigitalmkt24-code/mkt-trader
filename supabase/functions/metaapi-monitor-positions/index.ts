@@ -83,13 +83,13 @@ serve(async (req) => {
 
     const tradeAmount = tradingSettings?.mt5_trade_amount || 1;
     
-    // ============= ESTRATÉGIA SPREAD: 10% DE LUCRO RÁPIDO =============
-    // Entrada: $1.00 → TP: $0.10 (10%) — fechar imediatamente ao atingir
+    // ============= ESTRATÉGIA SPREAD: 15% DE LUCRO RÁPIDO =============
+    // Entrada fixa → TP: 15% — fechar imediatamente ao atingir
     // Verificação a cada 1 segundo para capturar lucro instantâneo
     // SEM STOP LOSS — IA Groq garante operações certeiras
-    const tpCurrency = tradeAmount * (tpPercent / 100); // 10% = $0.10 em $1.00
+    const tpCurrency = tradeAmount * (tpPercent / 100);
     
-    const MAX_MT5_POSITIONS = 5; // Máximo 5 operações simultâneas
+    const MAX_MT5_POSITIONS = 8; // Máximo 8 operações simultâneas (era 5)
     
     console.log(`📊 SPREAD STRATEGY: TP: $${tpCurrency.toFixed(2)} (${tpPercent}%) | SEM SL | TradeAmt: $${tradeAmount} | Max: ${MAX_MT5_POSITIONS} pos`);
 

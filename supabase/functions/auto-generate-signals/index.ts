@@ -7,13 +7,15 @@ const corsHeaders = {
 };
 
 // ============= CONFIGURAÇÕES SCALPING M1 =============
-const MIN_CONFIRMATIONS = 3; // 3 de 6 confirmações
-const RSI_CALL_MAX = 35; // RSI oversold threshold
-const RSI_PUT_MIN = 65; // RSI overbought threshold
-const RSI_ULTRA_CALL = 25; // Ultra extreme for bonus score
-const RSI_ULTRA_PUT = 75;
+const MIN_CONFIRMATIONS = 4; // 4 de 7 confirmações (mais rigoroso)
+const RSI_CALL_MAX = 30; // RSI oversold threshold (era 35)
+const RSI_PUT_MIN = 70; // RSI overbought threshold (era 65)
+const RSI_ULTRA_CALL = 20; // Ultra extreme for bonus score (era 25)
+const RSI_ULTRA_PUT = 80;
 const WHATSAPP_CONFLUENCE_THRESHOLD = 60;
-const IQ_MIN_CONFLUENCE_SCALPING = 50;
+const IQ_MIN_CONFLUENCE_SCALPING = 60; // Mínimo 60% para IQ (era 50)
+const IQ_MIN_AI_CONFIDENCE = 60; // Confiança mínima IA para IQ (era 50)
+const MT5_MIN_AI_CONFIDENCE = 50; // MT5 aceita sinais a partir de 50%
 const ASSET_SIGNAL_COOLDOWN_MS = 60000;
 const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
 const MIN_CANDLES_FOR_ANALYSIS = 8;
@@ -872,10 +874,10 @@ serve(async (req) => {
       if (assetsWithRecentSignals.has(key)) return false;
 
       const history = assetHistory.get(asset.symbol);
-      // BLOQUEIO MAIS RIGOROSO: 3 losses consecutivos (era 5)
+      // BLOQUEIO RIGOROSO: 3 losses consecutivos
       if (history && history.consecutiveLosses >= 3) return false;
-      // WR mínimo de 40% com pelo menos 5 trades (era 30%)
-      if (history && history.winRate < 40 && (history.wins + history.losses) >= 5) return false;
+      // WR mínimo de 45% com pelo menos 5 trades (era 40%)
+      if (history && history.winRate < 45 && (history.wins + history.losses) >= 5) return false;
 
       const newsCheck = isAssetAffectedByNews(asset.symbol);
       if (newsCheck.affected) {
@@ -1112,8 +1114,8 @@ serve(async (req) => {
             console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente`);
           } else if (!bestSignal.aiConfidence && bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
             console.log(`⏭️ IQ: Confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% (sem IA)`);
-          } else if (bestSignal.aiConfidence && bestSignal.aiConfidence < 50) {
-            console.log(`⏭️ IQ: IA confiança ${bestSignal.aiConfidence}% < 50%`);
+          } else if (bestSignal.aiConfidence && bestSignal.aiConfidence < IQ_MIN_AI_CONFIDENCE) {
+            console.log(`⏭️ IQ: IA confiança ${bestSignal.aiConfidence}% < ${IQ_MIN_AI_CONFIDENCE}%`);
           } else {
             const { data: iqConfig } = await supabase
               .from('iqoption_config')
@@ -1199,7 +1201,7 @@ serve(async (req) => {
     // ============= MT5 SPREAD STRATEGY — ATÉ 5 OPERAÇÕES SIMULTÂNEAS =============
     // MT5 usa estratégia de spread com entrada rápida e 10% de lucro
     // Permite até 5 posições simultâneas para maximizar oportunidades
-    const MAX_MT5_POSITIONS = 5;
+    const MAX_MT5_POSITIONS = 8; // Aumentado de 5 para 8 para mais lucro
     try {
       // MT5 SOMENTE com sinais aprovados pela IA (sem fallback técnico)
       const allMT5Candidates = aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC'));
@@ -1213,7 +1215,7 @@ serve(async (req) => {
         return true;
       });
 
-      const MT5_MIN_CONFLUENCE = 60;
+      const MT5_MIN_CONFLUENCE = 50; // Reduzido de 60 para 50 (IA já valida)
 
       if (uniqueMT5Candidates.length === 0) {
         console.log(`⏭️ MT5: Nenhum sinal disponível`);
@@ -1270,8 +1272,8 @@ serve(async (req) => {
                 console.log(`⏭️ MT5: ${mt5Signal.asset} confluência ${mt5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
                 return false;
               }
-              if (mt5Signal.aiConfidence && mt5Signal.aiConfidence < 50) {
-                console.log(`⏭️ MT5: ${mt5Signal.asset} IA confiança ${mt5Signal.aiConfidence}% < 50%`);
+              if (mt5Signal.aiConfidence && mt5Signal.aiConfidence < MT5_MIN_AI_CONFIDENCE) {
+                console.log(`⏭️ MT5: ${mt5Signal.asset} IA confiança ${mt5Signal.aiConfidence}% < ${MT5_MIN_AI_CONFIDENCE}%`);
                 return false;
               }
               const mt5NewsCheck = isAssetAffectedByNews(mt5Signal.asset);
@@ -1279,9 +1281,9 @@ serve(async (req) => {
                 console.log(`🚫 MT5: ${mt5Signal.asset} BLOQUEADO — ${mt5NewsCheck.reason}`);
                 return false;
               }
+              // MT5 PREFERE volatilidade alta — mais movimento = TP mais rápido
               if (mt5Signal.indicators.atr?.volatility === 'high') {
-                console.log(`🚫 MT5: ${mt5Signal.asset} BLOQUEADO — volatilidade alta`);
-                return false;
+                console.log(`🔥 MT5: ${mt5Signal.asset} ALTA VOLATILIDADE — PRIORIZANDO para spread rápido`);
               }
               return true;
             });

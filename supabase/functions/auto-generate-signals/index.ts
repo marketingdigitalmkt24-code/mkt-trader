@@ -1215,7 +1215,7 @@ serve(async (req) => {
         return true;
       });
 
-      const MT5_MIN_CONFLUENCE = 60;
+      const MT5_MIN_CONFLUENCE = 50; // Reduzido de 60 para 50 (IA já valida)
 
       if (uniqueMT5Candidates.length === 0) {
         console.log(`⏭️ MT5: Nenhum sinal disponível`);

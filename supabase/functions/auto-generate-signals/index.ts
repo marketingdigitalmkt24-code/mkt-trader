@@ -1000,7 +1000,7 @@ serve(async (req) => {
       aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
     }
 
-    // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 5) =============
+    // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
     const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
     
     // Salvar TODOS os sinais aprovados pela IA no banco (não só o melhor)

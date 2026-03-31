@@ -645,16 +645,13 @@ async function analyzeAssetWithRealData(
   const macd = calculateMACD(prices);
 
   // ============= REJEITAR INDICADORES EXTREMOS (ARTEFATOS DE DADOS RUINS) =============
-  // Com dados fake (Frankfurter/diários), RSI e Stoch atingem valores extremos irreais
-  // RSI < 5 ou > 95 com Stoch < 5 ou > 95 = certeza de dado fake
-  if (rsiValue <= 5 || rsiValue >= 95) {
+  // RSI < 3 ou > 97 = certeza de dado fake (relaxado — em M1 real, Stoch pode atingir 100)
+  if (rsiValue <= 3 || rsiValue >= 97) {
     console.log(`⚠️ ${asset.symbol}: RSI=${rsiValue.toFixed(1)} EXTREMO — ARTEFATO de dados ruins — REJEITADO`);
     return null;
   }
-  if (stoch.k <= 3 || stoch.k >= 97) {
-    console.log(`⚠️ ${asset.symbol}: Stoch=${stoch.k.toFixed(1)} EXTREMO — ARTEFATO de dados ruins — REJEITADO`);
-    return null;
-  }
+  // Stochastic 100 ou 0 é LEGÍTIMO em tendência forte de M1 — NÃO rejeitar
+  // Apenas rejeitar se RSI TAMBÉM for extremo (ambos extremos = dado fake)
 
   // ============= DETERMINE DIRECTION FROM REAL INDICATORS =============
   let type: 'CALL' | 'PUT' | null = null;

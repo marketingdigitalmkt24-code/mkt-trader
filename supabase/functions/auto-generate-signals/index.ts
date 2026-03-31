@@ -1201,7 +1201,7 @@ serve(async (req) => {
     // ============= MT5 SPREAD STRATEGY — ATÉ 5 OPERAÇÕES SIMULTÂNEAS =============
     // MT5 usa estratégia de spread com entrada rápida e 10% de lucro
     // Permite até 5 posições simultâneas para maximizar oportunidades
-    const MAX_MT5_POSITIONS = 5;
+    const MAX_MT5_POSITIONS = 8; // Aumentado de 5 para 8 para mais lucro
     try {
       // MT5 SOMENTE com sinais aprovados pela IA (sem fallback técnico)
       const allMT5Candidates = aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC'));

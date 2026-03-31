@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // ============= CONFIGURAÇÕES SCALPING M1 =============
-const MIN_CONFIRMATIONS = 4; // 4 de 7 confirmações (mais rigoroso)
+const MIN_CONFIRMATIONS = 3; // 3 de 7 confirmações (IA faz validação final)
 const RSI_CALL_MAX = 30; // RSI oversold threshold (era 35)
 const RSI_PUT_MIN = 70; // RSI overbought threshold (era 65)
 const RSI_ULTRA_CALL = 20; // Ultra extreme for bonus score (era 25)

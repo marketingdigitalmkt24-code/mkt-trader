@@ -7,13 +7,15 @@ const corsHeaders = {
 };
 
 // ============= CONFIGURAÇÕES SCALPING M1 =============
-const MIN_CONFIRMATIONS = 3; // 3 de 6 confirmações
-const RSI_CALL_MAX = 35; // RSI oversold threshold
-const RSI_PUT_MIN = 65; // RSI overbought threshold
-const RSI_ULTRA_CALL = 25; // Ultra extreme for bonus score
-const RSI_ULTRA_PUT = 75;
+const MIN_CONFIRMATIONS = 4; // 4 de 7 confirmações (mais rigoroso)
+const RSI_CALL_MAX = 30; // RSI oversold threshold (era 35)
+const RSI_PUT_MIN = 70; // RSI overbought threshold (era 65)
+const RSI_ULTRA_CALL = 20; // Ultra extreme for bonus score (era 25)
+const RSI_ULTRA_PUT = 80;
 const WHATSAPP_CONFLUENCE_THRESHOLD = 60;
-const IQ_MIN_CONFLUENCE_SCALPING = 50;
+const IQ_MIN_CONFLUENCE_SCALPING = 60; // Mínimo 60% para IQ (era 50)
+const IQ_MIN_AI_CONFIDENCE = 60; // Confiança mínima IA para IQ (era 50)
+const MT5_MIN_AI_CONFIDENCE = 50; // MT5 aceita sinais a partir de 50%
 const ASSET_SIGNAL_COOLDOWN_MS = 60000;
 const IQ_FOREX_CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
 const MIN_CANDLES_FOR_ANALYSIS = 8;

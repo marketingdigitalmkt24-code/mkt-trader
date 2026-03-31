@@ -889,10 +889,10 @@ serve(async (req) => {
       if (assetsWithRecentSignals.has(key)) return false;
 
       const history = assetHistory.get(asset.symbol);
-      // BLOQUEIO RIGOROSO: 3 losses consecutivos
-      if (history && history.consecutiveLosses >= 3) return false;
-      // WR mínimo de 45% com pelo menos 5 trades (era 40%)
-      if (history && history.winRate < 45 && (history.wins + history.losses) >= 5) return false;
+      // Bloqueio por 5 losses consecutivos (era 3 — muito restritivo)
+      if (history && history.consecutiveLosses >= 5) return false;
+      // WR mínimo de 30% com pelo menos 8 trades
+      if (history && history.winRate < 30 && (history.wins + history.losses) >= 8) return false;
 
       const newsCheck = isAssetAffectedByNews(asset.symbol);
       if (newsCheck.affected) {

@@ -1272,8 +1272,8 @@ serve(async (req) => {
                 console.log(`⏭️ MT5: ${mt5Signal.asset} confluência ${mt5Signal.indicators.confluenceScore}% < ${MT5_MIN_CONFLUENCE}%`);
                 return false;
               }
-              if (mt5Signal.aiConfidence && mt5Signal.aiConfidence < 50) {
-                console.log(`⏭️ MT5: ${mt5Signal.asset} IA confiança ${mt5Signal.aiConfidence}% < 50%`);
+              if (mt5Signal.aiConfidence && mt5Signal.aiConfidence < MT5_MIN_AI_CONFIDENCE) {
+                console.log(`⏭️ MT5: ${mt5Signal.asset} IA confiança ${mt5Signal.aiConfidence}% < ${MT5_MIN_AI_CONFIDENCE}%`);
                 return false;
               }
               const mt5NewsCheck = isAssetAffectedByNews(mt5Signal.asset);
@@ -1281,9 +1281,9 @@ serve(async (req) => {
                 console.log(`🚫 MT5: ${mt5Signal.asset} BLOQUEADO — ${mt5NewsCheck.reason}`);
                 return false;
               }
+              // MT5 PREFERE volatilidade alta — mais movimento = TP mais rápido
               if (mt5Signal.indicators.atr?.volatility === 'high') {
-                console.log(`🚫 MT5: ${mt5Signal.asset} BLOQUEADO — volatilidade alta`);
-                return false;
+                console.log(`🔥 MT5: ${mt5Signal.asset} ALTA VOLATILIDADE — PRIORIZANDO para spread rápido`);
               }
               return true;
             });

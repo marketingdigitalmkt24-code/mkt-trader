@@ -72,7 +72,7 @@ export function LiveOperationsCard() {
     pollRef.current = setInterval(() => {
       fetchMT5();
       fetchRecentTrades();
-    }, 5000);
+    }, 3000); // 3 segundos para operações em tempo real
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
@@ -125,7 +125,7 @@ export function LiveOperationsCard() {
           </div>
 
           {mt5Positions.length > 0 ? (
-            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
               {mt5Positions.map(pos => (
                 <div key={pos.id} className={cn(
                   "flex items-center justify-between p-2 rounded-lg text-xs border",

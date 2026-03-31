@@ -1000,7 +1000,7 @@ serve(async (req) => {
       aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
     }
 
-    // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 5) =============
+    // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
     const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
     
     // Salvar TODOS os sinais aprovados pela IA no banco (não só o melhor)
@@ -1201,7 +1201,7 @@ serve(async (req) => {
     // ============= MT5 SPREAD STRATEGY — ATÉ 5 OPERAÇÕES SIMULTÂNEAS =============
     // MT5 usa estratégia de spread com entrada rápida e 10% de lucro
     // Permite até 5 posições simultâneas para maximizar oportunidades
-    const MAX_MT5_POSITIONS = 8; // Aumentado de 5 para 8 para mais lucro
+    const MAX_MT5_POSITIONS = 20; // 20 operações simultâneas para lucro máximo
     try {
       // MT5 SOMENTE com sinais aprovados pela IA (sem fallback técnico)
       const allMT5Candidates = aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC'));

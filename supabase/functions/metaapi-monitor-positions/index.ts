@@ -89,7 +89,7 @@ serve(async (req) => {
     // SEM STOP LOSS — IA Groq garante operações certeiras
     const tpCurrency = tradeAmount * (tpPercent / 100);
     
-    const MAX_MT5_POSITIONS = 8; // Máximo 8 operações simultâneas (era 5)
+    const MAX_MT5_POSITIONS = 20; // 20 operações simultâneas
     
     console.log(`📊 SPREAD STRATEGY: TP: $${tpCurrency.toFixed(2)} (${tpPercent}%) | SEM SL | TradeAmt: $${tradeAmount} | Max: ${MAX_MT5_POSITIONS} pos`);
 

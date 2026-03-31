@@ -72,7 +72,7 @@ export function LiveOperationsCard() {
     pollRef.current = setInterval(() => {
       fetchMT5();
       fetchRecentTrades();
-    }, 3000); // 3 segundos para operações em tempo real
+    }, 30000); // 30 segundos para evitar rate limit da MetaAPI
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 

@@ -864,8 +864,8 @@ serve(async (req) => {
         }));
 
         allAssets = allAssets.filter((a: Asset) => isForexPairAsset(a.symbol));
-        allAssets = allAssets.filter((a: Asset) => !a.payout || a.payout >= 75);
-        console.log(`🔒 Filtro FOREX: ${allAssets.length} pares de moedas com payout >= 75%`);
+        allAssets = allAssets.filter((a: Asset) => !a.payout || a.payout >= 60);
+        console.log(`🔒 Filtro FOREX: ${allAssets.length} pares de moedas com payout >= 60%`);
         assets = allAssets;
       }
     } catch (e) {

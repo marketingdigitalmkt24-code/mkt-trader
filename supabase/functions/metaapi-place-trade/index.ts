@@ -158,7 +158,7 @@ serve(async (req) => {
     console.log(`✅ Símbolo mapeado: ${asset} → ${mt5Symbol}`);
 
     // ===== Step 2: Check total open positions (max 5 simultaneous) =====
-    const MAX_MT5_POSITIONS = 8;
+    const MAX_MT5_POSITIONS = 20;
     try {
       const positionsRes = await safeFetch(`${baseUrl}/positions`, {
         headers: authHeaders,

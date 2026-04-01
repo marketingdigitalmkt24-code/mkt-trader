@@ -58,6 +58,7 @@ export function LiveOperationsCard() {
         .from('operation_results')
         .select('id, asset, direction, result, profit, created_at, is_auto_trade')
         .gte('created_at', oneHourAgo)
+        .neq('timeframe', 'MT5')
         .order('created_at', { ascending: false })
         .limit(10);
       if (data) setRecentTrades(data);

@@ -22,6 +22,8 @@ interface RecentTrade {
   profit: number;
   created_at: string;
   is_auto_trade: boolean;
+  timeframe: string;
+  signal_id: string;
 }
 
 export function LiveOperationsCard() {

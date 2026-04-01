@@ -62,7 +62,7 @@ export function LiveOperationsCard() {
         .gte('created_at', oneHourAgo)
         .order('created_at', { ascending: false })
         .limit(20);
-      if (data) setRecentTrades(data);
+      if (data) setRecentTrades(data as RecentTrade[]);
     } catch {
       // silent
     }

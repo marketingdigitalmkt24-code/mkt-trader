@@ -89,7 +89,15 @@ export function LiveOperationsCard() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  const isMt5Trade = (trade: RecentTrade) =>
+    trade.timeframe === 'MT5' || trade.signal_id?.startsWith('mt5-');
+
+  const iqTrades = recentTrades.filter(t => !isMt5Trade(t));
+  const mt5ClosedTrades = recentTrades.filter(t => isMt5Trade(t));
+
   const totalMt5Profit = mt5Positions.reduce((sum, p) => sum + p.unrealizedProfit, 0);
+  const totalMt5ClosedProfit = mt5ClosedTrades.reduce((sum, t) => sum + t.profit, 0);
+  const totalIqProfit = iqTrades.reduce((sum, t) => sum + t.profit, 0);
 
   const getResultColor = (result: string) => {
     if (result === 'win') return 'text-call';

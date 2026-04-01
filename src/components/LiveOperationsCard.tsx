@@ -56,11 +56,10 @@ export function LiveOperationsCard() {
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade')
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id')
         .gte('created_at', oneHourAgo)
-        .neq('timeframe', 'MT5')
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(20);
       if (data) setRecentTrades(data);
     } catch {
       // silent

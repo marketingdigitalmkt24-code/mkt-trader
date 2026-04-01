@@ -182,6 +182,53 @@ export function LiveOperationsCard() {
           )}
         </div>
 
+        {/* MT5 Closed Trades */}
+        {mt5ClosedTrades.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Server className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">MT5 — Operações Fechadas</span>
+              </div>
+              <Badge variant="secondary" className="text-[10px]">
+                {mt5ClosedTrades.length} operação{mt5ClosedTrades.length !== 1 ? 'ões' : ''}
+              </Badge>
+            </div>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {mt5ClosedTrades.map(trade => (
+                <div key={trade.id} className={cn(
+                  "flex items-center justify-between p-2 rounded-lg text-xs",
+                  getResultBg(trade.result)
+                )}>
+                  <div className="flex items-center gap-2">
+                    {trade.direction === 'CALL' || trade.direction === 'call' || trade.direction === 'BUY' ? (
+                      <TrendingUp className="w-3 h-3 text-call" />
+                    ) : (
+                      <TrendingDown className="w-3 h-3 text-put" />
+                    )}
+                    <span className="font-medium">{trade.asset}</span>
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-muted-foreground/30">MT5</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
+                      {trade.result === 'pending' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
+                    </span>
+                    <Badge variant="secondary" className={cn("text-[9px] px-1 py-0", getResultColor(trade.result))}>
+                      {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result.toUpperCase()}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
+                <span className="text-xs text-muted-foreground">Total MT5 Fechado</span>
+                <span className={cn("text-xs font-mono font-bold", totalMt5ClosedProfit >= 0 ? "text-call" : "text-put")}>
+                  {totalMt5ClosedProfit >= 0 ? '+' : ''}${totalMt5ClosedProfit.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* IQ Option Recent Trades */}
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -194,9 +241,9 @@ export function LiveOperationsCard() {
             </Badge>
           </div>
 
-          {recentTrades.length > 0 ? (
+          {iqTrades.length > 0 ? (
             <div className="space-y-1 max-h-48 overflow-y-auto">
-              {recentTrades.map(trade => (
+              {iqTrades.map(trade => (
                 <div key={trade.id} className={cn(
                   "flex items-center justify-between p-2 rounded-lg text-xs",
                   getResultBg(trade.result)
@@ -216,19 +263,22 @@ export function LiveOperationsCard() {
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
                       {trade.result === 'pending' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
                     </span>
-                    <Badge
-                      variant="secondary"
-                      className={cn("text-[9px] px-1 py-0", getResultColor(trade.result))}
-                    >
+                    <Badge variant="secondary" className={cn("text-[9px] px-1 py-0", getResultColor(trade.result))}>
                       {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result.toUpperCase()}
                     </Badge>
                   </div>
                 </div>
               ))}
+              <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
+                <span className="text-xs text-muted-foreground">Total IQ Option</span>
+                <span className={cn("text-xs font-mono font-bold", totalIqProfit >= 0 ? "text-call" : "text-put")}>
+                  {totalIqProfit >= 0 ? '+' : ''}${totalIqProfit.toFixed(2)}
+                </span>
+              </div>
             </div>
           ) : (
             <div className="text-xs text-muted-foreground text-center py-3 bg-secondary/30 rounded-lg">
-              Nenhuma operação na última hora
+              Nenhuma operação IQ Option na última hora
             </div>
           )}
         </div>

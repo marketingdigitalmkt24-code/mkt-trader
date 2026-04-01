@@ -204,7 +204,7 @@ export function LiveOperationsCard() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
-                      {trade.result === 'pending' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(0)}` : `-$${Math.abs(trade.profit).toFixed(0)}`}
+                      {trade.result === 'pending' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
                     </span>
                     <Badge
                       variant="secondary"

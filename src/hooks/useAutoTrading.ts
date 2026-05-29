@@ -228,6 +228,9 @@ export function useAutoTrading() {
         ai_min_confidence: newConfig.aiMinConfidence,
         profit_target_type: newConfig.profitTargetType,
         profit_target_value: newConfig.profitTargetValue,
+        use_dynamic_stake: newConfig.useDynamicStake,
+        iq_max_stake_pct: newConfig.iqMaxStakePct,
+        iq_stake_cap_usd: newConfig.iqStakeCapUsd,
       };
 
       const { error } = await supabase

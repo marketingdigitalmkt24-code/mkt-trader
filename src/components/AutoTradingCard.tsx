@@ -27,6 +27,10 @@ interface AutoTradingConfig {
   useScaledEntries: boolean;
   scaledEntriesCount: number;
   scaledEntriesDelay: number;
+  // IQ dynamic stake
+  useDynamicStake: boolean;
+  iqMaxStakePct: number;
+  iqStakeCapUsd: number;
 }
 
 interface AutoTradingCardProps {
@@ -160,7 +164,7 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
             <DollarSign className="w-4 h-4 text-orange-500" />
-            Valor entrada IQ Option
+            Valor entrada IQ Option {localConfig.useDynamicStake && <Badge variant="secondary" className="text-xs">Dinâmico</Badge>}
           </Label>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">$</span>
@@ -169,11 +173,63 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
               min={1}
               max={1000}
               value={localConfig.amount}
+              disabled={localConfig.useDynamicStake}
               onChange={(e) => handleLocalChange({ amount: Number(e.target.value) })}
               className="w-24"
             />
+            {localConfig.useDynamicStake && currentBalance > 0 && (
+              <span className="text-xs text-muted-foreground">
+                ≈ ${Math.min(currentBalance * (localConfig.iqMaxStakePct / 100), localConfig.iqStakeCapUsd).toFixed(2)} por trade
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Dynamic Stake (IQ Option) — % of bank */}
+        <div className="space-y-3 rounded-lg border border-orange-500/20 bg-orange-500/5 p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="flex items-center gap-2 font-semibold">
+                <TrendingUp className="w-4 h-4 text-orange-500" />
+                Stake dinâmico (% da banca IQ)
+              </Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Cresce automaticamente conforme a banca aumenta — efeito composto.
+              </p>
+            </div>
+            <Switch
+              checked={localConfig.useDynamicStake}
+              onCheckedChange={(useDynamicStake) => handleLocalChange({ useDynamicStake })}
+            />
+          </div>
+          {localConfig.useDynamicStake && (
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1">
+                <Label className="text-xs">% por entrada ({localConfig.iqMaxStakePct}%)</Label>
+                <Slider
+                  min={1}
+                  max={10}
+                  step={0.5}
+                  value={[localConfig.iqMaxStakePct]}
+                  onValueChange={([v]) => handleLocalChange({ iqMaxStakePct: v })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Teto USD por trade</Label>
+                <Input
+                  type="number"
+                  min={5}
+                  max={5000}
+                  step={5}
+                  value={localConfig.iqStakeCapUsd}
+                  onChange={(e) => handleLocalChange({ iqStakeCapUsd: Number(e.target.value) })}
+                  className="h-9"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
 
         {/* Amount per trade - MT5 */}
         <div className="space-y-2">

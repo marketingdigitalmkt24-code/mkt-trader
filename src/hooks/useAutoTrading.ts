@@ -28,6 +28,10 @@ interface AutoTradingConfig {
   useScaledEntries: boolean;
   scaledEntriesCount: number; // Number of entries per asset (2-5)
   scaledEntriesDelay: number; // Delay between entries in seconds (5-30)
+  // IQ Option dynamic stake (% of bank)
+  useDynamicStake: boolean;
+  iqMaxStakePct: number; // 1-10 (% of bank per trade)
+  iqStakeCapUsd: number; // hard ceiling in USD per trade
 }
 
 interface TradeResult {
@@ -52,6 +56,9 @@ const DEFAULT_CONFIG: AutoTradingConfig = {
   useScaledEntries: false,
   scaledEntriesCount: 3,
   scaledEntriesDelay: 10,
+  useDynamicStake: false,
+  iqMaxStakePct: 5,
+  iqStakeCapUsd: 200,
 };
 
 export function useAutoTrading() {
@@ -181,6 +188,9 @@ export function useAutoTrading() {
             useScaledEntries: config.useScaledEntries,
             scaledEntriesCount: config.scaledEntriesCount,
             scaledEntriesDelay: config.scaledEntriesDelay,
+            useDynamicStake: (data as any).use_dynamic_stake ?? false,
+            iqMaxStakePct: Number((data as any).iq_max_stake_pct ?? 5),
+            iqStakeCapUsd: Number((data as any).iq_stake_cap_usd ?? 200),
           };
           
           setConfig(prev => ({ ...prev, ...dbConfig }));
@@ -218,6 +228,9 @@ export function useAutoTrading() {
         ai_min_confidence: newConfig.aiMinConfidence,
         profit_target_type: newConfig.profitTargetType,
         profit_target_value: newConfig.profitTargetValue,
+        use_dynamic_stake: newConfig.useDynamicStake,
+        iq_max_stake_pct: newConfig.iqMaxStakePct,
+        iq_stake_cap_usd: newConfig.iqStakeCapUsd,
       };
 
       const { error } = await supabase

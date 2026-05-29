@@ -336,6 +336,8 @@ export type Database = {
           created_at: string
           daily_limit_enabled: boolean
           id: string
+          iq_max_stake_pct: number
+          iq_stake_cap_usd: number
           max_consecutive_losses: number
           max_daily_trades: number
           min_confluence: number
@@ -346,6 +348,7 @@ export type Database = {
           trade_amount: number
           updated_at: string
           use_ai_analysis: boolean
+          use_dynamic_stake: boolean
           user_id: string
         }
         Insert: {
@@ -354,6 +357,8 @@ export type Database = {
           created_at?: string
           daily_limit_enabled?: boolean
           id?: string
+          iq_max_stake_pct?: number
+          iq_stake_cap_usd?: number
           max_consecutive_losses?: number
           max_daily_trades?: number
           min_confluence?: number
@@ -364,6 +369,7 @@ export type Database = {
           trade_amount?: number
           updated_at?: string
           use_ai_analysis?: boolean
+          use_dynamic_stake?: boolean
           user_id: string
         }
         Update: {
@@ -372,6 +378,8 @@ export type Database = {
           created_at?: string
           daily_limit_enabled?: boolean
           id?: string
+          iq_max_stake_pct?: number
+          iq_stake_cap_usd?: number
           max_consecutive_losses?: number
           max_daily_trades?: number
           min_confluence?: number
@@ -382,6 +390,7 @@ export type Database = {
           trade_amount?: number
           updated_at?: string
           use_ai_analysis?: boolean
+          use_dynamic_stake?: boolean
           user_id?: string
         }
         Relationships: []

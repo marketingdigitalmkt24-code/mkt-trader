@@ -1146,12 +1146,61 @@ serve(async (req) => {
             if (iqConfig) {
               const { data: tradeSettings } = await supabase
                 .from('user_trading_settings')
-                .select('trade_amount, mt5_trade_amount')
+                .select('trade_amount, mt5_trade_amount, use_dynamic_stake, iq_max_stake_pct, iq_stake_cap_usd, risk_per_trade, profit_target_type, profit_target_value')
                 .eq('user_id', iqConfig.user_id)
                 .limit(1)
                 .maybeSingle();
 
-              const iqTradeAmount = tradeSettings?.trade_amount || 1;
+              // ===== META DIÁRIA: PARAR SE JÁ ATINGIU =====
+              if (tradeSettings?.profit_target_type && tradeSettings.profit_target_type !== 'none' && Number(tradeSettings.profit_target_value) > 0) {
+                const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
+                const { data: todayOps } = await supabase
+                  .from('operation_results')
+                  .select('profit, timeframe')
+                  .gte('created_at', startOfDay.toISOString())
+                  .neq('timeframe', 'MT5');
+                const dailyProfit = (todayOps || []).reduce((acc: number, o: any) => acc + Number(o.profit || 0), 0);
+                const target = Number(tradeSettings.profit_target_value);
+                if (dailyProfit >= target) {
+                  console.log(`🎯 IQ: META DIÁRIA atingida ($${dailyProfit.toFixed(2)} >= $${target}). Auto-trading pausado.`);
+                  continue;
+                }
+              }
+
+              // ===== STAKE DINÂMICO (% DA BANCA) =====
+              let iqTradeAmount = Number(tradeSettings?.trade_amount) || 1;
+              if (tradeSettings?.use_dynamic_stake) {
+                try {
+                  const { data: balData } = await supabase.functions.invoke('iqoption-get-balance', {
+                    body: { userId: iqConfig.user_id },
+                  });
+                  const balance = Number(balData?.balance) || 0;
+                  if (balance > 0) {
+                    const pct = Number(tradeSettings.iq_max_stake_pct ?? tradeSettings.risk_per_trade ?? 2);
+                    const cap = Number(tradeSettings.iq_stake_cap_usd ?? 200);
+                    const dynamicAmount = Math.min(balance * (pct / 100), cap);
+                    iqTradeAmount = Math.max(1, Math.floor(dynamicAmount * 100) / 100);
+                    console.log(`💰 Stake dinâmico: banca $${balance.toFixed(2)} × ${pct}% = $${iqTradeAmount} (cap $${cap})`);
+                  }
+                } catch (e) {
+                  console.warn('⚠️ Stake dinâmico falhou, usando valor fixo:', e);
+                }
+              }
+
+              // ===== COOLING-OFF APÓS PERDAS CONSECUTIVAS =====
+              const { data: recentOps } = await supabase
+                .from('operation_results')
+                .select('result, timeframe')
+                .neq('timeframe', 'MT5')
+                .order('created_at', { ascending: false })
+                .limit(IQ_COOLOFF_AFTER_LOSSES);
+              const consecutiveLosses = (recentOps || []).filter((o: any) => o.result === 'loss').length;
+              if (consecutiveLosses >= IQ_COOLOFF_AFTER_LOSSES) {
+                const reduced = Math.max(1, Math.floor(iqTradeAmount * IQ_COOLOFF_STAKE_MULTIPLIER * 100) / 100);
+                console.log(`🧊 Cooling-off: ${consecutiveLosses} losses seguidas → stake $${iqTradeAmount} → $${reduced}`);
+                iqTradeAmount = reduced;
+              }
+
               const expiration = 1;
 
               // USAR DIREÇÃO DA IA (Groq decide a melhor direção)

@@ -188,6 +188,9 @@ export function useAutoTrading() {
             useScaledEntries: config.useScaledEntries,
             scaledEntriesCount: config.scaledEntriesCount,
             scaledEntriesDelay: config.scaledEntriesDelay,
+            useDynamicStake: (data as any).use_dynamic_stake ?? false,
+            iqMaxStakePct: Number((data as any).iq_max_stake_pct ?? 5),
+            iqStakeCapUsd: Number((data as any).iq_stake_cap_usd ?? 200),
           };
           
           setConfig(prev => ({ ...prev, ...dbConfig }));

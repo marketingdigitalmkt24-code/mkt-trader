@@ -56,6 +56,9 @@ const DEFAULT_CONFIG: AutoTradingConfig = {
   useScaledEntries: false,
   scaledEntriesCount: 3,
   scaledEntriesDelay: 10,
+  useDynamicStake: false,
+  iqMaxStakePct: 5,
+  iqStakeCapUsd: 200,
 };
 
 export function useAutoTrading() {

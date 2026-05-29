@@ -27,6 +27,10 @@ interface AutoTradingConfig {
   useScaledEntries: boolean;
   scaledEntriesCount: number;
   scaledEntriesDelay: number;
+  // IQ dynamic stake
+  useDynamicStake: boolean;
+  iqMaxStakePct: number;
+  iqStakeCapUsd: number;
 }
 
 interface AutoTradingCardProps {

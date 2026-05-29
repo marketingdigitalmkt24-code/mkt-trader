@@ -28,6 +28,10 @@ interface AutoTradingConfig {
   useScaledEntries: boolean;
   scaledEntriesCount: number; // Number of entries per asset (2-5)
   scaledEntriesDelay: number; // Delay between entries in seconds (5-30)
+  // IQ Option dynamic stake (% of bank)
+  useDynamicStake: boolean;
+  iqMaxStakePct: number; // 1-10 (% of bank per trade)
+  iqStakeCapUsd: number; // hard ceiling in USD per trade
 }
 
 interface TradeResult {

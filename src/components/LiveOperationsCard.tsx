@@ -5,14 +5,17 @@ import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 
-interface MT5Position {
+interface OpenPosition {
   id: string;
-  symbol: string;
-  unrealizedProfit: number;
-  volume: number;
   type: string;
-  target: number;
+  asset: string;
+  direction: string;
+  invest: number;
+  pnl: number;
 }
+
+const typeLabel = (t: string) =>
+  t === 'forex' ? 'FOREX' : t === 'digital-option' ? 'DIGITAL' : t === 'turbo-option' ? 'BINÁRIA' : t === 'binary-option' ? 'BINÁRIA' : t.toUpperCase();
 
 interface RecentTrade {
   id: string;
@@ -27,27 +30,23 @@ interface RecentTrade {
 }
 
 export function LiveOperationsCard() {
-  const [mt5Positions, setMt5Positions] = useState<MT5Position[]>([]);
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
-  const [mt5Loading, setMt5Loading] = useState(true);
-  const [lastMt5Check, setLastMt5Check] = useState<Date | null>(null);
+  const [openPositions, setOpenPositions] = useState<OpenPosition[]>([]);
+  const [openLoading, setOpenLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isFetchingRef = useRef(false);
 
-  // Fetch MT5 positions
-  const fetchMT5 = async () => {
+  // Posições abertas na IQ Option (binária, digital e forex)
+  const fetchOpen = async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
-      const { data } = await supabase.functions.invoke('metaapi-monitor-positions');
-      if (data?.success) {
-        setMt5Positions(data.openPositions || []);
-        setLastMt5Check(new Date());
-      }
+      const { data } = await supabase.functions.invoke('iqoption-open-positions');
+      if (data?.success) setOpenPositions(data.positions || []);
     } catch {
       // silent
     } finally {
-      setMt5Loading(false);
+      setOpenLoading(false);
       isFetchingRef.current = false;
     }
   };
@@ -70,9 +69,11 @@ export function LiveOperationsCard() {
 
   useEffect(() => {
     fetchRecentTrades();
+    fetchOpen();
     pollRef.current = setInterval(() => {
       fetchRecentTrades();
-    }, 30000); // 30 segundos para evitar rate limit da MetaAPI
+      fetchOpen();
+    }, 15000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
@@ -91,23 +92,20 @@ export function LiveOperationsCard() {
     trade.timeframe === 'MT5' || trade.signal_id?.startsWith('mt5-');
 
   const iqTrades = recentTrades.filter(t => !isMt5Trade(t));
-  const mt5ClosedTrades = recentTrades.filter(t => isMt5Trade(t));
-
-  const totalMt5Profit = mt5Positions.reduce((sum, p) => sum + p.unrealizedProfit, 0);
-  const totalMt5ClosedProfit = mt5ClosedTrades.reduce((sum, t) => sum + t.profit, 0);
+  const totalOpenPnl = openPositions.reduce((sum, p) => sum + (p.pnl || 0), 0);
   const totalIqProfit = iqTrades.reduce((sum, t) => sum + t.profit, 0);
 
   const getResultColor = (result: string) => {
     if (result === 'win') return 'text-call';
     if (result === 'loss') return 'text-put';
-    if (result === 'pending') return 'text-gold';
+    if (result === 'pending' || result === 'open') return 'text-gold';
     return 'text-muted-foreground';
   };
 
   const getResultBg = (result: string) => {
     if (result === 'win') return 'bg-call/10';
     if (result === 'loss') return 'bg-put/10';
-    if (result === 'pending') return 'bg-gold/10';
+    if (result === 'pending' || result === 'open') return 'bg-gold/10';
     return 'bg-secondary/50';
   };
 
@@ -118,6 +116,62 @@ export function LiveOperationsCard() {
           <Activity className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-semibold">Operações em Tempo Real</h3>
           
+        </div>
+
+        {/* Posições abertas */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Operações Abertas</span>
+            </div>
+            <Badge variant="secondary" className="text-[10px]">{openPositions.length} abertas</Badge>
+          </div>
+          {openLoading ? (
+            <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+          ) : openPositions.length > 0 ? (
+            <div className="space-y-1">
+              {openPositions.map(p => {
+                const pct = p.invest > 0 ? Math.min(100, Math.max(0, (p.pnl / p.invest) * 100)) : 0;
+                return (
+                  <div key={p.id} className="p-2 rounded-lg text-xs bg-gold/10">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {p.direction === 'CALL' ? <TrendingUp className="w-3 h-3 text-call" /> : <TrendingDown className="w-3 h-3 text-put" />}
+                        <span className="font-medium">{p.asset}</span>
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">{typeLabel(p.type)}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground font-mono">${p.invest.toFixed(2)}</span>
+                        <span className={cn("font-mono font-bold", p.pnl >= 0 ? "text-call" : "text-put")}>
+                          {p.pnl >= 0 ? '+' : '-'}${Math.abs(p.pnl).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    {p.type === 'forex' && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <Target className="w-3 h-3 text-muted-foreground" />
+                        <div className="flex-1 h-1 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full bg-call" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono">{pct.toFixed(0)}% / 100%</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
+                <span className="text-xs text-muted-foreground">Resultado aberto</span>
+                <span className={cn("text-xs font-mono font-bold", totalOpenPnl >= 0 ? "text-call" : "text-put")}>
+                  {totalOpenPnl >= 0 ? '+' : '-'}${Math.abs(totalOpenPnl).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground text-center py-3 bg-secondary/30 rounded-lg">
+              Nenhuma operação aberta agora
+            </div>
+          )}
         </div>
 
         {/* IQ Option Recent Trades */}
@@ -146,16 +200,19 @@ export function LiveOperationsCard() {
                       <TrendingDown className="w-3 h-3 text-put" />
                     )}
                     <span className="font-medium">{trade.asset}</span>
+                    {trade.timeframe === 'FOREX' && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">FOREX</Badge>
+                    )}
                     {trade.is_auto_trade && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">AUTO</Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
-                      {trade.result === 'pending' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
+                      {trade.result === 'pending' || trade.result === 'open' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
                     </span>
                     <Badge variant="secondary" className={cn("text-[9px] px-1 py-0", getResultColor(trade.result))}>
-                      {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result.toUpperCase()}
+                      {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result === 'open' ? 'ABERTA' : trade.result.toUpperCase()}
                     </Badge>
                   </div>
                 </div>

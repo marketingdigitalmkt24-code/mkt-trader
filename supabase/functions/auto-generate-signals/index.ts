@@ -1307,9 +1307,25 @@ serve(async (req) => {
                 },
               });
 
+              // FOREX em paralelo (pares normais) — TP 100% da margem, sem stop
+              if (!bestSignal.asset.toUpperCase().includes('OTC')) {
+                const { data: fxOpen } = await supabase.from('operation_results')
+                  .select('id').eq('timeframe', 'FOREX').eq('result', 'open').eq('asset', bestSignal.asset).limit(1);
+                if (!fxOpen || fxOpen.length === 0) {
+                  const { data: fxData } = await supabase.functions.invoke('iqoption-place-trade', {
+                    body: {
+                      asset: bestSignal.asset, direction: executionDirection.toLowerCase(),
+                      amount: iqTradeAmount, expiration, signalId: `fx-${bestSignal.id}`,
+                      isAutoTrade: true, isAIAnalyzed: !!bestSignal.aiConfidence, mode: 'forex',
+                    },
+                  });
+                  console.log(`💱 FOREX ${bestSignal.asset}: ${fxData?.success ? 'aberto ' + fxData.tradeId : 'falhou ' + fxData?.error}`);
+                }
+              }
+
               if (!iqError && iqData?.success) {
                 totalIQ++;
-                console.log(`✅ IQ REAL: ${bestSignal.asset} ${executionDirection} (IA) | ID: ${iqData.tradeId}`);
+                console.log(`✅ IQ REAL (${iqData.mode}): ${bestSignal.asset} ${executionDirection} (IA) | ID: ${iqData.tradeId}`);
                 await supabase.from('trade_queue')
                   .update({ status: 'executed', iq_option_id: iqData.tradeId, executed_at: new Date().toISOString() })
                   .eq('signal_id', bestSignal.id);

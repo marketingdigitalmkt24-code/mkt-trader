@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.metaapi-monitor-positions]
 verify_jwt = false
+
+[functions.iqoption-open-positions]
+verify_jwt = false

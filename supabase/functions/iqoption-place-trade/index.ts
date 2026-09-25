@@ -15,7 +15,11 @@ interface TradeRequest {
   isAutoTrade?: boolean;
   isAIAnalyzed?: boolean;
   timeframe?: string;
+  mode?: 'option' | 'forex';
 }
+
+const payoutById: Record<number, number> = {};
+let usedMode = 'binary';
 
 interface IQOptionCredentials {
   email: string;
@@ -183,6 +187,8 @@ async function placeTradeFireAndForget(
               
               const name = (assetInfo.name || '').toUpperCase();
               const numId = parseInt(id);
+              const commission = (info as any)?.option?.profit?.commission;
+              if (typeof commission === 'number') payoutById[numId] = 100 - commission;
               
               // Merge with existing entry to keep both turbo and binary IDs
               function setAsset(key: string) {
@@ -298,6 +304,56 @@ async function placeTradeFireAndForget(
             msg: { name: 'set-active-balance', version: '1.0', body: { balance_id: balanceId } }
           }));
           
+          // ===== FOREX (margem) com take profit de 100% no próprio servidor da IQ =====
+          if (trade.mode === 'forex') {
+            if (isOTCAsset) {
+              clearTimeout(timeout); ws.close();
+              resolve({ success: false, error: 'Forex não disponível para OTC' });
+              return;
+            }
+            usedMode = 'forex';
+            tradePlaced = true;
+            console.log(`📤 FOREX ${trade.direction} ${cleanAsset} margem $${trade.amount} TP 100%`);
+            ws.send(JSON.stringify({
+              name: 'sendMessage', request_id: 'fx1',
+              msg: { name: 'place-order-temp', version: '4.0', body: {
+                user_balance_id: balanceId, client_platform_id: 9,
+                instrument_type: 'forex', instrument_id: cleanAsset,
+                side: trade.direction === 'call' ? 'buy' : 'sell', type: 'market',
+                amount: trade.amount, leverage: 100,
+                limit_price: null, stop_price: null,
+                use_token_for_commission: false, auto_margin_call: false, use_trail_stop: false,
+                take_profit_kind: 'percent', take_profit_value: 100,
+                stop_lose_kind: null, stop_lose_value: null,
+              } },
+            }));
+            return;
+          }
+
+          // ===== Melhor payout: binária/turbo se payout >= 80%, senão DIGITAL =====
+          const optPayout = payoutById[foundAsset.turboId || foundAsset.binaryId || foundAsset.id] || 0;
+          if (optPayout > 0 && optPayout < 80) {
+            usedMode = 'digital';
+            tradePlaced = true;
+            const nowMs = Date.now();
+            const d = new Date(nowMs);
+            // expira no próximo minuto cheio (+1 se faltar menos de 30s)
+            const expMs = Math.ceil((nowMs + 30000) / 60000) * 60000 + (trade.expiration - 1) * 60000;
+            const e = new Date(expMs);
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const instrumentId = `do${foundAsset.id}A${e.getUTCFullYear()}${pad(e.getUTCMonth()+1)}${pad(e.getUTCDate())}D${pad(e.getUTCHours())}${pad(e.getUTCMinutes())}00T${trade.expiration}M${trade.direction === 'call' ? 'C' : 'P'}SPT`;
+            console.log(`📤 DIGITAL (payout binária ${optPayout}%) ${instrumentId} $${trade.amount} @${d.toISOString()}`);
+            ws.send(JSON.stringify({
+              name: 'sendMessage', request_id: 'dg1',
+              msg: { name: 'digital-options.place-digital-option', version: '3.0', body: {
+                user_balance_id: balanceId, instrument_id: instrumentId,
+                amount: String(trade.amount), asset_id: foundAsset.id, instrument_index: 0,
+              } },
+            }));
+            return;
+          }
+          usedMode = 'binary';
+
           // Calculate expiration
           const now = Math.floor(Date.now() / 1000);
           const nextMinute = Math.ceil(now / 60) * 60;
@@ -366,6 +422,24 @@ async function placeTradeFireAndForget(
           }, 5000);
         }
         
+        // Respostas de DIGITAL / FOREX
+        if (data.request_id === 'fx1' || data.request_id === 'dg1' || data.name === 'digital-option-placed') {
+          const id = data.msg?.id;
+          if (id) {
+            tradeId = String(id);
+            console.log(`✅ ${usedMode.toUpperCase()} aberto! ID: ${tradeId}`);
+            clearTimeout(timeout); ws.close();
+            resolve({ success: true, tradeId });
+            return;
+          }
+          if (data.msg?.message || data.status >= 400) {
+            console.error(`❌ ${usedMode} erro:`, JSON.stringify(data.msg));
+            clearTimeout(timeout); ws.close();
+            resolve({ success: false, error: data.msg?.message || `${usedMode} rejeitado` });
+            return;
+          }
+        }
+
         // Trade opened successfully
         if (data.name === 'binary-options.option-opened' || data.name === 'option') {
           const id = data.msg?.id || data.msg?.option_id;
@@ -458,14 +532,15 @@ serve(async (req) => {
 
     // Save to operation_results
     if (result.success && result.tradeId) {
-      const timeframe = tradeRequest.timeframe || (tradeRequest.expiration <= 1 ? 'M1' : 'M5');
+      const isForex = usedMode === 'forex';
+      const timeframe = isForex ? 'FOREX' : (tradeRequest.timeframe || (tradeRequest.expiration <= 1 ? 'M1' : 'M5'));
       
       await supabase.from('operation_results').insert({
         signal_id: tradeRequest.signalId || `auto_${Date.now()}`,
         asset: tradeRequest.asset,
         direction: tradeRequest.direction.toUpperCase(),
         entry_price: tradeRequest.amount,
-        result: 'pending',
+        result: isForex ? 'open' : 'pending',
         profit: 0,
         iq_option_id: result.tradeId,
         is_auto_trade: tradeRequest.isAutoTrade || false,
@@ -477,7 +552,7 @@ serve(async (req) => {
     }
 
     // Update trade_queue if this came from queue
-    if (tradeRequest.signalId) {
+    if (tradeRequest.signalId && tradeRequest.mode !== 'forex') {
       await supabase.from('trade_queue')
         .update({ 
           status: result.success ? 'executed' : 'failed',
@@ -490,7 +565,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify(result),
+      JSON.stringify({ ...result, mode: usedMode }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

@@ -297,7 +297,7 @@ async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
   const inserts: { symbol: string; price: number }[] = [];
 
   // Try MetaAPI real candles first
-  const metaInfo = await getMetaApiAccountInfo(supabase);
+  const metaInfo = null as any; // MT5/MetaAPI desativado — usar Yahoo Finance
 
   if (metaInfo) {
     console.log('🔗 Buscando candles REAIS via MetaAPI...');

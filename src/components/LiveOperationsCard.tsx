@@ -30,7 +30,11 @@ interface RecentTrade {
 }
 
 export function LiveOperationsCard() {
+  const PAGE_SIZE = 10;
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageRef = useRef(1);
   const [openPositions, setOpenPositions] = useState<OpenPosition[]>([]);
   const [openLoading, setOpenLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -51,21 +55,27 @@ export function LiveOperationsCard() {
     }
   };
 
-  // Fetch recent IQ Option trades
+  // Fetch IQ Option trades (paginated, 10 per page, all time)
   const fetchRecentTrades = async () => {
     try {
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const { data } = await supabase
+      const from = (pageRef.current - 1) * PAGE_SIZE;
+      const { data, count } = await supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id')
-        .gte('created_at', oneHourAgo)
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id', { count: 'exact' })
+        .or('timeframe.is.null,timeframe.neq.MT5')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .range(from, from + PAGE_SIZE - 1);
       if (data) setRecentTrades(data as RecentTrade[]);
+      if (typeof count === 'number') setTotalCount(count);
     } catch {
       // silent
     }
   };
+
+  useEffect(() => {
+    pageRef.current = page;
+    fetchRecentTrades();
+  }, [page]);
 
   useEffect(() => {
     fetchRecentTrades();
@@ -182,29 +192,29 @@ export function LiveOperationsCard() {
               <span className="text-xs font-medium text-muted-foreground">IQ Option — Últimas Operações</span>
             </div>
             <Badge variant="secondary" className="text-[10px]">
-              última hora
+              {totalCount} no total
             </Badge>
           </div>
 
           {iqTrades.length > 0 ? (
-            <div className="space-y-1 max-h-48 overflow-y-auto">
+            <div className="space-y-1">
               {iqTrades.map(trade => (
                 <div key={trade.id} className={cn(
                   "flex items-center justify-between p-2 rounded-lg text-xs",
                   getResultBg(trade.result)
                 )}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     {trade.direction === 'CALL' || trade.direction === 'call' ? (
-                      <TrendingUp className="w-3 h-3 text-call" />
+                      <TrendingUp className="w-3 h-3 text-call shrink-0" />
                     ) : (
-                      <TrendingDown className="w-3 h-3 text-put" />
+                      <TrendingDown className="w-3 h-3 text-put shrink-0" />
                     )}
                     <span className="font-medium">{trade.asset}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {new Date(trade.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
                     {trade.timeframe === 'FOREX' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">FOREX</Badge>
-                    )}
-                    {trade.is_auto_trade && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">AUTO</Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -218,15 +228,34 @@ export function LiveOperationsCard() {
                 </div>
               ))}
               <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
-                <span className="text-xs text-muted-foreground">Total IQ Option</span>
+                <span className="text-xs text-muted-foreground">Total desta página</span>
                 <span className={cn("text-xs font-mono font-bold", totalIqProfit >= 0 ? "text-call" : "text-put")}>
                   {totalIqProfit >= 0 ? '+' : ''}${totalIqProfit.toFixed(2)}
                 </span>
               </div>
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  className="text-xs px-2 py-1 rounded-md bg-secondary disabled:opacity-40"
+                  disabled={page <= 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >
+                  ← Anterior
+                </button>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  Página {page} de {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
+                </span>
+                <button
+                  className="text-xs px-2 py-1 rounded-md bg-secondary disabled:opacity-40"
+                  disabled={page >= Math.ceil(totalCount / PAGE_SIZE)}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Próxima →
+                </button>
+              </div>
             </div>
           ) : (
             <div className="text-xs text-muted-foreground text-center py-3 bg-secondary/30 rounded-lg">
-              Nenhuma operação IQ Option na última hora
+              Nenhuma operação IQ Option registrada
             </div>
           )}
         </div>

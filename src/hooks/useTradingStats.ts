@@ -106,6 +106,8 @@ export function useTradingStats() {
   // Fetch stats when period changes
   useEffect(() => {
     fetchStats();
+    const id = setInterval(fetchStats, 10000);
+    return () => clearInterval(id);
   }, [fetchStats]);
 
   // Subscribe to realtime updates

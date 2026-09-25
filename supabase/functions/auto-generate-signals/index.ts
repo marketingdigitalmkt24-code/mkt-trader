@@ -7,14 +7,14 @@ const corsHeaders = {
 };
 
 // ============= CONFIGURAÇÕES SCALPING M1 =============
-const MIN_CONFIRMATIONS = 3; // 3 de 7 confirmações (IA faz validação final)
+const MIN_CONFIRMATIONS = 4; // 4 de 7 confirmações — entradas mais assertivas
 const RSI_CALL_MAX = 30; // RSI oversold threshold (era 35)
 const RSI_PUT_MIN = 70; // RSI overbought threshold (era 65)
 const RSI_ULTRA_CALL = 20; // Ultra extreme for bonus score (era 25)
 const RSI_ULTRA_PUT = 80;
 const WHATSAPP_CONFLUENCE_THRESHOLD = 60;
-const IQ_MIN_CONFLUENCE_SCALPING = 80; // Apenas sinais de alta qualidade (era 60)
-const IQ_MIN_AI_CONFIDENCE = 75; // IA precisa estar muito confiante (era 60)
+const IQ_MIN_CONFLUENCE_SCALPING = 85; // Apenas sinais de alta qualidade (era 60)
+const IQ_MIN_AI_CONFIDENCE = 80; // IA precisa estar muito confiante (era 60)
 const IQ_COOLOFF_AFTER_LOSSES = 2; // Reduz stake após N perdas seguidas
 const IQ_COOLOFF_STAKE_MULTIPLIER = 0.5; // -50% no stake durante cooling-off
 const MT5_MIN_AI_CONFIDENCE = 50; // MT5 aceita sinais a partir de 50%
@@ -1267,8 +1267,9 @@ serve(async (req) => {
     // ============= MT5 SPREAD STRATEGY — ATÉ 5 OPERAÇÕES SIMULTÂNEAS =============
     // MT5 usa estratégia de spread com entrada rápida e 10% de lucro
     // Permite até 5 posições simultâneas para maximizar oportunidades
-    const MAX_MT5_POSITIONS = 20; // 20 operações simultâneas para lucro máximo
-    try {
+    const MAX_MT5_POSITIONS = 20;
+    const MT5_ENABLED = false; // MT5 desativado — somente IQ Option
+    if (MT5_ENABLED) try {
       // MT5 SOMENTE com sinais aprovados pela IA (sem fallback técnico)
       const allMT5Candidates = aiApprovedSignals.filter(s => !s.asset.toUpperCase().includes('OTC'));
 

@@ -148,9 +148,8 @@ export function BrokerConnectionsCard() {
             <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", isRefreshing && "animate-spin")} />
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2">
           {renderBroker(iqStatus)}
-          {renderBroker(mt5Status)}
         </div>
       </CardContent>
     </Card>

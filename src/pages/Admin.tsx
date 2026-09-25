@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
-import { MetaApiSettingsCard } from '@/components/MetaApiSettingsCard';
 import { UserManagementCard } from '@/components/UserManagementCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
@@ -71,8 +70,7 @@ const Admin = () => {
     };
 
     // Start polling every 3 seconds
-    monitorMt5();
-    mt5MonitorRef.current = setInterval(monitorMt5, 3000);
+    // MT5 desativado
 
     return () => {
       if (mt5MonitorRef.current) clearInterval(mt5MonitorRef.current);
@@ -207,7 +205,7 @@ const Admin = () => {
 
           {/* Brokers Tab - IQ Option + MT5 side by side */}
           <TabsContent value="brokers" className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4">
               {/* IQ Option */}
               <Card className="border-call/20">
                 <CardHeader className="pb-2">
@@ -224,27 +222,6 @@ const Admin = () => {
                 </CardContent>
               </Card>
 
-              {/* MT5 MetaAPI */}
-              <Card className="border-blue-500/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <div className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                      <MonitorSmartphone className="w-4 h-4 text-blue-500" />
-                    </div>
-                    MT5 MetaAPI
-                    <Badge className="ml-auto text-xs bg-blue-500/20 text-blue-400 border-blue-500/30">Forex</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <MetaApiSettingsCard defaultOpen={true} />
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
-              <p className="text-xs text-muted-foreground text-center">
-                ⚡ Os sinais são enviados <strong>simultaneamente</strong> para IQ Option (binário) e MT5 (forex) quando ambos estão ativos.
-              </p>
             </div>
           </TabsContent>
 

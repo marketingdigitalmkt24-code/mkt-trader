@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Header } from '@/components/Header';
 import { BankManagementCard } from '@/components/BankManagementCard';
-import { MT5BankManagementCard } from '@/components/MT5BankManagementCard';
 import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
 import { LiveOperationsCard } from '@/components/LiveOperationsCard';
 import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
@@ -67,10 +66,7 @@ const Index = () => {
         <BrokerConnectionsCard />
 
         {/* Row 2: Bank Management IQ + MT5 side by side */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <BankManagementCard />
-          <MT5BankManagementCard />
-        </div>
+        <BankManagementCard />
 
         {/* Row 3: Live Operations + AI Status side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">

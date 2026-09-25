@@ -62,8 +62,7 @@ export function LiveOperationsCard() {
       const { data, count } = await supabase
         .from('operation_results')
         .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id', { count: 'exact' })
-        .neq('timeframe', 'MT5')
-        .not('signal_id', 'like', 'mt5-%')
+        .or('timeframe.is.null,timeframe.neq.MT5')
         .order('created_at', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
       if (data) setRecentTrades(data as RecentTrade[]);

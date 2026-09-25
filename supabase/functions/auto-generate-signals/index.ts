@@ -102,27 +102,57 @@ interface Asset {
 }
 
 const FOREX_ASSETS: Asset[] = [
-  { symbol: 'EUR/USD', icon: '🇪🇺', type: 'forex', isOTC: false },
-  { symbol: 'GBP/USD', icon: '🇬🇧', type: 'forex', isOTC: false },
-  { symbol: 'USD/JPY', icon: '🇺🇸', type: 'forex', isOTC: false },
-  { symbol: 'GBP/JPY', icon: '🇬🇧', type: 'forex', isOTC: false },
-  { symbol: 'EUR/JPY', icon: '🇪🇺', type: 'forex', isOTC: false },
-  { symbol: 'AUD/USD', icon: '🇦🇺', type: 'forex', isOTC: false },
+  { symbol: 'EUR/USD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'GBP/USD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'USD/JPY', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'GBP/JPY', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'EUR/JPY', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'AUD/USD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'AUD/CAD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'EUR/GBP', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'NZD/USD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'USD/CHF', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'AUD/JPY', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'CAD/JPY', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'USD/CAD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'EUR/AUD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'EUR/CAD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'EUR/CHF', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'GBP/AUD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'GBP/CAD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'GBP/CHF', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'CHF/JPY', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'NZD/JPY', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'AUD/CHF', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'AUD/NZD', icon: '💱', type: 'forex', isOTC: false },
+  { symbol: 'EUR/NZD', icon: '💱', type: 'forex', isOTC: false },
 ];
 
 const OTC_ASSETS: Asset[] = [
   { symbol: 'EUR/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'GBP/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'USD/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'GBP/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'EUR/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'AUD/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'AUD/CAD-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'EUR/GBP-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'NZD/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'USD/CHF-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'AUD/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
   { symbol: 'CAD/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
-  { symbol: 'EUR/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
-  { symbol: 'GBP/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
-  { symbol: 'AUD/USD-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'USD/CAD-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'EUR/AUD-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'EUR/CAD-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'EUR/CHF-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'GBP/AUD-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'GBP/CAD-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'GBP/CHF-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'CHF/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'NZD/JPY-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'AUD/CHF-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'AUD/NZD-OTC', icon: '🔵', type: 'otc', isOTC: true },
+  { symbol: 'EUR/NZD-OTC', icon: '🔵', type: 'otc', isOTC: true },
 ];
 
 const CRYPTO_ASSETS: Asset[] = [];
@@ -137,6 +167,10 @@ const xmSymbolMap: Record<string, string> = {
   'GBP/JPY': 'GBPJPY', 'EUR/JPY': 'EURJPY', 'AUD/USD': 'AUDUSD',
   'AUD/CAD': 'AUDCAD', 'EUR/GBP': 'EURGBP', 'NZD/USD': 'NZDUSD',
   'USD/CHF': 'USDCHF', 'AUD/JPY': 'AUDJPY', 'CAD/JPY': 'CADJPY',
+  'USD/CAD': 'USDCAD', 'EUR/AUD': 'EURAUD', 'EUR/CAD': 'EURCAD',
+  'EUR/CHF': 'EURCHF', 'GBP/AUD': 'GBPAUD', 'GBP/CAD': 'GBPCAD',
+  'GBP/CHF': 'GBPCHF', 'CHF/JPY': 'CHFJPY', 'NZD/JPY': 'NZDJPY',
+  'AUD/CHF': 'AUDCHF', 'AUD/NZD': 'AUDNZD', 'EUR/NZD': 'EURNZD',
 };
 
 async function safeFetchMetaApi(url: string, options: RequestInit = {}): Promise<Response> {
@@ -263,7 +297,7 @@ async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
   const inserts: { symbol: string; price: number }[] = [];
 
   // Try MetaAPI real candles first
-  const metaInfo = await getMetaApiAccountInfo(supabase);
+  const metaInfo = null as any; // MT5/MetaAPI desativado — usar Yahoo Finance
 
   if (metaInfo) {
     console.log('🔗 Buscando candles REAIS via MetaAPI...');
@@ -288,6 +322,35 @@ async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
     if (finalPrices.size > 0) {
       console.log(`✅ MetaAPI: ${finalPrices.size / 2} pares com candles REAIS de 1 minuto`);
     }
+  }
+
+  // Yahoo Finance — candles REAIS de 1 minuto (gratuito, todos os pares)
+  if (finalPrices.size === 0) {
+    console.log('🔗 Buscando candles REAIS via Yahoo Finance...');
+    const syms = Object.keys(xmSymbolMap);
+    const results = await Promise.all(syms.map(async (symbol) => {
+      try {
+        const y = symbol.replace('/', '') + '=X';
+        const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${y}?interval=1m&range=1d`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(6000),
+        });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const res = j?.chart?.result?.[0];
+        const ts: number[] = res?.timestamp || [];
+        const closes: (number | null)[] = res?.indicators?.quote?.[0]?.close || [];
+        const pts = ts.map((t, i) => ({ t, c: closes[i] })).filter(p => typeof p.c === 'number').slice(-30);
+        return pts.length ? { symbol, pts } : null;
+      } catch { return null; }
+    }));
+    for (const r of results) {
+      if (!r) continue;
+      for (const p of r.pts) inserts.push({ symbol: r.symbol, price: p.c as number, created_at: new Date(p.t * 1000).toISOString() } as any);
+      const last = r.pts[r.pts.length - 1].c as number;
+      finalPrices.set(r.symbol, last);
+      finalPrices.set(`${r.symbol}-OTC`, last);
+    }
+    if (finalPrices.size > 0) console.log(`✅ Yahoo: ${finalPrices.size / 2} pares com candles reais`);
   }
 
   // Fallback for any missing pairs

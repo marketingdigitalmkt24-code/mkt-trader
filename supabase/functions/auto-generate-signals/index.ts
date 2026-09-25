@@ -1187,18 +1187,30 @@ serve(async (req) => {
                 }
               }
 
-              // ===== COOLING-OFF APÓS PERDAS CONSECUTIVAS =====
+              // ===== MARTINGALE LIMITADO (máx. 2 níveis) =====
+              // Após uma perda, a próxima entrada é multiplicada para recuperar a perda + lucro.
+              // Após 3 perdas seguidas (ciclo esgotado), volta ao valor base.
+              const MG_MAX_LEVELS = 2;
+              const MG_MULTIPLIER = 2.2; // cobre perda com payout ~85%
               const { data: recentOps } = await supabase
                 .from('operation_results')
-                .select('result, timeframe')
+                .select('result, timeframe, signal_id')
                 .neq('timeframe', 'MT5')
+                .in('result', ['win', 'loss'])
                 .order('created_at', { ascending: false })
-                .limit(IQ_COOLOFF_AFTER_LOSSES);
-              const consecutiveLosses = (recentOps || []).filter((o: any) => o.result === 'loss').length;
-              if (consecutiveLosses >= IQ_COOLOFF_AFTER_LOSSES) {
-                const reduced = Math.max(1, Math.floor(iqTradeAmount * IQ_COOLOFF_STAKE_MULTIPLIER * 100) / 100);
-                console.log(`🧊 Cooling-off: ${consecutiveLosses} losses seguidas → stake $${iqTradeAmount} → $${reduced}`);
-                iqTradeAmount = reduced;
+                .limit(MG_MAX_LEVELS + 1);
+              let trailingLosses = 0;
+              for (const o of (recentOps || []) as any[]) {
+                if (o.signal_id?.startsWith('mt5-')) continue;
+                if (o.result === 'loss') trailingLosses++; else break;
+              }
+              const mgLevel = trailingLosses > MG_MAX_LEVELS ? 0 : trailingLosses;
+              if (mgLevel > 0) {
+                const base = iqTradeAmount;
+                iqTradeAmount = Math.round(base * Math.pow(MG_MULTIPLIER, mgLevel) * 100) / 100;
+                console.log(`🎲 Martingale nível ${mgLevel}: $${base} → $${iqTradeAmount}`);
+              } else if (trailingLosses > MG_MAX_LEVELS) {
+                console.log(`🔁 Martingale: ciclo esgotado (${trailingLosses} perdas) — voltando ao valor base`);
               }
 
               const expiration = 1;

@@ -137,6 +137,10 @@ const xmSymbolMap: Record<string, string> = {
   'GBP/JPY': 'GBPJPY', 'EUR/JPY': 'EURJPY', 'AUD/USD': 'AUDUSD',
   'AUD/CAD': 'AUDCAD', 'EUR/GBP': 'EURGBP', 'NZD/USD': 'NZDUSD',
   'USD/CHF': 'USDCHF', 'AUD/JPY': 'AUDJPY', 'CAD/JPY': 'CADJPY',
+  'USD/CAD': 'USDCAD', 'EUR/AUD': 'EURAUD', 'EUR/CAD': 'EURCAD',
+  'EUR/CHF': 'EURCHF', 'GBP/AUD': 'GBPAUD', 'GBP/CAD': 'GBPCAD',
+  'GBP/CHF': 'GBPCHF', 'CHF/JPY': 'CHFJPY', 'NZD/JPY': 'NZDJPY',
+  'AUD/CHF': 'AUDCHF', 'AUD/NZD': 'AUDNZD', 'EUR/NZD': 'EURNZD',
 };
 
 async function safeFetchMetaApi(url: string, options: RequestInit = {}): Promise<Response> {

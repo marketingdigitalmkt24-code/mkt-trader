@@ -914,35 +914,43 @@ serve(async (req) => {
       return parts.length === 2 && parts.every(p => IQ_FOREX_CURRENCIES.includes(p));
     };
 
+    // SEMPRE verificar junto à IQ Option quais pares estão ABERTOS agora.
+    // O campo "payout" retornado não é o payout real (vem 15–18), então não filtramos por ele.
+    let iqVerified = false;
     try {
       const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets');
       if (iqData?.success && iqData?.assets?.length > 0) {
-        const enabledAssets = iqData.assets.filter((a: any) => a.enabled === true);
-        let allAssets = enabledAssets.map((a: any) => ({
-          symbol: a.name,
-          icon: a.isOTC ? '🔵' : a.name.includes('EUR') ? '🇪🇺' : a.name.includes('GBP') ? '🇬🇧' : '📊',
-          type: a.isOTC ? 'otc' : a.isBlitz ? 'blitz' : a.type,
-          isOTC: a.isOTC || false,
-          isBlitz: a.isBlitz || false,
-          isBinary: a.isBinary || false,
-          payout: a.payout,
-        }));
-
-        allAssets = allAssets.filter((a: Asset) => isForexPairAsset(a.symbol));
-        allAssets = allAssets.filter((a: Asset) => !a.payout || a.payout >= 60);
-        console.log(`🔒 Filtro FOREX: ${allAssets.length} pares de moedas com payout >= 60%`);
-        assets = allAssets;
+        const seen = new Set<string>();
+        const openAssets: Asset[] = [];
+        for (const a of iqData.assets) {
+          if (a.enabled !== true || a.schedule?.open === false) continue;
+          if (!isForexPairAsset(a.name)) continue;
+          const isOtc = !!a.isOTC || /OTC/i.test(a.name);
+          const base = a.name.replace(/[-\s]*OTC$/i, '').trim();
+          const symbol = isOtc ? `${base}-OTC` : base;
+          if (seen.has(symbol)) continue;
+          seen.add(symbol);
+          openAssets.push({
+            symbol,
+            icon: isOtc ? '🔵' : base.includes('EUR') ? '🇪🇺' : base.includes('GBP') ? '🇬🇧' : '📊',
+            type: isOtc ? 'otc' : 'forex',
+            isOTC: isOtc,
+          } as Asset);
+        }
+        iqVerified = true;
+        assets = openAssets;
+        console.log(`🟢 IQ Option: ${assets.length} pares de moedas ABERTOS agora: ${assets.map(a => a.symbol).join(', ')}`);
       }
     } catch (e) {
-      console.log('⚠️ IQ Option assets fetch failed, using fallback');
+      console.log('⚠️ Falha ao verificar pares abertos na IQ Option:', e);
     }
 
-    if (assets.length === 0) {
-      assets = weekend ? OTC_ASSETS : [...FOREX_ASSETS];
-    } else {
-      assets = weekend
-        ? assets.filter(a => a.isOTC || isOTCAsset(a.symbol))
-        : assets.filter(a => !a.isOTC && !isOTCAsset(a.symbol));
+    if (!iqVerified || assets.length === 0) {
+      console.log('⛔ Não foi possível confirmar pares abertos na IQ Option — ciclo ignorado');
+      return new Response(
+        JSON.stringify({ success: true, generated: 0, reason: 'IQ Option open pairs not verified' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // ============= FILTER BLOCKED ASSETS =============

@@ -290,6 +290,35 @@ async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
     }
   }
 
+  // Yahoo Finance — candles REAIS de 1 minuto (gratuito, todos os pares)
+  if (finalPrices.size === 0) {
+    console.log('🔗 Buscando candles REAIS via Yahoo Finance...');
+    const syms = Object.keys(xmSymbolMap);
+    const results = await Promise.all(syms.map(async (symbol) => {
+      try {
+        const y = symbol.replace('/', '') + '=X';
+        const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${y}?interval=1m&range=1d`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(6000),
+        });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const res = j?.chart?.result?.[0];
+        const ts: number[] = res?.timestamp || [];
+        const closes: (number | null)[] = res?.indicators?.quote?.[0]?.close || [];
+        const pts = ts.map((t, i) => ({ t, c: closes[i] })).filter(p => typeof p.c === 'number').slice(-30);
+        return pts.length ? { symbol, pts } : null;
+      } catch { return null; }
+    }));
+    for (const r of results) {
+      if (!r) continue;
+      for (const p of r.pts) inserts.push({ symbol: r.symbol, price: p.c as number, created_at: new Date(p.t * 1000).toISOString() } as any);
+      const last = r.pts[r.pts.length - 1].c as number;
+      finalPrices.set(r.symbol, last);
+      finalPrices.set(`${r.symbol}-OTC`, last);
+    }
+    if (finalPrices.size > 0) console.log(`✅ Yahoo: ${finalPrices.size / 2} pares com candles reais`);
+  }
+
   // Fallback for any missing pairs
   if (finalPrices.size === 0) {
     console.log('⚠️ MetaAPI indisponível — fallback AwesomeAPI');

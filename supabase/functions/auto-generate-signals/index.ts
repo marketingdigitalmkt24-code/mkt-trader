@@ -288,7 +288,40 @@ async function fetchFallbackPrices(): Promise<Map<string, number>> {
   return prices;
 }
 
-async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
+const CRYPTO_CODES = ['BTC', 'ETH', 'LTC', 'XRP', 'SOL', 'DOGE', 'ADA', 'BNB', 'DOT', 'TRX', 'MATIC', 'LINK', 'AVAX', 'BCH', 'EOS', 'XLM', 'SHIB', 'TON', 'ATOM', 'UNI', 'NEAR', 'PEPE'];
+const STOCK_NAME_MAP: Record<string, string> = {
+  APPLE: 'AAPL', AMAZON: 'AMZN', GOOGLE: 'GOOGL', ALPHABET: 'GOOGL', TESLA: 'TSLA', MICROSOFT: 'MSFT',
+  META: 'META', FACEBOOK: 'META', NVIDIA: 'NVDA', NETFLIX: 'NFLX', ALIBABA: 'BABA', MCDONALDS: 'MCD',
+  NIKE: 'NKE', COCACOLA: 'KO', DISNEY: 'DIS', INTEL: 'INTC', AMD: 'AMD', BOEING: 'BA', PAYPAL: 'PYPL',
+  UBER: 'UBER', SNAP: 'SNAP', TWITTER: 'X', CITIGROUP: 'C', JPMORGAN: 'JPM', PFIZER: 'PFE', ZOOM: 'ZM',
+  SPOTIFY: 'SPOT', AIRBNB: 'ABNB', COINBASE: 'COIN', PALANTIR: 'PLTR', GAMESTOP: 'GME', AMC: 'AMC',
+};
+
+function assetKind(symbol: string): 'forex' | 'crypto' | 'stock' {
+  const s = symbol.replace(/[-\s]*OTC$/i, '').toUpperCase();
+  const parts = s.split('/');
+  if (parts.length === 2 && CRYPTO_CODES.includes(parts[0])) return 'crypto';
+  if (CRYPTO_CODES.some(c => s === c || s === `${c}USD` || s === `${c}USDT`)) return 'crypto';
+  if (parts.length === 2 && parts.every(p => IQ_FOREX_CURRENCIES.includes(p))) return 'forex';
+  return 'stock';
+}
+
+// Converte símbolo da IQ Option para ticker Yahoo Finance (null = sem cotação disponível)
+function yahooTicker(symbol: string): string | null {
+  const s = symbol.replace(/[-\s]*OTC$/i, '').replace(/^FRONT\./, '').toUpperCase().trim();
+  const kind = assetKind(s);
+  if (kind === 'forex') return s.replace('/', '') + '=X';
+  if (kind === 'crypto') {
+    const code = s.includes('/') ? s.split('/')[0] : CRYPTO_CODES.find(c => s.startsWith(c))!;
+    return `${code}-USD`;
+  }
+  const clean = s.replace(/[^A-Z.]/g, '');
+  if (STOCK_NAME_MAP[clean]) return STOCK_NAME_MAP[clean];
+  if (/^[A-Z]{1,5}(\.[A-Z])?$/.test(clean) && !s.includes('/')) return clean;
+  return null;
+}
+
+async function fetchRealPrices(supabase: any, extraSymbols?: string[]): Promise<Map<string, number>> {
   // Clean old candles (2h+)
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   await supabase.from('price_candles').delete().lt('created_at', twoHoursAgo);
@@ -324,13 +357,14 @@ async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
     }
   }
 
-  // Yahoo Finance — candles REAIS de 1 minuto (gratuito, todos os pares)
+  // Yahoo Finance — candles REAIS de 1 minuto (moedas, ações e cripto)
   if (finalPrices.size === 0) {
     console.log('🔗 Buscando candles REAIS via Yahoo Finance...');
-    const syms = Object.keys(xmSymbolMap);
+    const syms = (extraSymbols && extraSymbols.length > 0 ? extraSymbols : Object.keys(xmSymbolMap))
+      .filter(s => !!yahooTicker(s)).slice(0, 120);
     const results = await Promise.all(syms.map(async (symbol) => {
       try {
-        const y = symbol.replace('/', '') + '=X';
+        const y = encodeURIComponent(yahooTicker(symbol)!);
         const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${y}?interval=1m&range=1d`, {
           headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(6000),
         });
@@ -366,10 +400,9 @@ async function fetchRealPrices(supabase: any): Promise<Map<string, number>> {
 
   // Save candles to DB (delete old ones for same symbols first, then insert fresh)
   if (inserts.length > 0) {
-    // Delete existing candles for these symbols to replace with fresh MetaAPI data
     const uniqueSymbols = [...new Set(inserts.map(i => i.symbol))];
-    for (const sym of uniqueSymbols) {
-      await supabase.from('price_candles').delete().eq('symbol', sym);
+    for (let i = 0; i < uniqueSymbols.length; i += 50) {
+      await supabase.from('price_candles').delete().in('symbol', uniqueSymbols.slice(i, i + 50));
     }
     // Insert fresh candles in batches
     const batchSize = 50;
@@ -854,8 +887,45 @@ serve(async (req) => {
     const weekend = isWeekend();
     console.log(`\n🕐 ===== GERAÇÃO DE SINAIS COM DADOS REAIS ===== | Weekend: ${weekend}`);
 
+    // ============= ATIVOS ABERTOS NA IQ OPTION (moedas, ações, cripto) =============
+    const openIqAssets: Asset[] = [];
+    try {
+      const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets');
+      if (iqData?.success && iqData?.assets?.length > 0) {
+        const seen = new Set<string>();
+        for (const a of iqData.assets) {
+          if (a.enabled !== true || a.schedule?.open === false) continue;
+          if (/BLITZ/i.test(a.name) || a.type === 'blitz') continue;
+          const isOtc = !!a.isOTC || /OTC/i.test(a.name);
+          const base = String(a.name).replace(/[-\s]*OTC$/i, '').trim();
+          const symbol = isOtc ? `${base}-OTC` : base;
+          if (seen.has(symbol) || !yahooTicker(base)) continue;
+          seen.add(symbol);
+          const kind = assetKind(base);
+          openIqAssets.push({
+            symbol,
+            icon: kind === 'crypto' ? '🪙' : kind === 'stock' ? '📈' : isOtc ? '🔵' : '💱',
+            type: isOtc ? 'otc' : kind,
+            isOTC: isOtc,
+          } as Asset);
+        }
+      }
+    } catch (e) {
+      console.log('⚠️ Falha ao verificar ativos abertos na IQ Option:', e);
+    }
+    if (openIqAssets.length === 0) {
+      console.log('⛔ Não foi possível confirmar ativos abertos na IQ Option — ciclo ignorado');
+      return new Response(
+        JSON.stringify({ success: true, generated: 0, reason: 'IQ Option open assets not verified' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const kinds = openIqAssets.reduce((m: any, a) => { const k = assetKind(a.symbol.replace('-OTC', '')); m[k] = (m[k] || 0) + 1; return m; }, {});
+    console.log(`🟢 IQ Option: ${openIqAssets.length} ativos ABERTOS (${JSON.stringify(kinds)})`);
+
     // ============= FETCH REAL PRICES =============
-    const realPrices = await fetchRealPrices(supabase);
+    const baseSymbols = [...new Set(openIqAssets.map(a => a.symbol.replace('-OTC', '')))];
+    const realPrices = await fetchRealPrices(supabase, baseSymbols);
 
     if (realPrices.size === 0) {
       console.error('❌ Nenhum preço real obtido — abortando geração');
@@ -905,53 +975,8 @@ serve(async (req) => {
       }
     });
 
-    // ============= GET AVAILABLE ASSETS =============
-    let assets: Asset[] = [];
-
-    const isForexPairAsset = (symbol: string): boolean => {
-      const clean = symbol.replace('-OTC', '').replace(' OTC', '').trim();
-      const parts = clean.split('/').map(p => p.trim().toUpperCase());
-      return parts.length === 2 && parts.every(p => IQ_FOREX_CURRENCIES.includes(p));
-    };
-
-    // SEMPRE verificar junto à IQ Option quais pares estão ABERTOS agora.
-    // O campo "payout" retornado não é o payout real (vem 15–18), então não filtramos por ele.
-    let iqVerified = false;
-    try {
-      const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets');
-      if (iqData?.success && iqData?.assets?.length > 0) {
-        const seen = new Set<string>();
-        const openAssets: Asset[] = [];
-        for (const a of iqData.assets) {
-          if (a.enabled !== true || a.schedule?.open === false) continue;
-          if (!isForexPairAsset(a.name)) continue;
-          const isOtc = !!a.isOTC || /OTC/i.test(a.name);
-          const base = a.name.replace(/[-\s]*OTC$/i, '').trim();
-          const symbol = isOtc ? `${base}-OTC` : base;
-          if (seen.has(symbol)) continue;
-          seen.add(symbol);
-          openAssets.push({
-            symbol,
-            icon: isOtc ? '🔵' : base.includes('EUR') ? '🇪🇺' : base.includes('GBP') ? '🇬🇧' : '📊',
-            type: isOtc ? 'otc' : 'forex',
-            isOTC: isOtc,
-          } as Asset);
-        }
-        iqVerified = true;
-        assets = openAssets;
-        console.log(`🟢 IQ Option: ${assets.length} pares de moedas ABERTOS agora: ${assets.map(a => a.symbol).join(', ')}`);
-      }
-    } catch (e) {
-      console.log('⚠️ Falha ao verificar pares abertos na IQ Option:', e);
-    }
-
-    if (!iqVerified || assets.length === 0) {
-      console.log('⛔ Não foi possível confirmar pares abertos na IQ Option — ciclo ignorado');
-      return new Response(
-        JSON.stringify({ success: true, generated: 0, reason: 'IQ Option open pairs not verified' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // ============= ASSETS (já verificados na IQ Option antes da busca de preços) =============
+    let assets: Asset[] = openIqAssets;
 
     // ============= FILTER BLOCKED ASSETS =============
     const originalCount = assets.length;
@@ -1186,9 +1211,8 @@ serve(async (req) => {
         const assetParts = assetClean.split('/').map((p: string) => p.trim().toUpperCase());
         const isForexPair = assetParts.length === 2 && assetParts.every((p: string) => forexCurrencies.includes(p));
 
-        if (!isForexPair) {
-          console.log(`⏭️ IQ Option: Skipping ${bestSignal.asset} — não é par de moedas`);
-        } else if (hasAnyPendingIQTrade) {
+        // Todos os ativos abertos na IQ (moedas, ações, cripto) podem operar opções
+        if (hasAnyPendingIQTrade) {
           console.log(`🚫 IQ Option: BLOQUEADO — operação anterior pendente`);
         } else {
           const { data: freshPending } = await supabase

@@ -263,14 +263,16 @@ DIREÇÃO CERTEIRA:
 
 IMPORTANTE: Seja SELETIVO. É melhor pular oportunidades duvidosas do que entrar em operações perdedoras. Sem stop loss, cada trade precisa ser CERTEIRO.`;
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    let response: Response | null = null;
+    for (const groqModel of ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'llama-3.1-8b-instant']) {
+    response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: groqModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Analise estes ${signals.length} sinais para LUCRO RÁPIDO M1:\n\n${JSON.stringify(signalSummaries, null, 2)}\n\nResponda APENAS com JSON no formato: {"analysis":"...","decisions":[{"asset":"...","execute":true/false,"best_direction":"CALL/PUT","confidence":0-100,"strategy":"MOMENTUM/REVERSAL/GOLDEN_SETUP/EXHAUSTION","reason":"..."}]}` },
@@ -280,6 +282,10 @@ IMPORTANTE: Seja SELETIVO. É melhor pular oportunidades duvidosas do que entrar
         response_format: { type: 'json_object' },
       }),
     });
+    if (response.status !== 404 && response.status !== 400) break;
+    console.log(`⚠️ Groq modelo ${groqModel} indisponível, tentando próximo`);
+    }
+    if (!response) return null;
 
     if (!response.ok) {
       const errText = await response.text();
@@ -478,7 +484,7 @@ serve(async (req) => {
         };
       }
 
-      const shouldExecLocal = local.shouldExecute && local.score >= 45;
+      const shouldExecLocal = local.shouldExecute && local.score >= 65;
       const emoji = shouldExecLocal ? '✅' : '❌';
       console.log(`📐 LOCAL ${emoji} ${s.asset} ${local.bestDirection} score=${local.score} [${local.strategy}] ${local.reason}`);
       return {

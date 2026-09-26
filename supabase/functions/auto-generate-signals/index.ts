@@ -900,6 +900,8 @@ serve(async (req) => {
           const base = String(a.name).replace(/[-\s]*OTC$/i, '').trim();
           const symbol = isOtc ? `${base}-OTC` : base;
           if (seen.has(symbol) || !yahooTicker(base)) continue;
+          // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
+          if (isOtc && assetKind(base) === 'crypto') continue;
           seen.add(symbol);
           const kind = assetKind(base);
           openIqAssets.push({

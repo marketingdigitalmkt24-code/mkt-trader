@@ -264,26 +264,35 @@ DIREÇÃO CERTEIRA:
 IMPORTANTE: Seja SELETIVO. É melhor pular oportunidades duvidosas do que entrar em operações perdedoras. Sem stop loss, cada trade precisa ser CERTEIRO.`;
 
     let response: Response | null = null;
-    for (const groqModel of ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'llama-3.1-8b-instant']) {
+    let usedModel = '';
+    const attempts: { model: string; json: boolean }[] = [
+      { model: 'llama-3.3-70b-versatile', json: true },
+      { model: 'llama-3.3-70b-versatile', json: false },
+    ];
+    for (const att of attempts) {
+    const body: any = {
+        model: att.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Analise estes ${signals.length} sinais para LUCRO RÁPIDO M1:\n\n${JSON.stringify(signalSummaries)}\n\nResponda APENAS com um objeto JSON válido (sem texto fora do JSON) no formato: {"analysis":"...","decisions":[{"asset":"...","execute":true,"best_direction":"CALL","confidence":0,"strategy":"MOMENTUM","reason":"..."}]}. Uma decisão por ativo. Razões curtas (máx 20 palavras).` },
+        ],
+        temperature: 0.1,
+        max_tokens: 3000,
+      };
+    if (att.json) body.response_format = { type: 'json_object' };
     response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: groqModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Analise estes ${signals.length} sinais para LUCRO RÁPIDO M1:\n\n${JSON.stringify(signalSummaries, null, 2)}\n\nResponda APENAS com JSON no formato: {"analysis":"...","decisions":[{"asset":"...","execute":true/false,"best_direction":"CALL/PUT","confidence":0-100,"strategy":"MOMENTUM/REVERSAL/GOLDEN_SETUP/EXHAUSTION","reason":"..."}]}` },
-        ],
-        temperature: 0.1,
-        max_tokens: 1500,
-        response_format: { type: 'json_object' },
-      }),
+      body: JSON.stringify(body),
     });
-    if (response.status !== 404 && response.status !== 400) break;
-    console.log(`⚠️ Groq modelo ${groqModel} indisponível, tentando próximo`);
+    usedModel = att.model;
+    if (response.ok || response.status === 429 || response.status >= 500) break;
+    const errBody = await response.text();
+    console.log(`⚠️ Groq ${att.model} (json=${att.json}) [${response.status}]: ${errBody.slice(0, 300)}`);
+    response = null;
     }
     if (!response) return null;
 
@@ -300,7 +309,10 @@ IMPORTANTE: Seja SELETIVO. É melhor pular oportunidades duvidosas do que entrar
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
     if (content) {
-      const parsed = JSON.parse(content);
+      const match = String(content).match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(match ? match[0] : content);
+      console.log(`🧠 Groq ${usedModel} OK`);
+
       console.log(`🧠 Groq Análise: ${parsed.analysis}`);
       console.log(`🧠 Groq Decisões: ${JSON.stringify(parsed.decisions)}`);
       return parsed.decisions || null;

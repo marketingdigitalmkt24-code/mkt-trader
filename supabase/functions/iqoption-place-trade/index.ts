@@ -356,8 +356,9 @@ async function placeTradeFireAndForget(
 
           // Calculate expiration
           const now = Math.floor(Date.now() / 1000);
-          const nextMinute = Math.ceil(now / 60) * 60;
-          const expirationTime = nextMinute + (trade.expiration * 60);
+          // Expira no minuto cheio mais próximo com pelo menos 30s restantes (1 min real = 1:00–1:30, não 1:50)
+          const nextMinute = Math.ceil((now + 30) / 60) * 60;
+          const expirationTime = nextMinute + ((trade.expiration - 1) * 60);
           
           // For M1 trades, prefer turbo but fallback to binary
           const isShortTerm = trade.expiration <= 5;

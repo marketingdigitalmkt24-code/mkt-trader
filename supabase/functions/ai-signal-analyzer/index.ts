@@ -481,7 +481,14 @@ serve(async (req) => {
 
       if (aiPick) {
         // Confiança mínima 50% para operação certeira
-        const shouldExecute = aiPick.execute && aiPick.confidence >= 50;
+        // Só repete padrões vencedores: ativo+direção com histórico ruim é bloqueado
+        const dir = String(aiPick.best_direction || s.type).toUpperCase();
+        const dw = ap ? (dir === 'CALL' ? ap.callWins : ap.putWins) : 0;
+        const dl = ap ? (dir === 'CALL' ? ap.callLosses : ap.putLosses) : 0;
+        const badHistory = (dw + dl) >= 2 && dw / (dw + dl) < 0.65;
+        const lastLoss = ap?.recentResults?.[0] === 'loss';
+        if (badHistory || lastLoss) console.log(`🚫 ${s.asset} ${dir}: histórico ${dw}W/${dl}L${lastLoss ? ' (última foi loss)' : ''} — só entra em padrão vencedor`);
+        const shouldExecute = aiPick.execute && aiPick.confidence >= 50 && !badHistory && !lastLoss;
         const emoji = shouldExecute ? '✅' : '❌';
         console.log(`🧠 AI ${emoji} ${s.asset} ${aiPick.best_direction} conf=${aiPick.confidence} [${aiPick.strategy}] ${aiPick.reason}`);
         return {

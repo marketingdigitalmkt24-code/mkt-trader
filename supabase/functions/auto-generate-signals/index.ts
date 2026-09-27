@@ -321,6 +321,27 @@ function yahooTicker(symbol: string): string | null {
   return null;
 }
 
+// Últimas velas OHLC FECHADAS por símbolo (para pavio / pin bar)
+const lastCandles = new Map<string, { o: number; h: number; l: number; c: number }>();
+
+// Estratégia do pavio: vela com pavio longo inferior (CALL) ou superior (PUT)
+function detectWickRejection(symbol: string, direction: 'CALL' | 'PUT'): { ok: boolean; strong: boolean; ratio: number } {
+  const k = lastCandles.get(symbol.replace('-OTC', ''));
+  if (!k) return { ok: false, strong: false, ratio: 0 };
+  const range = k.h - k.l;
+  if (range <= 0) return { ok: false, strong: false, ratio: 0 };
+  const body = Math.max(Math.abs(k.c - k.o), range * 0.02);
+  const lower = Math.min(k.o, k.c) - k.l;
+  const upper = k.h - Math.max(k.o, k.c);
+  const wick = direction === 'CALL' ? lower : upper;
+  const other = direction === 'CALL' ? upper : lower;
+  const closePos = (k.c - k.l) / range; // 1 = fechou na máxima
+  const ratio = wick / body;
+  const ok = ratio >= 2 && wick >= range * 0.55 && other <= range * 0.25 &&
+    (direction === 'CALL' ? closePos >= 0.6 : closePos <= 0.4);
+  return { ok, strong: ok && ratio >= 3, ratio };
+}
+
 async function fetchRealPrices(supabase: any, extraSymbols?: string[]): Promise<Map<string, number>> {
   // Clean old candles (2h+)
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -372,7 +393,15 @@ async function fetchRealPrices(supabase: any, extraSymbols?: string[]): Promise<
         const j = await r.json();
         const res = j?.chart?.result?.[0];
         const ts: number[] = res?.timestamp || [];
-        const closes: (number | null)[] = res?.indicators?.quote?.[0]?.close || [];
+        const q = res?.indicators?.quote?.[0] || {};
+        const closes: (number | null)[] = q.close || [];
+        // penúltima vela = última FECHADA
+        for (let i = ts.length - 2; i >= 0; i--) {
+          if ([q.open?.[i], q.high?.[i], q.low?.[i], q.close?.[i]].every((v: any) => typeof v === 'number')) {
+            lastCandles.set(symbol, { o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i] });
+            break;
+          }
+        }
         const pts = ts.map((t, i) => ({ t, c: closes[i] })).filter(p => typeof p.c === 'number').slice(-30);
         return pts.length ? { symbol, pts } : null;
       } catch { return null; }
@@ -831,7 +860,16 @@ async function analyzeAssetWithRealData(
   const { hasReversal, pattern } = detectReversalPattern(prices, type);
   if (hasReversal) confluenceCount++;
 
-  // Minimum 3 of 7 confirmations
+  // ESTRATÉGIA DO PAVIO (obrigatória): compradores/vendedores rejeitaram o preço antes do fechamento
+  const wick = detectWickRejection(asset.symbol, type);
+  if (!wick.ok) {
+    console.log(`🕯️ ${asset.symbol} ${type}: sem pavio de rejeição (ratio ${wick.ratio.toFixed(1)}) — ignorado`);
+    return null;
+  }
+  confluenceCount++;
+  const expMinutes = wick.strong && (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') ? 5 : 1;
+
+  // Minimum confirmations
   if (confluenceCount < MIN_CONFIRMATIONS) {
     console.log(`⚠️ ${asset.symbol} ${type}: Confluência ${confluenceCount}/7 < ${MIN_CONFIRMATIONS}`);
     return null;
@@ -849,7 +887,7 @@ async function analyzeAssetWithRealData(
     supportResistance: sr,
     confluenceScore,
     confluenceCount,
-    reversalPattern: hasReversal ? pattern : undefined,
+    reversalPattern: `Pavio ${isCall ? 'inferior' : 'superior'} ${wick.ratio.toFixed(1)}x corpo` + (hasReversal ? ` + ${pattern}` : ''),
   };
 
   const confirmations = generateConfirmations(indicators, type);
@@ -861,8 +899,8 @@ async function analyzeAssetWithRealData(
     type,
     asset: asset.symbol,
     assetIcon: asset.icon,
-    timeframe: 'M1',
-    expiration: '1 min',
+    timeframe: expMinutes === 5 ? 'M5' : 'M1',
+    expiration: `${expMinutes} min`,
     strength: 4,
     status: 'high_probability',
     confirmations,
@@ -1287,33 +1325,8 @@ serve(async (req) => {
                 }
               }
 
-              // ===== MARTINGALE LIMITADO (máx. 2 níveis) =====
-              // Após uma perda, a próxima entrada é multiplicada para recuperar a perda + lucro.
-              // Após 3 perdas seguidas (ciclo esgotado), volta ao valor base.
-              const MG_MAX_LEVELS = 2;
-              const MG_MULTIPLIER = 2.2; // cobre perda com payout ~85%
-              const { data: recentOps } = await supabase
-                .from('operation_results')
-                .select('result, timeframe, signal_id')
-                .neq('timeframe', 'MT5')
-                .in('result', ['win', 'loss'])
-                .order('created_at', { ascending: false })
-                .limit(MG_MAX_LEVELS + 1);
-              let trailingLosses = 0;
-              for (const o of (recentOps || []) as any[]) {
-                if (o.signal_id?.startsWith('mt5-')) continue;
-                if (o.result === 'loss') trailingLosses++; else break;
-              }
-              const mgLevel = trailingLosses > MG_MAX_LEVELS ? 0 : trailingLosses;
-              if (mgLevel > 0) {
-                const base = iqTradeAmount;
-                iqTradeAmount = Math.round(base * Math.pow(MG_MULTIPLIER, mgLevel) * 100) / 100;
-                console.log(`🎲 Martingale nível ${mgLevel}: $${base} → $${iqTradeAmount}`);
-              } else if (trailingLosses > MG_MAX_LEVELS) {
-                console.log(`🔁 Martingale: ciclo esgotado (${trailingLosses} perdas) — voltando ao valor base`);
-              }
-
-              const expiration = 1;
+              // Gale removido: valor sempre fixo/base
+              const expiration = parseInt(String(bestSignal.expiration)) === 5 ? 5 : 1;
 
               // USAR DIREÇÃO DA IA (Groq decide a melhor direção)
               const executionDirection = bestSignal.aiDirection || bestSignal.type;

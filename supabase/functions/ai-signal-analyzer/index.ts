@@ -268,6 +268,8 @@ IMPORTANTE: Seja SELETIVO. É melhor pular oportunidades duvidosas do que entrar
     const attempts: { model: string; json: boolean }[] = [
       { model: 'llama-3.3-70b-versatile', json: true },
       { model: 'llama-3.3-70b-versatile', json: false },
+      // Llama bloqueado na conta Groq (model_not_found) — usa GPT-OSS 120B da própria Groq até liberar
+      { model: 'openai/gpt-oss-120b', json: true },
     ];
     for (const att of attempts) {
     const body: any = {

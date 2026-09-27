@@ -294,7 +294,7 @@ const STOCK_NAME_MAP: Record<string, string> = {
   META: 'META', FACEBOOK: 'META', NVIDIA: 'NVDA', NETFLIX: 'NFLX', ALIBABA: 'BABA', MCDONALDS: 'MCD',
   NIKE: 'NKE', COCACOLA: 'KO', DISNEY: 'DIS', INTEL: 'INTC', AMD: 'AMD', BOEING: 'BA', PAYPAL: 'PYPL',
   UBER: 'UBER', SNAP: 'SNAP', TWITTER: 'X', CITIGROUP: 'C', JPMORGAN: 'JPM', PFIZER: 'PFE', ZOOM: 'ZM',
-  SPOTIFY: 'SPOT', AIRBNB: 'ABNB', COINBASE: 'COIN', PALANTIR: 'PLTR', GAMESTOP: 'GME', AMC: 'AMC',
+  SPOTIFY: 'SPOT', MCDON: 'MCD', MCDONALD: 'MCD', COKE: 'KO', GOLDMAN: 'GS', MORGANSTANLEY: 'MS', BERKSHIRE: 'BRK-B', WALMART: 'WMT', VISA: 'V', MASTERCARD: 'MA', ORACLE: 'ORCL', ADOBE: 'ADBE', SALESFORCE: 'CRM', IBM: 'IBM', CISCO: 'CSCO', QUALCOMM: 'QCOM', STARBUCKS: 'SBUX', PEPSICO: 'PEP', EXXON: 'XOM', CHEVRON: 'CVX', AIRBNB: 'ABNB', COINBASE: 'COIN', PALANTIR: 'PLTR', GAMESTOP: 'GME', AMC: 'AMC',
 };
 
 function assetKind(symbol: string): 'forex' | 'crypto' | 'stock' {
@@ -900,6 +900,9 @@ serve(async (req) => {
           const base = String(a.name).replace(/[-\s]*OTC$/i, '').trim();
           const symbol = isOtc ? `${base}-OTC` : base;
           if (seen.has(symbol) || !yahooTicker(base)) continue;
+          // Dias úteis: somente moedas normais (sem OTC, sem ações/cripto). Fim de semana: OTC (moedas e ações)
+          if (!weekend && (isOtc || assetKind(base) !== 'forex')) continue;
+          if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;
           seen.add(symbol);

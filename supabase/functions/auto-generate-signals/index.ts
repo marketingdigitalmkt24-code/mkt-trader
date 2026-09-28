@@ -860,13 +860,10 @@ async function analyzeAssetWithRealData(
   const { hasReversal, pattern } = detectReversalPattern(prices, type);
   if (hasReversal) confluenceCount++;
 
-  // ESTRATÉGIA DO PAVIO (obrigatória): compradores/vendedores rejeitaram o preço antes do fechamento
+  // ESTRATÉGIAS INTERCALADAS: PAVIO (fundo/topo de vela) OU ANÁLISE IA (confluência técnica)
   const wick = detectWickRejection(asset.symbol, type);
-  if (!wick.ok) {
-    console.log(`🕯️ ${asset.symbol} ${type}: sem pavio de rejeição (ratio ${wick.ratio.toFixed(1)}) — ignorado`);
-    return null;
-  }
-  confluenceCount++;
+  const strategy: 'WICK' | 'AI' = wick.ok ? 'WICK' : 'AI';
+  if (wick.ok) confluenceCount++;
   const expMinutes = wick.strong && (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') ? 5 : 1;
 
   // Minimum confirmations
@@ -887,7 +884,10 @@ async function analyzeAssetWithRealData(
     supportResistance: sr,
     confluenceScore,
     confluenceCount,
-    reversalPattern: `Pavio ${isCall ? 'inferior' : 'superior'} ${wick.ratio.toFixed(1)}x corpo` + (hasReversal ? ` + ${pattern}` : ''),
+    strategy,
+    reversalPattern: strategy === 'WICK'
+      ? `Pavio ${isCall ? 'inferior' : 'superior'} ${wick.ratio.toFixed(1)}x corpo` + (hasReversal ? ` + ${pattern}` : '')
+      : `IA ${hasReversal ? pattern : 'confluência'}`,
   };
 
   const confirmations = generateConfirmations(indicators, type);
@@ -1029,11 +1029,7 @@ serve(async (req) => {
       if (assetsWithPendingTrades.has(key)) return false;
       if (assetsWithRecentSignals.has(key)) return false;
 
-      const history = assetHistory.get(asset.symbol);
-      // Bloqueio por 5 losses consecutivos (era 3 — muito restritivo)
-      if (history && history.consecutiveLosses >= 5) return false;
-      // WR mínimo de 30% com pelo menos 8 trades
-      if (history && history.winRate < 30 && (history.wins + history.losses) >= 8) return false;
+      // Sem bloqueio por ativo: a decisão é pela estratégia/setup vencedor (em qualquer par)
 
       const newsCheck = isAssetAffectedByNews(asset.symbol);
       if (newsCheck.affected) {
@@ -1153,7 +1149,39 @@ serve(async (req) => {
     }
 
     if (aiApprovedSignals.length > 0) {
-      aiApprovedSignals.sort((a, b) => (b.aiConfidence || b.indicators.confluenceScore) - (a.aiConfidence || a.indicators.confluenceScore));
+      // ===== APRENDIZADO: estratégia/setup que mais trouxe WIN (em todos os pares) =====
+      const stratStats: Record<string, { w: number; l: number }> = {};
+      try {
+        const since = new Date(Date.now() - 14 * 864e5).toISOString();
+        const { data: ops } = await supabase.from('operation_results')
+          .select('signal_id, direction, result').gte('created_at', since)
+          .in('result', ['win', 'loss']).neq('timeframe', 'MT5').limit(500);
+        const ids = (ops || []).map((o: any) => o.signal_id).filter(Boolean);
+        const { data: sigs } = ids.length ? await supabase.from('trading_signals')
+          .select('signal_id, indicators').in('signal_id', ids) : { data: [] };
+        const sMap = new Map((sigs || []).map((s: any) => [s.signal_id, s.indicators || {}]));
+        for (const o of ops || []) {
+          const ind: any = sMap.get(o.signal_id) || {};
+          const strat = String(ind.reversalPattern || '').startsWith('Pavio') ? 'WICK' : 'AI';
+          const dir = String(o.direction || '').toUpperCase();
+          for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`]) {
+            stratStats[k] ||= { w: 0, l: 0 };
+            o.result === 'win' ? stratStats[k].w++ : stratStats[k].l++;
+          }
+        }
+      } catch (e) { console.log('⚠️ aprendizado de estratégia falhou', e); }
+      const wr = (k: string) => { const s = stratStats[k]; return s && s.w + s.l >= 3 ? s.w / (s.w + s.l) : null; };
+      const bestStrat = (wr('WICK') ?? 0.5) >= (wr('AI') ?? 0.5) ? 'WICK' : 'AI';
+      console.log(`📚 Estratégias: WICK ${JSON.stringify(stratStats.WICK || {})} | AI ${JSON.stringify(stratStats.AI || {})} → preferida ${bestStrat}`);
+      aiApprovedSignals = aiApprovedSignals.filter((s: any) => {
+        const st = s.indicators.strategy || 'AI';
+        const setupWR = wr(`${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`);
+        s.setupWR = setupWR;
+        s.priority = (s.aiConfidence || 0) + (st === bestStrat ? 10 : 0) + (setupWR !== null ? (setupWR - 0.5) * 40 : 0);
+        if (setupWR !== null && setupWR < 0.4) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: setup com mais perdas (${Math.round(setupWR * 100)}%)`); return false; }
+        return true;
+      });
+      aiApprovedSignals.sort((a, b) => b.priority - a.priority);
     }
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============

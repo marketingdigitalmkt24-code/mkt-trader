@@ -461,36 +461,9 @@ serve(async (req) => {
       const local = localResults.find(l => l.signal.asset === s.asset)!;
       const ap = profile.assetProfiles[s.asset];
 
-      // BLOQUEIO: apenas ativos MUITO tóxicos
-      const isToxic = ap && (
-        ap.consecutiveLosses >= 5 ||
-        (ap.winRate < 25 && (ap.wins + ap.losses) >= 5)
-      );
-
-      if (isToxic) {
-        console.log(`🚫 BLOQUEIO ${s.asset}: ${ap.consecutiveLosses}L | WR ${ap.winRate}%`);
-        return {
-          signalId: `${s.asset}-${Date.now()}`,
-          asset: s.asset,
-          recommendation: 'SKIP',
-          confidence: 0,
-          reason: `BLOCKED: ${ap.consecutiveLosses}L, WR ${ap.winRate}%`,
-          adjustedConfluence: 0,
-          riskLevel: 'HIGH',
-          bestDirection: s.type,
-        };
-      }
-
+      // Sem bloqueio por ativo: o filtro de setup vencedor é feito no gerador (todos os pares)
       if (aiPick) {
-        // Confiança mínima 50% para operação certeira
-        // Só repete padrões vencedores: ativo+direção com histórico ruim é bloqueado
-        const dir = String(aiPick.best_direction || s.type).toUpperCase();
-        const dw = ap ? (dir === 'CALL' ? ap.callWins : ap.putWins) : 0;
-        const dl = ap ? (dir === 'CALL' ? ap.callLosses : ap.putLosses) : 0;
-        const badHistory = (dw + dl) >= 2 && dw / (dw + dl) < 0.65;
-        const lastLoss = ap?.recentResults?.[0] === 'loss';
-        if (badHistory || lastLoss) console.log(`🚫 ${s.asset} ${dir}: histórico ${dw}W/${dl}L${lastLoss ? ' (última foi loss)' : ''} — só entra em padrão vencedor`);
-        const shouldExecute = aiPick.execute && aiPick.confidence >= 50 && !badHistory && !lastLoss;
+        const shouldExecute = aiPick.execute && aiPick.confidence >= 50;
         const emoji = shouldExecute ? '✅' : '❌';
         console.log(`🧠 AI ${emoji} ${s.asset} ${aiPick.best_direction} conf=${aiPick.confidence} [${aiPick.strategy}] ${aiPick.reason}`);
         return {

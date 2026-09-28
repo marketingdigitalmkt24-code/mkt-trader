@@ -860,13 +860,10 @@ async function analyzeAssetWithRealData(
   const { hasReversal, pattern } = detectReversalPattern(prices, type);
   if (hasReversal) confluenceCount++;
 
-  // ESTRATÉGIA DO PAVIO (obrigatória): compradores/vendedores rejeitaram o preço antes do fechamento
+  // ESTRATÉGIAS INTERCALADAS: PAVIO (fundo/topo de vela) OU ANÁLISE IA (confluência técnica)
   const wick = detectWickRejection(asset.symbol, type);
-  if (!wick.ok) {
-    console.log(`🕯️ ${asset.symbol} ${type}: sem pavio de rejeição (ratio ${wick.ratio.toFixed(1)}) — ignorado`);
-    return null;
-  }
-  confluenceCount++;
+  const strategy: 'WICK' | 'AI' = wick.ok ? 'WICK' : 'AI';
+  if (wick.ok) confluenceCount++;
   const expMinutes = wick.strong && (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') ? 5 : 1;
 
   // Minimum confirmations
@@ -887,7 +884,10 @@ async function analyzeAssetWithRealData(
     supportResistance: sr,
     confluenceScore,
     confluenceCount,
-    reversalPattern: `Pavio ${isCall ? 'inferior' : 'superior'} ${wick.ratio.toFixed(1)}x corpo` + (hasReversal ? ` + ${pattern}` : ''),
+    strategy,
+    reversalPattern: strategy === 'WICK'
+      ? `Pavio ${isCall ? 'inferior' : 'superior'} ${wick.ratio.toFixed(1)}x corpo` + (hasReversal ? ` + ${pattern}` : '')
+      : `IA ${hasReversal ? pattern : 'confluência'}`,
   };
 
   const confirmations = generateConfirmations(indicators, type);
@@ -1029,11 +1029,7 @@ serve(async (req) => {
       if (assetsWithPendingTrades.has(key)) return false;
       if (assetsWithRecentSignals.has(key)) return false;
 
-      const history = assetHistory.get(asset.symbol);
-      // Bloqueio por 5 losses consecutivos (era 3 — muito restritivo)
-      if (history && history.consecutiveLosses >= 5) return false;
-      // WR mínimo de 30% com pelo menos 8 trades
-      if (history && history.winRate < 30 && (history.wins + history.losses) >= 8) return false;
+      // Sem bloqueio por ativo: a decisão é pela estratégia/setup vencedor (em qualquer par)
 
       const newsCheck = isAssetAffectedByNews(asset.symbol);
       if (newsCheck.affected) {

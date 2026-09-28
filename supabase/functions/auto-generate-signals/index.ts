@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // ============= CONFIGURAÇÕES SCALPING M1 =============
-const MIN_CONFIRMATIONS = 4; // 4 de 7 confirmações — entradas mais assertivas
+const MIN_CONFIRMATIONS = 3; // 4 de 7 confirmações — entradas mais assertivas
 const RSI_CALL_MAX = 30; // RSI oversold threshold (era 35)
 const RSI_PUT_MIN = 70; // RSI overbought threshold (era 65)
 const RSI_ULTRA_CALL = 20; // Ultra extreme for bonus score (era 25)
@@ -83,7 +83,7 @@ function isAssetAffectedByNews(assetSymbol: string): { affected: boolean; reason
 function isWeekend(): boolean {
   const now = new Date();
   const d = now.getUTCDay(), h = now.getUTCHours();
-  return d === 0 || d === 6 || (d === 5 && h >= 21);
+  return d === 6 || (d === 0 && h < 21) || (d === 5 && h >= 21);
 }
 
 function isOTCAsset(asset: string): boolean {
@@ -755,7 +755,7 @@ async function analyzeAssetWithRealData(
   const variationPct = (priceRange / avgPrice) * 100;
   
   // Se a variação total dos preços é menor que 0.05%, os dados são estáticos/fake
-  if (variationPct < 0.05) {
+  if (variationPct < 0.015) {
     console.log(`⚠️ ${asset.symbol}: Dados de preço SEM VARIAÇÃO REAL (${variationPct.toFixed(4)}%) — REJEITADO`);
     return null;
   }
@@ -931,6 +931,7 @@ serve(async (req) => {
       const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets');
       if (iqData?.success && iqData?.assets?.length > 0) {
         const seen = new Set<string>();
+        const normalForexOpen = iqData.assets.filter((a: any) => a.enabled === true && a.schedule?.open !== false && !a.isOTC && !/OTC|BLITZ/i.test(a.name) && assetKind(String(a.name).trim()) === 'forex' && yahooTicker(String(a.name).trim())).length;
         for (const a of iqData.assets) {
           if (a.enabled !== true || a.schedule?.open === false) continue;
           if (/BLITZ/i.test(a.name) || a.type === 'blitz') continue;
@@ -939,7 +940,9 @@ serve(async (req) => {
           const symbol = isOtc ? `${base}-OTC` : base;
           if (seen.has(symbol) || !yahooTicker(base)) continue;
           // Dias úteis: somente moedas normais (sem OTC, sem ações/cripto). Fim de semana: OTC (moedas e ações)
-          if (!weekend && (isOtc || assetKind(base) !== 'forex')) continue;
+          // Dias úteis: moedas normais + moedas OTC quando poucas normais estão abertas (ex.: abertura asiática)
+          if (!weekend && assetKind(base) !== 'forex') continue;
+          if (!weekend && isOtc && normalForexOpen >= 8) continue;
           if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;

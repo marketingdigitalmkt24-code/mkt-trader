@@ -886,6 +886,13 @@ async function analyzeAssetWithRealData(
   // Detect reversal candle patterns
   const { hasReversal, pattern } = detectReversalPattern(prices, type);
   if (hasReversal) confluenceCount++;
+  // Pontos por estar A FAVOR da tendência (continuação)
+  {
+    const px2 = prices[prices.length - 1];
+    if (isCall ? (ema21 > sma50 && px2 > sma50) : (ema21 < sma50 && px2 < sma50)) confluenceCount += 2;
+    if (isCall ? macd.trend === 'bullish' : macd.trend === 'bearish') confluenceCount++;
+    if (isCall ? ema9 > ema21 : ema9 < ema21) confluenceCount++;
+  }
 
   // ESTRATÉGIAS INTERCALADAS: PAVIO (fundo/topo de vela) OU ANÁLISE IA (confluência técnica)
   const wick = detectWickRejection(asset.symbol, type);
@@ -905,7 +912,7 @@ async function analyzeAssetWithRealData(
   // Sem bloqueio por confirmações: a decisão final é da IA (Groq) + estratégia do pavio
   console.log(`🧠 ${asset.symbol} ${type}: estratégia ${strategy}, confluência ${confluenceCount}/7 → enviado para IA`);
 
-  const confluenceScore = Math.round((confluenceCount / 7) * 100);
+  const confluenceScore = Math.min(100, Math.round((confluenceCount / 7) * 100));
 
   const indicators = {
     rsi,
@@ -1159,6 +1166,7 @@ serve(async (req) => {
         // Sem espera: se a IA não aprovou nenhum, usa a MELHOR entrada analisada por ela (a favor da tendência)
         if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
           const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
+          console.log(`🔎 Melhor análise da IA: ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
           if ((best.confidence || 0) >= IQ_MIN_AI_CONFIDENCE) {
             console.log(`🎯 Melhor oportunidade analisada pela IA: ${best.asset} ${best.bestDirection || ''} (${best.confidence}%)`);
             executeSignals = [best];

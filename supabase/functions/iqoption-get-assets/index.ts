@@ -75,7 +75,7 @@ async function tryHttpLogin(email: string, password: string): Promise<string | n
 }
 
 // Get assets via WebSocket using SSID
-async function getAssetsViaWs(ssid: string): Promise<{ assets: AvailableAsset[]; error: string | null }> {
+async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ assets: AvailableAsset[]; error: string | null }> {
   for (const wsUrl of IQ_OPTION_WS_URLS) {
     try {
       console.log(`📡 Connecting to ${wsUrl} for assets...`);
@@ -84,6 +84,10 @@ async function getAssetsViaWs(ssid: string): Promise<{ assets: AvailableAsset[];
         const ws = new WebSocket(wsUrl);
         const assets: AvailableAsset[] = [];
         let resolved = false;
+        const reqMap = new Map<string, AvailableAsset>();
+        let pendingCandles = 0;
+        let candleTimer: number | null = null;
+        let pendingAssets: AvailableAsset[] = [];
         
         const timeout = setTimeout(() => {
           if (!resolved) {
@@ -91,7 +95,7 @@ async function getAssetsViaWs(ssid: string): Promise<{ assets: AvailableAsset[];
             ws.close();
             resolve({ assets: [], error: 'Timeout' });
           }
-        }, 15000);
+        }, 22000);
 
         ws.onopen = () => {
           console.log('✅ WebSocket connected, authenticating...');
@@ -183,10 +187,37 @@ async function getAssetsViaWs(ssid: string): Promise<{ assets: AvailableAsset[];
               
               assets.sort((a, b) => (b.payout || 0) - (a.payout || 0));
               console.log(`✅ Found ${assets.length} assets`);
-              
-              clearTimeout(timeout);
-              ws.close();
-              resolve({ assets, error: null });
+
+              if (!withCandles) {
+                clearTimeout(timeout);
+                ws.close();
+                resolve({ assets, error: null });
+              } else {
+                // Velas REAIS da própria IQ Option (essencial p/ OTC, cujo preço é sintético)
+                const open = assets.filter(a => a.enabled && a.schedule?.open !== false && !a.isBlitz || (a.enabled && a.isBinary)).slice(0, 80);
+                const uniq = new Map<number, AvailableAsset>();
+                open.forEach(a => uniq.set(a.id, a));
+                pendingCandles = uniq.size;
+                const nowSec = Math.floor(Date.now() / 1000);
+                for (const a of uniq.values()) {
+                  reqMap.set(`c${a.id}`, a);
+                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 40 } } }));
+                }
+                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); resolve({ assets, error: null }); }, 6000);
+                pendingAssets = assets;
+              }
+            }
+
+            if (data.name === 'candles' && withCandles && data.request_id && reqMap.has(data.request_id)) {
+              const a = reqMap.get(data.request_id)!;
+              const cs = data.msg?.candles || [];
+              (a as any).candles = cs.map((c: any) => ({ t: c.from, o: c.open, h: c.max, l: c.min, c: c.close }));
+              pendingCandles--;
+              if (pendingCandles <= 0 && candleTimer) {
+                clearTimeout(candleTimer); clearTimeout(timeout); ws.close();
+                console.log(`🕯️ Velas IQ recebidas para ${reqMap.size} ativos`);
+                resolve({ assets: pendingAssets, error: null });
+              }
             }
           } catch (e) {
             console.error('Parse error:', e);

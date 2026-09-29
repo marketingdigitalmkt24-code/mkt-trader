@@ -1354,6 +1354,37 @@ serve(async (req) => {
         }
       }
 
+      // ============= FOREX IMEDIATO — sem confirmações, TP x1000 =============
+      try {
+        const fxParts = bestSignal.asset.split('/').map((p: string) => p.trim().toUpperCase());
+        const fxCur = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];
+        const isFx = !/OTC|BLITZ/i.test(bestSignal.asset) && fxParts.length === 2 && fxParts.every((p: string) => fxCur.includes(p));
+        if (isFx) {
+          const { data: fxOpen } = await supabase.from('operation_results')
+            .select('id').eq('timeframe', 'FOREX').eq('result', 'open').eq('asset', bestSignal.asset).limit(1);
+          if (!fxOpen || fxOpen.length === 0) {
+            const { data: fxCfg } = await supabase.from('iqoption_config').select('user_id')
+              .eq('is_active', true).not('user_id', 'is', null)
+              .order('last_connected_at', { ascending: false }).limit(1).maybeSingle();
+            const { data: fxSet } = fxCfg ? await supabase.from('user_trading_settings')
+              .select('trade_amount').eq('user_id', fxCfg.user_id).limit(1).maybeSingle() : { data: null };
+            const fxAmount = Number(fxSet?.trade_amount) || 1;
+            const fxDir = (bestSignal.aiDirection || bestSignal.type).toLowerCase();
+            const { data: fxData } = await supabase.functions.invoke('iqoption-place-trade', {
+              body: {
+                asset: bestSignal.asset, direction: fxDir, amount: fxAmount, expiration: 1,
+                signalId: `fx-${bestSignal.id}`, isAutoTrade: true, isAIAnalyzed: !!bestSignal.aiConfidence, mode: 'forex',
+              },
+            });
+            console.log(`💱 FOREX IMEDIATO ${bestSignal.asset} ${fxDir}: ${fxData?.success ? 'aberto ' + fxData.tradeId : 'falhou ' + fxData?.error}`);
+          } else {
+            console.log(`💱 FOREX ${bestSignal.asset}: já existe posição aberta`);
+          }
+        }
+      } catch (e) {
+        console.error('❌ FOREX imediato falhou:', e);
+      }
+
       // ============= IQ OPTION TRADE =============
       try {
         const forexCurrencies = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'HKD', 'THB'];
@@ -1464,21 +1495,7 @@ serve(async (req) => {
                 },
               });
 
-              // FOREX em paralelo (pares normais) — TP 100% da margem, sem stop
-              if (!bestSignal.asset.toUpperCase().includes('OTC')) {
-                const { data: fxOpen } = await supabase.from('operation_results')
-                  .select('id').eq('timeframe', 'FOREX').eq('result', 'open').eq('asset', bestSignal.asset).limit(1);
-                if (!fxOpen || fxOpen.length === 0) {
-                  const { data: fxData } = await supabase.functions.invoke('iqoption-place-trade', {
-                    body: {
-                      asset: bestSignal.asset, direction: executionDirection.toLowerCase(),
-                      amount: iqTradeAmount, expiration, signalId: `fx-${bestSignal.id}`,
-                      isAutoTrade: true, isAIAnalyzed: !!bestSignal.aiConfidence, mode: 'forex',
-                    },
-                  });
-                  console.log(`💱 FOREX ${bestSignal.asset}: ${fxData?.success ? 'aberto ' + fxData.tradeId : 'falhou ' + fxData?.error}`);
-                }
-              }
+              // FOREX agora é aberto no bloco imediato (antes das opções)
 
               if (!iqError && iqData?.success) {
                 totalIQ++;

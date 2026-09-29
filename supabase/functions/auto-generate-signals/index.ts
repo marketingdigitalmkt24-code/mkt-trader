@@ -915,8 +915,9 @@ async function analyzeAssetWithRealData(
     const aligned = isCall
       ? (ema9 > ema21 && ema21 > sma50 && lastPx > ema9)
       : (ema9 < ema21 && ema21 < sma50 && lastPx < ema9);
-    // MACD: basta a linha MACD estar do lado da operação (o limiar antigo nunca era atingido no M1)
-    const macdOk = isCall ? macd.value > 0 : macd.value < 0;
+    // MACD: linha do lado da operação. Com poucas velas (<26) usa MACD rápido (6/13)
+    const macdVal = prices.length >= 26 ? macd.value : calculateEMA(prices, 6) - calculateEMA(prices, 13);
+    const macdOk = isCall ? macdVal > 0 : macdVal < 0;
     const spread = Math.abs(ema9 - sma50) / atrVal; // separação das médias em ATRs
     const last6 = prices.slice(-7);
     let dirMoves = 0;

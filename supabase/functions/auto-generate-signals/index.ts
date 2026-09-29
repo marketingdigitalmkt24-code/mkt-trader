@@ -1143,8 +1143,16 @@ serve(async (req) => {
       if (aiError) {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
-        const executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
+        let executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
         console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
+        // Sem espera: se a IA não aprovou nenhum, usa a MELHOR entrada analisada por ela (a favor da tendência)
+        if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
+          const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
+          if ((best.confidence || 0) >= IQ_MIN_AI_CONFIDENCE) {
+            console.log(`🎯 Melhor oportunidade analisada pela IA: ${best.asset} ${best.bestDirection || ''} (${best.confidence}%)`);
+            executeSignals = [best];
+          }
+        }
 
         for (const approved of executeSignals) {
           const candidate = candidates.find(c => c.asset.toUpperCase() === approved.asset.toUpperCase());

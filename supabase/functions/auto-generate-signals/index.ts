@@ -837,6 +837,17 @@ async function analyzeAssetWithRealData(
     console.log(`📈 ${asset.symbol}: MACD bearish + Bollinger upper — sinal PUT`);
   }
 
+  // Tendência maior: entrar SEMPRE a favor dela (continuação), nunca contra
+  {
+    const px = prices[prices.length - 1];
+    const tDown = ema21 < sma50 && px < sma50 && ema9 < ema21;
+    const tUp = ema21 > sma50 && px > sma50 && ema9 > ema21;
+    if (type === 'CALL' && tDown) { type = 'PUT'; console.log(`↪️ ${asset.symbol}: tendência de baixa → PUT a favor`); }
+    else if (type === 'PUT' && tUp) { type = 'CALL'; console.log(`↪️ ${asset.symbol}: tendência de alta → CALL a favor`); }
+    else if (!type && tUp && macd.trend === 'bullish') { type = 'CALL'; console.log(`📈 ${asset.symbol}: tendência de alta + MACD → CALL`); }
+    else if (!type && tDown && macd.trend === 'bearish') { type = 'PUT'; console.log(`📉 ${asset.symbol}: tendência de baixa + MACD → PUT`); }
+  }
+
   if (!type) {
     console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — sem sinal`);
     return null;

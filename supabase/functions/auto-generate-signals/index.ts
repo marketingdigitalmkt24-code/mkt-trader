@@ -14,7 +14,7 @@ const RSI_ULTRA_CALL = 20; // Ultra extreme for bonus score (era 25)
 const RSI_ULTRA_PUT = 80;
 const WHATSAPP_CONFLUENCE_THRESHOLD = 60;
 const IQ_MIN_CONFLUENCE_SCALPING = 85; // Apenas sinais de alta qualidade (era 60)
-const IQ_MIN_AI_CONFIDENCE = 70; // IA precisa ter pelo menos 70% de confiança
+const IQ_MIN_AI_CONFIDENCE = 60; // mínimo 60% — evita ficar em espera
 const IQ_COOLOFF_AFTER_LOSSES = 2; // Reduz stake após N perdas seguidas
 const IQ_COOLOFF_STAKE_MULTIPLIER = 0.5; // -50% no stake durante cooling-off
 const MT5_MIN_AI_CONFIDENCE = 50; // MT5 aceita sinais a partir de 50%
@@ -925,7 +925,8 @@ async function analyzeAssetWithRealData(
       if (isCall ? last6[i] > last6[i - 1] : last6[i] < last6[i - 1]) dirMoves++;
     }
     const slope = (ema21 - calculateEMA(prices.slice(0, -5), 21)) * (isCall ? 1 : -1);
-    const strong = aligned && macdOk && spread >= 1.0 && dirMoves >= 3 && slope > 0;
+    // Padrão das vitórias (EUR/JPY PUT x4): médias alinhadas + MACD + inclinação. Separação mínima reduzida p/ não ficar em espera
+    const strong = aligned && macdOk && spread >= 0.5 && dirMoves >= 3 && slope > 0;
     if (!strong) {
       console.log(`🚫 ${asset.symbol} ${type}: tendência fraca (alinhada=${aligned} macd=${macdOk} sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6 incl=${slope > 0}) — ignorado`);
       return null;

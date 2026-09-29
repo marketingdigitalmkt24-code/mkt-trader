@@ -881,16 +881,8 @@ async function analyzeAssetWithRealData(
   if (wick.ok) confluenceCount++;
   const expMinutes = wick.strong && (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') ? 5 : 1;
 
-  // Confirmação de PREÇO obrigatória: pavio de rejeição OU padrão de reversão na última vela fechada
-  if (!wick.ok && !hasReversal) {
-    console.log(`⚠️ ${asset.symbol} ${type}: sem confirmação de vela (pavio/reversão)`);
-    return null;
-  }
-  // Minimum confirmations
-  if (confluenceCount < MIN_CONFIRMATIONS) {
-    console.log(`⚠️ ${asset.symbol} ${type}: Confluência ${confluenceCount}/7 < ${MIN_CONFIRMATIONS}`);
-    return null;
-  }
+  // Sem bloqueio por confirmações: a decisão final é da IA (Groq) + estratégia do pavio
+  console.log(`🧠 ${asset.symbol} ${type}: estratégia ${strategy}, confluência ${confluenceCount}/7 → enviado para IA`);
 
   const confluenceScore = Math.round((confluenceCount / 7) * 100);
 

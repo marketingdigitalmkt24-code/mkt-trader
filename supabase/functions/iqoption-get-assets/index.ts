@@ -194,7 +194,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                 resolve({ assets, error: null });
               } else {
                 // Velas REAIS da própria IQ Option (essencial p/ OTC, cujo preço é sintético)
-                const open = assets.filter(a => a.enabled && a.schedule?.open !== false && !a.isBlitz || (a.enabled && a.isBinary)).slice(0, 80);
+                const open = assets.filter(a => a.enabled && a.schedule?.open !== false).slice(0, 80);
                 const uniq = new Map<number, AvailableAsset>();
                 open.forEach(a => uniq.set(a.id, a));
                 pendingCandles = uniq.size;
@@ -390,6 +390,8 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    let withCandles = false;
+    try { const b = await req.json(); withCandles = !!b?.withCandles; } catch { /* sem body */ }
 
     const { data: configData, error: configError } = await supabase
       .from('iqoption_config')
@@ -409,7 +411,7 @@ serve(async (req) => {
     const ssid = await tryHttpLogin(configData.email, configData.password);
     
     if (ssid) {
-      const { assets, error } = await getAssetsViaWs(ssid);
+      const { assets, error } = await getAssetsViaWs(ssid, withCandles);
       if (assets.length > 0) {
         const grouped = {
           blitz: assets.filter(a => a.isBlitz && !a.isOTC),

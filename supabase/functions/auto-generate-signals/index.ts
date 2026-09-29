@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // ============= CONFIGURAÇÕES SCALPING M1 =============
-const MIN_CONFIRMATIONS = 3; // 4 de 7 confirmações — entradas mais assertivas
+const MIN_CONFIRMATIONS = 4; // 4 de 7 confirmações — entradas mais assertivas
 const RSI_CALL_MAX = 30; // RSI oversold threshold (era 35)
 const RSI_PUT_MIN = 70; // RSI overbought threshold (era 65)
 const RSI_ULTRA_CALL = 20; // Ultra extreme for bonus score (era 25)
@@ -322,6 +322,8 @@ function yahooTicker(symbol: string): string | null {
 }
 
 // Últimas velas OHLC FECHADAS por símbolo (para pavio / pin bar)
+const otcOnlySymbols = new Set<string>();
+const iqCandles = new Map<string, { t: number; o: number; h: number; l: number; c: number }[]>();
 const lastCandles = new Map<string, { o: number; h: number; l: number; c: number }>();
 
 // Estratégia do pavio: vela com pavio longo inferior (CALL) ou superior (PUT)
@@ -378,10 +380,23 @@ async function fetchRealPrices(supabase: any, extraSymbols?: string[]): Promise<
     }
   }
 
-  // Yahoo Finance — candles REAIS de 1 minuto (moedas, ações e cripto)
-  if (finalPrices.size === 0) {
+  // 1) Velas da PRÓPRIA IQ Option (mesmo preço em que a operação é executada — obrigatório p/ OTC)
+  for (const [symbol, cs] of iqCandles) {
+    const closed = cs.slice(0, -1).filter(k => [k.o, k.h, k.l, k.c].every(v => typeof v === 'number'));
+    if (closed.length < 20) continue;
+    const k = closed[closed.length - 1];
+    lastCandles.set(symbol, { o: k.o, h: k.h, l: k.l, c: k.c });
+    for (const x of closed.slice(-30)) inserts.push({ symbol, price: x.c, created_at: new Date(x.t * 1000).toISOString() } as any);
+    finalPrices.set(symbol, k.c);
+    finalPrices.set(`${symbol}-OTC`, k.c);
+  }
+  if (finalPrices.size > 0) console.log(`🕯️ IQ Option: ${finalPrices.size / 2} ativos com velas próprias da corretora`);
+  const missing = (extraSymbols || []).filter(s => !finalPrices.has(s));
+
+  // 2) Yahoo Finance só para o que faltou (nunca para OTC — preço OTC é sintético)
+  if (missing.length > 0 || finalPrices.size === 0) {
     console.log('🔗 Buscando candles REAIS via Yahoo Finance...');
-    const syms = (extraSymbols && extraSymbols.length > 0 ? extraSymbols : Object.keys(xmSymbolMap))
+    const syms = (missing.length > 0 ? missing.filter(s => !otcOnlySymbols.has(s)) : (finalPrices.size === 0 ? Object.keys(xmSymbolMap) : []))
       .filter(s => !!yahooTicker(s)).slice(0, 120);
     const results = await Promise.all(syms.map(async (symbol) => {
       try {
@@ -866,6 +881,11 @@ async function analyzeAssetWithRealData(
   if (wick.ok) confluenceCount++;
   const expMinutes = wick.strong && (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') ? 5 : 1;
 
+  // Confirmação de PREÇO obrigatória: pavio de rejeição OU padrão de reversão na última vela fechada
+  if (!wick.ok && !hasReversal) {
+    console.log(`⚠️ ${asset.symbol} ${type}: sem confirmação de vela (pavio/reversão)`);
+    return null;
+  }
   // Minimum confirmations
   if (confluenceCount < MIN_CONFIRMATIONS) {
     console.log(`⚠️ ${asset.symbol} ${type}: Confluência ${confluenceCount}/7 < ${MIN_CONFIRMATIONS}`);
@@ -927,8 +947,9 @@ serve(async (req) => {
 
     // ============= ATIVOS ABERTOS NA IQ OPTION (moedas, ações, cripto) =============
     const openIqAssets: Asset[] = [];
+    iqCandles.clear(); otcOnlySymbols.clear(); lastCandles.clear();
     try {
-      const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets');
+      const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets', { body: { withCandles: true } });
       if (iqData?.success && iqData?.assets?.length > 0) {
         const seen = new Set<string>();
         const normalForexOpen = iqData.assets.filter((a: any) => a.enabled === true && a.schedule?.open !== false && !a.isOTC && !/OTC|BLITZ/i.test(a.name) && assetKind(String(a.name).trim()) === 'forex' && yahooTicker(String(a.name).trim())).length;
@@ -947,6 +968,8 @@ serve(async (req) => {
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;
           seen.add(symbol);
+          if (Array.isArray(a.candles) && a.candles.length > 0) iqCandles.set(base, a.candles);
+          if (isOtc) otcOnlySymbols.add(base);
           const kind = assetKind(base);
           openIqAssets.push({
             symbol,

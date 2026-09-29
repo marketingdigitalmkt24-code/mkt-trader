@@ -133,6 +133,8 @@ async function placeTradeFireAndForget(
     let tradeId: string | null = null;
     const activeAssets: Record<string, AssetInfo> = {};
     let tradePlaced = false;
+    let fxSender: ((leverage: number) => void) | null = null;
+    const fxLevers = [500, 300, 100, 50];
     
     // Shorter timeout - we don't wait for result, just confirmation of placement
     const timeout = setTimeout(() => {
@@ -393,6 +395,12 @@ async function placeTradeFireAndForget(
             console.log(`✅ ${usedMode.toUpperCase()} aberto! ID: ${tradeId}`);
             clearTimeout(timeout); ws.close();
             resolve({ success: true, tradeId });
+            return;
+          }
+          if (data.request_id === 'fx1' && fxSender && fxLevers.length && (data.msg?.message || data.status >= 400)) {
+            const next = fxLevers.shift()!;
+            console.log(`🔄 FOREX rejeitado (${data.msg?.message || data.status}) — tentando x${next}`);
+            fxSender(next);
             return;
           }
           if (data.msg?.message || data.status >= 400) {

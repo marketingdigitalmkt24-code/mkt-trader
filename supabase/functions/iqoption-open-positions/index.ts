@@ -94,8 +94,8 @@ Deno.serve(async (req) => {
                 expiresAt: p.expiration_time ?? p.raw_event?.instrument_expiration ?? null,
               };
               positions.push(pos);
-              // Forex: fecha se lucro >= 100% da margem (backup do take profit)
-              if (type === 'forex' && invest > 0 && pnl >= invest) toClose.push(pos.id);
+              // Forex: fecha se lucro >= 1000% da margem (x10, backup do take profit)
+              if (type === 'forex' && invest > 0 && pnl >= invest * 10) toClose.push(pos.id);
             }
             for (const id of toClose) send(`close-${id}`, 'close-position', '1.0', { position_id: Number(id) });
             if (toClose.length === 0) setTimeout(done, 1500);

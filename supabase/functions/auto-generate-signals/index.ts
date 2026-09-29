@@ -947,6 +947,7 @@ serve(async (req) => {
 
     // ============= ATIVOS ABERTOS NA IQ OPTION (moedas, ações, cripto) =============
     const openIqAssets: Asset[] = [];
+    iqCandles.clear(); otcOnlySymbols.clear(); lastCandles.clear();
     try {
       const { data: iqData } = await supabase.functions.invoke('iqoption-get-assets', { body: { withCandles: true } });
       if (iqData?.success && iqData?.assets?.length > 0) {

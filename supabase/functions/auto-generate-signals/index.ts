@@ -975,9 +975,9 @@ serve(async (req) => {
         const normalForexOpen = iqData.assets.filter((a: any) => a.enabled === true && a.schedule?.open !== false && !a.isOTC && !/OTC|BLITZ/i.test(a.name) && assetKind(String(a.name).trim()) === 'forex' && yahooTicker(String(a.name).trim())).length;
         for (const a of iqData.assets) {
           if (a.enabled !== true || a.schedule?.open === false) continue;
-          if (/BLITZ/i.test(a.name) || a.type === 'blitz') continue;
+          // Blitz: mesmo par de moedas — analisado junto (executa na modalidade com melhor payout)
           const isOtc = !!a.isOTC || /OTC/i.test(a.name);
-          const base = String(a.name).replace(/[-\s]*OTC$/i, '').trim();
+          const base = String(a.name).replace(/[-\s]*BLITZ/i, '').replace(/[-\s]*OTC$/i, '').trim();
           const symbol = isOtc ? `${base}-OTC` : base;
           if (seen.has(symbol) || !yahooTicker(base)) continue;
           // Dias úteis: somente moedas normais (sem OTC, sem ações/cripto). Fim de semana: OTC (moedas e ações)

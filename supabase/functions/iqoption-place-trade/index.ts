@@ -304,7 +304,7 @@ async function placeTradeFireAndForget(
             msg: { name: 'set-active-balance', version: '1.0', body: { balance_id: balanceId } }
           }));
           
-          // ===== FOREX (margem) com take profit de 100% no próprio servidor da IQ =====
+          // ===== FOREX (margem) alavancagem 1000x, take profit de 1000% no servidor da IQ =====
           if (trade.mode === 'forex') {
             if (isOTCAsset) {
               clearTimeout(timeout); ws.close();
@@ -313,115 +313,77 @@ async function placeTradeFireAndForget(
             }
             usedMode = 'forex';
             tradePlaced = true;
-            console.log(`📤 FOREX ${trade.direction} ${cleanAsset} margem $${trade.amount} TP 100%`);
-            ws.send(JSON.stringify({
-              name: 'sendMessage', request_id: 'fx1',
-              msg: { name: 'place-order-temp', version: '4.0', body: {
-                user_balance_id: balanceId, client_platform_id: 9,
-                instrument_type: 'forex', instrument_id: cleanAsset,
-                side: trade.direction === 'call' ? 'buy' : 'sell', type: 'market',
-                amount: trade.amount, leverage: 100,
-                limit_price: null, stop_price: null,
-                use_token_for_commission: false, auto_margin_call: false, use_trail_stop: false,
-                take_profit_kind: 'percent', take_profit_value: 100,
-                stop_lose_kind: null, stop_lose_value: null,
-              } },
-            }));
+            const sendForex = (leverage: number) => {
+              console.log(`📤 FOREX ${trade.direction} ${cleanAsset} margem $${trade.amount} x${leverage} TP 1000%`);
+              ws.send(JSON.stringify({
+                name: 'sendMessage', request_id: 'fx1',
+                msg: { name: 'place-order-temp', version: '4.0', body: {
+                  user_balance_id: balanceId, client_platform_id: 9,
+                  instrument_type: 'forex', instrument_id: cleanAsset,
+                  side: trade.direction === 'call' ? 'buy' : 'sell', type: 'market',
+                  amount: trade.amount, leverage,
+                  limit_price: null, stop_price: null,
+                  use_token_for_commission: false, auto_margin_call: false, use_trail_stop: false,
+                  take_profit_kind: 'percent', take_profit_value: 1000,
+                  stop_lose_kind: null, stop_lose_value: null,
+                } },
+              }));
+            };
+            fxSender = sendForex;
+            sendForex(1000);
             return;
           }
 
-          // ===== Melhor payout: binária/turbo se payout >= 80%, senão DIGITAL =====
-          const optPayout = payoutById[foundAsset.turboId || foundAsset.binaryId || foundAsset.id] || 0;
-          if (optPayout > 0 && optPayout < 80) {
+          const sendDigital = (reason: string) => {
             usedMode = 'digital';
             tradePlaced = true;
             const nowMs = Date.now();
-            const d = new Date(nowMs);
-            // expira no próximo minuto cheio (+1 se faltar menos de 30s)
             const expMs = Math.ceil((nowMs + 30000) / 60000) * 60000 + (trade.expiration - 1) * 60000;
             const e = new Date(expMs);
             const pad = (n: number) => String(n).padStart(2, '0');
-            const instrumentId = `do${foundAsset.id}A${e.getUTCFullYear()}${pad(e.getUTCMonth()+1)}${pad(e.getUTCDate())}D${pad(e.getUTCHours())}${pad(e.getUTCMinutes())}00T${trade.expiration}M${trade.direction === 'call' ? 'C' : 'P'}SPT`;
-            console.log(`📤 DIGITAL (payout binária ${optPayout}%) ${instrumentId} $${trade.amount} @${d.toISOString()}`);
+            const instrumentId = `do${foundAsset!.id}A${e.getUTCFullYear()}${pad(e.getUTCMonth()+1)}${pad(e.getUTCDate())}D${pad(e.getUTCHours())}${pad(e.getUTCMinutes())}00T${trade.expiration}M${trade.direction === 'call' ? 'C' : 'P'}SPT`;
+            console.log(`📤 DIGITAL (${reason}) ${instrumentId} $${trade.amount}`);
             ws.send(JSON.stringify({
               name: 'sendMessage', request_id: 'dg1',
               msg: { name: 'digital-options.place-digital-option', version: '3.0', body: {
                 user_balance_id: balanceId, instrument_id: instrumentId,
-                amount: String(trade.amount), asset_id: foundAsset.id, instrument_index: 0,
+                amount: String(trade.amount), asset_id: foundAsset!.id, instrument_index: 0,
               } },
             }));
+          };
+
+          // ===== Melhor oportunidade: turbo/blitz se payout >= 80%; sem turbo (binária só expira em 15 min) ou payout baixo -> DIGITAL =====
+          const optPayout = payoutById[foundAsset.turboId || foundAsset.binaryId || foundAsset.id] || 0;
+          if (!hasTurbo || (optPayout > 0 && optPayout < 80)) {
+            sendDigital(!hasTurbo ? 'sem turbo' : `payout ${optPayout}%`);
             return;
           }
           usedMode = 'binary';
 
-          // Calculate expiration
           const now = Math.floor(Date.now() / 1000);
-          // Expira no minuto cheio mais próximo com pelo menos 30s restantes (1 min real = 1:00–1:30, não 1:50)
           const nextMinute = Math.ceil((now + 30) / 60) * 60;
           const expirationTime = nextMinute + ((trade.expiration - 1) * 60);
-          
-          // For M1 trades, prefer turbo but fallback to binary
-          const isShortTerm = trade.expiration <= 5;
-          let useId = foundAsset.id;
-          let useType = foundAsset.optionType;
-          
-          if (isShortTerm && hasTurbo) {
-            useId = foundAsset.turboId!;
-            useType = 3;
-          } else if (isShortTerm && !hasTurbo && hasBinary) {
-            // Fallback: use BINARY mode when TURBO is unavailable
-            useId = foundAsset.binaryId!;
-            useType = 1;
-            console.log(`🔄 ${matchedName} sem TURBO — usando BINARY como fallback (ID:${useId})`);
-          } else if (isShortTerm && !hasTurbo && !hasBinary) {
-            console.error(`❌ ${matchedName} sem TURBO nem BINARY disponível.`);
-            clearTimeout(timeout); ws.close();
-            resolve({ success: false, error: `${trade.asset} não tem nenhum modo disponível` });
-            return;
-          } else if (!isShortTerm && hasBinary) {
-            useId = foundAsset.binaryId!;
-            useType = 1;
-          }
-          
-          console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} | ID:${useId} | ${useType === 3 ? 'TURBO' : 'BINARY'} | $${trade.amount} | Exp:${trade.expiration}min`);
-          
+          const useId = foundAsset.turboId!;
+
+          console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} | ID:${useId} | TURBO | $${trade.amount} | Exp:${trade.expiration}min`);
           tradePlaced = true;
-          let retryAttempted = false;
-          
-          function sendTradeMessage(activeId: number, optionTypeId: number) {
-            ws.send(JSON.stringify({
-              name: 'sendMessage',
-              msg: {
-                name: 'binary-options.open-option',
-                version: '1.0',
-                body: {
-                  user_balance_id: balanceId,
-                  active_id: activeId,
-                  option_type_id: optionTypeId,
-                  direction: trade.direction,
-                  expired: expirationTime,
-                  price: trade.amount,
-                  profit_percent: 0,
-                },
+          ws.send(JSON.stringify({
+            name: 'sendMessage',
+            msg: {
+              name: 'binary-options.open-option', version: '1.0',
+              body: {
+                user_balance_id: balanceId, active_id: useId, option_type_id: 3,
+                direction: trade.direction, expired: expirationTime,
+                price: trade.amount, profit_percent: 0,
               },
-            }));
-          }
-          
-          sendTradeMessage(useId, useType);
-          
-          // Auto-retry with alternative type after 5 seconds if no response
-          const retryTimeout = setTimeout(() => {
-            if (!tradeId && !retryAttempted) {
-              retryAttempted = true;
-              const altId = useType === 3 ? foundAsset.binaryId : foundAsset.turboId;
-              const altType = useType === 3 ? 1 : 3;
-              if (altId) {
-                console.log(`🔄 Retry with ${altType === 3 ? 'TURBO' : 'BINARY'} (ID:${altId})`);
-                sendTradeMessage(altId, altType);
-              }
-            }
-          }, 5000);
+            },
+          }));
+
+          // Sem confirmação em 7s -> tenta DIGITAL
+          setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 7000);
         }
+
+        if (data.request_id === 'fx1') console.log('📨 FOREX resposta:', JSON.stringify(data).slice(0, 400));
         
         // Respostas de DIGITAL / FOREX
         if (data.request_id === 'fx1' || data.request_id === 'dg1' || data.name === 'digital-option-placed') {

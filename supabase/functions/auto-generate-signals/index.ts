@@ -69,7 +69,8 @@ function isAssetAffectedByNews(assetSymbol: string): { affected: boolean; reason
 
   for (const event of getHighImpactNewsWindows()) {
     const eventMinutes = event.hour * 60 + event.minute;
-    if (currentMinutes >= eventMinutes - event.duration && currentMinutes <= eventMinutes + event.duration) {
+    const win = Math.max(event.duration, 30); // janela ampliada: 30 min antes/depois de notícia forte
+    if (currentMinutes >= eventMinutes - win && currentMinutes <= eventMinutes + win) {
       const affectedCurrency = currencies.find(c => event.currencies.includes(c));
       if (affectedCurrency) {
         return { affected: true, reason: `${affectedCurrency} afetado por notícia às ${event.hour}:${event.minute.toString().padStart(2, '0')} UTC` };
@@ -880,6 +881,15 @@ async function analyzeAssetWithRealData(
   const strategy: 'WICK' | 'AI' = wick.ok ? 'WICK' : 'AI';
   if (wick.ok) confluenceCount++;
   const expMinutes = wick.strong && (isCall ? sr.pricePosition === 'near_support' : sr.pricePosition === 'near_resistance') ? 5 : 1;
+
+  // NUNCA contra a tendência maior (EMA21 vs SMA50 + preço vs SMA50)
+  const lastPx = prices[prices.length - 1];
+  const majorDown = ema21 < sma50 && lastPx < sma50;
+  const majorUp = ema21 > sma50 && lastPx > sma50;
+  if ((isCall && majorDown) || (!isCall && majorUp)) {
+    console.log(`🚫 ${asset.symbol} ${type}: contra a tendência (${majorDown ? 'baixa' : 'alta'}) — ignorado`);
+    return null;
+  }
 
   // Sem bloqueio por confirmações: a decisão final é da IA (Groq) + estratégia do pavio
   console.log(`🧠 ${asset.symbol} ${type}: estratégia ${strategy}, confluência ${confluenceCount}/7 → enviado para IA`);

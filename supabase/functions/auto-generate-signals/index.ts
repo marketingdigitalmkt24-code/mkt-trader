@@ -909,6 +909,30 @@ async function analyzeAssetWithRealData(
     return null;
   }
 
+  // ===== SÓ TENDÊNCIA MUITO FORTE =====
+  {
+    const atrVal = Math.max(atr?.value || 0, lastPx * 0.00002);
+    const aligned = isCall
+      ? (ema9 > ema21 && ema21 > sma50 && lastPx > ema9)
+      : (ema9 < ema21 && ema21 < sma50 && lastPx < ema9);
+    const macdOk = isCall
+      ? (macd.trend === 'bullish' && macd.histogram > 0)
+      : (macd.trend === 'bearish' && macd.histogram < 0);
+    const spread = Math.abs(ema9 - sma50) / atrVal; // separação das médias em ATRs
+    const last6 = prices.slice(-7);
+    let dirMoves = 0;
+    for (let i = 1; i < last6.length; i++) {
+      if (isCall ? last6[i] > last6[i - 1] : last6[i] < last6[i - 1]) dirMoves++;
+    }
+    const slope = (ema21 - calculateEMA(prices.slice(0, -5), 21)) * (isCall ? 1 : -1);
+    const strong = aligned && macdOk && spread >= 1.0 && dirMoves >= 4 && slope > 0;
+    if (!strong) {
+      console.log(`🚫 ${asset.symbol} ${type}: tendência fraca (alinhada=${aligned} macd=${macdOk} sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6 incl=${slope > 0}) — ignorado`);
+      return null;
+    }
+    console.log(`💪 ${asset.symbol} ${type}: TENDÊNCIA MUITO FORTE (sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6)`);
+  }
+
   // Sem bloqueio por confirmações: a decisão final é da IA (Groq) + estratégia do pavio
   console.log(`🧠 ${asset.symbol} ${type}: estratégia ${strategy}, confluência ${confluenceCount}/7 → enviado para IA`);
 

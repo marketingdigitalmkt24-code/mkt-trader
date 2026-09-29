@@ -31,9 +31,11 @@ export function useTradingStats() {
     const now = new Date();
     
     switch (p) {
-      case 'today':
-        // Use LOCAL midnight to match user's "today"
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      case 'today': {
+        // Meia-noite em Brasília (UTC-3)
+        const brt = new Date(now.getTime() - 3 * 3600 * 1000);
+        return new Date(Date.UTC(brt.getUTCFullYear(), brt.getUTCMonth(), brt.getUTCDate(), 3, 0, 0, 0));
+      }
       case 'week':
         const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
         return weekStart;
@@ -52,7 +54,8 @@ export function useTradingStats() {
 
       const { data: results, error } = await supabase
         .from('operation_results')
-        .select('result, profit, entry_price')
+        .select('result, profit, entry_price, timeframe')
+        .neq('timeframe', 'MT5')
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: true });
 
@@ -69,11 +72,11 @@ export function useTradingStats() {
         const resultType = result.result?.toLowerCase();
         if (resultType === 'win') {
           wins++;
-          profit += result.profit || 0;
+          profit += Number(result.profit) || 0;
           currentStreak = 0;
         } else if (resultType === 'loss' || resultType === 'loose') {
           losses++;
-          profit -= result.entry_price || 0;
+          profit += Number(result.profit) || 0;
           currentStreak++;
           consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
         } else if (resultType === 'tie' || resultType === 'equal') {

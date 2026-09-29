@@ -222,7 +222,7 @@ async function aiAdaptiveStrategy(
       ? `WR: ${hourProfile.winRate}% (${hourProfile.wins}W/${hourProfile.losses}L)`
       : 'sem dados';
 
-    const systemPrompt = `Você é um TRADER PROFISSIONAL de opções binárias IQ Option com EXPIRAÇÃO DE 5 MINUTOS. Aprove só entradas A FAVOR da tendência, com pavio de rejeição em suporte/resistência e espaço para o preço andar 5 minutos no sentido da operação. Evite mercado lateral, velas de exaustão e entradas contra a tendência. Priorize setups com histórico vencedor e rejeite os com perdas recentes.
+    const systemPrompt = `Você é um TRADER PROFISSIONAL de opções binárias IQ Option com EXPIRAÇÃO DE 1 MINUTO. Aprove só entradas A FAVOR da tendência, com pavio de rejeição em suporte/resistência e momentum forte para o preço andar 1 minuto no sentido da operação. Evite mercado lateral, velas de exaustão e entradas contra a tendência. Priorize setups com histórico vencedor e rejeite os com perdas recentes.
 
 ═══ PERFIL DE APRENDIZADO (14 dias) ═══
 Trades: ${profile.totalTrades} | WR: ${profile.overallWinRate}% | P&L: $${profile.totalProfit.toFixed(2)}
@@ -264,7 +264,7 @@ Sempre informe best_direction CALL ou PUT (nunca NONE) e uma confiança realista
         model: att.model,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Analise estes ${signals.length} sinais para operações de 5 MINUTOS (M5):\n\n${JSON.stringify(signalSummaries)}\n\nResponda APENAS com um objeto JSON válido (sem texto fora do JSON) no formato: {"analysis":"...","decisions":[{"asset":"...","execute":true,"best_direction":"CALL","confidence":0,"strategy":"MOMENTUM","reason":"..."}]}. Uma decisão por ativo. Razões curtas (máx 20 palavras).` },
+          { role: 'user', content: `Analise estes ${signals.length} sinais para operações de 1 MINUTO (M1) A FAVOR DA TENDÊNCIA:\n\n${JSON.stringify(signalSummaries)}\n\nResponda APENAS com um objeto JSON válido (sem texto fora do JSON) no formato: {"analysis":"...","decisions":[{"asset":"...","execute":true,"best_direction":"CALL","confidence":0,"strategy":"MOMENTUM","reason":"..."}]}. Uma decisão por ativo. Razões curtas (máx 20 palavras).` },
         ],
         temperature: 0.1,
         max_tokens: 3000,

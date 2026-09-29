@@ -840,8 +840,8 @@ async function analyzeAssetWithRealData(
   // Tendência maior: entrar SEMPRE a favor dela (continuação), nunca contra
   {
     const px = prices[prices.length - 1];
-    const tDown = ema21 < sma50 && px < sma50 && ema9 < ema21;
-    const tUp = ema21 > sma50 && px > sma50 && ema9 > ema21;
+    const tDown = ema21 < sma50 && px < sma50;
+    const tUp = ema21 > sma50 && px > sma50;
     if (type === 'CALL' && tDown) { type = 'PUT'; console.log(`↪️ ${asset.symbol}: tendência de baixa → PUT a favor`); }
     else if (type === 'PUT' && tUp) { type = 'CALL'; console.log(`↪️ ${asset.symbol}: tendência de alta → CALL a favor`); }
     else if (!type && tUp && macd.trend === 'bullish') { type = 'CALL'; console.log(`📈 ${asset.symbol}: tendência de alta + MACD → CALL`); }

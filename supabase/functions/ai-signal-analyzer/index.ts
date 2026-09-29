@@ -245,7 +245,7 @@ REGRA PRINCIPAL — A FAVOR DA TENDÊNCIA:
 - RSI/Estocástico extremos NÃO são obrigatórios: em tendência forte, extremo = força (continuação).
 - Pavio longo de rejeição a favor da tendência (fundo de vela em alta / topo em baixa) = entrada forte.
 
-APROVE (execute=true) quando a tendência e pelo menos 1 outro fator (MACD, pavio, suporte/resistência, momentum) estiverem na mesma direção.
+SÓ TENDÊNCIA MUITO FORTE: os sinais já chegam filtrados com EMA9/EMA21/SMA50 alinhadas e MACD a favor. APROVE (execute=true) apenas se o momentum for forte e contínuo na direção da tendência (MACD histograma a favor, EMA9 afastada da EMA21). REJEITE se o preço estiver colado em suporte (para PUT) ou resistência (para CALL), pois o movimento pode travar.
 REJEITE apenas se: volatilidade ALTA extrema, tendência totalmente lateral e indicadores contraditórios, ou setup tóxico no histórico.
 
 CONFIANÇA: 55-65 = boa entrada a favor da tendência; 66-80 = tendência + pavio/S&R; 80+ = tudo alinhado.

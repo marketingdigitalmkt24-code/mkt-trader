@@ -911,7 +911,7 @@ async function analyzeAssetWithRealData(
 
   // ===== SÓ TENDÊNCIA MUITO FORTE =====
   {
-    const atrVal = Math.max(atr || 0, lastPx * 0.00002);
+    const atrVal = Math.max(atr?.value || 0, lastPx * 0.00002);
     const aligned = isCall
       ? (ema9 > ema21 && ema21 > sma50 && lastPx > ema9)
       : (ema9 < ema21 && ema21 < sma50 && lastPx < ema9);

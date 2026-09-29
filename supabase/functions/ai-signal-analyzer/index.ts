@@ -234,34 +234,22 @@ ${profile.goldenSetups.slice(0, 5).map((g: any) => `${g.asset} ${g.direction} ${
 ⛔ TÓXICOS:
 ${profile.toxicPatterns.slice(0, 5).join(' | ') || 'Nenhum'}
 
-═══ ESTRATÉGIA OPERAÇÃO CERTEIRA (MT5 SPREAD) ═══
+═══ ESTRATÉGIA IQ OPTION (opções binárias/digitais M1 e M5) ═══
 
-OBJETIVO: Encontrar entradas com ALTÍSSIMA probabilidade de fechar no lucro em poucos segundos.
-O sistema NÃO usa stop loss — portanto a operação PRECISA ser certeira.
-Alvo: apenas 10% de lucro ($0.10 em $1.00) — basta um micro-movimento a favor.
+OBJETIVO: Sempre escolher a MELHOR entrada disponível para WIN. Não fique em espera: em cada ciclo, avalie cada ativo e dê a direção mais provável.
 
-APROVAÇÃO — Aprove SOMENTE se:
-1. RSI em zona EXTREMA (< 25 CALL ou > 75 PUT) com Estocástico confirmando (<20 ou >80)
-2. Padrão de vela de reversão CONFIRMADO (Hammer, Engulfing, Pin Bar) + RSI extremo
-3. Golden Setup: combinação ativo+direção+hora com WR >= 60% no histórico
-4. Confluência técnica ≥ 57% com pelo menos 3 indicadores alinhados na MESMA direção
-5. Preço em suporte forte (CALL) ou resistência forte (PUT) com exaustão confirmada
+REGRA PRINCIPAL — A FAVOR DA TENDÊNCIA:
+- Tendência de alta (EMA21 > SMA50, preço acima) → prefira CALL (pullback ou continuação)
+- Tendência de baixa (EMA21 < SMA50, preço abaixo) → prefira PUT
+- NUNCA recomende contra a tendência maior.
+- RSI/Estocástico extremos NÃO são obrigatórios: em tendência forte, extremo = força (continuação).
+- Pavio longo de rejeição a favor da tendência (fundo de vela em alta / topo em baixa) = entrada forte.
 
-REJEIÇÃO RIGOROSA — Rejeite se:
-1. Ativo com 3+ perdas consecutivas recentes (sem SL, não podemos arriscar)
-2. Volatilidade ALTA (ATR high) — micro-movimentos imprevisíveis
-3. Indicadores CONTRADITÓRIOS — RSI diz CALL mas MACD diz PUT forte
-4. WR do ativo < 35% com 3+ trades históricos
-5. Hora com WR < 40% no histórico
-6. Sem padrão de reversão E sem RSI extremo — operação sem convicção
+APROVE (execute=true) quando a tendência e pelo menos 1 outro fator (MACD, pavio, suporte/resistência, momentum) estiverem na mesma direção.
+REJEITE apenas se: volatilidade ALTA extrema, tendência totalmente lateral e indicadores contraditórios, ou setup tóxico no histórico.
 
-DIREÇÃO CERTEIRA:
-- SEMPRE use a direção com MELHOR win rate histórico quando os indicadores confirmam
-- RSI < 25 + Stoch < 20 + Suporte = CALL CERTEIRO
-- RSI > 75 + Stoch > 80 + Resistência = PUT CERTEIRO
-- Se há dúvida entre CALL e PUT: REJEITAR (sem SL = sem margem para erro)
-
-IMPORTANTE: Seja SELETIVO. É melhor pular oportunidades duvidosas do que entrar em operações perdedoras. Sem stop loss, cada trade precisa ser CERTEIRO.`;
+CONFIANÇA: 55-65 = boa entrada a favor da tendência; 66-80 = tendência + pavio/S&R; 80+ = tudo alinhado.
+Sempre informe best_direction CALL ou PUT (nunca NONE) e uma confiança realista.`;
 
     let response: Response | null = null;
     let usedModel = '';

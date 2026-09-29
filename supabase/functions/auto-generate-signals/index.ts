@@ -837,6 +837,17 @@ async function analyzeAssetWithRealData(
     console.log(`📈 ${asset.symbol}: MACD bearish + Bollinger upper — sinal PUT`);
   }
 
+  // Tendência maior: entrar SEMPRE a favor dela (continuação), nunca contra
+  {
+    const px = prices[prices.length - 1];
+    const tDown = ema21 < sma50 && px < sma50;
+    const tUp = ema21 > sma50 && px > sma50;
+    if (type === 'CALL' && tDown) { type = 'PUT'; console.log(`↪️ ${asset.symbol}: tendência de baixa → PUT a favor`); }
+    else if (type === 'PUT' && tUp) { type = 'CALL'; console.log(`↪️ ${asset.symbol}: tendência de alta → CALL a favor`); }
+    else if (!type && tUp && macd.trend === 'bullish') { type = 'CALL'; console.log(`📈 ${asset.symbol}: tendência de alta + MACD → CALL`); }
+    else if (!type && tDown && macd.trend === 'bearish') { type = 'PUT'; console.log(`📉 ${asset.symbol}: tendência de baixa + MACD → PUT`); }
+  }
+
   if (!type) {
     console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — sem sinal`);
     return null;
@@ -875,6 +886,13 @@ async function analyzeAssetWithRealData(
   // Detect reversal candle patterns
   const { hasReversal, pattern } = detectReversalPattern(prices, type);
   if (hasReversal) confluenceCount++;
+  // Pontos por estar A FAVOR da tendência (continuação)
+  {
+    const px2 = prices[prices.length - 1];
+    if (isCall ? (ema21 > sma50 && px2 > sma50) : (ema21 < sma50 && px2 < sma50)) confluenceCount += 2;
+    if (isCall ? macd.trend === 'bullish' : macd.trend === 'bearish') confluenceCount++;
+    if (isCall ? ema9 > ema21 : ema9 < ema21) confluenceCount++;
+  }
 
   // ESTRATÉGIAS INTERCALADAS: PAVIO (fundo/topo de vela) OU ANÁLISE IA (confluência técnica)
   const wick = detectWickRejection(asset.symbol, type);
@@ -894,7 +912,7 @@ async function analyzeAssetWithRealData(
   // Sem bloqueio por confirmações: a decisão final é da IA (Groq) + estratégia do pavio
   console.log(`🧠 ${asset.symbol} ${type}: estratégia ${strategy}, confluência ${confluenceCount}/7 → enviado para IA`);
 
-  const confluenceScore = Math.round((confluenceCount / 7) * 100);
+  const confluenceScore = Math.min(100, Math.round((confluenceCount / 7) * 100));
 
   const indicators = {
     rsi,
@@ -1143,8 +1161,17 @@ serve(async (req) => {
       if (aiError) {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
-        const executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
+        let executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
         console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
+        // Sem espera: se a IA não aprovou nenhum, usa a MELHOR entrada analisada por ela (a favor da tendência)
+        if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
+          const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
+          console.log(`🔎 Melhor análise da IA: ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
+          if ((best.confidence || 0) >= IQ_MIN_AI_CONFIDENCE) {
+            console.log(`🎯 Melhor oportunidade analisada pela IA: ${best.asset} ${best.bestDirection || ''} (${best.confidence}%)`);
+            executeSignals = [best];
+          }
+        }
 
         for (const approved of executeSignals) {
           const candidate = candidates.find(c => c.asset.toUpperCase() === approved.asset.toUpperCase());

@@ -898,7 +898,7 @@ async function analyzeAssetWithRealData(
   const wick = detectWickRejection(asset.symbol, type);
   const strategy: 'WICK' | 'AI' = wick.ok ? 'WICK' : 'AI';
   if (wick.ok) confluenceCount++;
-  const expMinutes = 5; // expiração fixa de 5 minutos (mais assertiva)
+  const expMinutes = 1; // expiração de 1 minuto a favor da tendência
 
   // NUNCA contra a tendência maior (EMA21 vs SMA50 + preço vs SMA50)
   const lastPx = prices[prices.length - 1];
@@ -1409,7 +1409,7 @@ serve(async (req) => {
               }
 
               // Gale removido: valor sempre fixo/base
-              const expiration = 5; // sempre 5 minutos
+              const expiration = 1; // sempre 1 minuto
 
               // USAR DIREÇÃO DA IA (Groq decide a melhor direção)
               const executionDirection = bestSignal.aiDirection || bestSignal.type;
@@ -1422,7 +1422,7 @@ serve(async (req) => {
                 amount: iqTradeAmount,
                 expiration,
                 signal_id: bestSignal.id,
-                timeframe: 'M5',
+                timeframe: 'M1',
                 confluence_score: bestSignal.indicators.confluenceScore,
                 status: 'executing',
               });
@@ -1436,7 +1436,7 @@ serve(async (req) => {
                   signalId: bestSignal.id,
                   isAutoTrade: true,
                   isAIAnalyzed: !!bestSignal.aiConfidence,
-                  timeframe: 'M5',
+                  timeframe: 'M1',
                 },
               });
 

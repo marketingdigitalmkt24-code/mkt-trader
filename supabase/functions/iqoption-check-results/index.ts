@@ -489,6 +489,7 @@ serve(async (req) => {
 
     // Update pending operations with REAL results from IQ Option history
     let updatedCount = 0;
+    let freshWin: { signal_id: string; asset: string; direction: string; timeframe: string } | null = null;
     if (pendingOperations && pendingOperations.length > 0 && closedPositions.length > 0) {
       for (const pending of pendingOperations) {
         const iqId = pending.iq_option_id ? String(pending.iq_option_id) : '';
@@ -498,13 +499,13 @@ serve(async (req) => {
         const closed = closedPositions.find((p) =>
           iqId ? p.matchIds.includes(iqId) : p.matchIds.includes(String(pending.signal_id))
         );
-        
+
         if (closed && closed.win !== 'pending') {
-          const result = closed.win === 'win' ? 'win' : 
+          const result = closed.win === 'win' ? 'win' :
                          closed.win === 'loose' ? 'loss' : 'tie';
-          
+
           console.log(`✅ Found real result for ${pending.id}: ${result} (profit: ${closed.profit})`);
-          
+
           const { error: updateError } = await supabase
             .from('operation_results')
             .update({
@@ -516,6 +517,21 @@ serve(async (req) => {
 
           if (!updateError) {
             updatedCount++;
+            // Track the most recent fresh WIN for immediate continuation
+            if (
+              result === 'win' &&
+              !freshWin &&
+              pending.timeframe !== 'MT5' &&
+              pending.timeframe !== 'FOREX' &&
+              !String(pending.signal_id).startsWith('cont-')
+            ) {
+              freshWin = {
+                signal_id: String(pending.signal_id),
+                asset: pending.asset,
+                direction: String(pending.direction).toUpperCase(),
+                timeframe: pending.timeframe || 'M1',
+              };
+            }
           } else {
             console.error('Error updating result:', updateError);
           }
@@ -527,6 +543,39 @@ serve(async (req) => {
     }
 
     console.log(`Updated ${updatedCount} operation results from IQ Option history`);
+
+    // ============= CONTINUAÇÃO PÓS-WIN IMEDIATA =============
+    // Assim que um WIN é confirmado, entra na próxima vela no mesmo ativo/direção
+    // sem esperar o próximo ciclo do gerador de sinais.
+    if (freshWin) {
+      try {
+        const contId = `cont-${freshWin.signal_id}`.slice(0, 120);
+        const { data: already } = await supabase.from('trade_queue').select('id').eq('signal_id', contId).limit(1);
+        if (!already?.length) {
+          // Só continua se o WIN é recente (últimos 3 min) e não há outra operação pendente
+          const { data: stillPending } = await supabase
+            .from('operation_results')
+            .select('id')
+            .eq('result', 'pending')
+            .limit(1);
+          if (!stillPending?.length) {
+            const { data: orig } = await supabase.from('trade_queue').select('amount').eq('signal_id', freshWin.signal_id).limit(1);
+            const amount = Number(orig?.[0]?.amount) || 1;
+            console.log(`🔁 CONTINUAÇÃO PÓS-WIN IMEDIATA: ${freshWin.asset} ${freshWin.direction} $${amount}`);
+            await supabase.from('trade_queue').insert({ asset: freshWin.asset, direction: freshWin.direction, amount, expiration: 1, signal_id: contId, timeframe: 'M1', confluence_score: 0, status: 'executing' });
+            const { data: cData, error: cErr } = await supabase.functions.invoke('iqoption-place-trade', {
+              body: { asset: freshWin.asset, direction: freshWin.direction.toLowerCase(), amount, expiration: 1, signalId: contId, isAutoTrade: true, isAIAnalyzed: false, timeframe: 'M1' },
+            });
+            const ok = !cErr && cData?.success;
+            await supabase.from('trade_queue').update(ok
+              ? { status: 'executed', iq_option_id: cData.tradeId, executed_at: new Date().toISOString() }
+              : { status: 'failed', error: cErr?.message || cData?.error || 'Unknown error' }).eq('signal_id', contId);
+          }
+        }
+      } catch (e) {
+        console.log('⚠️ Continuação pós-win imediata falhou:', e);
+      }
+    }
 
     const responsePayload = {
       success: true,

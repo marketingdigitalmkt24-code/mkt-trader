@@ -1079,6 +1079,46 @@ serve(async (req) => {
       console.log(`🔒 IQ OPTION BLOQUEADO: ${(pendingOps || []).length} operação(ões) pendente(s)`);
     }
 
+    // ============= ESTRATÉGIA CONTINUAÇÃO PÓS-WIN =============
+    // Após um WIN, entra na próxima vela no mesmo ativo e mesma direção (1 nível, 1 operação por vez)
+    if (!hasAnyPendingIQTrade) {
+      try {
+        const since = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+        const { data: lastOps } = await supabase
+          .from('operation_results')
+          .select('signal_id, asset, direction, result, timeframe, created_at')
+          .in('result', ['win', 'loss'])
+          .neq('timeframe', 'MT5')
+          .neq('timeframe', 'FOREX')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const w = lastOps?.[0];
+        if (w && w.result === 'win' && w.created_at >= since && !String(w.signal_id).startsWith('cont-')) {
+          const contId = `cont-${w.signal_id}`.slice(0, 120);
+          const { data: already } = await supabase.from('trade_queue').select('id').eq('signal_id', contId).limit(1);
+          if (!already?.length) {
+            const { data: orig } = await supabase.from('trade_queue').select('amount').eq('signal_id', w.signal_id).limit(1);
+            const amount = Number(orig?.[0]?.amount) || 1;
+            const dir = String(w.direction).toUpperCase();
+            console.log(`🔁 CONTINUAÇÃO PÓS-WIN: ${w.asset} ${dir} $${amount}`);
+            await supabase.from('trade_queue').insert({ asset: w.asset, direction: dir, amount, expiration: 1, signal_id: contId, timeframe: 'M1', confluence_score: 0, status: 'executing' });
+            const { data: cData, error: cErr } = await supabase.functions.invoke('iqoption-place-trade', {
+              body: { asset: w.asset, direction: dir.toLowerCase(), amount, expiration: 1, signalId: contId, isAutoTrade: true, isAIAnalyzed: false, timeframe: 'M1' },
+            });
+            const ok = !cErr && cData?.success;
+            await supabase.from('trade_queue').update(ok
+              ? { status: 'executed', iq_option_id: cData.tradeId, executed_at: new Date().toISOString() }
+              : { status: 'failed', error: cErr?.message || cData?.error || 'Unknown error' }).eq('signal_id', contId);
+            if (ok) {
+              return new Response(JSON.stringify({ success: true, continuation: w.asset, direction: dir }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+          }
+        }
+      } catch (e) {
+        console.log('⚠️ Continuação pós-win falhou:', e);
+      }
+    }
+
     // ============= CHECK RECENT SIGNALS (cooldown) =============
     const cooldownAgo = new Date(Date.now() - ASSET_SIGNAL_COOLDOWN_MS).toISOString();
     const { data: recentSignals } = await supabase

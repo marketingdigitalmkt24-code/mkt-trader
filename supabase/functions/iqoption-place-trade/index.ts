@@ -147,7 +147,7 @@ async function placeTradeFireAndForget(
         console.log('❌ Trade NOT confirmed - will not save fake pending entry');
         resolve({ success: false, error: 'Trade timeout - no confirmation from IQ Option' });
       }
-    }, 30000);
+    }, 90000);
 
     ws.onopen = () => {
       console.log('🔗 WebSocket connected, authenticating...');

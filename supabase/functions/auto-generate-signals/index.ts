@@ -316,6 +316,9 @@ function yahooTicker(symbol: string): string | null {
     const code = s.includes('/') ? s.split('/')[0] : CRYPTO_CODES.find(c => s.startsWith(c))!;
     return `${code}-USD`;
   }
+  const idx = s.replace(/:.*$/, '').replace(/[^A-Z0-9]/g, '');
+  const INDEX_MAP: Record<string, string> = { US30: '^DJI', DJ30: '^DJI', US500: '^GSPC', SPX500: '^GSPC', SP500: '^GSPC', US100: '^NDX', NAS100: '^NDX', USTEC: '^NDX', US2000: '^RUT', GER30: '^GDAXI', GER40: '^GDAXI', DE40: '^GDAXI', UK100: '^FTSE', JP225: '^N225', FRA40: '^FCHI', EU50: '^STOXX50E', HK50: '^HSI', AUS200: '^AXJO' };
+  if (INDEX_MAP[idx]) return INDEX_MAP[idx];
   const clean = s.replace(/[^A-Z.]/g, '');
   if (STOCK_NAME_MAP[clean]) return STOCK_NAME_MAP[clean];
   if (/^[A-Z]{1,5}(\.[A-Z])?$/.test(clean) && !s.includes('/')) return clean;
@@ -1140,13 +1143,18 @@ serve(async (req) => {
     // ===== NUNCA FICAR EM ESPERA =====
     // Se nenhum gatilho forte disparou, roda uma 2ª passada em modo oportunidade:
     // aceita tendência alinhada + MACD e deixa a IA decidir o melhor candidato.
-    if (candidates.length === 0) {
-      console.log('🔎 Nenhum gatilho forte — 2ª passada em MODO OPORTUNIDADE (IA decide)...');
-      for (const asset of shuffled) {
+    {
+      console.log('🔎 2ª passada em MODO OPORTUNIDADE (ações/cripto sempre + demais se vazio)...');
+      const have = new Set(candidates.map((c: any) => c.asset.toUpperCase()));
+      const pri = [...shuffled].sort((a, b) => (assetKind(b.symbol.replace('-OTC','')) !== 'forex' ? 1 : 0) - (assetKind(a.symbol.replace('-OTC','')) !== 'forex' ? 1 : 0));
+      for (const asset of pri) {
+        if (have.has(asset.symbol.toUpperCase())) continue;
+        const nonFx = assetKind(asset.symbol.replace('-OTC','')) !== 'forex';
+        if (!nonFx && candidates.length > 0) continue;
         const realPrice = realPrices.get(asset.symbol) || realPrices.get(asset.symbol.replace('-OTC', ''));
         const signal = await analyzeAssetWithRealData(asset, supabase, realPrice, true);
         if (signal) candidates.push(signal);
-        if (candidates.length >= 5) break; // manda os 5 melhores para a IA
+        if (candidates.length >= 8) break; // limita envio à IA
       }
     }
 

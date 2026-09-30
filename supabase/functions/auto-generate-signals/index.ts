@@ -1137,6 +1137,19 @@ serve(async (req) => {
       if (signal) candidates.push(signal);
     }
 
+    // ===== NUNCA FICAR EM ESPERA =====
+    // Se nenhum gatilho forte disparou, roda uma 2ª passada em modo oportunidade:
+    // aceita tendência alinhada + MACD e deixa a IA decidir o melhor candidato.
+    if (candidates.length === 0) {
+      console.log('🔎 Nenhum gatilho forte — 2ª passada em MODO OPORTUNIDADE (IA decide)...');
+      for (const asset of shuffled) {
+        const realPrice = realPrices.get(asset.symbol) || realPrices.get(asset.symbol.replace('-OTC', ''));
+        const signal = await analyzeAssetWithRealData(asset, supabase, realPrice, true);
+        if (signal) candidates.push(signal);
+        if (candidates.length >= 5) break; // manda os 5 melhores para a IA
+      }
+    }
+
     if (candidates.length === 0) {
       console.log('⏳ Nenhum sinal de exaustão real encontrado neste ciclo');
       return new Response(

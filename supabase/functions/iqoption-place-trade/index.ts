@@ -541,6 +541,29 @@ serve(async (req) => {
       });
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
+
+      // Schedule result checks right at expiry (fast win/loss → instant post-win continuation)
+      if (!isForex) {
+        const expMs = (Math.ceil(Date.now() / 60000) + (tradeRequest.expiration || 1)) * 60000;
+        const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/iqoption-check-results`;
+        const key = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+        const delays = [2000, 6000, 12000, 20000].map(d => Math.max(0, expMs - Date.now() + d));
+        const task = (async () => {
+          let last = 0;
+          for (const d of delays) {
+            await new Promise(r => setTimeout(r, d - last));
+            last = d;
+            try {
+              const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: '{}' });
+              const j = await r.json().catch(() => ({}));
+              console.log(`⚡ Fast result check (+${d}ms):`, JSON.stringify(j).slice(0, 200));
+              if (j?.updatedResults > 0) break;
+            } catch (e) { console.log('fast check error', e); }
+          }
+        })();
+        // @ts-ignore EdgeRuntime exists in Supabase runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(task);
+      }
     }
 
     // Update trade_queue if this came from queue

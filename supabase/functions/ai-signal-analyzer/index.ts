@@ -206,6 +206,7 @@ async function aiAdaptiveStrategy(
         support_resistance: s.indicators.supportResistance.pricePosition,
         volatility: s.indicators.atr.volatility,
         pattern: s.indicators.reversalPattern || 'none',
+        edge_scanner: s.indicators.strategy === 'EDGE' ? (s.type === 'CALL' ? 'BUY' : 'SELL') : 'none',
         confluence: s.indicators.confluenceScore,
         confirmations: s.confirmations?.length || 0,
         asset_wr: ap ? `${ap.winRate}%` : 'sem dados',
@@ -247,6 +248,8 @@ REGRA PRINCIPAL — A FAVOR DA TENDÊNCIA:
 
 SÓ TENDÊNCIA MUITO FORTE: os sinais já chegam filtrados com EMA9/EMA21/SMA50 alinhadas e MACD a favor. APROVE (execute=true) apenas se o momentum for forte e contínuo na direção da tendência (MACD histograma a favor, EMA9 afastada da EMA21). REJEITE se o preço estiver colado em suporte (para PUT) ou resistência (para CALL), pois o movimento pode travar.
 REJEITE apenas se: volatilidade ALTA extrema, tendência totalmente lateral e indicadores contraditórios, ou setup tóxico no histórico.
+
+EDGE SCANNER (IQ Option): campo edge_scanner = BUY/SELL significa que a última vela fechada rejeitou o preço com pavio longo contra a tendência e fechou a favor, com preço acima (BUY) ou abaixo (SELL) das médias EMA21/SMA50. É o gatilho prioritário: se não houver exaustão extrema nem setup tóxico, APROVE com confiança 70+ na direção do edge_scanner.
 
 CONFIANÇA: 55-65 = boa entrada a favor da tendência; 66-80 = tendência + pavio/S&R; 80+ = tudo alinhado.
 Sempre informe best_direction CALL ou PUT (nunca NONE) e uma confiança realista.`;

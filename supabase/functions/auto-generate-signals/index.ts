@@ -898,10 +898,26 @@ async function analyzeAssetWithRealData(
     if (isCall ? ema9 > ema21 : ema9 < ema21) confluenceCount++;
   }
 
-  // ESTRATÉGIAS INTERCALADAS: PAVIO (fundo/topo de vela) OU ANÁLISE IA (confluência técnica)
+  // ESTRATÉGIAS INTERCALADAS: EDGE SCANNER / PAVIO / ANÁLISE IA
   const wick = detectWickRejection(asset.symbol, type);
-  const strategy: 'WICK' | 'AI' = wick.ok ? 'WICK' : 'AI';
+  // EDGE SCANNER (estilo IQ Option): vela fechada com pavio de rejeição (≥1,5x corpo) a favor,
+  // fechando na direção, com preço do lado certo da EMA21 e SMA50 e médias alinhadas → BUY/SELL
+  const edge = (() => {
+    const k = lastCandles.get(asset.symbol.replace('-OTC', ''));
+    if (!k) return false;
+    const range = k.h - k.l;
+    if (range <= 0) return false;
+    const body = Math.max(Math.abs(k.c - k.o), range * 0.02);
+    const lower = Math.min(k.o, k.c) - k.l;
+    const upper = k.h - Math.max(k.o, k.c);
+    const px = prices[prices.length - 1];
+    return isCall
+      ? lower >= body * 1.5 && lower >= range * 0.4 && k.c >= k.o && ema21 > sma50 && px > ema21
+      : upper >= body * 1.5 && upper >= range * 0.4 && k.c <= k.o && ema21 < sma50 && px < ema21;
+  })();
+  const strategy: 'EDGE' | 'WICK' | 'AI' = edge ? 'EDGE' : wick.ok ? 'WICK' : 'AI';
   if (wick.ok) confluenceCount++;
+  if (edge) { confluenceCount += 2; console.log(`📡 ${asset.symbol}: EDGE SCANNER ${isCall ? 'BUY' : 'SELL'}`); }
   const expMinutes = 1; // expiração de 1 minuto a favor da tendência
 
   // NUNCA contra a tendência maior (EMA21 vs SMA50 + preço vs SMA50)
@@ -913,8 +929,8 @@ async function analyzeAssetWithRealData(
     return null;
   }
 
-  // ===== SÓ TENDÊNCIA MUITO FORTE =====
-  {
+  // ===== SÓ TENDÊNCIA MUITO FORTE (ou gatilho EDGE SCANNER a favor da tendência) =====
+  if (!edge) {
     const atrVal = Math.max(atr?.value || 0, lastPx * 0.00002);
     const aligned = isCall
       ? (ema9 > ema21 && ema21 > sma50 && lastPx > ema9)
@@ -929,10 +945,7 @@ async function analyzeAssetWithRealData(
       if (isCall ? last6[i] > last6[i - 1] : last6[i] < last6[i - 1]) dirMoves++;
     }
     const slope = (ema21 - calculateEMA(prices.slice(0, -5), 21)) * (isCall ? 1 : -1);
-    // Padrão das vitórias (EUR/JPY PUT x4): médias alinhadas + MACD + inclinação. Separação mínima reduzida p/ não ficar em espera
     const strong = aligned && macdOk && spread >= 0.5 && dirMoves >= 3 && slope > 0;
-    // Modo "sempre buscando": quando nenhum sinal forte apareceu no ciclo, aceita tendência
-    // alinhada + MACD a favor e deixa a IA decidir (nunca fica em espera)
     const opportunity = (majorUp || majorDown) && macdOk && aligned;
     if (!strong && !(forceOpportunity && opportunity)) {
       console.log(`🚫 ${asset.symbol} ${type}: tendência fraca (alinhada=${aligned} macd=${macdOk} sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6 incl=${slope > 0}) — ignorado`);
@@ -960,7 +973,9 @@ async function analyzeAssetWithRealData(
     confluenceScore,
     confluenceCount,
     strategy,
-    reversalPattern: strategy === 'WICK'
+    reversalPattern: strategy === 'EDGE'
+      ? `Edge Scanner ${isCall ? 'BUY' : 'SELL'}`
+      : strategy === 'WICK'
       ? `Pavio ${isCall ? 'inferior' : 'superior'} ${wick.ratio.toFixed(1)}x corpo` + (hasReversal ? ` + ${pattern}` : '')
       : `IA ${hasReversal ? pattern : 'confluência'}`,
   };

@@ -1469,6 +1469,44 @@ serve(async (req) => {
 
               // USAR DIREÇÃO DA IA (Groq decide a melhor direção)
               const executionDirection = bestSignal.aiDirection || bestSignal.type;
+
+              // ===== FILTRO OTC MAIS RIGOROSO =====
+              if (isOTCAsset(bestSignal.asset)) {
+                const otcMinConf = 72;
+                if ((bestSignal.aiConfidence || 0) < otcMinConf) {
+                  console.log(`🛑 OTC: ${bestSignal.asset} confiança ${bestSignal.aiConfidence || 0}% < ${otcMinConf}%. Pulando.`);
+                  continue;
+                }
+                const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+                const { data: recentOtc } = await supabase
+                  .from('operation_results')
+                  .select('asset, direction, result, created_at')
+                  .like('asset', '%OTC%')
+                  .gte('created_at', since)
+                  .in('result', ['win', 'loss'])
+                  .order('created_at', { ascending: false })
+                  .limit(20);
+                const list = recentOtc || [];
+                const sameLoss = list.find((o: any) => o.asset === bestSignal.asset && String(o.direction).toUpperCase() === String(executionDirection).toUpperCase() && o.result === 'loss');
+                if (sameLoss) {
+                  console.log(`🛑 OTC: ${bestSignal.asset} ${executionDirection} perdeu na última hora. Pulando.`);
+                  continue;
+                }
+                const last3 = list.slice(0, 3);
+                if (last3.length === 3 && last3.every((o: any) => o.result === 'loss')) {
+                  console.log('🛑 OTC: 3 perdas seguidas — pausa até a próxima janela.');
+                  continue;
+                }
+                const dirOps = list.filter((o: any) => String(o.direction).toUpperCase() === String(executionDirection).toUpperCase());
+                const dirLoss = dirOps.filter((o: any) => o.result === 'loss').length;
+                if (dirOps.length >= 4 && dirLoss / dirOps.length > 0.5) {
+                  console.log(`🛑 OTC: direção ${executionDirection} com ${dirLoss}/${dirOps.length} perdas na última hora. Pulando.`);
+                  continue;
+                }
+              }
+
+              // Delay de 2 segundos antes da entrada
+              await new Promise((r) => setTimeout(r, 2000));
               console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
               // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso

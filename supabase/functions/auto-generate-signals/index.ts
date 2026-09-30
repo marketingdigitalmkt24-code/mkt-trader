@@ -1008,7 +1008,8 @@ serve(async (req) => {
           // Dias úteis: somente moedas normais (sem OTC, sem ações/cripto). Fim de semana: OTC (moedas e ações)
           // Dias úteis: moedas normais + moedas OTC quando poucas normais estão abertas (ex.: abertura asiática)
           if (!weekend && assetKind(base) !== 'forex') continue;
-          if (!weekend && isOtc && normalForexOpen >= 8) continue;
+          // Dias úteis: OTC só quando praticamente não há pares reais abertos
+          if (!weekend && isOtc && normalForexOpen >= 3) continue;
           if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;

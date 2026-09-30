@@ -333,6 +333,16 @@ async function placeTradeFireAndForget(
             };
             fxSender = sendForex;
             sendForex(1000);
+            // Sem resposta em 5s -> tenta próxima alavancagem
+            const fxRetry = () => setTimeout(() => {
+              if (!tradeId && fxLevers.length) {
+                const next = fxLevers.shift()!;
+                console.log(`🔄 FOREX sem resposta — tentando x${next}`);
+                sendForex(next);
+                fxRetry();
+              }
+            }, 5000);
+            fxRetry();
             return;
           }
 
@@ -386,6 +396,14 @@ async function placeTradeFireAndForget(
         }
 
         if (data.request_id === 'fx1') console.log('📨 FOREX resposta:', JSON.stringify(data).slice(0, 400));
+        else if (usedMode === 'forex' && !['heartbeat', 'timeSync', 'front'].includes(data.name)) console.log('📨 FOREX msg:', data.name, JSON.stringify(data.msg ?? {}).slice(0, 300));
+        if (usedMode === 'forex' && (data.name === 'order-changed' || data.name === 'position-changed') && data.msg?.id && !tradeId) {
+          tradeId = String(data.msg.id);
+          console.log(`✅ FOREX aberto via ${data.name}! ID: ${tradeId}`);
+          clearTimeout(timeout); ws.close();
+          resolve({ success: true, tradeId });
+          return;
+        }
         
         // Respostas de DIGITAL / FOREX
         if (data.request_id === 'fx1' || data.request_id === 'dg1' || data.name === 'digital-option-placed') {

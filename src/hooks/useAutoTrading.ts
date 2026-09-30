@@ -102,7 +102,7 @@ export function useAutoTrading() {
   const [lastTradeResult, setLastTradeResult] = useState<{ success: boolean; message: string } | null>(null);
   const [activeTradesCount, setActiveTradesCount] = useState(0);
   const lastCheckResultsTime = useRef<number>(0);
-  const CHECK_RESULTS_INTERVAL = 30000; // 30 seconds
+  const CHECK_RESULTS_INTERVAL = 10000; // 10 seconds (server cron also checks every 5s)
   const initialSignalsMarked = useRef(false); // Flag to mark DB-loaded signals as processed
 
   // Check if IQ Option is connected (has active config with recent connection)

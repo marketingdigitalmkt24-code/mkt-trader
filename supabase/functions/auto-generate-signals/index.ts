@@ -1470,6 +1470,14 @@ serve(async (req) => {
               // USAR DIREÇÃO DA IA (Groq decide a melhor direção)
               const executionDirection = bestSignal.aiDirection || bestSignal.type;
 
+              // ===== EXAUSTÃO: não vender no fundo nem comprar no topo =====
+              const rsiNow = Number((bestSignal.indicators as any)?.rsi?.value ?? (bestSignal.indicators as any)?.rsi);
+              const dirU = String(executionDirection).toUpperCase();
+              if (Number.isFinite(rsiNow) && ((dirU === 'PUT' && rsiNow < 22) || (dirU === 'CALL' && rsiNow > 78))) {
+                console.log(`🛑 EXAUSTÃO: ${bestSignal.asset} ${dirU} com RSI ${rsiNow.toFixed(1)} — movimento já esticado, risco de repique. Pulando.`);
+                continue;
+              }
+
               // ===== FILTRO OTC MAIS RIGOROSO =====
               if (isOTCAsset(bestSignal.asset)) {
                 const otcMinConf = 72;

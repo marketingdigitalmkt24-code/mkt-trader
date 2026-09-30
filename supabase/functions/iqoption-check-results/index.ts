@@ -453,7 +453,7 @@ serve(async (req) => {
     // TIE results are often temporary placeholders - we should always verify them
     const { data: pendingOperations, error: pendingError } = await supabase
       .from('operation_results')
-      .select('id, iq_option_id, signal_id, created_at, result')
+      .select('id, iq_option_id, signal_id, created_at, result, asset, direction, timeframe')
       .or('result.eq.pending,result.eq.tie')
       .order('created_at', { ascending: false })
       .limit(200);

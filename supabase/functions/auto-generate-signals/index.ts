@@ -928,9 +928,15 @@ async function analyzeAssetWithRealData(
     const slope = (ema21 - calculateEMA(prices.slice(0, -5), 21)) * (isCall ? 1 : -1);
     // Padrão das vitórias (EUR/JPY PUT x4): médias alinhadas + MACD + inclinação. Separação mínima reduzida p/ não ficar em espera
     const strong = aligned && macdOk && spread >= 0.5 && dirMoves >= 3 && slope > 0;
-    if (!strong) {
+    // Modo "sempre buscando": quando nenhum sinal forte apareceu no ciclo, aceita tendência
+    // alinhada + MACD a favor e deixa a IA decidir (nunca fica em espera)
+    const opportunity = (majorUp || majorDown) && macdOk && aligned;
+    if (!strong && !(forceOpportunity && opportunity)) {
       console.log(`🚫 ${asset.symbol} ${type}: tendência fraca (alinhada=${aligned} macd=${macdOk} sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6 incl=${slope > 0}) — ignorado`);
       return null;
+    }
+    if (!strong && forceOpportunity) {
+      console.log(`🔎 ${asset.symbol} ${type}: modo oportunidade — tendência alinhada + MACD, IA decide`);
     }
     console.log(`💪 ${asset.symbol} ${type}: TENDÊNCIA MUITO FORTE (sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6)`);
   }

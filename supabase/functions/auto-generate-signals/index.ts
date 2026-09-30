@@ -745,7 +745,8 @@ function generateConfirmations(indicators: any, type: 'CALL' | 'PUT'): string[] 
 async function analyzeAssetWithRealData(
   asset: Asset,
   supabase: any,
-  realPrice: number | undefined
+  realPrice: number | undefined,
+  forceOpportunity = false
 ): Promise<any | null> {
   if (!realPrice) {
     console.log(`⏭️ ${asset.symbol}: Sem preço real disponível`);
@@ -1005,9 +1006,8 @@ serve(async (req) => {
           const base = String(a.name).replace(/[-\s]*BLITZ/i, '').replace(/[-\s]*OTC$/i, '').trim();
           const symbol = isOtc ? `${base}-OTC` : base;
           if (seen.has(symbol) || !yahooTicker(base)) continue;
-          // Dias úteis: somente moedas normais (sem OTC, sem ações/cripto). Fim de semana: OTC (moedas e ações)
-          // Dias úteis: moedas normais + moedas OTC quando poucas normais estão abertas (ex.: abertura asiática)
-          if (!weekend && assetKind(base) !== 'forex') continue;
+          // Dias úteis: TODOS os ativos reais abertos (moedas, ações e cripto) — a IA nunca fica em espera
+          // Fim de semana: OTC (moedas e ações)
           // Dias úteis: OTC só quando praticamente não há pares reais abertos
           if (!weekend && isOtc && normalForexOpen >= 3) continue;
           if (weekend && !isOtc) continue;

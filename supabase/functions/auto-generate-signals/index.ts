@@ -745,7 +745,8 @@ function generateConfirmations(indicators: any, type: 'CALL' | 'PUT'): string[] 
 async function analyzeAssetWithRealData(
   asset: Asset,
   supabase: any,
-  realPrice: number | undefined
+  realPrice: number | undefined,
+  forceOpportunity = false
 ): Promise<any | null> {
   if (!realPrice) {
     console.log(`⏭️ ${asset.symbol}: Sem preço real disponível`);
@@ -927,9 +928,15 @@ async function analyzeAssetWithRealData(
     const slope = (ema21 - calculateEMA(prices.slice(0, -5), 21)) * (isCall ? 1 : -1);
     // Padrão das vitórias (EUR/JPY PUT x4): médias alinhadas + MACD + inclinação. Separação mínima reduzida p/ não ficar em espera
     const strong = aligned && macdOk && spread >= 0.5 && dirMoves >= 3 && slope > 0;
-    if (!strong) {
+    // Modo "sempre buscando": quando nenhum sinal forte apareceu no ciclo, aceita tendência
+    // alinhada + MACD a favor e deixa a IA decidir (nunca fica em espera)
+    const opportunity = (majorUp || majorDown) && macdOk && aligned;
+    if (!strong && !(forceOpportunity && opportunity)) {
       console.log(`🚫 ${asset.symbol} ${type}: tendência fraca (alinhada=${aligned} macd=${macdOk} sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6 incl=${slope > 0}) — ignorado`);
       return null;
+    }
+    if (!strong && forceOpportunity) {
+      console.log(`🔎 ${asset.symbol} ${type}: modo oportunidade — tendência alinhada + MACD, IA decide`);
     }
     console.log(`💪 ${asset.symbol} ${type}: TENDÊNCIA MUITO FORTE (sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6)`);
   }
@@ -1005,9 +1012,8 @@ serve(async (req) => {
           const base = String(a.name).replace(/[-\s]*BLITZ/i, '').replace(/[-\s]*OTC$/i, '').trim();
           const symbol = isOtc ? `${base}-OTC` : base;
           if (seen.has(symbol) || !yahooTicker(base)) continue;
-          // Dias úteis: somente moedas normais (sem OTC, sem ações/cripto). Fim de semana: OTC (moedas e ações)
-          // Dias úteis: moedas normais + moedas OTC quando poucas normais estão abertas (ex.: abertura asiática)
-          if (!weekend && assetKind(base) !== 'forex') continue;
+          // Dias úteis: TODOS os ativos reais abertos (moedas, ações e cripto) — a IA nunca fica em espera
+          // Fim de semana: OTC (moedas e ações)
           // Dias úteis: OTC só quando praticamente não há pares reais abertos
           if (!weekend && isOtc && normalForexOpen >= 3) continue;
           if (weekend && !isOtc) continue;
@@ -1129,6 +1135,19 @@ serve(async (req) => {
       const realPrice = realPrices.get(asset.symbol) || realPrices.get(asset.symbol.replace('-OTC', ''));
       const signal = await analyzeAssetWithRealData(asset, supabase, realPrice);
       if (signal) candidates.push(signal);
+    }
+
+    // ===== NUNCA FICAR EM ESPERA =====
+    // Se nenhum gatilho forte disparou, roda uma 2ª passada em modo oportunidade:
+    // aceita tendência alinhada + MACD e deixa a IA decidir o melhor candidato.
+    if (candidates.length === 0) {
+      console.log('🔎 Nenhum gatilho forte — 2ª passada em MODO OPORTUNIDADE (IA decide)...');
+      for (const asset of shuffled) {
+        const realPrice = realPrices.get(asset.symbol) || realPrices.get(asset.symbol.replace('-OTC', ''));
+        const signal = await analyzeAssetWithRealData(asset, supabase, realPrice, true);
+        if (signal) candidates.push(signal);
+        if (candidates.length >= 5) break; // manda os 5 melhores para a IA
+      }
     }
 
     if (candidates.length === 0) {

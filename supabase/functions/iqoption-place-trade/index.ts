@@ -147,7 +147,7 @@ async function placeTradeFireAndForget(
         console.log('❌ Trade NOT confirmed - will not save fake pending entry');
         resolve({ success: false, error: 'Trade timeout - no confirmation from IQ Option' });
       }
-    }, 30000);
+    }, 90000);
 
     ws.onopen = () => {
       console.log('🔗 WebSocket connected, authenticating...');
@@ -350,7 +350,7 @@ async function placeTradeFireAndForget(
             usedMode = 'digital';
             tradePlaced = true;
             const nowMs = Date.now();
-            const expMs = Math.ceil((nowMs + 30000) / 60000) * 60000 + (trade.expiration - 1) * 60000;
+            const expMs = Math.ceil(nowMs / 60000) * 60000 + trade.expiration * 60000;
             const e = new Date(expMs);
             const pad = (n: number) => String(n).padStart(2, '0');
             const instrumentId = `do${foundAsset!.id}A${e.getUTCFullYear()}${pad(e.getUTCMonth()+1)}${pad(e.getUTCDate())}D${pad(e.getUTCHours())}${pad(e.getUTCMinutes())}00T${trade.expiration}M${trade.direction === 'call' ? 'C' : 'P'}SPT`;
@@ -364,35 +364,38 @@ async function placeTradeFireAndForget(
             }));
           };
 
-          // ===== Melhor oportunidade: turbo/blitz se payout >= 80%; sem turbo (binária só expira em 15 min) ou payout baixo -> DIGITAL =====
-          const optPayout = payoutById[foundAsset.turboId || foundAsset.binaryId || foundAsset.id] || 0;
-          if (!hasTurbo || (optPayout > 0 && optPayout < 80)) {
-            sendDigital(!hasTurbo ? 'sem turbo' : `payout ${optPayout}%`);
-            return;
-          }
-          usedMode = 'binary';
+          // ===== Entrada sincronizada: 2 segundos ANTES da abertura da próxima vela =====
+          const nowMs0 = Date.now();
+          let entryDelay = Math.ceil(nowMs0 / 60000) * 60000 - 2000 - nowMs0;
+          if (entryDelay < 0) entryDelay += 60000;
+          console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar 2s antes da próxima vela`);
 
-          const now = Math.floor(Date.now() / 1000);
-          const nextMinute = Math.ceil((now + 30) / 60) * 60;
-          const expirationTime = nextMinute + ((trade.expiration - 1) * 60);
-          const useId = foundAsset.turboId!;
-
-          console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} | ID:${useId} | TURBO | $${trade.amount} | Exp:${trade.expiration}min`);
-          tradePlaced = true;
-          ws.send(JSON.stringify({
-            name: 'sendMessage',
-            msg: {
-              name: 'binary-options.open-option', version: '1.0',
-              body: {
-                user_balance_id: balanceId, active_id: useId, option_type_id: 3,
-                direction: trade.direction, expired: expirationTime,
-                price: trade.amount, profit_percent: 0,
+          const fire = () => {
+            const optPayout = payoutById[foundAsset!.turboId || foundAsset!.binaryId || foundAsset!.id] || 0;
+            if (!hasTurbo || (optPayout > 0 && optPayout < 80)) {
+              sendDigital(!hasTurbo ? 'sem turbo' : `payout ${optPayout}%`);
+              return;
+            }
+            usedMode = 'binary';
+            const now = Math.floor(Date.now() / 1000);
+            const expirationTime = Math.ceil(now / 60) * 60 + trade.expiration * 60;
+            const useId = foundAsset!.turboId!;
+            console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} | ID:${useId} | TURBO | $${trade.amount} | Exp:${trade.expiration}min | sec:${new Date().getUTCSeconds()}`);
+            tradePlaced = true;
+            ws.send(JSON.stringify({
+              name: 'sendMessage',
+              msg: {
+                name: 'binary-options.open-option', version: '1.0',
+                body: {
+                  user_balance_id: balanceId, active_id: useId, option_type_id: 3,
+                  direction: trade.direction, expired: expirationTime,
+                  price: trade.amount, profit_percent: 0,
+                },
               },
-            },
-          }));
-
-          // Sem confirmação em 7s -> tenta DIGITAL
-          setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 7000);
+            }));
+            setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 5000);
+          };
+          setTimeout(fire, entryDelay);
         }
 
         if (data.request_id === 'fx1') console.log('📨 FOREX resposta:', JSON.stringify(data).slice(0, 400));

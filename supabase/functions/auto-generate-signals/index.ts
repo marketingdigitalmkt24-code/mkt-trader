@@ -1514,8 +1514,7 @@ serve(async (req) => {
                 }
               }
 
-              // Delay de 2 segundos antes da entrada
-              await new Promise((r) => setTimeout(r, 2000));
+              // Sincronização de entrada (2s antes da vela) é feita em iqoption-place-trade
               console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
               // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso

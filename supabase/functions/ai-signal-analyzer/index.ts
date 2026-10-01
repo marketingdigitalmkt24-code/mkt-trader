@@ -207,6 +207,7 @@ async function aiAdaptiveStrategy(
         volatility: s.indicators.atr.volatility,
         pattern: s.indicators.reversalPattern || 'none',
         edge_scanner: s.indicators.strategy === 'EDGE' ? (s.type === 'CALL' ? 'BUY' : 'SELL') : 'none',
+        pullback_wick: s.indicators.strategy === 'PULLBACK',
         confluence: s.indicators.confluenceScore,
         confirmations: s.confirmations?.length || 0,
         asset_wr: ap ? `${ap.winRate}%` : 'sem dados',
@@ -250,6 +251,8 @@ SÓ TENDÊNCIA MUITO FORTE: os sinais já chegam filtrados com EMA9/EMA21/SMA50 
 REJEITE apenas se: volatilidade ALTA extrema, tendência totalmente lateral e indicadores contraditórios, ou setup tóxico no histórico.
 
 EDGE SCANNER (IQ Option): campo edge_scanner = BUY/SELL significa que a última vela fechada rejeitou o preço com pavio longo contra a tendência e fechou a favor, com preço acima (BUY) ou abaixo (SELL) das médias EMA21/SMA50. É o gatilho prioritário: se não houver exaustão extrema nem setup tóxico, APROVE com confiança 70+ na direção do edge_scanner.
+
+PULLBACK + PAVIO (setup prioritário): campo pullback_wick = true significa que o preço fez uma RETRAÇÃO até as médias (EMA9/EMA21) dentro da tendência e a última vela fechada tem pavio longo de rejeição a favor da tendência — o padrão clássico de continuação após recuo. É a entrada de MAIOR prioridade: se não houver exaustão extrema (RSI<22 para PUT / RSI>78 para CALL) nem setup tóxico, APROVE com confiança 75+ na direção proposta.
 
 CONFIANÇA: 55-65 = boa entrada a favor da tendência; 66-80 = tendência + pavio/S&R; 80+ = tudo alinhado.
 Sempre informe best_direction CALL ou PUT (nunca NONE) e uma confiança realista.`;

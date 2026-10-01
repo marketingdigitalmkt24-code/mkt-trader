@@ -348,6 +348,21 @@ function detectWickRejection(symbol: string, direction: 'CALL' | 'PUT'): { ok: b
   return { ok, strong: ok && ratio >= 3, ratio };
 }
 
+// PULLBACK + PAVIO: nas velas anteriores o preço recuou até a EMA9/EMA21 (retração)
+// e a última vela fechada tem pavio longo de rejeição a favor da tendência → entrada prioritária
+function detectPullbackWick(symbol: string, direction: 'CALL' | 'PUT', ema9: number, ema21: number): { ok: boolean; ratio: number } {
+  const candles = iqCandles.get(symbol.replace('-OTC', ''));
+  const wick = detectWickRejection(symbol, direction);
+  if (!candles || candles.length < 4 || !wick.ok) return { ok: false, ratio: wick.ratio };
+  // Retração: alguma das 5 velas ANTERIORES à última tocou/cruzou a EMA9 ou EMA21 contra a tendência
+  const prev = candles.slice(-6, -1);
+  const ref = Math.min(Math.abs(ema9), Math.abs(ema21)) || 1;
+  const touched = prev.some(k => direction === 'CALL'
+    ? k.l <= Math.max(ema9, ema21) + ref * 0.0005 // recuou até as médias
+    : k.h >= Math.min(ema9, ema21) - ref * 0.0005);
+  return { ok: touched, ratio: wick.ratio };
+}
+
 async function fetchRealPrices(supabase: any, extraSymbols?: string[]): Promise<Map<string, number>> {
   // Clean old candles (2h+)
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -915,9 +930,11 @@ async function analyzeAssetWithRealData(
       ? lower >= body * 1.5 && lower >= range * 0.4 && k.c >= k.o && ema21 > sma50 && px > ema21
       : upper >= body * 1.5 && upper >= range * 0.4 && k.c <= k.o && ema21 < sma50 && px < ema21;
   })();
-  const strategy: 'EDGE' | 'WICK' | 'AI' = edge ? 'EDGE' : wick.ok ? 'WICK' : 'AI';
+  const pullbackWick = detectPullbackWick(asset.symbol, type, ema9, ema21);
+  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : wick.ok ? 'WICK' : 'AI';
   if (wick.ok) confluenceCount++;
   if (edge) { confluenceCount += 2; console.log(`📡 ${asset.symbol}: EDGE SCANNER ${isCall ? 'BUY' : 'SELL'}`); }
+  if (pullbackWick.ok && !edge) { confluenceCount += 3; console.log(`🎯 ${asset.symbol}: PULLBACK + PAVIO ${isCall ? 'CALL' : 'PUT'} (pavio ${pullbackWick.ratio.toFixed(1)}x) — entrada prioritária`); }
   const expMinutes = 1; // expiração de 1 minuto a favor da tendência
 
   // NUNCA contra a tendência maior (EMA21 vs SMA50 + preço vs SMA50)
@@ -975,6 +992,8 @@ async function analyzeAssetWithRealData(
     strategy,
     reversalPattern: strategy === 'EDGE'
       ? `Edge Scanner ${isCall ? 'BUY' : 'SELL'}`
+      : strategy === 'PULLBACK'
+      ? `Pullback + Pavio ${isCall ? 'inferior' : 'superior'} ${pullbackWick.ratio.toFixed(1)}x (retração às médias)`
       : strategy === 'WICK'
       ? `Pavio ${isCall ? 'inferior' : 'superior'} ${wick.ratio.toFixed(1)}x corpo` + (hasReversal ? ` + ${pattern}` : '')
       : `IA ${hasReversal ? pattern : 'confluência'}`,

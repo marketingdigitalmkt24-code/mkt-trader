@@ -4,7 +4,6 @@ import { BankManagementCard } from '@/components/BankManagementCard';
 import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
 import { LiveOperationsCard } from '@/components/LiveOperationsCard';
 import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
-import { WinContinuationCard } from '@/components/WinContinuationCard';
 import { Timeframe, MarketType } from '@/types/trading';
 import { useAutoSignals } from '@/hooks/useAutoSignals';
 import { useSignalResults } from '@/hooks/useSignalResults';
@@ -72,10 +71,7 @@ const Index = () => {
         {/* Row 3: Live Operations + AI Status side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <LiveOperationsCard />
-          <div className="space-y-3 sm:space-y-4">
-            <AIAnalysisStatusCard />
-            <WinContinuationCard />
-          </div>
+          <AIAnalysisStatusCard />
         </div>
       </main>
     </div>

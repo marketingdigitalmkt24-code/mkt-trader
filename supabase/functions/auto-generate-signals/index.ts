@@ -992,6 +992,8 @@ async function analyzeAssetWithRealData(
     strategy,
     reversalPattern: strategy === 'EDGE'
       ? `Edge Scanner ${isCall ? 'BUY' : 'SELL'}`
+      : strategy === 'PULLBACK'
+      ? `Pullback + Pavio ${isCall ? 'inferior' : 'superior'} ${pullbackWick.ratio.toFixed(1)}x (retração às médias)`
       : strategy === 'WICK'
       ? `Pavio ${isCall ? 'inferior' : 'superior'} ${wick.ratio.toFixed(1)}x corpo` + (hasReversal ? ` + ${pattern}` : '')
       : `IA ${hasReversal ? pattern : 'confluência'}`,

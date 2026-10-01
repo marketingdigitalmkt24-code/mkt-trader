@@ -930,9 +930,11 @@ async function analyzeAssetWithRealData(
       ? lower >= body * 1.5 && lower >= range * 0.4 && k.c >= k.o && ema21 > sma50 && px > ema21
       : upper >= body * 1.5 && upper >= range * 0.4 && k.c <= k.o && ema21 < sma50 && px < ema21;
   })();
-  const strategy: 'EDGE' | 'WICK' | 'AI' = edge ? 'EDGE' : wick.ok ? 'WICK' : 'AI';
+  const pullbackWick = detectPullbackWick(asset.symbol, type, ema9, ema21);
+  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : wick.ok ? 'WICK' : 'AI';
   if (wick.ok) confluenceCount++;
   if (edge) { confluenceCount += 2; console.log(`📡 ${asset.symbol}: EDGE SCANNER ${isCall ? 'BUY' : 'SELL'}`); }
+  if (pullbackWick.ok && !edge) { confluenceCount += 3; console.log(`🎯 ${asset.symbol}: PULLBACK + PAVIO ${isCall ? 'CALL' : 'PUT'} (pavio ${pullbackWick.ratio.toFixed(1)}x) — entrada prioritária`); }
   const expMinutes = 1; // expiração de 1 minuto a favor da tendência
 
   // NUNCA contra a tendência maior (EMA21 vs SMA50 + preço vs SMA50)

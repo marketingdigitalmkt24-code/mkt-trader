@@ -1,0 +1,1 @@
+- Match IQ Option operations to `trading_signals` by `signal_id` when displaying strategy; there is no declared foreign key, and unmatched historical operations must remain unidentified rather than be guessed as IA.

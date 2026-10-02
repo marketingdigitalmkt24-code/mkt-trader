@@ -1,0 +1,2 @@
+- [x] Add strategy badges to IQ Option's latest operations, with honest labels for unmatched history.
+- [x] Compare recorded losses by strategy using linked IQ Option operations.

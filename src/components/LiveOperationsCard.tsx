@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, TrendingUp, TrendingDown, Target, Clock, Server, MonitorSmartphone, Loader2 } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, Target, Clock, MonitorSmartphone, Loader2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -27,7 +28,15 @@ interface RecentTrade {
   is_auto_trade: boolean;
   timeframe: string;
   signal_id: string;
+  strategy?: string;
 }
+
+const strategyLabels: Record<string, string> = {
+  PULLBACK: 'Pullback + Pavio',
+  EDGE: 'Edge Scanner',
+  AI: 'IA',
+  WICK: 'Pavio',
+};
 
 export function LiveOperationsCard() {
   const PAGE_SIZE = 10;
@@ -39,6 +48,7 @@ export function LiveOperationsCard() {
   const [openLoading, setOpenLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isFetchingRef = useRef(false);
+  const recentRequestRef = useRef(0);
 
   // Posições abertas na IQ Option (binária, digital e forex)
   const fetchOpen = async () => {
@@ -57,15 +67,29 @@ export function LiveOperationsCard() {
 
   // Fetch IQ Option trades (paginated, 10 per page, all time)
   const fetchRecentTrades = async () => {
+    const request = ++recentRequestRef.current;
     try {
       const from = (pageRef.current - 1) * PAGE_SIZE;
-      const { data, count } = await supabase
+      const { data, count, error } = await supabase
         .from('operation_results')
         .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id', { count: 'exact' })
         .or('timeframe.is.null,timeframe.neq.MT5')
+        .not('signal_id', 'like', 'mt5-%')
         .order('created_at', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
-      if (data) setRecentTrades(data as RecentTrade[]);
+      if (error || !data) return;
+      const ids = [...new Set(data.map(trade => trade.signal_id).filter(Boolean))];
+      const { data: signals } = ids.length
+        ? await supabase.from('trading_signals').select('signal_id, indicators').in('signal_id', ids)
+        : { data: [] };
+      const strategies = new Map((signals || []).map(signal => [
+        signal.signal_id,
+        typeof signal.indicators === 'object' && signal.indicators !== null && !Array.isArray(signal.indicators) && 'strategy' in signal.indicators
+          ? String(signal.indicators.strategy)
+          : '',
+      ]));
+      if (request !== recentRequestRef.current) return;
+      setRecentTrades(data.map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[]);
       if (typeof count === 'number') setTotalCount(count);
     } catch {
       // silent
@@ -200,10 +224,10 @@ export function LiveOperationsCard() {
             <div className="space-y-1">
               {iqTrades.map(trade => (
                 <div key={trade.id} className={cn(
-                  "flex items-center justify-between p-2 rounded-lg text-xs",
+                  "flex flex-wrap items-center justify-between gap-x-2 gap-y-1 p-2 rounded-lg text-xs",
                   getResultBg(trade.result)
                 )}>
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                     {trade.direction === 'CALL' || trade.direction === 'call' ? (
                       <TrendingUp className="w-3 h-3 text-call shrink-0" />
                     ) : (
@@ -216,8 +240,11 @@ export function LiveOperationsCard() {
                     {trade.timeframe === 'FOREX' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">FOREX</Badge>
                     )}
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal text-muted-foreground">
+                      {strategyLabels[trade.strategy || ''] || 'Não identificada'}
+                    </Badge>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0 ml-auto">
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
                       {trade.result === 'pending' || trade.result === 'open' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
                     </span>
@@ -234,23 +261,23 @@ export function LiveOperationsCard() {
                 </span>
               </div>
               <div className="flex items-center justify-between pt-2">
-                <button
-                  className="text-xs px-2 py-1 rounded-md bg-secondary disabled:opacity-40"
+                <Button
+                  size="sm" variant="secondary" className="h-7 px-2 text-xs"
                   disabled={page <= 1}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                 >
                   ← Anterior
-                </button>
+                </Button>
                 <span className="text-[10px] text-muted-foreground font-mono">
                   Página {page} de {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
                 </span>
-                <button
-                  className="text-xs px-2 py-1 rounded-md bg-secondary disabled:opacity-40"
+                <Button
+                  size="sm" variant="secondary" className="h-7 px-2 text-xs"
                   disabled={page >= Math.ceil(totalCount / PAGE_SIZE)}
                   onClick={() => setPage(p => p + 1)}
                 >
                   Próxima →
-                </button>
+                </Button>
               </div>
             </div>
           ) : (

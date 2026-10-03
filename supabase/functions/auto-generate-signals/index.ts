@@ -1361,8 +1361,8 @@ serve(async (req) => {
         // SÓ REPETE SETUPS VENCEDORES: entrada igual (estratégia + direção + posição) precisa ter
         // histórico com WIN e mais wins que losses. Setup que perdeu mais (ou só perdeu) é bloqueado.
         const ss = stratStats[setupKey];
-        if (!ss || ss.w === 0) { console.log(`⏭️ ${s.asset} ${setupKey}: setup sem WIN no histórico — não repetir`); return false; }
-        if (ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
+        // Setup novo (sem histórico) é liberado; bloqueia só quem perdeu ≥ ganhou
+        if (ss && ss.w + ss.l > 0 && ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
         return true;
       });
       aiApprovedSignals.sort((a, b) => b.priority - a.priority);

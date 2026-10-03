@@ -1264,8 +1264,23 @@ serve(async (req) => {
         for (const approved of executeSignals) {
           const candidate = candidates.find(c => c.asset.toUpperCase() === approved.asset.toUpperCase());
           if (candidate) {
-            // USAR DIREÇÃO RECOMENDADA PELA GROQ/IA (não inverter cegamente)
-            const bestDir = approved.bestDirection || candidate.type;
+            // VALIDAÇÃO DE DIREÇÃO: o candidato já passou pelo filtro de tendência na sua direção.
+            // Se a IA inverter a direção, a entrada ficaria contra a tendência → descartar.
+            const aiDir = String(approved.bestDirection || candidate.type).toUpperCase();
+            if (aiDir !== candidate.type) {
+              console.log(`⛔ ${candidate.asset}: IA sugeriu ${aiDir} mas a tendência validada é ${candidate.type} — descartado`);
+              continue;
+            }
+            const ma = candidate.indicators?.movingAverages || {};
+            const macdH = candidate.indicators?.macd?.histogram ?? 0;
+            const trendOk = aiDir === 'CALL'
+              ? (ma.ema9 > ma.ema21 && ma.ema21 > ma.sma50 && macdH >= 0)
+              : (ma.ema9 < ma.ema21 && ma.ema21 < ma.sma50 && macdH <= 0);
+            if (!trendOk) {
+              console.log(`⛔ ${candidate.asset} ${aiDir}: médias/MACD não confirmam a direção — descartado`);
+              continue;
+            }
+            const bestDir = aiDir;
             aiApprovedSignals.push({
               ...candidate,
               type: bestDir, // Direção corrigida pela IA
@@ -1305,7 +1320,10 @@ serve(async (req) => {
         const sMap = new Map((sigs || []).map((s: any) => [s.signal_id, s.indicators || {}]));
         for (const o of ops || []) {
           const ind: any = sMap.get(o.signal_id) || {};
-          const strat = String(ind.reversalPattern || '').startsWith('Pavio') ? 'WICK' : 'AI';
+          const strat = ['EDGE', 'PULLBACK', 'WICK', 'AI'].includes(ind.strategy)
+            ? ind.strategy
+            : (String(ind.reversalPattern || '').startsWith('Pavio') ? 'WICK' : null);
+          if (!strat) continue; // histórico sem estratégia registrada: não contar como IA
           const dir = String(o.direction || '').toUpperCase();
           for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`]) {
             stratStats[k] ||= { w: 0, l: 0 };

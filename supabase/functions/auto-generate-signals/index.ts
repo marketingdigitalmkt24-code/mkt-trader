@@ -1332,8 +1332,9 @@ serve(async (req) => {
         }
       } catch (e) { console.log('⚠️ aprendizado de estratégia falhou', e); }
       const wr = (k: string) => { const s = stratStats[k]; return s && s.w + s.l >= 3 ? s.w / (s.w + s.l) : null; };
-      const bestStrat = (wr('WICK') ?? 0.5) >= (wr('AI') ?? 0.5) ? 'WICK' : 'AI';
-      console.log(`📚 Estratégias: WICK ${JSON.stringify(stratStats.WICK || {})} | AI ${JSON.stringify(stratStats.AI || {})} → preferida ${bestStrat}`);
+      const bestStrat = ['EDGE', 'PULLBACK', 'WICK', 'AI']
+        .sort((a, b) => (wr(b) ?? 0.5) - (wr(a) ?? 0.5))[0];
+      console.log(`📚 Estratégias: ${['EDGE', 'PULLBACK', 'WICK', 'AI'].map(k => `${k} ${JSON.stringify(stratStats[k] || {})}`).join(' | ')} → preferida ${bestStrat}`);
       aiApprovedSignals = aiApprovedSignals.filter((s: any) => {
         const st = s.indicators.strategy || 'AI';
         const setupWR = wr(`${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`);

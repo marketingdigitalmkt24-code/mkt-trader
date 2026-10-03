@@ -946,6 +946,12 @@ async function analyzeAssetWithRealData(
     return null;
   }
 
+  // ===== PAVIO LONGO OBRIGATÓRIO (em cima p/ PUT, embaixo p/ CALL), mesmo em tendência forte =====
+  if (!wick.ok && !edge && !pullbackWick.ok) {
+    console.log(`🕯️ ${asset.symbol} ${type}: sem pavio longo de rejeição — entrada não permitida`);
+    return null;
+  }
+
   // ===== SÓ TENDÊNCIA MUITO FORTE (ou gatilho EDGE SCANNER a favor da tendência) =====
   if (!edge) {
     const atrVal = Math.max(atr?.value || 0, lastPx * 0.00002);
@@ -1337,10 +1343,15 @@ serve(async (req) => {
       console.log(`📚 Estratégias: ${['EDGE', 'PULLBACK', 'WICK', 'AI'].map(k => `${k} ${JSON.stringify(stratStats[k] || {})}`).join(' | ')} → preferida ${bestStrat}`);
       aiApprovedSignals = aiApprovedSignals.filter((s: any) => {
         const st = s.indicators.strategy || 'AI';
-        const setupWR = wr(`${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`);
+        const setupKey = `${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`;
+        const setupWR = wr(setupKey);
         s.setupWR = setupWR;
         s.priority = (s.aiConfidence || 0) + (st === bestStrat ? 10 : 0) + (setupWR !== null ? (setupWR - 0.5) * 40 : 0);
-        if (setupWR !== null && setupWR < 0.4) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: setup com mais perdas (${Math.round(setupWR * 100)}%)`); return false; }
+        // SÓ REPETE SETUPS VENCEDORES: entrada igual (estratégia + direção + posição) precisa ter
+        // histórico com WIN e mais wins que losses. Setup que perdeu mais (ou só perdeu) é bloqueado.
+        const ss = stratStats[setupKey];
+        if (!ss || ss.w === 0) { console.log(`⏭️ ${s.asset} ${setupKey}: setup sem WIN no histórico — não repetir`); return false; }
+        if (ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
         return true;
       });
       aiApprovedSignals.sort((a, b) => b.priority - a.priority);
@@ -1545,6 +1556,20 @@ serve(async (req) => {
                   console.warn('⚠️ Stake dinâmico falhou, usando valor fixo:', e);
                 }
               }
+
+              // ===== PROTEÇÃO DO DIA: não devolver lucro nem afundar a banca =====
+              try {
+                const brtNow = new Date(Date.now() - 3 * 3600e3);
+                const dayStartUtc = new Date(Date.UTC(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate(), 3)).toISOString();
+                const { data: dayOps } = await supabase.from('operation_results')
+                  .select('profit, created_at').gte('created_at', dayStartUtc).neq('timeframe', 'MT5')
+                  .in('result', ['win', 'loss']).order('created_at', { ascending: true }).limit(500);
+                let run = 0, peak = 0;
+                for (const o of dayOps || []) { run += Number(o.profit) || 0; peak = Math.max(peak, run); }
+                const maxLoss = iqTradeAmount * 3;
+                if (run <= -maxLoss) { console.log(`🛡️ Dia em -$${Math.abs(run).toFixed(2)} (limite -$${maxLoss}) — operações pausadas até amanhã`); continue; }
+                if (peak >= iqTradeAmount && run <= peak * 0.5) { console.log(`🛡️ Lucro do dia caiu de $${peak.toFixed(2)} para $${run.toFixed(2)} — pausado para não devolver o lucro`); continue; }
+              } catch (e) { console.warn('⚠️ proteção do dia falhou', e); }
 
               // Gale removido: valor sempre fixo/base
               const expiration = 1; // sempre 1 minuto

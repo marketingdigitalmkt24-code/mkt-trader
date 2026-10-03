@@ -348,6 +348,17 @@ function detectWickRejection(symbol: string, direction: 'CALL' | 'PUT'): { ok: b
   return { ok, strong: ok && ratio >= 3, ratio };
 }
 
+// Pavio leve (filtro obrigatório): pavio a favor ≥ 1x corpo e ≥ 35% da vela
+function hasLightWick(symbol: string, direction: 'CALL' | 'PUT'): boolean {
+  const k = lastCandles.get(symbol.replace('-OTC', ''));
+  if (!k) return false;
+  const range = k.h - k.l;
+  if (range <= 0) return false;
+  const body = Math.max(Math.abs(k.c - k.o), range * 0.02);
+  const wick = direction === 'CALL' ? Math.min(k.o, k.c) - k.l : k.h - Math.max(k.o, k.c);
+  return wick >= body && wick >= range * 0.35;
+}
+
 // PULLBACK + PAVIO: nas velas anteriores o preço recuou até a EMA9/EMA21 (retração)
 // e a última vela fechada tem pavio longo de rejeição a favor da tendência → entrada prioritária
 function detectPullbackWick(symbol: string, direction: 'CALL' | 'PUT', ema9: number, ema21: number): { ok: boolean; ratio: number } {

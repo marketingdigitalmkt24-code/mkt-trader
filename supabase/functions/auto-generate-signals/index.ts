@@ -348,6 +348,17 @@ function detectWickRejection(symbol: string, direction: 'CALL' | 'PUT'): { ok: b
   return { ok, strong: ok && ratio >= 3, ratio };
 }
 
+// Pavio leve (filtro obrigatório): pavio a favor ≥ 1x corpo e ≥ 35% da vela
+function hasLightWick(symbol: string, direction: 'CALL' | 'PUT'): boolean {
+  const k = lastCandles.get(symbol.replace('-OTC', ''));
+  if (!k) return false;
+  const range = k.h - k.l;
+  if (range <= 0) return false;
+  const body = Math.max(Math.abs(k.c - k.o), range * 0.02);
+  const wick = direction === 'CALL' ? Math.min(k.o, k.c) - k.l : k.h - Math.max(k.o, k.c);
+  return wick >= body && wick >= range * 0.35;
+}
+
 // PULLBACK + PAVIO: nas velas anteriores o preço recuou até a EMA9/EMA21 (retração)
 // e a última vela fechada tem pavio longo de rejeição a favor da tendência → entrada prioritária
 function detectPullbackWick(symbol: string, direction: 'CALL' | 'PUT', ema9: number, ema21: number): { ok: boolean; ratio: number } {
@@ -1350,8 +1361,8 @@ serve(async (req) => {
         // SÓ REPETE SETUPS VENCEDORES: entrada igual (estratégia + direção + posição) precisa ter
         // histórico com WIN e mais wins que losses. Setup que perdeu mais (ou só perdeu) é bloqueado.
         const ss = stratStats[setupKey];
-        if (!ss || ss.w === 0) { console.log(`⏭️ ${s.asset} ${setupKey}: setup sem WIN no histórico — não repetir`); return false; }
-        if (ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
+        // Setup novo (sem histórico) é liberado; bloqueia só quem perdeu ≥ ganhou
+        if (ss && ss.w + ss.l > 0 && ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
         return true;
       });
       aiApprovedSignals.sort((a, b) => b.priority - a.priority);

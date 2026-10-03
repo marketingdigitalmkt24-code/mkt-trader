@@ -946,6 +946,12 @@ async function analyzeAssetWithRealData(
     return null;
   }
 
+  // ===== PAVIO LONGO OBRIGATÓRIO (em cima p/ PUT, embaixo p/ CALL), mesmo em tendência forte =====
+  if (!wick.ok && !edge && !pullbackWick.ok) {
+    console.log(`🕯️ ${asset.symbol} ${type}: sem pavio longo de rejeição — entrada não permitida`);
+    return null;
+  }
+
   // ===== SÓ TENDÊNCIA MUITO FORTE (ou gatilho EDGE SCANNER a favor da tendência) =====
   if (!edge) {
     const atrVal = Math.max(atr?.value || 0, lastPx * 0.00002);
@@ -1337,10 +1343,15 @@ serve(async (req) => {
       console.log(`📚 Estratégias: ${['EDGE', 'PULLBACK', 'WICK', 'AI'].map(k => `${k} ${JSON.stringify(stratStats[k] || {})}`).join(' | ')} → preferida ${bestStrat}`);
       aiApprovedSignals = aiApprovedSignals.filter((s: any) => {
         const st = s.indicators.strategy || 'AI';
-        const setupWR = wr(`${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`);
+        const setupKey = `${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`;
+        const setupWR = wr(setupKey);
         s.setupWR = setupWR;
         s.priority = (s.aiConfidence || 0) + (st === bestStrat ? 10 : 0) + (setupWR !== null ? (setupWR - 0.5) * 40 : 0);
-        if (setupWR !== null && setupWR < 0.4) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: setup com mais perdas (${Math.round(setupWR * 100)}%)`); return false; }
+        // SÓ REPETE SETUPS VENCEDORES: entrada igual (estratégia + direção + posição) precisa ter
+        // histórico com WIN e mais wins que losses. Setup que perdeu mais (ou só perdeu) é bloqueado.
+        const ss = stratStats[setupKey];
+        if (!ss || ss.w === 0) { console.log(`⏭️ ${s.asset} ${setupKey}: setup sem WIN no histórico — não repetir`); return false; }
+        if (ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
         return true;
       });
       aiApprovedSignals.sort((a, b) => b.priority - a.priority);

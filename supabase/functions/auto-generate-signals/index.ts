@@ -1325,7 +1325,7 @@ serve(async (req) => {
 
     if (aiApprovedSignals.length > 0) {
       // ===== APRENDIZADO: estratégia/setup que mais trouxe WIN (em todos os pares) =====
-      const stratStats: Record<string, { w: number; l: number }> = {};
+      const stratStats: Record<string, { w: number; l: number; pl?: number }> = {};
       try {
         const since = new Date(Date.now() - 14 * 864e5).toISOString();
         const { data: ops } = await supabase.from('operation_results')

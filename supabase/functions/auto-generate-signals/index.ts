@@ -1572,19 +1572,7 @@ serve(async (req) => {
                 }
               }
 
-              // ===== PROTEÇÃO DO DIA: não devolver lucro nem afundar a banca =====
-              try {
-                const brtNow = new Date(Date.now() - 3 * 3600e3);
-                const dayStartUtc = new Date(Date.UTC(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate(), 3)).toISOString();
-                const { data: dayOps } = await supabase.from('operation_results')
-                  .select('profit, created_at').gte('created_at', dayStartUtc).neq('timeframe', 'MT5')
-                  .in('result', ['win', 'loss']).order('created_at', { ascending: true }).limit(500);
-                let run = 0, peak = 0;
-                for (const o of dayOps || []) { run += Number(o.profit) || 0; peak = Math.max(peak, run); }
-                const maxLoss = iqTradeAmount * 3;
-                if (run <= -maxLoss) { console.log(`🛡️ Dia em -$${Math.abs(run).toFixed(2)} (limite -$${maxLoss}) — operações pausadas até amanhã`); continue; }
-                if (peak >= iqTradeAmount && run <= peak * 0.5) { console.log(`🛡️ Lucro do dia caiu de $${peak.toFixed(2)} para $${run.toFixed(2)} — pausado para não devolver o lucro`); continue; }
-              } catch (e) { console.warn('⚠️ proteção do dia falhou', e); }
+              // Proteção diária removida a pedido do usuário — sem pausa por lucro/perda do dia
 
               // Gale removido: valor sempre fixo/base
               const expiration = 1; // sempre 1 minuto

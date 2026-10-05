@@ -1329,8 +1329,8 @@ serve(async (req) => {
       try {
         const since = new Date(Date.now() - 14 * 864e5).toISOString();
         const { data: ops } = await supabase.from('operation_results')
-          .select('signal_id, direction, result').gte('created_at', since)
-          .in('result', ['win', 'loss']).neq('timeframe', 'MT5').limit(500);
+          .select('signal_id, asset, direction, result, profit').gte('created_at', since)
+          .in('result', ['win', 'loss']).neq('timeframe', 'MT5').limit(1000);
         const ids = (ops || []).map((o: any) => o.signal_id).filter(Boolean);
         const { data: sigs } = ids.length ? await supabase.from('trading_signals')
           .select('signal_id, indicators').in('signal_id', ids) : { data: [] };
@@ -1342,9 +1342,11 @@ serve(async (req) => {
             : (String(ind.reversalPattern || '').startsWith('Pavio') ? 'WICK' : null);
           if (!strat) continue; // histórico sem estratégia registrada: não contar como IA
           const dir = String(o.direction || '').toUpperCase();
-          for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`]) {
-            stratStats[k] ||= { w: 0, l: 0 };
+          const mk = String(o.asset || '').includes('OTC') ? 'OTC' : 'REAL';
+          for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`, `MK|${mk}|${strat}|${dir}`]) {
+            stratStats[k] ||= { w: 0, l: 0, pl: 0 } as any;
             o.result === 'win' ? stratStats[k].w++ : stratStats[k].l++;
+            (stratStats[k] as any).pl += Number(o.profit) || 0;
           }
         }
       } catch (e) { console.log('⚠️ aprendizado de estratégia falhou', e); }
@@ -1354,12 +1356,14 @@ serve(async (req) => {
       console.log(`📚 Estratégias: ${['EDGE', 'PULLBACK', 'WICK', 'AI'].map(k => `${k} ${JSON.stringify(stratStats[k] || {})}`).join(' | ')} → preferida ${bestStrat}`);
       aiApprovedSignals = aiApprovedSignals.filter((s: any) => {
         const st = s.indicators.strategy || 'AI';
+        // SÓ ESTRATÉGIAS LUCRATIVAS por mercado (pares normais x OTC) + direção, últimos 14 dias
+        const mk = String(s.asset).includes('OTC') ? 'OTC' : 'REAL';
+        const ms: any = stratStats[`MK|${mk}|${st}|${s.type}`];
+        if (ms && ms.w + ms.l >= 5 && ms.pl <= 0) { console.log(`⏭️ ${s.asset} ${mk} ${st}/${s.type}: estratégia no prejuízo (${ms.w}W/${ms.l}L, $${ms.pl.toFixed(2)}) — bloqueada`); return false; }
         const setupKey = `${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`;
         const setupWR = wr(setupKey);
         s.setupWR = setupWR;
         s.priority = (s.aiConfidence || 0) + (st === bestStrat ? 10 : 0) + (setupWR !== null ? (setupWR - 0.5) * 40 : 0);
-        // SÓ REPETE SETUPS VENCEDORES: entrada igual (estratégia + direção + posição) precisa ter
-        // histórico com WIN e mais wins que losses. Setup que perdeu mais (ou só perdeu) é bloqueado.
         const ss = stratStats[setupKey];
         // Setup novo (sem histórico) é liberado; bloqueia só quem perdeu ≥ ganhou
         if (ss && ss.w + ss.l > 0 && ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }

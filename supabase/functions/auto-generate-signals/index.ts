@@ -942,7 +942,7 @@ async function analyzeAssetWithRealData(
       : upper >= body * 1.5 && upper >= range * 0.4 && k.c <= k.o && ema21 < sma50 && px < ema21;
   })();
   const pullbackWick = detectPullbackWick(asset.symbol, type, ema9, ema21);
-  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : wick.ok ? 'WICK' : 'AI';
+  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : 'AI';
   if (wick.ok) confluenceCount++;
   if (edge) { confluenceCount += 2; console.log(`📡 ${asset.symbol}: EDGE SCANNER ${isCall ? 'BUY' : 'SELL'}`); }
   if (pullbackWick.ok && !edge) { confluenceCount += 3; console.log(`🎯 ${asset.symbol}: PULLBACK + PAVIO ${isCall ? 'CALL' : 'PUT'} (pavio ${pullbackWick.ratio.toFixed(1)}x) — entrada prioritária`); }
@@ -957,9 +957,9 @@ async function analyzeAssetWithRealData(
     return null;
   }
 
-  // ===== PAVIO LONGO OBRIGATÓRIO (em cima p/ PUT, embaixo p/ CALL), mesmo em tendência forte =====
-  if (!wick.ok && !edge && !pullbackWick.ok) {
-    console.log(`🕯️ ${asset.symbol} ${type}: sem pavio longo de rejeição — entrada não permitida`);
+  // ===== PAVIO SOZINHO DESLIGADO: só entra EDGE SCANNER ou PULLBACK + PAVIO =====
+  if (!edge && !pullbackWick.ok) {
+    console.log(`🕯️ ${asset.symbol} ${type}: sem Edge Scanner nem Pullback + Pavio — entrada não permitida`);
     return null;
   }
 

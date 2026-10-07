@@ -374,6 +374,31 @@ function detectPullbackWick(symbol: string, direction: 'CALL' | 'PUT', ema9: num
   return { ok: touched, ratio: wick.ratio };
 }
 
+// TESTE NO PRÓPRIO GRÁFICO DA IQ OPTION (sem depender de operações feitas):
+// em cada vela passada com pavio de rejeição a favor + tendência (EMA9 vs EMA21) na mesma direção,
+// confere se a vela SEGUINTE fechou a favor. Retorna wins/losses dessa entrada no gráfico do ativo.
+function chartBacktest(symbol: string, direction: 'CALL' | 'PUT'): { w: number; l: number } {
+  const cs = (iqCandles.get(symbol.replace('-OTC', '')) || []).slice(0, -1)
+    .filter(k => [k.o, k.h, k.l, k.c].every(v => typeof v === 'number'));
+  let w = 0, l = 0;
+  if (cs.length < 25) return { w, l };
+  const ema = (p: number) => { const a = 2 / (p + 1); const out: number[] = []; cs.forEach((k, i) => out.push(i ? k.c * a + out[i - 1] * (1 - a) : k.c)); return out; };
+  const e9 = ema(9), e21 = ema(21);
+  for (let i = 21; i < cs.length - 1; i++) {
+    const k = cs[i], n = cs[i + 1];
+    const range = k.h - k.l; if (range <= 0) continue;
+    const body = Math.max(Math.abs(k.c - k.o), range * 0.02);
+    const wick = direction === 'CALL' ? Math.min(k.o, k.c) - k.l : k.h - Math.max(k.o, k.c);
+    const trendOk = direction === 'CALL' ? e9[i] > e21[i] : e9[i] < e21[i];
+    if (!trendOk || wick < body || wick < range * 0.35) continue;
+    const win = direction === 'CALL' ? n.c > n.o : n.c < n.o;
+    if (n.c === n.o) continue;
+    if (win) w++; else l++;
+  }
+  return { w, l };
+}
+
+
 async function fetchRealPrices(supabase: any, extraSymbols?: string[]): Promise<Map<string, number>> {
   // Clean old candles (2h+)
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -1366,20 +1391,17 @@ serve(async (req) => {
         // SÓ ESTRATÉGIAS LUCRATIVAS por mercado (pares normais x OTC) + direção, últimos 14 dias
         const mk = String(s.asset).includes('OTC') ? 'OTC' : 'REAL';
         const ms: any = stratStats[`MK|${mk}|${st}|${s.type}`];
-        // Leitura por gráfico: cada ativo+direção+estratégia é julgado pelo próprio histórico (14 dias)
-        const adAll: any = stratStats[`AD|${s.asset}|${st}|${s.type}`];
-        const adProven = adAll && adAll.w + adAll.l >= 3 && adAll.w > adAll.l;
-        if (adAll && adAll.w + adAll.l >= 3 && !adProven) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: gráfico com perdas ≥ wins (${adAll.w}W/${adAll.l}L) — bloqueado`); return false; }
-        if (!adProven && ms && ms.w + ms.l >= 5 && ms.pl <= 0) { console.log(`⏭️ ${s.asset} ${mk} ${st}/${s.type}: estratégia no prejuízo (${ms.w}W/${ms.l}L, $${ms.pl.toFixed(2)}) — bloqueada`); return false; }
-        if (adProven) console.log(`✅ ${s.asset} ${st}/${s.type}: gráfico lucrativo (${adAll.w}W/${adAll.l}L) — liberado`);
-        // EDGE SCANNER: só entra em ativo+direção que já deu MAIS WINS que LOSSES (mín. 3 entradas, últimos 14 dias)
-        if (st === 'EDGE') {
-          const ad: any = adAll;
-          if (!ad || ad.w + ad.l < 3 || ad.w <= ad.l) {
-            console.log(`⏭️ ${s.asset} EDGE/${s.type}: ativo+direção sem mais wins que losses (${ad ? `${ad.w}W/${ad.l}L` : 'sem histórico'}) — bloqueado`);
-            return false;
-          }
-        }
+        // Leitura por gráfico: histórico de operações quando houver; senão, teste no PRÓPRIO gráfico da IQ Option
+        const adOps: any = stratStats[`AD|${s.asset}|${st}|${s.type}`];
+        const hasOps = adOps && adOps.w + adOps.l >= 3;
+        const bt = chartBacktest(s.asset, s.type);
+        const adAll: any = hasOps ? adOps : bt;
+        const src = hasOps ? 'operações' : 'gráfico IQ';
+        const adProven = adAll.w + adAll.l >= 3 && adAll.w > adAll.l;
+        if (!adProven) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: ${src} sem mais wins que losses (${adAll.w}W/${adAll.l}L) — bloqueado`); return false; }
+        if (hasOps && ms && ms.w + ms.l >= 5 && ms.pl <= 0 && !adProven) return false;
+        console.log(`✅ ${s.asset} ${st}/${s.type}: ${src} lucrativo (${adAll.w}W/${adAll.l}L) — liberado`);
+        s.chartWR = adAll.w / (adAll.w + adAll.l);
         const setupKey = `${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`;
         const setupWR = wr(setupKey);
         s.setupWR = setupWR;

@@ -201,7 +201,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                 const nowSec = Math.floor(Date.now() / 1000);
                 for (const a of uniq.values()) {
                   reqMap.set(`c${a.id}`, a);
-                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 40 } } }));
+                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 120 } } }));
                 }
                 candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); resolve({ assets, error: null }); }, 6000);
                 pendingAssets = assets;

@@ -1366,10 +1366,15 @@ serve(async (req) => {
         // SÓ ESTRATÉGIAS LUCRATIVAS por mercado (pares normais x OTC) + direção, últimos 14 dias
         const mk = String(s.asset).includes('OTC') ? 'OTC' : 'REAL';
         const ms: any = stratStats[`MK|${mk}|${st}|${s.type}`];
-        if (ms && ms.w + ms.l >= 5 && ms.pl <= 0) { console.log(`⏭️ ${s.asset} ${mk} ${st}/${s.type}: estratégia no prejuízo (${ms.w}W/${ms.l}L, $${ms.pl.toFixed(2)}) — bloqueada`); return false; }
+        // Leitura por gráfico: cada ativo+direção+estratégia é julgado pelo próprio histórico (14 dias)
+        const adAll: any = stratStats[`AD|${s.asset}|${st}|${s.type}`];
+        const adProven = adAll && adAll.w + adAll.l >= 3 && adAll.w > adAll.l;
+        if (adAll && adAll.w + adAll.l >= 3 && !adProven) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: gráfico com perdas ≥ wins (${adAll.w}W/${adAll.l}L) — bloqueado`); return false; }
+        if (!adProven && ms && ms.w + ms.l >= 5 && ms.pl <= 0) { console.log(`⏭️ ${s.asset} ${mk} ${st}/${s.type}: estratégia no prejuízo (${ms.w}W/${ms.l}L, $${ms.pl.toFixed(2)}) — bloqueada`); return false; }
+        if (adProven) console.log(`✅ ${s.asset} ${st}/${s.type}: gráfico lucrativo (${adAll.w}W/${adAll.l}L) — liberado`);
         // EDGE SCANNER: só entra em ativo+direção que já deu MAIS WINS que LOSSES (mín. 3 entradas, últimos 14 dias)
         if (st === 'EDGE') {
-          const ad: any = stratStats[`AD|${s.asset}|EDGE|${s.type}`];
+          const ad: any = adAll;
           if (!ad || ad.w + ad.l < 3 || ad.w <= ad.l) {
             console.log(`⏭️ ${s.asset} EDGE/${s.type}: ativo+direção sem mais wins que losses (${ad ? `${ad.w}W/${ad.l}L` : 'sem histórico'}) — bloqueado`);
             return false;

@@ -1343,7 +1343,7 @@ serve(async (req) => {
           if (!strat) continue; // histórico sem estratégia registrada: não contar como IA
           const dir = String(o.direction || '').toUpperCase();
           const mk = String(o.asset || '').includes('OTC') ? 'OTC' : 'REAL';
-          for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`, `MK|${mk}|${strat}|${dir}`]) {
+          for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`, `MK|${mk}|${strat}|${dir}`, `AD|${o.asset}|${strat}|${dir}`]) {
             stratStats[k] ||= { w: 0, l: 0, pl: 0 } as any;
             o.result === 'win' ? stratStats[k].w++ : stratStats[k].l++;
             (stratStats[k] as any).pl += Number(o.profit) || 0;
@@ -1360,6 +1360,14 @@ serve(async (req) => {
         const mk = String(s.asset).includes('OTC') ? 'OTC' : 'REAL';
         const ms: any = stratStats[`MK|${mk}|${st}|${s.type}`];
         if (ms && ms.w + ms.l >= 5 && ms.pl <= 0) { console.log(`⏭️ ${s.asset} ${mk} ${st}/${s.type}: estratégia no prejuízo (${ms.w}W/${ms.l}L, $${ms.pl.toFixed(2)}) — bloqueada`); return false; }
+        // EDGE SCANNER: só entra em ativo+direção que já deu MAIS WINS que LOSSES (mín. 3 entradas, últimos 14 dias)
+        if (st === 'EDGE') {
+          const ad: any = stratStats[`AD|${s.asset}|EDGE|${s.type}`];
+          if (!ad || ad.w + ad.l < 3 || ad.w <= ad.l) {
+            console.log(`⏭️ ${s.asset} EDGE/${s.type}: ativo+direção sem mais wins que losses (${ad ? `${ad.w}W/${ad.l}L` : 'sem histórico'}) — bloqueado`);
+            return false;
+          }
+        }
         const setupKey = `${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`;
         const setupWR = wr(setupKey);
         s.setupWR = setupWR;

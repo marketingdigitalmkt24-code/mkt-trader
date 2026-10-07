@@ -1328,13 +1328,20 @@ serve(async (req) => {
       const stratStats: Record<string, { w: number; l: number; pl?: number }> = {};
       try {
         const since = new Date(Date.now() - 14 * 864e5).toISOString();
-        const { data: ops } = await supabase.from('operation_results')
+        const { data: ops, error: opsErr } = await supabase.from('operation_results')
           .select('signal_id, asset, direction, result, profit').gte('created_at', since)
-          .in('result', ['win', 'loss']).neq('timeframe', 'MT5').limit(1000);
-        const ids = (ops || []).map((o: any) => o.signal_id).filter(Boolean);
-        const { data: sigs } = ids.length ? await supabase.from('trading_signals')
-          .select('signal_id, indicators').in('signal_id', ids) : { data: [] };
-        const sMap = new Map((sigs || []).map((s: any) => [s.signal_id, s.indicators || {}]));
+          .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
+          .order('created_at', { ascending: false }).limit(1000);
+        if (opsErr) console.log('⚠️ aprendizado: erro ops', opsErr.message);
+        const ids = [...new Set((ops || []).map((o: any) => o.signal_id).filter(Boolean))];
+        const sMap = new Map<string, any>();
+        // Busca em lotes: lista grande no filtro estoura o tamanho da URL e volta vazia
+        for (let i = 0; i < ids.length; i += 100) {
+          const { data: sigs, error: sErr } = await supabase.from('trading_signals')
+            .select('signal_id, indicators').in('signal_id', ids.slice(i, i + 100));
+          if (sErr) console.log('⚠️ aprendizado: erro sinais', sErr.message);
+          for (const s of sigs || []) sMap.set((s as any).signal_id, (s as any).indicators || {});
+        }
         for (const o of ops || []) {
           const ind: any = sMap.get(o.signal_id) || {};
           const strat = ['EDGE', 'PULLBACK', 'WICK', 'AI'].includes(ind.strategy)

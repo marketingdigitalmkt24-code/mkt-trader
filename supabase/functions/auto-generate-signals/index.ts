@@ -374,6 +374,31 @@ function detectPullbackWick(symbol: string, direction: 'CALL' | 'PUT', ema9: num
   return { ok: touched, ratio: wick.ratio };
 }
 
+// TESTE NO PRÓPRIO GRÁFICO DA IQ OPTION (sem depender de operações feitas):
+// em cada vela passada com pavio de rejeição a favor + tendência (EMA9 vs EMA21) na mesma direção,
+// confere se a vela SEGUINTE fechou a favor. Retorna wins/losses dessa entrada no gráfico do ativo.
+function chartBacktest(symbol: string, direction: 'CALL' | 'PUT'): { w: number; l: number } {
+  const cs = (iqCandles.get(symbol.replace('-OTC', '')) || []).slice(0, -1)
+    .filter(k => [k.o, k.h, k.l, k.c].every(v => typeof v === 'number'));
+  let w = 0, l = 0;
+  if (cs.length < 25) return { w, l };
+  const ema = (p: number) => { const a = 2 / (p + 1); const out: number[] = []; cs.forEach((k, i) => out.push(i ? k.c * a + out[i - 1] * (1 - a) : k.c)); return out; };
+  const e9 = ema(9), e21 = ema(21);
+  for (let i = 21; i < cs.length - 1; i++) {
+    const k = cs[i], n = cs[i + 1];
+    const range = k.h - k.l; if (range <= 0) continue;
+    const body = Math.max(Math.abs(k.c - k.o), range * 0.02);
+    const wick = direction === 'CALL' ? Math.min(k.o, k.c) - k.l : k.h - Math.max(k.o, k.c);
+    const trendOk = direction === 'CALL' ? e9[i] > e21[i] : e9[i] < e21[i];
+    if (!trendOk || wick < body || wick < range * 0.35) continue;
+    const win = direction === 'CALL' ? n.c > n.o : n.c < n.o;
+    if (n.c === n.o) continue;
+    if (win) w++; else l++;
+  }
+  return { w, l };
+}
+
+
 async function fetchRealPrices(supabase: any, extraSymbols?: string[]): Promise<Map<string, number>> {
   // Clean old candles (2h+)
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();

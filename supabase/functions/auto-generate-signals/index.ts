@@ -1343,7 +1343,7 @@ serve(async (req) => {
           if (!strat) continue; // histórico sem estratégia registrada: não contar como IA
           const dir = String(o.direction || '').toUpperCase();
           const mk = String(o.asset || '').includes('OTC') ? 'OTC' : 'REAL';
-          for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`, `MK|${mk}|${strat}|${dir}`]) {
+          for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`, `MK|${mk}|${strat}|${dir}`, `AD|${o.asset}|${strat}|${dir}`]) {
             stratStats[k] ||= { w: 0, l: 0, pl: 0 } as any;
             o.result === 'win' ? stratStats[k].w++ : stratStats[k].l++;
             (stratStats[k] as any).pl += Number(o.profit) || 0;

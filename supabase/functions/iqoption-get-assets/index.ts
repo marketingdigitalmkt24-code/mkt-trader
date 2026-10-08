@@ -194,7 +194,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                 resolve({ assets, error: null });
               } else {
                 // Velas REAIS da própria IQ Option (essencial p/ OTC, cujo preço é sintético)
-                const open = assets.filter(a => a.enabled && a.schedule?.open !== false).slice(0, 80);
+                const open = assets.filter(a => a.enabled && a.schedule?.open !== false).sort((x, y) => Number(x.isOTC) - Number(y.isOTC)).slice(0, 120);
                 const uniq = new Map<number, AvailableAsset>();
                 open.forEach(a => uniq.set(a.id, a));
                 pendingCandles = uniq.size;

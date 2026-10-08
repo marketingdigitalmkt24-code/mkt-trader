@@ -95,7 +95,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
             ws.close();
             resolve({ assets: [], error: 'Timeout' });
           }
-        }, 22000);
+        }, 28000);
 
         ws.onopen = () => {
           console.log('✅ WebSocket connected, authenticating...');
@@ -194,7 +194,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                 resolve({ assets, error: null });
               } else {
                 // Velas REAIS da própria IQ Option (essencial p/ OTC, cujo preço é sintético)
-                const open = assets.filter(a => a.enabled && a.schedule?.open !== false).slice(0, 80);
+                const open = assets.filter(a => a.enabled && a.schedule?.open !== false).sort((x, y) => Number(x.isOTC) - Number(y.isOTC)).slice(0, 120);
                 const uniq = new Map<number, AvailableAsset>();
                 open.forEach(a => uniq.set(a.id, a));
                 pendingCandles = uniq.size;
@@ -203,7 +203,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                   reqMap.set(`c${a.id}`, a);
                   ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 120 } } }));
                 }
-                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); resolve({ assets, error: null }); }, 6000);
+                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); resolve({ assets, error: null }); }, 12000);
                 pendingAssets = assets;
               }
             }

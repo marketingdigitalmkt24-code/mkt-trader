@@ -95,7 +95,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
             ws.close();
             resolve({ assets: [], error: 'Timeout' });
           }
-        }, 22000);
+        }, 28000);
 
         ws.onopen = () => {
           console.log('✅ WebSocket connected, authenticating...');
@@ -203,7 +203,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                   reqMap.set(`c${a.id}`, a);
                   ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 120 } } }));
                 }
-                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); resolve({ assets, error: null }); }, 6000);
+                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); resolve({ assets, error: null }); }, 12000);
                 pendingAssets = assets;
               }
             }

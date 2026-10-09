@@ -216,27 +216,41 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                 const open = assets.filter(a => a.enabled && a.schedule?.open !== false).sort((x, y) => Number(x.isOTC) - Number(y.isOTC)).slice(0, 120);
                 const uniq = new Map<number, AvailableAsset>();
                 open.forEach(a => uniq.set(a.id, a));
-                pendingCandles = uniq.size;
+                pendingCandles = uniq.size * 2;
                 const nowSec = Math.floor(Date.now() / 1000);
+                // 24h de velas de 1 min = 1440; a IQ entrega no máx. 1000 por pedido → 2 pedidos
                 for (const a of uniq.values()) {
                   reqMap.set(`c${a.id}`, a);
-                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 1440 } } }));
+                  reqMap.set(`d${a.id}`, a);
+                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 1000 } } }));
+                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `d${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec - 60000, count: 440 } } }));
                 }
-                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); resolve({ assets, error: null }); }, 18000);
+                const finish = () => {
+                  for (const a of uniq.values()) {
+                    const x = a as any;
+                    const merged = [...(x._old || []), ...(x._new || [])].sort((p: any, q: any) => p.t - q.t)
+                      .filter((k: any, i: number, arr: any[]) => i === 0 || k.t !== arr[i - 1].t);
+                    if (x._new) x.candles = x._new.slice(-120);
+                    if (merged.length) x.bt24 = backtest24(merged);
+                    delete x._old; delete x._new;
+                  }
+                };
+                finishFn = finish;
+                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); finish(); resolve({ assets, error: null }); }, 18000);
                 pendingAssets = assets;
               }
             }
 
             if (data.name === 'candles' && withCandles && data.request_id && reqMap.has(data.request_id)) {
-              const a = reqMap.get(data.request_id)!;
+              const a = reqMap.get(data.request_id)! as any;
               const cs = data.msg?.candles || [];
               const all = cs.map((c: any) => ({ t: c.from, o: c.open, h: c.max, l: c.min, c: c.close }));
-              (a as any).candles = all.slice(-120);
-              (a as any).bt24 = backtest24(all);
+              if (String(data.request_id).startsWith('c')) a._new = all; else a._old = all;
               pendingCandles--;
               if (pendingCandles <= 0 && candleTimer) {
                 clearTimeout(candleTimer); clearTimeout(timeout); ws.close();
-                console.log(`🕯️ Velas IQ recebidas para ${reqMap.size} ativos`);
+                finishFn?.();
+                console.log(`🕯️ Velas IQ (24h) recebidas para ${reqMap.size / 2} ativos`);
                 resolve({ assets: pendingAssets, error: null });
               }
             }

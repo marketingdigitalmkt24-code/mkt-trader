@@ -36,6 +36,7 @@ const strategyLabels: Record<string, string> = {
   EDGE: 'Edge Scanner',
   AI: 'IA',
   WICK: 'Pavio',
+  CHART: 'Gráfico 24h',
 };
 
 export function LiveOperationsCard() {

@@ -967,7 +967,11 @@ async function analyzeAssetWithRealData(
       : upper >= body * 1.5 && upper >= range * 0.4 && k.c <= k.o && ema21 < sma50 && px < ema21;
   })();
   const pullbackWick = detectPullbackWick(asset.symbol, type, ema9, ema21);
-  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : 'AI';
+  // GRÁFICO 24H: a mesma entrada (tendência + vela a favor) testada nas velas das últimas 24h do ativo
+  const chart24 = chartMomentumBacktest(asset.symbol, type as 'CALL' | 'PUT');
+  const chartOk = chart24.w + chart24.l >= 10 && chart24.w / (chart24.w + chart24.l) >= 0.58;
+  if (chartOk) console.log(`📊 ${asset.symbol} ${type}: gráfico 24h lucrativo ${chart24.w}W/${chart24.l}L`);
+  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' | 'CHART' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : chartOk ? 'CHART' : 'AI';
   if (wick.ok) confluenceCount++;
   if (edge) { confluenceCount += 2; console.log(`📡 ${asset.symbol}: EDGE SCANNER ${isCall ? 'BUY' : 'SELL'}`); }
   if (pullbackWick.ok && !edge) { confluenceCount += 3; console.log(`🎯 ${asset.symbol}: PULLBACK + PAVIO ${isCall ? 'CALL' : 'PUT'} (pavio ${pullbackWick.ratio.toFixed(1)}x) — entrada prioritária`); }
@@ -983,7 +987,7 @@ async function analyzeAssetWithRealData(
   }
 
   // ===== PAVIO SOZINHO DESLIGADO: só entra EDGE SCANNER ou PULLBACK + PAVIO =====
-  if (!edge && !pullbackWick.ok) {
+  if (!edge && !pullbackWick.ok && !chartOk) {
     console.log(`🕯️ ${asset.symbol} ${type}: sem Edge Scanner nem Pullback + Pavio — entrada não permitida`);
     return null;
   }
@@ -1094,7 +1098,7 @@ serve(async (req) => {
           // Dias úteis: TODOS os ativos reais abertos (moedas, ações e cripto) — a IA nunca fica em espera
           // Fim de semana: OTC (moedas e ações)
           // Dias úteis: OTC só quando praticamente não há pares reais abertos
-          if (!weekend && isOtc && normalForexOpen >= 3) continue;
+          // Todos os pares disponíveis no horário (reais + OTC) — o gráfico 24h decide quais são lucrativos
           if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;

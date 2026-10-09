@@ -74,6 +74,25 @@ async function tryHttpLogin(email: string, password: string): Promise<string | n
   return null;
 }
 
+// Teste da entrada nas velas de 1 min das últimas 24h do ativo:
+// tendência (EMA9 vs EMA21) + vela fechada a favor → a vela SEGUINTE fechou a favor?
+function backtest24(cs: { o: number; h: number; l: number; c: number }[]) {
+  const out = { CALL: { w: 0, l: 0 }, PUT: { w: 0, l: 0 }, n: cs.length };
+  const v = cs.slice(0, -1).filter(k => [k.o, k.h, k.l, k.c].every(x => typeof x === 'number'));
+  if (v.length < 30) return out;
+  const ema = (p: number) => { const a = 2 / (p + 1); const r: number[] = []; v.forEach((k, i) => r.push(i ? k.c * a + r[i - 1] * (1 - a) : k.c)); return r; };
+  const e9 = ema(9), e21 = ema(21);
+  for (let i = 21; i < v.length - 1; i++) {
+    const k = v[i], n = v[i + 1];
+    if (n.c === n.o || k.c === k.o) continue;
+    const dir = e9[i] > e21[i] && k.c > k.o && k.c > e9[i] ? 'CALL' : e9[i] < e21[i] && k.c < k.o && k.c < e9[i] ? 'PUT' : null;
+    if (!dir) continue;
+    const win = dir === 'CALL' ? n.c > n.o : n.c < n.o;
+    if (win) out[dir].w++; else out[dir].l++;
+  }
+  return out;
+}
+
 // Get assets via WebSocket using SSID
 async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ assets: AvailableAsset[]; error: string | null }> {
   for (const wsUrl of IQ_OPTION_WS_URLS) {

@@ -1100,6 +1100,7 @@ serve(async (req) => {
       if (iqData?.success && iqData?.assets?.length > 0) {
         const seen = new Set<string>();
         const normalForexOpen = iqData.assets.filter((a: any) => a.enabled === true && a.schedule?.open !== false && !a.isOTC && !/OTC|BLITZ/i.test(a.name) && assetKind(String(a.name).trim()) === 'forex' && yahooTicker(String(a.name).trim())).length;
+        const realOpenBases = new Set<string>(iqData.assets.filter((a: any) => a.enabled === true && a.schedule?.open !== false && !a.isOTC && !/OTC/i.test(a.name)).map((a: any) => String(a.name).replace(/[-\s]*BLITZ/i, '').trim()));
         for (const a of iqData.assets) {
           if (a.enabled !== true || a.schedule?.open === false) continue;
           // Blitz: mesmo par de moedas — analisado junto (executa na modalidade com melhor payout)
@@ -1112,7 +1113,7 @@ serve(async (req) => {
           // Dias úteis: OTC só quando praticamente não há pares reais abertos
           // Todos os pares disponíveis no horário (reais + OTC) — o gráfico 24h decide quais são lucrativos.
           // Par OTC cujo par real já está aberto é pulado (mesmo gráfico base, evitaria misturar preços).
-          if (isOtc && seen.has(base)) continue;
+          if (isOtc && realOpenBases.has(base)) continue;
           if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;

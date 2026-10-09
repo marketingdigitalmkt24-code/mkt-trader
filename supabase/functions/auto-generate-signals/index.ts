@@ -329,6 +329,18 @@ function yahooTicker(symbol: string): string | null {
 const otcOnlySymbols = new Set<string>();
 const iqCandles = new Map<string, { t: number; o: number; h: number; l: number; c: number }[]>();
 const lastCandles = new Map<string, { o: number; h: number; l: number; c: number }>();
+const bt24Map = new Map<string, { CALL: { w: number; l: number }; PUT: { w: number; l: number }; n: number }>();
+
+// Entrada GRÁFICO 24H: só vale se a vela atual repete o setup testado (tendência + vela a favor)
+// e esse setup foi lucrativo nas últimas 24h do mesmo ativo/direção.
+function chartMomentumBacktest(symbol: string, direction: 'CALL' | 'PUT'): { w: number; l: number } {
+  const key = symbol.replace('-OTC', '');
+  const bt = bt24Map.get(symbol) || bt24Map.get(key);
+  const k = lastCandles.get(key);
+  if (!bt || !k) return { w: 0, l: 0 };
+  const inDir = direction === 'CALL' ? k.c > k.o : k.c < k.o;
+  return inDir ? bt[direction] : { w: 0, l: 0 };
+}
 
 // Estratégia do pavio: vela com pavio longo inferior (CALL) ou superior (PUT)
 function detectWickRejection(symbol: string, direction: 'CALL' | 'PUT'): { ok: boolean; strong: boolean; ratio: number } {
@@ -1104,6 +1116,7 @@ serve(async (req) => {
           if (isOtc && assetKind(base) === 'crypto') continue;
           seen.add(symbol);
           if (Array.isArray(a.candles) && a.candles.length > 0) iqCandles.set(base, a.candles);
+          if (a.bt24) bt24Map.set(symbol, a.bt24);
           if (isOtc) otcOnlySymbols.add(base);
           const kind = assetKind(base);
           openIqAssets.push({

@@ -74,6 +74,25 @@ async function tryHttpLogin(email: string, password: string): Promise<string | n
   return null;
 }
 
+// Teste da entrada nas velas de 1 min das últimas 24h do ativo:
+// tendência (EMA9 vs EMA21) + vela fechada a favor → a vela SEGUINTE fechou a favor?
+function backtest24(cs: { o: number; h: number; l: number; c: number }[]) {
+  const out = { CALL: { w: 0, l: 0 }, PUT: { w: 0, l: 0 }, n: cs.length };
+  const v = cs.slice(0, -1).filter(k => [k.o, k.h, k.l, k.c].every(x => typeof x === 'number'));
+  if (v.length < 30) return out;
+  const ema = (p: number) => { const a = 2 / (p + 1); const r: number[] = []; v.forEach((k, i) => r.push(i ? k.c * a + r[i - 1] * (1 - a) : k.c)); return r; };
+  const e9 = ema(9), e21 = ema(21);
+  for (let i = 21; i < v.length - 1; i++) {
+    const k = v[i], n = v[i + 1];
+    if (n.c === n.o || k.c === k.o) continue;
+    const dir = e9[i] > e21[i] && k.c > k.o && k.c > e9[i] ? 'CALL' : e9[i] < e21[i] && k.c < k.o && k.c < e9[i] ? 'PUT' : null;
+    if (!dir) continue;
+    const win = dir === 'CALL' ? n.c > n.o : n.c < n.o;
+    if (win) out[dir].w++; else out[dir].l++;
+  }
+  return out;
+}
+
 // Get assets via WebSocket using SSID
 async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ assets: AvailableAsset[]; error: string | null }> {
   for (const wsUrl of IQ_OPTION_WS_URLS) {
@@ -88,6 +107,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
         let pendingCandles = 0;
         let candleTimer: number | null = null;
         let pendingAssets: AvailableAsset[] = [];
+        let finishFn: (() => void) | null = null;
         
         const timeout = setTimeout(() => {
           if (!resolved) {
@@ -197,25 +217,41 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                 const open = assets.filter(a => a.enabled && a.schedule?.open !== false).sort((x, y) => Number(x.isOTC) - Number(y.isOTC)).slice(0, 120);
                 const uniq = new Map<number, AvailableAsset>();
                 open.forEach(a => uniq.set(a.id, a));
-                pendingCandles = uniq.size;
+                pendingCandles = uniq.size * 2;
                 const nowSec = Math.floor(Date.now() / 1000);
+                // 24h de velas de 1 min = 1440; a IQ entrega no máx. 1000 por pedido → 2 pedidos
                 for (const a of uniq.values()) {
                   reqMap.set(`c${a.id}`, a);
-                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 120 } } }));
+                  reqMap.set(`d${a.id}`, a);
+                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `c${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec, count: 1000 } } }));
+                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `d${a.id}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: a.id, size: 60, to: nowSec - 60000, count: 440 } } }));
                 }
-                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); resolve({ assets, error: null }); }, 12000);
+                const finish = () => {
+                  for (const a of uniq.values()) {
+                    const x = a as any;
+                    const merged = [...(x._old || []), ...(x._new || [])].sort((p: any, q: any) => p.t - q.t)
+                      .filter((k: any, i: number, arr: any[]) => i === 0 || k.t !== arr[i - 1].t);
+                    if (x._new) x.candles = x._new.slice(-120);
+                    if (merged.length) x.bt24 = backtest24(merged);
+                    delete x._old; delete x._new;
+                  }
+                };
+                finishFn = finish;
+                candleTimer = setTimeout(() => { clearTimeout(timeout); ws.close(); finish(); resolve({ assets, error: null }); }, 18000);
                 pendingAssets = assets;
               }
             }
 
             if (data.name === 'candles' && withCandles && data.request_id && reqMap.has(data.request_id)) {
-              const a = reqMap.get(data.request_id)!;
+              const a = reqMap.get(data.request_id)! as any;
               const cs = data.msg?.candles || [];
-              (a as any).candles = cs.map((c: any) => ({ t: c.from, o: c.open, h: c.max, l: c.min, c: c.close }));
+              const all = cs.map((c: any) => ({ t: c.from, o: c.open, h: c.max, l: c.min, c: c.close }));
+              if (String(data.request_id).startsWith('c')) a._new = all; else a._old = all;
               pendingCandles--;
               if (pendingCandles <= 0 && candleTimer) {
                 clearTimeout(candleTimer); clearTimeout(timeout); ws.close();
-                console.log(`🕯️ Velas IQ recebidas para ${reqMap.size} ativos`);
+                finishFn?.();
+                console.log(`🕯️ Velas IQ (24h) recebidas para ${reqMap.size / 2} ativos`);
                 resolve({ assets: pendingAssets, error: null });
               }
             }

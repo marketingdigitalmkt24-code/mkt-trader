@@ -329,6 +329,18 @@ function yahooTicker(symbol: string): string | null {
 const otcOnlySymbols = new Set<string>();
 const iqCandles = new Map<string, { t: number; o: number; h: number; l: number; c: number }[]>();
 const lastCandles = new Map<string, { o: number; h: number; l: number; c: number }>();
+const bt24Map = new Map<string, { CALL: { w: number; l: number }; PUT: { w: number; l: number }; n: number }>();
+
+// Entrada GRÁFICO 24H: só vale se a vela atual repete o setup testado (tendência + vela a favor)
+// e esse setup foi lucrativo nas últimas 24h do mesmo ativo/direção.
+function chartMomentumBacktest(symbol: string, direction: 'CALL' | 'PUT'): { w: number; l: number } {
+  const key = symbol.replace('-OTC', '');
+  const bt = bt24Map.get(symbol) || bt24Map.get(key);
+  const k = lastCandles.get(key);
+  if (!bt || !k) return { w: 0, l: 0 };
+  const inDir = direction === 'CALL' ? k.c > k.o : k.c < k.o;
+  return inDir ? bt[direction] : { w: 0, l: 0 };
+}
 
 // Estratégia do pavio: vela com pavio longo inferior (CALL) ou superior (PUT)
 function detectWickRejection(symbol: string, direction: 'CALL' | 'PUT'): { ok: boolean; strong: boolean; ratio: number } {
@@ -967,7 +979,11 @@ async function analyzeAssetWithRealData(
       : upper >= body * 1.5 && upper >= range * 0.4 && k.c <= k.o && ema21 < sma50 && px < ema21;
   })();
   const pullbackWick = detectPullbackWick(asset.symbol, type, ema9, ema21);
-  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : 'AI';
+  // GRÁFICO 24H: a mesma entrada (tendência + vela a favor) testada nas velas das últimas 24h do ativo
+  const chart24 = chartMomentumBacktest(asset.symbol, type as 'CALL' | 'PUT');
+  const chartOk = chart24.w + chart24.l >= 10 && chart24.w / (chart24.w + chart24.l) >= 0.58;
+  if (chartOk) console.log(`📊 ${asset.symbol} ${type}: gráfico 24h lucrativo ${chart24.w}W/${chart24.l}L`);
+  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' | 'CHART' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : chartOk ? 'CHART' : 'AI';
   if (wick.ok) confluenceCount++;
   if (edge) { confluenceCount += 2; console.log(`📡 ${asset.symbol}: EDGE SCANNER ${isCall ? 'BUY' : 'SELL'}`); }
   if (pullbackWick.ok && !edge) { confluenceCount += 3; console.log(`🎯 ${asset.symbol}: PULLBACK + PAVIO ${isCall ? 'CALL' : 'PUT'} (pavio ${pullbackWick.ratio.toFixed(1)}x) — entrada prioritária`); }
@@ -983,7 +999,7 @@ async function analyzeAssetWithRealData(
   }
 
   // ===== PAVIO SOZINHO DESLIGADO: só entra EDGE SCANNER ou PULLBACK + PAVIO =====
-  if (!edge && !pullbackWick.ok) {
+  if (!edge && !pullbackWick.ok && !chartOk) {
     console.log(`🕯️ ${asset.symbol} ${type}: sem Edge Scanner nem Pullback + Pavio — entrada não permitida`);
     return null;
   }
@@ -1084,6 +1100,7 @@ serve(async (req) => {
       if (iqData?.success && iqData?.assets?.length > 0) {
         const seen = new Set<string>();
         const normalForexOpen = iqData.assets.filter((a: any) => a.enabled === true && a.schedule?.open !== false && !a.isOTC && !/OTC|BLITZ/i.test(a.name) && assetKind(String(a.name).trim()) === 'forex' && yahooTicker(String(a.name).trim())).length;
+        const realOpenBases = new Set<string>(iqData.assets.filter((a: any) => a.enabled === true && a.schedule?.open !== false && !a.isOTC && !/OTC/i.test(a.name)).map((a: any) => String(a.name).replace(/[-\s]*BLITZ/i, '').trim()));
         for (const a of iqData.assets) {
           if (a.enabled !== true || a.schedule?.open === false) continue;
           // Blitz: mesmo par de moedas — analisado junto (executa na modalidade com melhor payout)
@@ -1094,12 +1111,15 @@ serve(async (req) => {
           // Dias úteis: TODOS os ativos reais abertos (moedas, ações e cripto) — a IA nunca fica em espera
           // Fim de semana: OTC (moedas e ações)
           // Dias úteis: OTC só quando praticamente não há pares reais abertos
-          if (!weekend && isOtc && normalForexOpen >= 3) continue;
+          // Todos os pares disponíveis no horário (reais + OTC) — o gráfico 24h decide quais são lucrativos.
+          // Par OTC cujo par real já está aberto é pulado (mesmo gráfico base, evitaria misturar preços).
+          if (isOtc && realOpenBases.has(base)) continue;
           if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;
           seen.add(symbol);
           if (Array.isArray(a.candles) && a.candles.length > 0) iqCandles.set(base, a.candles);
+          if (a.bt24) bt24Map.set(symbol, a.bt24);
           if (isOtc) otcOnlySymbols.add(base);
           const kind = assetKind(base);
           openIqAssets.push({
@@ -1394,9 +1414,9 @@ serve(async (req) => {
         // Leitura por gráfico: histórico de operações quando houver; senão, teste no PRÓPRIO gráfico da IQ Option
         const adOps: any = stratStats[`AD|${s.asset}|${st}|${s.type}`];
         const hasOps = adOps && adOps.w + adOps.l >= 3;
-        const bt = chartBacktest(s.asset, s.type);
+        const bt = st === 'CHART' ? chartMomentumBacktest(s.asset, s.type) : chartBacktest(s.asset, s.type);
         const adAll: any = hasOps ? adOps : bt;
-        const src = hasOps ? 'operações' : 'gráfico IQ';
+        const src = hasOps ? 'operações' : st === 'CHART' ? 'gráfico 24h' : 'gráfico IQ';
         const adProven = adAll.w + adAll.l >= 3 && adAll.w > adAll.l;
         if (!adProven) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: ${src} sem mais wins que losses (${adAll.w}W/${adAll.l}L) — bloqueado`); return false; }
         if (hasOps && ms && ms.w + ms.l >= 5 && ms.pl <= 0 && !adProven) return false;
@@ -1408,7 +1428,7 @@ serve(async (req) => {
         s.priority = (s.aiConfidence || 0) + (st === bestStrat ? 10 : 0) + (setupWR !== null ? (setupWR - 0.5) * 40 : 0);
         const ss = stratStats[setupKey];
         // Setup novo (sem histórico) é liberado; bloqueia só quem perdeu ≥ ganhou
-        if (ss && ss.w + ss.l > 0 && ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
+        if (ss && ss.w + ss.l >= 3 && ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
         return true;
       });
       aiApprovedSignals.sort((a, b) => b.priority - a.priority);

@@ -107,6 +107,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
         let pendingCandles = 0;
         let candleTimer: number | null = null;
         let pendingAssets: AvailableAsset[] = [];
+        let finishFn: (() => void) | null = null;
         
         const timeout = setTimeout(() => {
           if (!resolved) {

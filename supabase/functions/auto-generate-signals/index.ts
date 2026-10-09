@@ -1414,9 +1414,9 @@ serve(async (req) => {
         // Leitura por gráfico: histórico de operações quando houver; senão, teste no PRÓPRIO gráfico da IQ Option
         const adOps: any = stratStats[`AD|${s.asset}|${st}|${s.type}`];
         const hasOps = adOps && adOps.w + adOps.l >= 3;
-        const bt = chartBacktest(s.asset, s.type);
+        const bt = st === 'CHART' ? chartMomentumBacktest(s.asset, s.type) : chartBacktest(s.asset, s.type);
         const adAll: any = hasOps ? adOps : bt;
-        const src = hasOps ? 'operações' : 'gráfico IQ';
+        const src = hasOps ? 'operações' : st === 'CHART' ? 'gráfico 24h' : 'gráfico IQ';
         const adProven = adAll.w + adAll.l >= 3 && adAll.w > adAll.l;
         if (!adProven) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: ${src} sem mais wins que losses (${adAll.w}W/${adAll.l}L) — bloqueado`); return false; }
         if (hasOps && ms && ms.w + ms.l >= 5 && ms.pl <= 0 && !adProven) return false;

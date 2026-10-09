@@ -1110,7 +1110,9 @@ serve(async (req) => {
           // Dias úteis: TODOS os ativos reais abertos (moedas, ações e cripto) — a IA nunca fica em espera
           // Fim de semana: OTC (moedas e ações)
           // Dias úteis: OTC só quando praticamente não há pares reais abertos
-          // Todos os pares disponíveis no horário (reais + OTC) — o gráfico 24h decide quais são lucrativos
+          // Todos os pares disponíveis no horário (reais + OTC) — o gráfico 24h decide quais são lucrativos.
+          // Par OTC cujo par real já está aberto é pulado (mesmo gráfico base, evitaria misturar preços).
+          if (isOtc && seen.has(base)) continue;
           if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;

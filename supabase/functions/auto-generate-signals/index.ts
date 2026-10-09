@@ -1428,7 +1428,7 @@ serve(async (req) => {
         s.priority = (s.aiConfidence || 0) + (st === bestStrat ? 10 : 0) + (setupWR !== null ? (setupWR - 0.5) * 40 : 0);
         const ss = stratStats[setupKey];
         // Setup novo (sem histórico) é liberado; bloqueia só quem perdeu ≥ ganhou
-        if (ss && ss.w + ss.l > 0 && ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
+        if (ss && ss.w + ss.l >= 3 && ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
         return true;
       });
       aiApprovedSignals.sort((a, b) => b.priority - a.priority);

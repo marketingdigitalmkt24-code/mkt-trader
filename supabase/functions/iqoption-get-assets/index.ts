@@ -231,7 +231,7 @@ async function getAssetsViaWs(ssid: string, withCandles = false): Promise<{ asse
                     const x = a as any;
                     const merged = [...(x._old || []), ...(x._new || [])].sort((p: any, q: any) => p.t - q.t)
                       .filter((k: any, i: number, arr: any[]) => i === 0 || k.t !== arr[i - 1].t);
-                    if (x._new) x.candles = x._new.slice(-120);
+                    if (x._new) x.candles = x._new.slice(-300); // 5h de velas p/ análise mais estável
                     if (merged.length) x.bt24 = backtest24(merged);
                     delete x._old; delete x._new;
                   }

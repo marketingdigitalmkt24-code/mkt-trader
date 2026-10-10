@@ -983,7 +983,8 @@ async function analyzeAssetWithRealData(
   const chart24 = chartMomentumBacktest(asset.symbol, type as 'CALL' | 'PUT');
   const chartOk = chart24.w + chart24.l >= 10 && chart24.w / (chart24.w + chart24.l) >= 0.58;
   if (chartOk) console.log(`📊 ${asset.symbol} ${type}: gráfico 24h lucrativo ${chart24.w}W/${chart24.l}L`);
-  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' | 'CHART' = edge ? 'EDGE' : pullbackWick.ok ? 'PULLBACK' : chartOk ? 'CHART' : 'AI';
+  // SÓ EDGE SCANNER: demais estratégias desligadas a pedido do usuário
+  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' | 'CHART' = 'EDGE';
   if (wick.ok) confluenceCount++;
   if (edge) { confluenceCount += 2; console.log(`📡 ${asset.symbol}: EDGE SCANNER ${isCall ? 'BUY' : 'SELL'}`); }
   if (pullbackWick.ok && !edge) { confluenceCount += 3; console.log(`🎯 ${asset.symbol}: PULLBACK + PAVIO ${isCall ? 'CALL' : 'PUT'} (pavio ${pullbackWick.ratio.toFixed(1)}x) — entrada prioritária`); }
@@ -998,9 +999,9 @@ async function analyzeAssetWithRealData(
     return null;
   }
 
-  // ===== PAVIO SOZINHO DESLIGADO: só entra EDGE SCANNER ou PULLBACK + PAVIO =====
-  if (!edge && !pullbackWick.ok && !chartOk) {
-    console.log(`🕯️ ${asset.symbol} ${type}: sem Edge Scanner nem Pullback + Pavio — entrada não permitida`);
+  // ===== SÓ EDGE SCANNER: sem o sinal do Edge Scanner não há entrada =====
+  if (!edge) {
+    console.log(`🕯️ ${asset.symbol} ${type}: sem Edge Scanner — entrada não permitida`);
     return null;
   }
 
@@ -1636,7 +1637,24 @@ serve(async (req) => {
 
               // Proteção diária removida a pedido do usuário — sem pausa por lucro/perda do dia
 
-              // Gale removido: valor sempre fixo/base
+              // ===== GALE (1x): se a última operação foi perda, próxima entrada dobra o valor =====
+              try {
+                const { data: lastOps } = await supabase
+                  .from('operation_results')
+                  .select('result')
+                  .neq('timeframe', 'MT5')
+                  .in('result', ['win', 'loss'])
+                  .order('created_at', { ascending: false })
+                  .limit(2);
+                const ops = lastOps || [];
+                if (ops.length >= 1 && ops[0].result === 'loss' && (ops.length < 2 || ops[1].result !== 'loss')) {
+                  const galeAmount = Math.round(iqTradeAmount * 2 * 100) / 100;
+                  console.log(`🔁 GALE: última operação foi perda — entrada dobrada de $${iqTradeAmount} para $${galeAmount} (apenas 1 gale)`);
+                  iqTradeAmount = galeAmount;
+                }
+              } catch (e) {
+                console.warn('⚠️ Checagem de gale falhou, usando valor base:', e);
+              }
               const expiration = 1; // sempre 1 minuto
 
               // USAR DIREÇÃO DA IA (Groq decide a melhor direção)

@@ -916,8 +916,8 @@ async function analyzeAssetWithRealData(
   }
 
   if (!type) {
-    console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — sem sinal`);
-    return null;
+    // SÓ IA: sem gatilho, propõe a direção do MACD e deixa a IA decidir
+    type = macd.trend === 'bearish' ? 'PUT' : 'CALL';
   }
 
   const isCall = type === 'CALL';

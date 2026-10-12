@@ -1215,6 +1215,9 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    // SÓ IA: envia à IA os 10 ativos com mais confluência (limite de tamanho da análise)
+    candidates.sort((a: any, b: any) => (b.indicators?.confluenceScore || 0) - (a.indicators?.confluenceScore || 0));
+    candidates.splice(10);
 
     // ============= SEND TO AI FOR VALIDATION =============
     console.log(`🤖 Enviando ${candidates.length} sinais REAIS para validação IA...`);

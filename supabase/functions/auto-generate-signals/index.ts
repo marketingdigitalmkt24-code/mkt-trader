@@ -916,8 +916,8 @@ async function analyzeAssetWithRealData(
   }
 
   if (!type) {
-    console.log(`👀 ${asset.symbol}: RSI=${rsiValue.toFixed(1)} Stoch=${stoch.k.toFixed(1)} Pos=${sr.pricePosition} — sem sinal`);
-    return null;
+    // SÓ IA: sem gatilho, propõe a direção do MACD e deixa a IA decidir
+    type = macd.trend === 'bearish' ? 'PUT' : 'CALL';
   }
 
   const isCall = type === 'CALL';
@@ -983,55 +983,13 @@ async function analyzeAssetWithRealData(
   const chart24 = chartMomentumBacktest(asset.symbol, type as 'CALL' | 'PUT');
   const chartOk = chart24.w + chart24.l >= 10 && chart24.w / (chart24.w + chart24.l) >= 0.58;
   if (chartOk) console.log(`📊 ${asset.symbol} ${type}: gráfico 24h lucrativo ${chart24.w}W/${chart24.l}L`);
-  // SÓ EDGE SCANNER: demais estratégias desligadas a pedido do usuário
-  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' | 'CHART' = 'EDGE';
+  // SÓ IA: todas as estratégias e filtros (Edge, pavio, tendência) desligados — a IA decide
+  const strategy: 'EDGE' | 'PULLBACK' | 'WICK' | 'AI' | 'CHART' = 'AI';
   if (wick.ok) confluenceCount++;
-  if (edge) { confluenceCount += 2; console.log(`📡 ${asset.symbol}: EDGE SCANNER ${isCall ? 'BUY' : 'SELL'}`); }
-  if (pullbackWick.ok && !edge) { confluenceCount += 3; console.log(`🎯 ${asset.symbol}: PULLBACK + PAVIO ${isCall ? 'CALL' : 'PUT'} (pavio ${pullbackWick.ratio.toFixed(1)}x) — entrada prioritária`); }
-  const expMinutes = 1; // expiração de 1 minuto a favor da tendência
-
-  // NUNCA contra a tendência maior (EMA21 vs SMA50 + preço vs SMA50)
-  const lastPx = prices[prices.length - 1];
-  const majorDown = ema21 < sma50 && lastPx < sma50;
-  const majorUp = ema21 > sma50 && lastPx > sma50;
-  if ((isCall && majorDown) || (!isCall && majorUp)) {
-    console.log(`🚫 ${asset.symbol} ${type}: contra a tendência (${majorDown ? 'baixa' : 'alta'}) — ignorado`);
-    return null;
-  }
-
-  // ===== SÓ EDGE SCANNER: sem o sinal do Edge Scanner não há entrada =====
-  if (!edge) {
-    console.log(`🕯️ ${asset.symbol} ${type}: sem Edge Scanner — entrada não permitida`);
-    return null;
-  }
-
-  // ===== SÓ TENDÊNCIA MUITO FORTE (ou gatilho EDGE SCANNER a favor da tendência) =====
-  if (!edge) {
-    const atrVal = Math.max(atr?.value || 0, lastPx * 0.00002);
-    const aligned = isCall
-      ? (ema9 > ema21 && ema21 > sma50 && lastPx > ema9)
-      : (ema9 < ema21 && ema21 < sma50 && lastPx < ema9);
-    // MACD: linha do lado da operação. Com poucas velas (<26) usa MACD rápido (6/13)
-    const macdVal = prices.length >= 26 ? macd.value : calculateEMA(prices, 6) - calculateEMA(prices, 13);
-    const macdOk = isCall ? macdVal > 0 : macdVal < 0;
-    const spread = Math.abs(ema9 - sma50) / atrVal; // separação das médias em ATRs
-    const last6 = prices.slice(-7);
-    let dirMoves = 0;
-    for (let i = 1; i < last6.length; i++) {
-      if (isCall ? last6[i] > last6[i - 1] : last6[i] < last6[i - 1]) dirMoves++;
-    }
-    const slope = (ema21 - calculateEMA(prices.slice(0, -5), 21)) * (isCall ? 1 : -1);
-    const strong = aligned && macdOk && spread >= 0.5 && dirMoves >= 3 && slope > 0;
-    const opportunity = (majorUp || majorDown) && macdOk && aligned;
-    if (!strong && !(forceOpportunity && opportunity)) {
-      console.log(`🚫 ${asset.symbol} ${type}: tendência fraca (alinhada=${aligned} macd=${macdOk} sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6 incl=${slope > 0}) — ignorado`);
-      return null;
-    }
-    if (!strong && forceOpportunity) {
-      console.log(`🔎 ${asset.symbol} ${type}: modo oportunidade — tendência alinhada + MACD, IA decide`);
-    }
-    console.log(`💪 ${asset.symbol} ${type}: TENDÊNCIA MUITO FORTE (sep=${spread.toFixed(2)}ATR velas=${dirMoves}/6)`);
-  }
+  if (edge) confluenceCount += 2;
+  if (pullbackWick.ok) confluenceCount += 2;
+  if (chartOk) confluenceCount++;
+  const expMinutes = 1;
 
   // Sem bloqueio por confirmações: a decisão final é da IA (Groq) + estratégia do pavio
   console.log(`🧠 ${asset.symbol} ${type}: estratégia ${strategy}, confluência ${confluenceCount}/7 → enviado para IA`);
@@ -1208,13 +1166,7 @@ serve(async (req) => {
       if (assetsWithPendingTrades.has(key)) return false;
       if (assetsWithRecentSignals.has(key)) return false;
 
-      // Sem bloqueio por ativo: a decisão é pela estratégia/setup vencedor (em qualquer par)
-
-      const newsCheck = isAssetAffectedByNews(asset.symbol);
-      if (newsCheck.affected) {
-        console.log(`📰 ${asset.symbol}: BLOQUEADO — ${newsCheck.reason}`);
-        return false;
-      }
+      // SÓ IA: sem filtro de notícias (pedido do usuário)
 
       return true;
     });
@@ -1263,6 +1215,9 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    // SÓ IA: envia à IA os 10 ativos com mais confluência (limite de tamanho da análise)
+    candidates.sort((a: any, b: any) => (b.indicators?.confluenceScore || 0) - (a.indicators?.confluenceScore || 0));
+    candidates.splice(10);
 
     // ============= SEND TO AI FOR VALIDATION =============
     console.log(`🤖 Enviando ${candidates.length} sinais REAIS para validação IA...`);
@@ -1317,33 +1272,15 @@ serve(async (req) => {
         // Sem espera: se a IA não aprovou nenhum, usa a MELHOR entrada analisada por ela (a favor da tendência)
         if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
           const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
-          console.log(`🔎 Melhor análise da IA: ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
-          if ((best.confidence || 0) >= IQ_MIN_AI_CONFIDENCE) {
-            console.log(`🎯 Melhor oportunidade analisada pela IA: ${best.asset} ${best.bestDirection || ''} (${best.confidence}%)`);
-            executeSignals = [best];
-          }
+          console.log(`🎯 SÓ IA (sem confiança mínima): melhor análise ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
+          executeSignals = [best];
         }
 
         for (const approved of executeSignals) {
           const candidate = candidates.find(c => c.asset.toUpperCase() === approved.asset.toUpperCase());
           if (candidate) {
-            // VALIDAÇÃO DE DIREÇÃO: o candidato já passou pelo filtro de tendência na sua direção.
-            // Se a IA inverter a direção, a entrada ficaria contra a tendência → descartar.
-            const aiDir = String(approved.bestDirection || candidate.type).toUpperCase();
-            if (aiDir !== candidate.type) {
-              console.log(`⛔ ${candidate.asset}: IA sugeriu ${aiDir} mas a tendência validada é ${candidate.type} — descartado`);
-              continue;
-            }
-            const ma = candidate.indicators?.movingAverages || {};
-            const macdH = candidate.indicators?.macd?.histogram ?? 0;
-            const trendOk = aiDir === 'CALL'
-              ? (ma.ema9 > ma.ema21 && ma.ema21 > ma.sma50 && macdH >= 0)
-              : (ma.ema9 < ma.ema21 && ma.ema21 < ma.sma50 && macdH <= 0);
-            if (!trendOk) {
-              console.log(`⛔ ${candidate.asset} ${aiDir}: médias/MACD não confirmam a direção — descartado`);
-              continue;
-            }
-            const bestDir = aiDir;
+            // A IA decide a direção livremente
+            const bestDir = String(approved.bestDirection || candidate.type).toUpperCase();
             aiApprovedSignals.push({
               ...candidate,
               type: bestDir, // Direção corrigida pela IA
@@ -1369,71 +1306,8 @@ serve(async (req) => {
       );
     }
 
-    if (aiApprovedSignals.length > 0) {
-      // ===== APRENDIZADO: estratégia/setup que mais trouxe WIN (em todos os pares) =====
-      const stratStats: Record<string, { w: number; l: number; pl?: number }> = {};
-      try {
-        const since = new Date(Date.now() - 14 * 864e5).toISOString();
-        const { data: ops, error: opsErr } = await supabase.from('operation_results')
-          .select('signal_id, asset, direction, result, profit').gte('created_at', since)
-          .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
-          .order('created_at', { ascending: false }).limit(1000);
-        if (opsErr) console.log('⚠️ aprendizado: erro ops', opsErr.message);
-        const ids = [...new Set((ops || []).map((o: any) => o.signal_id).filter(Boolean))];
-        const sMap = new Map<string, any>();
-        // Busca em lotes: lista grande no filtro estoura o tamanho da URL e volta vazia
-        for (let i = 0; i < ids.length; i += 100) {
-          const { data: sigs, error: sErr } = await supabase.from('trading_signals')
-            .select('signal_id, indicators').in('signal_id', ids.slice(i, i + 100));
-          if (sErr) console.log('⚠️ aprendizado: erro sinais', sErr.message);
-          for (const s of sigs || []) sMap.set((s as any).signal_id, (s as any).indicators || {});
-        }
-        for (const o of ops || []) {
-          const ind: any = sMap.get(o.signal_id) || {};
-          const strat = ['EDGE', 'PULLBACK', 'WICK', 'AI'].includes(ind.strategy)
-            ? ind.strategy
-            : (String(ind.reversalPattern || '').startsWith('Pavio') ? 'WICK' : null);
-          if (!strat) continue; // histórico sem estratégia registrada: não contar como IA
-          const dir = String(o.direction || '').toUpperCase();
-          const mk = String(o.asset || '').includes('OTC') ? 'OTC' : 'REAL';
-          for (const k of [strat, `${strat}|${dir}|${ind.bollinger?.position}|${ind.supportResistance?.pricePosition}`, `MK|${mk}|${strat}|${dir}`, `AD|${o.asset}|${strat}|${dir}`]) {
-            stratStats[k] ||= { w: 0, l: 0, pl: 0 } as any;
-            o.result === 'win' ? stratStats[k].w++ : stratStats[k].l++;
-            (stratStats[k] as any).pl += Number(o.profit) || 0;
-          }
-        }
-      } catch (e) { console.log('⚠️ aprendizado de estratégia falhou', e); }
-      const wr = (k: string) => { const s = stratStats[k]; return s && s.w + s.l >= 3 ? s.w / (s.w + s.l) : null; };
-      const bestStrat = ['EDGE', 'PULLBACK', 'WICK', 'AI']
-        .sort((a, b) => (wr(b) ?? 0.5) - (wr(a) ?? 0.5))[0];
-      console.log(`📚 Estratégias: ${['EDGE', 'PULLBACK', 'WICK', 'AI'].map(k => `${k} ${JSON.stringify(stratStats[k] || {})}`).join(' | ')} → preferida ${bestStrat}`);
-      aiApprovedSignals = aiApprovedSignals.filter((s: any) => {
-        const st = s.indicators.strategy || 'AI';
-        // SÓ ESTRATÉGIAS LUCRATIVAS por mercado (pares normais x OTC) + direção, últimos 14 dias
-        const mk = String(s.asset).includes('OTC') ? 'OTC' : 'REAL';
-        const ms: any = stratStats[`MK|${mk}|${st}|${s.type}`];
-        // Leitura por gráfico: histórico de operações quando houver; senão, teste no PRÓPRIO gráfico da IQ Option
-        const adOps: any = stratStats[`AD|${s.asset}|${st}|${s.type}`];
-        const hasOps = adOps && adOps.w + adOps.l >= 3;
-        const bt = st === 'CHART' ? chartMomentumBacktest(s.asset, s.type) : chartBacktest(s.asset, s.type);
-        const adAll: any = hasOps ? adOps : bt;
-        const src = hasOps ? 'operações' : st === 'CHART' ? 'gráfico 24h' : 'gráfico IQ';
-        const adProven = adAll.w + adAll.l >= 3 && adAll.w > adAll.l;
-        if (!adProven) { console.log(`⏭️ ${s.asset} ${st}/${s.type}: ${src} sem mais wins que losses (${adAll.w}W/${adAll.l}L) — bloqueado`); return false; }
-        if (hasOps && ms && ms.w + ms.l >= 5 && ms.pl <= 0 && !adProven) return false;
-        console.log(`✅ ${s.asset} ${st}/${s.type}: ${src} lucrativo (${adAll.w}W/${adAll.l}L) — liberado`);
-        s.chartWR = adAll.w / (adAll.w + adAll.l);
-        const setupKey = `${st}|${s.type}|${s.indicators.bollinger?.position}|${s.indicators.supportResistance?.pricePosition}`;
-        const setupWR = wr(setupKey);
-        s.setupWR = setupWR;
-        s.priority = (s.aiConfidence || 0) + (st === bestStrat ? 10 : 0) + (setupWR !== null ? (setupWR - 0.5) * 40 : 0);
-        const ss = stratStats[setupKey];
-        // Setup novo (sem histórico) é liberado; bloqueia só quem perdeu ≥ ganhou
-        if (ss && ss.w + ss.l >= 3 && ss.l >= ss.w) { console.log(`⏭️ ${s.asset} ${setupKey}: setup com perdas ≥ wins (${ss.w}W/${ss.l}L) — bloqueado`); return false; }
-        return true;
-      });
-      aiApprovedSignals.sort((a, b) => b.priority - a.priority);
-    }
+    // SÓ IA: sem filtros de histórico/estratégia — a entrada mais assertiva (maior confiança da IA) vai primeiro
+    aiApprovedSignals.sort((a, b) => (b.aiConfidence || 0) - (a.aiConfidence || 0));
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
     const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
@@ -1577,10 +1451,6 @@ serve(async (req) => {
 
           if (freshPending && freshPending.length > 0) {
             console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente`);
-          } else if (!bestSignal.aiConfidence && bestSignal.indicators.confluenceScore < IQ_MIN_CONFLUENCE_SCALPING) {
-            console.log(`⏭️ IQ: Confluência ${bestSignal.indicators.confluenceScore}% < ${IQ_MIN_CONFLUENCE_SCALPING}% (sem IA)`);
-          } else if (bestSignal.aiConfidence && bestSignal.aiConfidence < IQ_MIN_AI_CONFIDENCE) {
-            console.log(`⏭️ IQ: IA confiança ${bestSignal.aiConfidence}% < ${IQ_MIN_AI_CONFIDENCE}%`);
           } else {
             const { data: iqConfig } = await supabase
               .from('iqoption_config')
@@ -1637,71 +1507,9 @@ serve(async (req) => {
 
               // Proteção diária removida a pedido do usuário — sem pausa por lucro/perda do dia
 
-              // ===== GALE (1x): se a última operação foi perda, próxima entrada dobra o valor =====
-              try {
-                const { data: lastOps } = await supabase
-                  .from('operation_results')
-                  .select('result')
-                  .neq('timeframe', 'MT5')
-                  .in('result', ['win', 'loss'])
-                  .order('created_at', { ascending: false })
-                  .limit(2);
-                const ops = lastOps || [];
-                if (ops.length >= 1 && ops[0].result === 'loss' && (ops.length < 2 || ops[1].result !== 'loss')) {
-                  const galeAmount = Math.round(iqTradeAmount * 2 * 100) / 100;
-                  console.log(`🔁 GALE: última operação foi perda — entrada dobrada de $${iqTradeAmount} para $${galeAmount} (apenas 1 gale)`);
-                  iqTradeAmount = galeAmount;
-                }
-              } catch (e) {
-                console.warn('⚠️ Checagem de gale falhou, usando valor base:', e);
-              }
+              // SÓ IA: sem gale, sem filtro de exaustão, sem filtro OTC (pedido do usuário)
               const expiration = 1; // sempre 1 minuto
-
-              // USAR DIREÇÃO DA IA (Groq decide a melhor direção)
               const executionDirection = bestSignal.aiDirection || bestSignal.type;
-
-              // ===== EXAUSTÃO: não vender no fundo nem comprar no topo =====
-              const rsiNow = Number((bestSignal.indicators as any)?.rsi?.value ?? (bestSignal.indicators as any)?.rsi);
-              const dirU = String(executionDirection).toUpperCase();
-              if (Number.isFinite(rsiNow) && ((dirU === 'PUT' && rsiNow < 22) || (dirU === 'CALL' && rsiNow > 78))) {
-                console.log(`🛑 EXAUSTÃO: ${bestSignal.asset} ${dirU} com RSI ${rsiNow.toFixed(1)} — movimento já esticado, risco de repique. Pulando.`);
-                continue;
-              }
-
-              // ===== FILTRO OTC MAIS RIGOROSO =====
-              if (isOTCAsset(bestSignal.asset)) {
-                const otcMinConf = 72;
-                if ((bestSignal.aiConfidence || 0) < otcMinConf) {
-                  console.log(`🛑 OTC: ${bestSignal.asset} confiança ${bestSignal.aiConfidence || 0}% < ${otcMinConf}%. Pulando.`);
-                  continue;
-                }
-                const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-                const { data: recentOtc } = await supabase
-                  .from('operation_results')
-                  .select('asset, direction, result, created_at')
-                  .like('asset', '%OTC%')
-                  .gte('created_at', since)
-                  .in('result', ['win', 'loss'])
-                  .order('created_at', { ascending: false })
-                  .limit(20);
-                const list = recentOtc || [];
-                const sameLoss = list.find((o: any) => o.asset === bestSignal.asset && String(o.direction).toUpperCase() === String(executionDirection).toUpperCase() && o.result === 'loss');
-                if (sameLoss) {
-                  console.log(`🛑 OTC: ${bestSignal.asset} ${executionDirection} perdeu na última hora. Pulando.`);
-                  continue;
-                }
-                const last3 = list.slice(0, 3);
-                if (last3.length === 3 && last3.every((o: any) => o.result === 'loss')) {
-                  console.log('🛑 OTC: 3 perdas seguidas — pausa até a próxima janela.');
-                  continue;
-                }
-                const dirOps = list.filter((o: any) => String(o.direction).toUpperCase() === String(executionDirection).toUpperCase());
-                const dirLoss = dirOps.filter((o: any) => o.result === 'loss').length;
-                if (dirOps.length >= 4 && dirLoss / dirOps.length > 0.5) {
-                  console.log(`🛑 OTC: direção ${executionDirection} com ${dirLoss}/${dirOps.length} perdas na última hora. Pulando.`);
-                  continue;
-                }
-              }
 
               // Sincronização de entrada (2s antes da vela) é feita em iqoption-place-trade
               console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);

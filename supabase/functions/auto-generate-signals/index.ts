@@ -1282,7 +1282,7 @@ serve(async (req) => {
         if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
           const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
           console.log(`🎯 SÓ IA (sem confiança mínima): melhor análise ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
-          executeSignals = [best];
+          executeSignals = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0)).slice(0, 5);
         }
 
         for (const approved of executeSignals) {

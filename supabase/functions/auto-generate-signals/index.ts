@@ -1232,15 +1232,12 @@ serve(async (req) => {
     }));
 
     let historicalResults: any[] = [];
-    // Aprendizado contínuo: desempenho por ativo+direção nas últimas operações
-    const learnedStats = new Map<string, { wins: number; losses: number; profit: number }>();
     try {
       const { data: results } = await supabase
         .from('operation_results')
-        .select('asset, result, direction, profit')
-        .neq('timeframe', 'MT5')
+        .select('asset, result')
         .order('created_at', { ascending: false })
-        .limit(300);
+        .limit(100);
 
       if (results && results.length > 0) {
         const assetStats = new Map<string, { wins: number; losses: number }>();
@@ -1249,12 +1246,6 @@ serve(async (req) => {
           if (r.result === 'win') stats.wins++;
           else if (r.result === 'loss') stats.losses++;
           assetStats.set(r.asset, stats);
-          const k = `${String(r.asset).toUpperCase()}|${String(r.direction || '').toUpperCase()}`;
-          const ls = learnedStats.get(k) || { wins: 0, losses: 0, profit: 0 };
-          if (r.result === 'win') ls.wins++;
-          else if (r.result === 'loss') ls.losses++;
-          ls.profit += Number(r.profit) || 0;
-          learnedStats.set(k, ls);
         });
         historicalResults = Array.from(assetStats.entries()).map(([asset, stats]) => ({
           asset,
@@ -1282,7 +1273,7 @@ serve(async (req) => {
         if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
           const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
           console.log(`🎯 SÓ IA (sem confiança mínima): melhor análise ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
-          executeSignals = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0)).slice(0, 5);
+          executeSignals = [best];
         }
 
         for (const approved of executeSignals) {
@@ -1315,30 +1306,11 @@ serve(async (req) => {
       );
     }
 
-    // APRENDIZADO CONTÍNUO: ativo+direção que já deu win sobe; o que deu mais loss desce para o fim.
-    // Nunca fica em espera — se todos forem ruins, entra no menos ruim.
-    const learnScore = (s: any) => {
-      const k = `${String(s.asset).toUpperCase()}|${String(s.aiDirection || s.type).toUpperCase()}`;
-      const st = learnedStats.get(k);
-      if (!st) return { score: s.aiConfidence || 0, bad: false, info: 'sem histórico' };
-      const diff = st.wins - st.losses;
-      const bad = st.losses > st.wins && (st.wins + st.losses) >= 3;
-      return { score: (s.aiConfidence || 0) + diff * 10, bad, info: `${st.wins}W/${st.losses}L` };
-    };
-    aiApprovedSignals.forEach(s => { const l = learnScore(s); s.learnScore = l.score; s.learnBad = l.bad; s.learnInfo = l.info; });
-    aiApprovedSignals.sort((a, b) => (Number(a.learnBad) - Number(b.learnBad)) || (b.learnScore - a.learnScore));
-    console.log(`📚 Aprendizado: ${aiApprovedSignals.map(s => `${s.asset} ${s.aiDirection || s.type} [${s.learnInfo}${s.learnBad ? ' ⛔' : ''}]`).join(' | ')}`);
-
-    // BLOQUEIO POR APRENDIZADO: ativo+direção com mais losses que wins (mín. 3 ops) fica de fora.
-    // Só entra no "menos ruim" se TODOS os candidatos estiverem bloqueados (nunca fica em espera).
-    const cleanSignals = aiApprovedSignals.filter(s => !s.learnBad);
-    const pool = cleanSignals.length > 0 ? cleanSignals : aiApprovedSignals;
-    if (cleanSignals.length < aiApprovedSignals.length) {
-      console.log(`🧹 Filtro de aprendizado: ${aiApprovedSignals.length - cleanSignals.length} candidato(s) bloqueado(s) por histórico negativo`);
-    }
+    // SÓ IA: sem filtros de histórico/estratégia — a entrada mais assertiva (maior confiança da IA) vai primeiro
+    aiApprovedSignals.sort((a, b) => (b.aiConfidence || 0) - (a.aiConfidence || 0));
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
-    const signalsToExecute = pool.length > 0 ? [pool[0]] : [];
+    const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
     
     // Salvar TODOS os sinais aprovados pela IA no banco (não só o melhor)
     for (let i = 1; i < aiApprovedSignals.length; i++) {

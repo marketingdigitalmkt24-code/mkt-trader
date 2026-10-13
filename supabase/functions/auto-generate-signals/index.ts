@@ -1306,40 +1306,8 @@ serve(async (req) => {
       );
     }
 
-    // SÓ IA: a entrada mais assertiva vai primeiro — desempate/boost por ativo+direção
-    // que está dando WIN hoje (ex.: EUR/THB-OTC CALL), sem bloquear nada
-    const todayMap = new Map<string, { w: number; l: number }>();
-    try {
-      const brtNow = new Date(Date.now() - 3 * 3600 * 1000);
-      const brtMidnightUtc = new Date(Date.UTC(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate(), 3, 0, 0));
-      const { data: todayOps } = await supabase
-        .from('operation_results')
-        .select('asset, direction, result')
-        .gte('created_at', brtMidnightUtc.toISOString())
-        .in('result', ['win', 'loss'])
-        .limit(500);
-      for (const op of todayOps || []) {
-        const key = `${op.asset}|${op.direction}`;
-        const cur = todayMap.get(key) || { w: 0, l: 0 };
-        if (op.result === 'win') cur.w++; else cur.l++;
-        todayMap.set(key, cur);
-      }
-    } catch (e) {
-      console.error('⚠️ Falha ao ler resultados de hoje (seguindo sem boost):', e);
-    }
-    const todayScore = (s: any): number => {
-      const dir = s.aiDirection || s.type;
-      const cur = todayMap.get(`${s.asset}|${dir}`);
-      if (!cur) return 0;
-      if (cur.w > cur.l) return 15 + Math.min(cur.w - cur.l, 3) * 5; // boost para combos vencedores
-      if (cur.l > cur.w) return -15 - Math.min(cur.l - cur.w, 3) * 5; // penaliza combos perdedores
-      return 0;
-    };
-    aiApprovedSignals.sort((a, b) => ((b.aiConfidence || 0) + todayScore(b)) - ((a.aiConfidence || 0) + todayScore(a)));
-    const topToday = todayScore(aiApprovedSignals[0]);
-    if (topToday !== 0) {
-      console.log(`📈 Boost do dia aplicado: ${aiApprovedSignals[0].asset} (${aiApprovedSignals[0].aiDirection || aiApprovedSignals[0].type}) → ${topToday > 0 ? '+' : ''}${topToday} pts`);
-    }
+    // SÓ IA: a entrada mais assertiva (maior confiança da IA) vai primeiro
+    aiApprovedSignals.sort((a, b) => (b.aiConfidence || 0) - (a.aiConfidence || 0));
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
     const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];

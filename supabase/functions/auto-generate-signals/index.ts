@@ -1322,15 +1322,23 @@ serve(async (req) => {
       const st = learnedStats.get(k);
       if (!st) return { score: s.aiConfidence || 0, bad: false, info: 'sem histórico' };
       const diff = st.wins - st.losses;
-      const bad = st.losses > st.wins && (st.wins + st.losses) >= 2;
-      return { score: (s.aiConfidence || 0) + diff * 8, bad, info: `${st.wins}W/${st.losses}L` };
+      const bad = st.losses > st.wins && (st.wins + st.losses) >= 3;
+      return { score: (s.aiConfidence || 0) + diff * 10, bad, info: `${st.wins}W/${st.losses}L` };
     };
     aiApprovedSignals.forEach(s => { const l = learnScore(s); s.learnScore = l.score; s.learnBad = l.bad; s.learnInfo = l.info; });
     aiApprovedSignals.sort((a, b) => (Number(a.learnBad) - Number(b.learnBad)) || (b.learnScore - a.learnScore));
     console.log(`📚 Aprendizado: ${aiApprovedSignals.map(s => `${s.asset} ${s.aiDirection || s.type} [${s.learnInfo}${s.learnBad ? ' ⛔' : ''}]`).join(' | ')}`);
 
+    // BLOQUEIO POR APRENDIZADO: ativo+direção com mais losses que wins (mín. 3 ops) fica de fora.
+    // Só entra no "menos ruim" se TODOS os candidatos estiverem bloqueados (nunca fica em espera).
+    const cleanSignals = aiApprovedSignals.filter(s => !s.learnBad);
+    const pool = cleanSignals.length > 0 ? cleanSignals : aiApprovedSignals;
+    if (cleanSignals.length < aiApprovedSignals.length) {
+      console.log(`🧹 Filtro de aprendizado: ${aiApprovedSignals.length - cleanSignals.length} candidato(s) bloqueado(s) por histórico negativo`);
+    }
+
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
-    const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
+    const signalsToExecute = pool.length > 0 ? [pool[0]] : [];
     
     // Salvar TODOS os sinais aprovados pela IA no banco (não só o melhor)
     for (let i = 1; i < aiApprovedSignals.length; i++) {

@@ -1267,13 +1267,13 @@ serve(async (req) => {
       if (aiError) {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
-        let executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
-        console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
-        // Sem espera: se a IA não aprovou nenhum, usa a MELHOR entrada analisada por ela (a favor da tendência)
-        if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
-          const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
-          console.log(`🎯 SÓ IA (sem confiança mínima): melhor análise ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
-          executeSignals = [best];
+        // SÓ MOMENTUM: executa apenas o que a IA aprovou com o padrão vencedor — sem fallback
+        const executeSignals = aiData.analyzedSignals.filter((a: any) =>
+          a.recommendation === 'EXECUTE' && String(a.strategy || '').toUpperCase() === 'MOMENTUM'
+        );
+        console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados com padrão MOMENTUM`);
+        if (executeSignals.length === 0) {
+          console.log('⏸️ Nenhuma entrada com padrão MOMENTUM aprovada — aguardando próximo ciclo');
         }
 
         for (const approved of executeSignals) {

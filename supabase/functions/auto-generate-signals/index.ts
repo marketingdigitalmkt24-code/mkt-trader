@@ -1232,12 +1232,15 @@ serve(async (req) => {
     }));
 
     let historicalResults: any[] = [];
+    // Aprendizado contínuo: desempenho por ativo+direção nas últimas operações
+    const learnedStats = new Map<string, { wins: number; losses: number; profit: number }>();
     try {
       const { data: results } = await supabase
         .from('operation_results')
-        .select('asset, result')
+        .select('asset, result, direction, profit')
+        .neq('timeframe', 'MT5')
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(300);
 
       if (results && results.length > 0) {
         const assetStats = new Map<string, { wins: number; losses: number }>();
@@ -1246,6 +1249,12 @@ serve(async (req) => {
           if (r.result === 'win') stats.wins++;
           else if (r.result === 'loss') stats.losses++;
           assetStats.set(r.asset, stats);
+          const k = `${String(r.asset).toUpperCase()}|${String(r.direction || '').toUpperCase()}`;
+          const ls = learnedStats.get(k) || { wins: 0, losses: 0, profit: 0 };
+          if (r.result === 'win') ls.wins++;
+          else if (r.result === 'loss') ls.losses++;
+          ls.profit += Number(r.profit) || 0;
+          learnedStats.set(k, ls);
         });
         historicalResults = Array.from(assetStats.entries()).map(([asset, stats]) => ({
           asset,

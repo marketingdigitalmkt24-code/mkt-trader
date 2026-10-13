@@ -247,9 +247,6 @@ REGRA PRINCIPAL — A FAVOR DA TENDÊNCIA:
 - RSI/Estocástico extremos NÃO são obrigatórios: em tendência forte, extremo = força (continuação).
 - Pavio longo de rejeição a favor da tendência (fundo de vela em alta / topo em baixa) = entrada forte.
 
-PADRÃO VENCEDOR (MOMENTUM) — busque este setup em TODOS os pares disponíveis:
-É o padrão das entradas que mais deram WIN (ex.: EUR/THB-OTC 01:29, USD/HKD-OTC): MACD a favor da direção, EMA9 afastada da EMA21 na mesma direção, volatilidade BAIXA/MÉDIA e preço com espaço para andar (longe de suporte para PUT, longe de resistência para CALL). Quando encontrar esse padrão em qualquer par, APROVE (execute=true) com confiança 65+ e strategy=MOMENTUM. Compare todos os ativos do ciclo e escolha o que tiver esse padrão mais limpo.
-
 SÓ TENDÊNCIA MUITO FORTE: os sinais já chegam filtrados com EMA9/EMA21/SMA50 alinhadas e MACD a favor. APROVE (execute=true) apenas se o momentum for forte e contínuo na direção da tendência (MACD histograma a favor, EMA9 afastada da EMA21). REJEITE se o preço estiver colado em suporte (para PUT) ou resistência (para CALL), pois o movimento pode travar.
 REJEITE apenas se: volatilidade ALTA extrema, tendência totalmente lateral e indicadores contraditórios, ou setup tóxico no histórico.
 
@@ -468,7 +465,6 @@ serve(async (req) => {
           asset: s.asset,
           recommendation: shouldExecute ? 'EXECUTE' : 'SKIP',
           confidence: aiPick.confidence,
-          strategy: aiPick.strategy || 'UNKNOWN',
           reason: `AI[${aiPick.strategy}]: ${aiPick.reason}`,
           adjustedConfluence: aiPick.confidence,
           riskLevel: aiPick.confidence >= 75 ? 'LOW' : 'MEDIUM',
@@ -484,7 +480,6 @@ serve(async (req) => {
         asset: s.asset,
         recommendation: shouldExecLocal ? 'EXECUTE' : 'SKIP',
         confidence: local.score,
-        strategy: local.strategy,
         reason: `LOCAL[${local.strategy}]: ${local.reason}`,
         adjustedConfluence: local.score,
         riskLevel: local.score >= 65 ? 'LOW' : 'MEDIUM',

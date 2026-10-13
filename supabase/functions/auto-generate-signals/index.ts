@@ -1267,15 +1267,13 @@ serve(async (req) => {
       if (aiError) {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
-        // MODO TESTE (conta de treino): executa a entrada que a IA julga com MAIOR chance de PERDA
-        // (menor confiança / pior cenário entre os ativos analisados) — pedido do usuário
-        const sortedWorst = [...aiData.analyzedSignals].sort((a: any, b: any) => (a.confidence || 0) - (b.confidence || 0));
-        const worst = sortedWorst[0];
-        const executeSignals = worst ? [worst] : [];
-        if (worst) {
-          console.log(`🎯 MODO PERDA (treino): pior entrada segundo a IA → ${worst.asset} ${worst.bestDirection || ''} conf=${worst.confidence}% — ${worst.reason || ''}`);
-        } else {
-          console.log('⏸️ Nenhum ativo analisado pela IA — aguardando próximo ciclo');
+        let executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
+        console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
+        // Sem espera: se a IA não aprovou nenhum, usa a MELHOR entrada analisada por ela (a favor da tendência)
+        if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
+          const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
+          console.log(`🎯 SÓ IA (sem confiança mínima): melhor análise ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
+          executeSignals = [best];
         }
 
         for (const approved of executeSignals) {
@@ -1308,7 +1306,7 @@ serve(async (req) => {
       );
     }
 
-    // SÓ IA: a entrada mais assertiva (maior confiança da IA) vai primeiro
+    // SÓ IA: sem filtros de histórico/estratégia — a entrada mais assertiva (maior confiança da IA) vai primeiro
     aiApprovedSignals.sort((a, b) => (b.aiConfidence || 0) - (a.aiConfidence || 0));
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============

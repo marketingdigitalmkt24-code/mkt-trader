@@ -1267,13 +1267,15 @@ serve(async (req) => {
       if (aiError) {
         console.error('❌ Erro na análise IA:', aiError);
       } else if (aiData?.success && aiData?.analyzedSignals) {
-        // SÓ MOMENTUM: executa apenas o que a IA aprovou com o padrão vencedor — sem fallback
-        const executeSignals = aiData.analyzedSignals.filter((a: any) =>
-          a.recommendation === 'EXECUTE' && String(a.strategy || '').toUpperCase() === 'MOMENTUM'
-        );
-        console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados com padrão MOMENTUM`);
-        if (executeSignals.length === 0) {
-          console.log('⏸️ Nenhuma entrada com padrão MOMENTUM aprovada — aguardando próximo ciclo');
+        // MODO TESTE (conta de treino): executa a entrada que a IA julga com MAIOR chance de PERDA
+        // (menor confiança / pior cenário entre os ativos analisados) — pedido do usuário
+        const sortedWorst = [...aiData.analyzedSignals].sort((a: any, b: any) => (a.confidence || 0) - (b.confidence || 0));
+        const worst = sortedWorst[0];
+        const executeSignals = worst ? [worst] : [];
+        if (worst) {
+          console.log(`🎯 MODO PERDA (treino): pior entrada segundo a IA → ${worst.asset} ${worst.bestDirection || ''} conf=${worst.confidence}% — ${worst.reason || ''}`);
+        } else {
+          console.log('⏸️ Nenhum ativo analisado pela IA — aguardando próximo ciclo');
         }
 
         for (const approved of executeSignals) {

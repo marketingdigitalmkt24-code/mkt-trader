@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, TrendingUp, TrendingDown, Target, Clock, MonitorSmartphone, Loader2 } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, Target, Clock, MonitorSmartphone, Loader2, Volume2, VolumeX } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';

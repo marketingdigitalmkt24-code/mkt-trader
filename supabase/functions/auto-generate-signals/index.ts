@@ -1534,10 +1534,10 @@ serve(async (req) => {
         const w = (hist || []).filter((h: any) => h.result === 'win').length;
         const tot = (hist || []).length;
         realTurn = tot >= 3 && w / tot >= 0.6;
-        // Regra extra: última operação finalizada do MESMO ativo (qualquer direção) foi perda nos últimos 15 min → REAL
+        // Regra extra: última operação finalizada do MESMO ativo (MESMA direção) foi perda nos últimos 15 min → REAL
         if (!realTurn) {
           const { data: last } = await supabase.from('operation_results')
-            .select('result').eq('asset', bestSignal.asset)
+            .select('result').eq('asset', bestSignal.asset).eq('direction', dirH)
             .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
             .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
             .order('created_at', { ascending: false }).limit(1);

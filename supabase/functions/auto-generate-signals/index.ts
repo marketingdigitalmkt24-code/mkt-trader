@@ -1520,29 +1520,17 @@ serve(async (req) => {
 
       // ============= MODO TESTE (pedido 14/10/2026) =============
       // Toda entrada é simulada (sem IQ Option). Só abre REAL quando a última operação
-      // finalizada do MESMO ativo foi uma perda no teste (últimos 15 min).
-      // IA analisa TODAS as últimas operações (teste + reais) do ativo+direção (24h).
-      // Só abre REAL na IQ quando o histórico mostra chance de ganho: ≥3 resultados e acerto ≥60%.
+      // finalizada do MESMO ativo (MESMA direção) foi uma perda nos últimos 15 min.
+      // Estratégia ÚNICA: perda anterior (pedido 14/10/2026 — regra de histórico removida).
       let realTurn = false;
       try {
         const dirH = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
-        const { data: hist } = await supabase.from('operation_results')
+        const { data: last } = await supabase.from('operation_results')
           .select('result').eq('asset', bestSignal.asset).eq('direction', dirH)
           .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
-          .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
-          .order('created_at', { ascending: false }).limit(50);
-        const w = (hist || []).filter((h: any) => h.result === 'win').length;
-        const tot = (hist || []).length;
-        realTurn = tot >= 3 && w / tot >= 0.6;
-        // Regra extra: última operação finalizada do MESMO ativo (MESMA direção) foi perda nos últimos 15 min → REAL
-        if (!realTurn) {
-          const { data: last } = await supabase.from('operation_results')
-            .select('result').eq('asset', bestSignal.asset).eq('direction', dirH)
-            .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
-            .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
-            .order('created_at', { ascending: false }).limit(1);
-          if (last && last[0]?.result === 'loss') { realTurn = true; console.log(`🔁 ${bestSignal.asset}: perda anterior → REAL`); }
-        }
+          .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: false }).limit(1);
+        if (last && last[0]?.result === 'loss') { realTurn = true; console.log(`🔁 ${bestSignal.asset}: perda anterior → REAL`); }
         // Ativo recusado pela IQ ("invalid instrument") nas últimas 24h → não envia (evita buzina sem operação)
         if (realTurn) {
           const { data: bad } = await supabase.from('trade_queue').select('id')
@@ -1550,7 +1538,7 @@ serve(async (req) => {
             .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
           if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ (invalid instrument) → TESTE`); }
         }
-        console.log(`📊 Histórico ${bestSignal.asset} ${dirH}: ${w}/${tot} wins → ${realTurn ? 'REAL' : 'TESTE'}`);
+        console.log(`📊 Perda anterior ${bestSignal.asset} ${dirH}: ${last?.[0]?.result || 'nenhuma'} → ${realTurn ? 'REAL' : 'TESTE'}`);
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')

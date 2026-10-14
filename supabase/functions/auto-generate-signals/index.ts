@@ -1521,17 +1521,21 @@ serve(async (req) => {
       // ============= MODO TESTE (pedido 14/10/2026) =============
       // Toda entrada é simulada (sem IQ Option). Só abre REAL quando a última operação
       // finalizada do MESMO ativo foi uma perda no teste (últimos 15 min).
+      // IA analisa TODAS as últimas operações (teste + reais) do ativo+direção (24h).
+      // Só abre REAL na IQ quando o histórico mostra chance de ganho: ≥3 resultados e acerto ≥60%.
       let realTurn = false;
       try {
-        const { data: lastOp } = await supabase.from('operation_results')
-          .select('result, timeframe, created_at')
-          .eq('asset', bestSignal.asset)
-          .in('result', ['win', 'loss', 'tie', 'test_open', 'pending', 'open'])
-          .neq('timeframe', 'MT5')
-          .order('created_at', { ascending: false }).limit(1).maybeSingle();
-        realTurn = !!lastOp && lastOp.timeframe === 'TEST' && lastOp.result === 'loss'
-          && Date.now() - new Date(lastOp.created_at).getTime() < 15 * 60 * 1000;
-      } catch (e) { console.log('⚠️ Erro modo teste:', e); }
+        const dirH = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
+        const { data: hist } = await supabase.from('operation_results')
+          .select('result').eq('asset', bestSignal.asset).eq('direction', dirH)
+          .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
+          .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+          .order('created_at', { ascending: false }).limit(50);
+        const w = (hist || []).filter((h: any) => h.result === 'win').length;
+        const tot = (hist || []).length;
+        realTurn = tot >= 3 && w / tot >= 0.6;
+        console.log(`📊 Histórico ${bestSignal.asset} ${dirH}: ${w}/${tot} wins → ${realTurn ? 'REAL' : 'TESTE'}`);
+      } catch (e) { console.log('⚠️ Erro histórico:', e); }
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
@@ -1548,7 +1552,7 @@ serve(async (req) => {
         executedSignals.push({ asset: bestSignal.asset, type: bestSignal.type, test: true });
         continue;
       }
-      console.log(`🔥 Perda no teste em ${bestSignal.asset} → abrindo REAL na IQ Option`);
+      console.log(`✅ Histórico favorável em ${bestSignal.asset} → abrindo REAL na IQ Option`);
 
       // ============= FOREX IMEDIATO — sem confirmações, TP x1000 =============
       try {

@@ -97,17 +97,18 @@ export function LiveOperationsCard() {
     }
   };
 
-  // Buzina só quando a operação realmente abriu na IQ Option (trade_queue executada)
+  // Buzina toca quando o sinal é ENVIADO para a IQ Option (status 'executing'),
+  // ~30s antes da entrada real (que sai 2s antes da vela fechar). Testes não tocam.
   const checkNewSignals = async () => {
     if (!hornEnabledRef.current) return;
     try {
       const since = new Date(Date.now() - 90 * 1000).toISOString();
       const { data } = await supabase
         .from('trade_queue')
-        .select('signal_id, executed_at')
-        .eq('status', 'executed')
-        .gte('executed_at', since)
-        .order('executed_at', { ascending: false })
+        .select('signal_id, created_at')
+        .eq('status', 'executing')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
         .limit(5);
       for (const sig of data || []) {
         if (!seenSignalsRef.current.has(sig.signal_id)) {
@@ -187,7 +188,7 @@ export function LiveOperationsCard() {
 
   // Poll de sinais novos para a buzina (a cada 10s)
   useEffect(() => {
-    const hornPoll = setInterval(checkNewSignals, 10000);
+    const hornPoll = setInterval(checkNewSignals, 3000);
     return () => clearInterval(hornPoll);
   }, []);
 

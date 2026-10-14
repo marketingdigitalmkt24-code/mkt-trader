@@ -1507,6 +1507,17 @@ serve(async (req) => {
         }
       }
 
+      // ============= PREÇO AO VIVO DA IQ OPTION =============
+      // Usa o último preço do gráfico da IQ (não o preço calculado do sinal) para registrar a entrada.
+      try {
+        const live = iqCandles.get(String(bestSignal.asset).replace('-OTC', ''));
+        const lp = live && live.length ? Number(live[live.length - 1].c) : NaN;
+        if (Number.isFinite(lp) && lp > 0) {
+          console.log(`📡 Preço ao vivo IQ ${bestSignal.asset}: sinal ${bestSignal.price} → IQ ${lp}`);
+          bestSignal.price = lp;
+        }
+      } catch (_) { /* mantém preço do sinal */ }
+
       // ============= MODO TESTE (pedido 14/10/2026) =============
       // Toda entrada é simulada (sem IQ Option). Só abre REAL quando a última operação
       // finalizada do MESMO ativo foi uma perda no teste (últimos 15 min).

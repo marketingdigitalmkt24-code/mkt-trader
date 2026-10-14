@@ -1320,8 +1320,9 @@ serve(async (req) => {
       console.error('❌ Falha ao chamar IA:', e);
     }
 
-    // SÓ A FAVOR DA TENDÊNCIA (pedido do usuário, 14/10/2026): médias alinhadas e preço do lado certo
-    {
+    // MODO IA SEM FILTRO (pedido do usuário, 14/10/2026): filtros de tendência/RSI/EMA/volatilidade desligados
+    const AI_NO_FILTER = true;
+    if (!AI_NO_FILTER) {
       const before = aiApprovedSignals.length;
       aiApprovedSignals = aiApprovedSignals.filter((s: any) => {
         const ma = s.indicators?.movingAverages || {};
@@ -1495,6 +1496,38 @@ serve(async (req) => {
           console.error('❌ WhatsApp failed:', e);
         }
       }
+
+      // ============= MODO TESTE (pedido 14/10/2026) =============
+      // Toda entrada é simulada (sem IQ Option). Só abre REAL quando a última operação
+      // finalizada do MESMO ativo foi uma perda no teste (últimos 15 min).
+      let realTurn = false;
+      try {
+        const { data: lastOp } = await supabase.from('operation_results')
+          .select('result, timeframe, created_at')
+          .eq('asset', bestSignal.asset)
+          .in('result', ['win', 'loss', 'tie', 'test_open', 'pending', 'open'])
+          .neq('timeframe', 'MT5')
+          .order('created_at', { ascending: false }).limit(1).maybeSingle();
+        realTurn = !!lastOp && lastOp.timeframe === 'TEST' && lastOp.result === 'loss'
+          && Date.now() - new Date(lastOp.created_at).getTime() < 15 * 60 * 1000;
+      } catch (e) { console.log('⚠️ Erro modo teste:', e); }
+      if (!realTurn) {
+        const { data: openTest } = await supabase.from('operation_results')
+          .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
+        if (!openTest || openTest.length === 0) {
+          const dir = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
+          await supabase.from('operation_results').insert({
+            signal_id: bestSignal.id, asset: bestSignal.asset, direction: dir,
+            entry_price: bestSignal.price, result: 'test_open', profit: 0,
+            expiration_time: new Date(Date.now() + 60 * 1000).toISOString(),
+            is_auto_trade: true, is_ai_analyzed: !!bestSignal.aiConfidence, timeframe: 'TEST',
+          });
+          console.log(`🧪 TESTE aberto: ${bestSignal.asset} ${dir} @ ${bestSignal.price}`);
+        }
+        executedSignals.push({ asset: bestSignal.asset, type: bestSignal.type, test: true });
+        continue;
+      }
+      console.log(`🔥 Perda no teste em ${bestSignal.asset} → abrindo REAL na IQ Option`);
 
       // ============= FOREX IMEDIATO — sem confirmações, TP x1000 =============
       try {

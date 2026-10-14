@@ -182,6 +182,12 @@ export function LiveOperationsCard() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
+  // Poll de sinais novos para a buzina (a cada 10s)
+  useEffect(() => {
+    const hornPoll = setInterval(checkNewSignals, 10000);
+    return () => clearInterval(hornPoll);
+  }, []);
+
   // Subscribe to realtime operation_results
   useEffect(() => {
     const channel = supabase
@@ -220,7 +226,16 @@ export function LiveOperationsCard() {
         <div className="flex items-center gap-2 mb-4">
           <Activity className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-semibold">Operações em Tempo Real</h3>
-          
+          <Button
+            size="sm"
+            variant={hornEnabled ? 'default' : 'secondary'}
+            className="h-7 px-2 text-xs ml-auto gap-1"
+            onClick={toggleHorn}
+            title="Avisar com buzina ~1 minuto antes de cada operação"
+          >
+            {hornEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            Buzina
+          </Button>
         </div>
 
         {/* Posições abertas */}

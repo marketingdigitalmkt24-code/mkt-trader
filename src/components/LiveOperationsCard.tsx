@@ -44,6 +44,7 @@ export function LiveOperationsCard() {
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState({ wins: 0, losses: 0, testWinsToday: 0, testLossesToday: 0 });
   const pageRef = useRef(1);
   const [openPositions, setOpenPositions] = useState<OpenPosition[]>([]);
   const [openLoading, setOpenLoading] = useState(true);
@@ -171,6 +172,31 @@ export function LiveOperationsCard() {
     }
   };
 
+  // Contadores de ganhos/perdas (geral) e resultado diário em teste (dia de Brasília)
+  const fetchStats = async () => {
+    try {
+      const base = () => supabase.from('operation_results').select('*', { count: 'exact', head: true })
+        .or('timeframe.is.null,timeframe.neq.MT5')
+        .not('signal_id', 'like', 'mt5-%');
+      const brNow = new Date(Date.now() - 3 * 3600 * 1000);
+      const dayStartIso = new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()) + 3 * 3600 * 1000).toISOString();
+      const [w, l, tw, tl] = await Promise.all([
+        base().eq('result', 'win'),
+        base().eq('result', 'loss'),
+        base().eq('timeframe', 'TEST').gte('created_at', dayStartIso).eq('result', 'win'),
+        base().eq('timeframe', 'TEST').gte('created_at', dayStartIso).eq('result', 'loss'),
+      ]);
+      setStats({
+        wins: w.count ?? 0,
+        losses: l.count ?? 0,
+        testWinsToday: tw.count ?? 0,
+        testLossesToday: tl.count ?? 0,
+      });
+    } catch {
+      // silent
+    }
+  };
+
   useEffect(() => {
     pageRef.current = page;
     fetchRecentTrades();
@@ -178,9 +204,11 @@ export function LiveOperationsCard() {
 
   useEffect(() => {
     fetchRecentTrades();
+    fetchStats();
     fetchOpen();
     pollRef.current = setInterval(() => {
       fetchRecentTrades();
+      fetchStats();
       fetchOpen();
     }, 15000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
@@ -198,6 +226,7 @@ export function LiveOperationsCard() {
       .channel('live-ops')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, () => {
         fetchRecentTrades();
+        fetchStats();
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -209,6 +238,10 @@ export function LiveOperationsCard() {
   const iqTrades = recentTrades.filter(t => !isMt5Trade(t));
   const totalOpenPnl = openPositions.reduce((sum, p) => sum + (p.pnl || 0), 0);
   const totalIqProfit = iqTrades.reduce((sum, t) => sum + t.profit, 0);
+  const hitTotal = stats.wins + stats.losses;
+  const hitPct = hitTotal > 0 ? Math.round((stats.wins / hitTotal) * 100) : 0;
+  const testTodayTotal = stats.testWinsToday + stats.testLossesToday;
+  const testTodayPct = testTodayTotal > 0 ? Math.round((stats.testWinsToday / testTodayTotal) * 100) : 0;
 
   const getResultColor = (result: string) => {
     if (result === 'win') return 'text-call';
@@ -305,10 +338,24 @@ export function LiveOperationsCard() {
               <MonitorSmartphone className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">IQ Option — Últimas Operações</span>
             </div>
-            <Badge variant="secondary" className="text-[10px]">
-              {totalCount} no total
-            </Badge>
+            <div className="flex items-center gap-1 flex-wrap justify-end">
+              <Badge variant="secondary" className="text-[10px]">{totalCount} no total</Badge>
+              <Badge variant="secondary" className="text-[10px] text-call bg-call/10">✓ {stats.wins} ganhos</Badge>
+              <Badge variant="secondary" className="text-[10px] text-put bg-put/10">✗ {stats.losses} perdas</Badge>
+              <Badge variant="secondary" className="text-[10px]">{hitPct}%</Badge>
+            </div>
           </div>
+
+          {testTodayTotal > 0 && (
+            <div className="flex items-center justify-between mb-2 px-2 py-1.5 rounded-lg bg-secondary/30 text-[10px]">
+              <span className="text-muted-foreground">Resultado diário (teste)</span>
+              <span className="flex items-center gap-2 font-mono">
+                <span className="text-call">✓ {stats.testWinsToday}</span>
+                <span className="text-put">✗ {stats.testLossesToday}</span>
+                <span className="text-muted-foreground">{testTodayPct}%</span>
+              </span>
+            </div>
+          )}
 
           {iqTrades.length > 0 ? (
             <div className="space-y-1">

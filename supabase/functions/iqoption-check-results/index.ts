@@ -291,7 +291,12 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
                   win = pos.result;
                 }
 
-                const candidateIds = [pos.option_id, pos.position_id, pos.external_id, pos.id]
+                const digitalOrderIds = [
+                  ...(Array.isArray(pos.order_ids) ? pos.order_ids : []),
+                  ...(Array.isArray(pos.raw_event?.digital_options_position_changed1?.order_ids) ? pos.raw_event.digital_options_position_changed1.order_ids : []),
+                  pos.raw_event?.digital_options_position_changed1?.order_id,
+                ];
+                const candidateIds = [pos.option_id, pos.position_id, pos.external_id, pos.id, ...digitalOrderIds]
                   .filter((v: any) => v !== undefined && v !== null)
                   .map((v: any) => String(v));
 
@@ -496,9 +501,11 @@ serve(async (req) => {
 
         // Search for matching closed position in IQ Option history
         // IMPORTANT: use strict ID matching to avoid false positives
+        // Digital: o id retornado na abertura é o order_id, que aparece dentro do raw_event (order_ids)
+        const idRe = iqId ? new RegExp(`[^0-9]${iqId}[^0-9]`) : null;
         const closed = closedPositions.find((p) =>
           iqId ? p.matchIds.includes(iqId) : p.matchIds.includes(String(pending.signal_id))
-        );
+        ) || (idRe ? closedPositions.find((p) => idRe.test(p.rawJson)) : undefined);
 
         if (closed && closed.win !== 'pending') {
           const result = closed.win === 'win' ? 'win' :

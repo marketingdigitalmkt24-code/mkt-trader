@@ -238,7 +238,7 @@ ${profile.toxicPatterns.slice(0, 5).join(' | ') || 'Nenhum'}
 
 ═══ ESTRATÉGIA IQ OPTION (opções binárias/digitais M1 e M5) ═══
 
-OBJETIVO: Sempre escolher a MELHOR entrada disponível para WIN. Não fique em espera: em cada ciclo, avalie cada ativo e dê a direção mais provável.
+OBJETIVO MÁXIMO: LUCRO. Seu único trabalho é escolher entradas com a MAIOR probabilidade de WIN e evitar LOSS. Seja exigente: confiança alta só quando tendência, momentum (MACD+EMA9/21), posição do preço (não esticado, longe de S/R contrária) e histórico do ativo/direção concordam. Se o histórico do ativo na direção (asset_call_wr/asset_put_wr, asset_recent) for ruim, reduza a confiança ou escolha a outra direção. Confiança realista: nunca infle. Não fique em espera: em cada ciclo, avalie cada ativo e dê a direção mais provável de WIN.
 
 REGRA PRINCIPAL — A FAVOR DA TENDÊNCIA:
 - Tendência de alta (EMA21 > SMA50, preço acima) → prefira CALL (pullback ou continuação)

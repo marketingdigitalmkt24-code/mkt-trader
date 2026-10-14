@@ -1306,8 +1306,34 @@ serve(async (req) => {
       );
     }
 
-    // SÓ IA: sem filtros de histórico/estratégia — a entrada mais assertiva (maior confiança da IA) vai primeiro
-    aiApprovedSignals.sort((a, b) => (b.aiConfidence || 0) - (a.aiConfidence || 0));
+    // MODO LUCRO: ranqueia por confiança da IA + histórico (últimas 300) do ativo+direção — vencedores primeiro, nunca bloqueia
+    try {
+      const { data: hist } = await supabase
+        .from('operation_results')
+        .select('asset, direction, result')
+        .neq('timeframe', 'MT5')
+        .in('result', ['win', 'loss'])
+        .order('created_at', { ascending: false })
+        .limit(300);
+      const st = new Map<string, { w: number; l: number }>();
+      for (const r of hist || []) {
+        const k = `${String(r.asset).toUpperCase()}|${String(r.direction || '').toUpperCase()}`;
+        const s = st.get(k) || { w: 0, l: 0 };
+        if (r.result === 'win') s.w++; else s.l++;
+        st.set(k, s);
+      }
+      for (const s of aiApprovedSignals) {
+        const h = st.get(`${String(s.asset).toUpperCase()}|${String(s.type).toUpperCase()}`);
+        // Bônus/penalidade: +5 por win líquido, -8 por loss líquido (perdas pesam mais)
+        const net = h ? h.w - h.l : 0;
+        s.profitScore = (s.aiConfidence || 0) + (net >= 0 ? net * 5 : net * 8);
+        s.histWL = h ? `${h.w}W/${h.l}L` : 'novo';
+      }
+    } catch (e) {
+      console.log('⚠️ Erro histórico lucro:', e);
+    }
+    aiApprovedSignals.sort((a, b) => (b.profitScore ?? b.aiConfidence ?? 0) - (a.profitScore ?? a.aiConfidence ?? 0));
+    console.log(`💰 MODO LUCRO ranking: ${aiApprovedSignals.slice(0, 5).map((s: any) => `${s.asset} ${s.type} conf=${s.aiConfidence} hist=${s.histWL} score=${s.profitScore}`).join(' | ')}`);
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
     const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];

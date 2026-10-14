@@ -1538,31 +1538,7 @@ serve(async (req) => {
 
               // Proteção diária removida a pedido do usuário — sem pausa por lucro/perda do dia
 
-              // ===== GALE 1: após uma perda, dobra o valor UMA vez na próxima entrada =====
-              try {
-                const { data: lastOps } = await supabase
-                  .from('operation_results')
-                  .select('result, profit, amount, created_at')
-                  .neq('timeframe', 'MT5')
-                  .in('result', ['win', 'loss'])
-                  .order('created_at', { ascending: false })
-                  .limit(2);
-                if (lastOps && lastOps.length > 0 && lastOps[0].result === 'loss') {
-                  const prev = lastOps[1];
-                  const prevWasGale = prev && prev.result === 'loss';
-                  if (!prevWasGale) {
-                    const before = iqTradeAmount;
-                    iqTradeAmount = Math.round(iqTradeAmount * 2 * 100) / 100;
-                    console.log(`🔁 GALE 1: última operação foi LOSS — dobrando entrada $${before} → $${iqTradeAmount} (uma única vez)`);
-                  } else {
-                    console.log('⏭️ GALE já usado na entrada anterior — voltando ao valor normal');
-                  }
-                }
-              } catch (e) {
-                console.warn('⚠️ Checagem de gale falhou, seguindo sem gale:', e);
-              }
-
-              // SÓ IA: sem filtro de exaustão, sem filtro OTC (pedido do usuário)
+              // SÓ IA: sem gale, sem filtro de exaustão, sem filtro OTC (pedido do usuário)
               const expiration = 1; // sempre 1 minuto
               const executionDirection = bestSignal.aiDirection || bestSignal.type;
 

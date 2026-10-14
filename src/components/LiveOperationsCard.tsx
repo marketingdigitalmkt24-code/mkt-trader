@@ -212,14 +212,14 @@ export function LiveOperationsCard() {
   const getResultColor = (result: string) => {
     if (result === 'win') return 'text-call';
     if (result === 'loss') return 'text-put';
-    if (result === 'pending' || result === 'open') return 'text-gold';
+    if (result === 'pending' || result === 'open' || result === 'test_open') return 'text-gold';
     return 'text-muted-foreground';
   };
 
   const getResultBg = (result: string) => {
     if (result === 'win') return 'bg-call/10';
     if (result === 'loss') return 'bg-put/10';
-    if (result === 'pending' || result === 'open') return 'bg-gold/10';
+    if (result === 'pending' || result === 'open' || result === 'test_open') return 'bg-gold/10';
     return 'bg-secondary/50';
   };
 
@@ -326,6 +326,9 @@ export function LiveOperationsCard() {
                     <span className="text-[10px] text-muted-foreground font-mono">
                       {new Date(trade.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </span>
+                    {trade.timeframe === 'TEST' && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">TESTE</Badge>
+                    )}
                     {trade.timeframe === 'FOREX' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">FOREX</Badge>
                     )}
@@ -335,10 +338,10 @@ export function LiveOperationsCard() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-auto">
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
-                      {trade.result === 'pending' || trade.result === 'open' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
+                      {trade.result === 'pending' || trade.result === 'open' || trade.result === 'test_open' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
                     </span>
                     <Badge variant="secondary" className={cn("text-[9px] px-1 py-0", getResultColor(trade.result))}>
-                      {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result === 'open' ? 'ABERTA' : trade.result.toUpperCase()}
+                      {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result === 'open' ? 'ABERTA' : trade.result === 'test_open' ? 'TESTE' : trade.result.toUpperCase()}
                     </Badge>
                   </div>
                 </div>

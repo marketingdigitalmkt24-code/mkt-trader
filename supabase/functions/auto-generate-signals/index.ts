@@ -1309,8 +1309,20 @@ serve(async (req) => {
         const ok = dir === 'CALL'
           ? e9 > e21 && e21 > s50 && px > e21
           : e9 < e21 && e21 < s50 && px < e21;
-        if (!ok) console.log(`🚫 Contra a tendência: ${s.asset} ${dir} (ema9 ${e9}, ema21 ${e21}, sma50 ${s50}, preço ${px})`);
-        return ok;
+        if (!ok) { console.log(`🚫 Contra a tendência: ${s.asset} ${dir} (ema9 ${e9}, ema21 ${e21}, sma50 ${s50}, preço ${px})`); return false; }
+        // RSI esticado (pedido 14/10/2026): não comprar >70, não vender <30
+        const rsi = Number(s.indicators?.rsi?.value);
+        if (Number.isFinite(rsi) && ((dir === 'CALL' && rsi > 70) || (dir === 'PUT' && rsi < 30))) {
+          console.log(`🚫 RSI esticado: ${s.asset} ${dir} RSI ${rsi.toFixed(1)}`); return false;
+        }
+        // Preço perto da EMA21: distância ≤ 1 ATR (ou ≤ 2× afastamento EMA9-EMA21 sem ATR)
+        const atrRaw = s.indicators?.atr;
+        const atr = Number(typeof atrRaw === 'object' ? atrRaw?.value : atrRaw);
+        const maxDist = Number.isFinite(atr) && atr > 0 ? atr : 2 * Math.abs(e9 - e21);
+        if (Math.abs(px - e21) > maxDist) {
+          console.log(`🚫 Longe da EMA21: ${s.asset} ${dir} dist ${Math.abs(px - e21)} > ${maxDist}`); return false;
+        }
+        return true;
       });
       console.log(`📈 Filtro tendência: ${aiApprovedSignals.length}/${before} a favor`);
     }

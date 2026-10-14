@@ -1269,11 +1269,9 @@ serve(async (req) => {
       } else if (aiData?.success && aiData?.analyzedSignals) {
         let executeSignals = aiData.analyzedSignals.filter((a: any) => a.recommendation === 'EXECUTE');
         console.log(`🧠 IA (${aiData.engine || 'unknown'}): ${executeSignals.length}/${aiData.analyzedSignals.length} sinais aprovados`);
-        // Sem espera: se a IA não aprovou nenhum, usa a MELHOR entrada analisada por ela (a favor da tendência)
-        if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
-          const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
-          console.log(`🎯 SÓ IA (sem confiança mínima): melhor análise ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
-          executeSignals = [best];
+        // SÓ entradas lucrativas: se a IA não aprovou nenhuma (EXECUTE), NÃO entra — sem fallback
+        if (executeSignals.length === 0) {
+          console.log('⏸️ IA não aprovou nenhuma entrada neste ciclo — aguardando próxima oportunidade');
         }
 
         for (const approved of executeSignals) {
@@ -1472,11 +1470,18 @@ serve(async (req) => {
             .from('operation_results')
             .select('id')
             .eq('result', 'pending')
-            .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
             .limit(1);
 
-          if (freshPending && freshPending.length > 0) {
-            console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente`);
+          // Trava anti-duplo: qualquer operação pendente OU fila em execução nos últimos 3 min bloqueia nova entrada
+          const { data: queueBusy } = await supabase
+            .from('trade_queue')
+            .select('id')
+            .eq('status', 'executing')
+            .gte('created_at', new Date(Date.now() - 3 * 60 * 1000).toISOString())
+            .limit(1);
+
+          if ((freshPending && freshPending.length > 0) || (queueBusy && queueBusy.length > 0)) {
+            console.log(`🚫 IQ Option: BLOQUEADO — operação pendente ou em execução`);
           } else {
             const { data: iqConfig } = await supabase
               .from('iqoption_config')

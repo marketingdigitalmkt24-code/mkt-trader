@@ -89,6 +89,7 @@ export function useIQOptionConnection() {
         .select('result, profit, entry_price, timeframe')
         .gte('created_at', brasiliaMidnightUtc.toISOString())
         .neq('timeframe', 'MT5')
+        .neq('timeframe', 'TEST')
         .order('created_at', { ascending: true });
 
       if (error) throw error;

@@ -338,10 +338,24 @@ export function LiveOperationsCard() {
               <MonitorSmartphone className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">IQ Option — Últimas Operações</span>
             </div>
-            <Badge variant="secondary" className="text-[10px]">
-              {totalCount} no total
-            </Badge>
+            <div className="flex items-center gap-1 flex-wrap justify-end">
+              <Badge variant="secondary" className="text-[10px]">{totalCount} no total</Badge>
+              <Badge variant="secondary" className="text-[10px] text-call bg-call/10">✓ {stats.wins} ganhos</Badge>
+              <Badge variant="secondary" className="text-[10px] text-put bg-put/10">✗ {stats.losses} perdas</Badge>
+              <Badge variant="secondary" className="text-[10px]">{hitPct}%</Badge>
+            </div>
           </div>
+
+          {testTodayTotal > 0 && (
+            <div className="flex items-center justify-between mb-2 px-2 py-1.5 rounded-lg bg-secondary/30 text-[10px]">
+              <span className="text-muted-foreground">Resultado diário (teste)</span>
+              <span className="flex items-center gap-2 font-mono">
+                <span className="text-call">✓ {stats.testWinsToday}</span>
+                <span className="text-put">✗ {stats.testLossesToday}</span>
+                <span className="text-muted-foreground">{testTodayPct}%</span>
+              </span>
+            </div>
+          )}
 
           {iqTrades.length > 0 ? (
             <div className="space-y-1">

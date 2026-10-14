@@ -50,8 +50,9 @@ export function LiveOperationsCard() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isFetchingRef = useRef(false);
   const recentRequestRef = useRef(0);
-  const [hornEnabled, setHornEnabled] = useState(false);
-  const hornEnabledRef = useRef(false);
+  const initialHorn = typeof window !== 'undefined' && localStorage.getItem('hornEnabled') === '1';
+  const [hornEnabled, setHornEnabled] = useState(initialHorn);
+  const hornEnabledRef = useRef(initialHorn);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const seenSignalsRef = useRef<Set<string>>(new Set());
   const hornPrimedRef = useRef(false);
@@ -89,6 +90,7 @@ export function LiveOperationsCard() {
     const next = !hornEnabledRef.current;
     hornEnabledRef.current = next;
     setHornEnabled(next);
+    localStorage.setItem('hornEnabled', next ? '1' : '0');
     if (next && !hornPrimedRef.current) {
       hornPrimedRef.current = true;
       playHorn(); // destrava o áudio do navegador com o clique

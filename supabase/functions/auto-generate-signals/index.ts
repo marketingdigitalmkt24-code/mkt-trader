@@ -1298,6 +1298,23 @@ serve(async (req) => {
       console.error('❌ Falha ao chamar IA:', e);
     }
 
+    // SÓ A FAVOR DA TENDÊNCIA (pedido do usuário, 14/10/2026): médias alinhadas e preço do lado certo
+    {
+      const before = aiApprovedSignals.length;
+      aiApprovedSignals = aiApprovedSignals.filter((s: any) => {
+        const ma = s.indicators?.movingAverages || {};
+        const e9 = Number(ma.ema9), e21 = Number(ma.ema21), s50 = Number(ma.sma50), px = Number(s.price);
+        if (![e9, e21, s50, px].every(Number.isFinite)) return false;
+        const dir = String(s.aiDirection || s.type).toUpperCase();
+        const ok = dir === 'CALL'
+          ? e9 > e21 && e21 > s50 && px > e21
+          : e9 < e21 && e21 < s50 && px < e21;
+        if (!ok) console.log(`🚫 Contra a tendência: ${s.asset} ${dir} (ema9 ${e9}, ema21 ${e21}, sma50 ${s50}, preço ${px})`);
+        return ok;
+      });
+      console.log(`📈 Filtro tendência: ${aiApprovedSignals.length}/${before} a favor`);
+    }
+
     // MT5 SÓ opera com aprovação da IA — sem fallback técnico
     if (aiApprovedSignals.length === 0) {
       console.log('⚠️ IA não aprovou nenhum sinal — MT5 e IQ bloqueados (somente sinais aprovados pela IA)');

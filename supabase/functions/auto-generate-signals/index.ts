@@ -1534,6 +1534,15 @@ serve(async (req) => {
         const w = (hist || []).filter((h: any) => h.result === 'win').length;
         const tot = (hist || []).length;
         realTurn = tot >= 3 && w / tot >= 0.6;
+        // Regra extra: última operação finalizada do MESMO ativo (qualquer direção) foi perda nos últimos 15 min → REAL
+        if (!realTurn) {
+          const { data: last } = await supabase.from('operation_results')
+            .select('result').eq('asset', bestSignal.asset)
+            .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
+            .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
+            .order('created_at', { ascending: false }).limit(1);
+          if (last && last[0]?.result === 'loss') { realTurn = true; console.log(`🔁 ${bestSignal.asset}: perda anterior → REAL`); }
+        }
         // Ativo recusado pela IQ ("invalid instrument") nas últimas 24h → não envia (evita buzina sem operação)
         if (realTurn) {
           const { data: bad } = await supabase.from('trade_queue').select('id')

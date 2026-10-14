@@ -97,16 +97,17 @@ export function LiveOperationsCard() {
     }
   };
 
-  // Verifica sinais novos (criados nos últimos 90s) e buzina ~1 min antes da entrada
+  // Buzina só quando a operação realmente abriu na IQ Option (trade_queue executada)
   const checkNewSignals = async () => {
     if (!hornEnabledRef.current) return;
     try {
       const since = new Date(Date.now() - 90 * 1000).toISOString();
       const { data } = await supabase
-        .from('trading_signals')
-        .select('signal_id, created_at')
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
+        .from('trade_queue')
+        .select('signal_id, executed_at')
+        .eq('status', 'executed')
+        .gte('executed_at', since)
+        .order('executed_at', { ascending: false })
         .limit(5);
       for (const sig of data || []) {
         if (!seenSignalsRef.current.has(sig.signal_id)) {

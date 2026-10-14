@@ -234,7 +234,7 @@ export function LiveOperationsCard() {
             variant={hornEnabled ? 'default' : 'secondary'}
             className="h-7 px-2 text-xs ml-auto gap-1"
             onClick={toggleHorn}
-            title="Avisar com buzina ~1 minuto antes de cada operação"
+            title="Buzina toca quando uma operação abre na IQ Option"
           >
             {hornEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
             Buzina

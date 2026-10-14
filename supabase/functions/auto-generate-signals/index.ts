@@ -1130,6 +1130,28 @@ serve(async (req) => {
 
     const hasAnyPendingIQTrade = (pendingOps || []).length > 0;
 
+    // ============= MODO TESTE: resolver operações simuladas vencidas =============
+    try {
+      const { data: testOpen } = await supabase.from('operation_results')
+        .select('id, asset, direction, entry_price, expiration_time')
+        .eq('timeframe', 'TEST').eq('result', 'test_open')
+        .lte('expiration_time', new Date().toISOString()).limit(20);
+      for (const t of testOpen || []) {
+        const cs = iqCandles.get(String(t.asset).replace('-OTC', ''));
+        const exit = cs && cs.length ? Number(cs[cs.length - 1].c) : NaN;
+        const entry = Number(t.entry_price);
+        const tooOld = t.expiration_time && Date.now() - new Date(t.expiration_time).getTime() > 10 * 60 * 1000;
+        if (!Number.isFinite(exit) || !Number.isFinite(entry)) {
+          if (tooOld) await supabase.from('operation_results').update({ result: 'expired' }).eq('id', t.id);
+          continue;
+        }
+        const up = String(t.direction).toUpperCase() === 'CALL';
+        const res = exit === entry ? 'tie' : (exit > entry) === up ? 'win' : 'loss';
+        await supabase.from('operation_results').update({ result: res, exit_price: exit }).eq('id', t.id);
+        console.log(`🧪 TESTE ${t.asset} ${t.direction}: ${entry} → ${exit} = ${res}`);
+      }
+    } catch (e) { console.log('⚠️ Erro resolvendo testes:', e); }
+
     if (hasAnyPendingIQTrade) {
       console.log(`🔒 IQ OPTION BLOQUEADO: ${(pendingOps || []).length} operação(ões) pendente(s)`);
     }

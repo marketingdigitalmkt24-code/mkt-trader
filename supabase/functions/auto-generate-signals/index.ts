@@ -1273,7 +1273,8 @@ serve(async (req) => {
         if (executeSignals.length === 0 && aiData.analyzedSignals.length > 0) {
           const best = [...aiData.analyzedSignals].sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))[0];
           console.log(`🎯 SÓ IA (sem confiança mínima): melhor análise ${best.asset} ${best.bestDirection || ''} ${best.confidence}% — ${best.reason || ''}`);
-          executeSignals = [best];
+          // todas as análises entram no ranking de lucro (confiança + histórico) — nunca fica em espera
+          executeSignals = [...aiData.analyzedSignals];
         }
 
         for (const approved of executeSignals) {
@@ -1306,8 +1307,30 @@ serve(async (req) => {
       );
     }
 
-    // SÓ IA: sem filtros de histórico/estratégia — a entrada mais assertiva (maior confiança da IA) vai primeiro
-    aiApprovedSignals.sort((a, b) => (b.aiConfidence || 0) - (a.aiConfidence || 0));
+    // MODO LUCRO: ranking = confiança IA + saldo win/loss (últimas 300 operações) por ativo+direção; perdas pesam mais. Nunca bloqueia.
+    const dirStats = new Map<string, { w: number; l: number }>();
+    try {
+      const { data: hist } = await supabase
+        .from('operation_results')
+        .select('asset, direction, result')
+        .neq('timeframe', 'MT5')
+        .in('result', ['win', 'loss'])
+        .order('created_at', { ascending: false })
+        .limit(300);
+      for (const r of hist || []) {
+        const k = `${String(r.asset).toUpperCase()}|${String(r.direction || '').toUpperCase()}`;
+        const st = dirStats.get(k) || { w: 0, l: 0 };
+        if (r.result === 'win') st.w++; else st.l++;
+        dirStats.set(k, st);
+      }
+    } catch (e) { console.log('⚠️ Erro histórico ranking:', e); }
+    const rankScore = (s: any) => {
+      const st = dirStats.get(`${String(s.asset).toUpperCase()}|${String(s.aiDirection || s.type).toUpperCase()}`);
+      const net = st ? st.w * 6 - st.l * 9 : 0; // perdas pesam 1,5x
+      return (s.aiConfidence || 0) + Math.max(-40, Math.min(25, net));
+    };
+    aiApprovedSignals.sort((a, b) => rankScore(b) - rankScore(a));
+    console.log(`🏁 Ranking lucro: ${aiApprovedSignals.slice(0, 5).map(s => `${s.asset} ${s.aiDirection} ${rankScore(s).toFixed(0)}`).join(' | ')}`);
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
     const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];

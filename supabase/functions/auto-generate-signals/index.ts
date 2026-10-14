@@ -1534,6 +1534,13 @@ serve(async (req) => {
         const w = (hist || []).filter((h: any) => h.result === 'win').length;
         const tot = (hist || []).length;
         realTurn = tot >= 3 && w / tot >= 0.6;
+        // Ativo recusado pela IQ ("invalid instrument") nas últimas 24h → não envia (evita buzina sem operação)
+        if (realTurn) {
+          const { data: bad } = await supabase.from('trade_queue').select('id')
+            .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
+            .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
+          if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ (invalid instrument) → TESTE`); }
+        }
         console.log(`📊 Histórico ${bestSignal.asset} ${dirH}: ${w}/${tot} wins → ${realTurn ? 'REAL' : 'TESTE'}`);
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
       if (!realTurn) {

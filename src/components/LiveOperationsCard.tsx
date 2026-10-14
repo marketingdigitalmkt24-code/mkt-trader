@@ -188,7 +188,7 @@ export function LiveOperationsCard() {
 
   // Poll de sinais novos para a buzina (a cada 10s)
   useEffect(() => {
-    const hornPoll = setInterval(checkNewSignals, 10000);
+    const hornPoll = setInterval(checkNewSignals, 3000);
     return () => clearInterval(hornPoll);
   }, []);
 

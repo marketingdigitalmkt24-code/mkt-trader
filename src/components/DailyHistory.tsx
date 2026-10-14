@@ -56,6 +56,9 @@ export function DailyHistory({
 
     if (timeframeFilter) {
       query = query.eq('timeframe', timeframeFilter);
+    } else {
+      // Card de resultados IQ Option: só operações reais, sem testes nem MT5
+      query = query.neq('timeframe', 'TEST').neq('timeframe', 'MT5');
     }
     if (excludeTimeframe) {
       query = query.neq('timeframe', excludeTimeframe);

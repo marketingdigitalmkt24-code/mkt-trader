@@ -1307,9 +1307,21 @@ serve(async (req) => {
         if (![e9, e21, s50, px].every(Number.isFinite)) return false;
         const dir = String(s.aiDirection || s.type).toUpperCase();
         const ok = dir === 'CALL'
-          ? e9 > e21 && e21 > s50 && px > e21
-          : e9 < e21 && e21 < s50 && px < e21;
+          ? e9 > e21 && e21 > s50 && px > e9
+          : e9 < e21 && e21 < s50 && px < e9;
         if (!ok) { console.log(`🚫 Contra a tendência: ${s.asset} ${dir} (ema9 ${e9}, ema21 ${e21}, sma50 ${s50}, preço ${px})`); return false; }
+        // Força da tendência: médias separadas por ≥ 0,5 ATR (pedido 14/10/2026)
+        const atrObj = s.indicators?.atr;
+        const atrVal = Number(typeof atrObj === 'object' ? atrObj?.value : atrObj);
+        const minSep = Number.isFinite(atrVal) && atrVal > 0 ? atrVal * 0.5 : 0;
+        if (minSep > 0 && Math.abs(e9 - e21) < minSep) {
+          console.log(`🚫 Tendência fraca: ${s.asset} ${dir} separação ${Math.abs(e9 - e21)} < ${minSep}`); return false;
+        }
+        // RSI a favor: compra só com RSI > 50, venda só com RSI < 50 (pedido 14/10/2026)
+        const rsiDir = Number(s.indicators?.rsi?.value);
+        if (Number.isFinite(rsiDir) && ((dir === 'CALL' && rsiDir <= 50) || (dir === 'PUT' && rsiDir >= 50))) {
+          console.log(`🚫 RSI contra a direção: ${s.asset} ${dir} RSI ${rsiDir.toFixed(1)}`); return false;
+        }
         // Sem cripto OTC e sem volatilidade alta (pedido 14/10/2026)
         const assetU = String(s.asset || '').toUpperCase();
         const isOtc = assetU.includes('OTC') || s.market_type === 'otc';

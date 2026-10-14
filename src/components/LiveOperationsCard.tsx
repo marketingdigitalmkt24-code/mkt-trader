@@ -97,16 +97,17 @@ export function LiveOperationsCard() {
     }
   };
 
-  // Verifica sinais novos (criados nos últimos 90s) e buzina ~1 min antes da entrada
+  // Buzina só quando a operação realmente abriu na IQ Option (trade_queue executada)
   const checkNewSignals = async () => {
     if (!hornEnabledRef.current) return;
     try {
       const since = new Date(Date.now() - 90 * 1000).toISOString();
       const { data } = await supabase
-        .from('trading_signals')
-        .select('signal_id, created_at')
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
+        .from('trade_queue')
+        .select('signal_id, executed_at')
+        .eq('status', 'executed')
+        .gte('executed_at', since)
+        .order('executed_at', { ascending: false })
         .limit(5);
       for (const sig of data || []) {
         if (!seenSignalsRef.current.has(sig.signal_id)) {
@@ -233,7 +234,7 @@ export function LiveOperationsCard() {
             variant={hornEnabled ? 'default' : 'secondary'}
             className="h-7 px-2 text-xs ml-auto gap-1"
             onClick={toggleHorn}
-            title="Avisar com buzina ~1 minuto antes de cada operação"
+            title="Buzina toca quando uma operação abre na IQ Option"
           >
             {hornEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
             Buzina

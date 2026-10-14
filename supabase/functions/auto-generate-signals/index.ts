@@ -1310,6 +1310,16 @@ serve(async (req) => {
           ? e9 > e21 && e21 > s50 && px > e21
           : e9 < e21 && e21 < s50 && px < e21;
         if (!ok) { console.log(`🚫 Contra a tendência: ${s.asset} ${dir} (ema9 ${e9}, ema21 ${e21}, sma50 ${s50}, preço ${px})`); return false; }
+        // Sem cripto OTC e sem volatilidade alta (pedido 14/10/2026)
+        const assetU = String(s.asset || '').toUpperCase();
+        const isOtc = assetU.includes('OTC') || s.market_type === 'otc';
+        const CRYPTO_RE = /^(BTC|ETH|XRP|LTC|SOL|DOGE|ADA|DOT|BNB|TRX|AVAX|LINK|MATIC|POL|SHIB|PEPE|TON|HYPE|SUI|NEAR|ATOM|UNI|BCH|XLM|ETC|FIL|APT|ARB|OP|TRUMP|WIF|BONK|ONDO|RNDR|INJ|IOTA|EOS|XMR|ZEC|DASH|NEO|KAS|TAO|ICP|HBAR|ALGO|AAVE|SAND|MANA|AXS|FET|SEI|JUP|FLOKI|WLD|ENA)(\/|-|$)/;
+        if (isOtc && (s.market_type === 'crypto' || CRYPTO_RE.test(assetU.replace(/[-\s]?OTC/, '')))) {
+          console.log(`🚫 Cripto OTC excluída: ${s.asset}`); return false;
+        }
+        if (String(s.indicators?.atr?.volatility || '').toLowerCase() === 'high') {
+          console.log(`🚫 Volatilidade alta: ${s.asset}`); return false;
+        }
         // RSI esticado (pedido 14/10/2026): não comprar >70, não vender <30
         const rsi = Number(s.indicators?.rsi?.value);
         if (Number.isFinite(rsi) && ((dir === 'CALL' && rsi > 70) || (dir === 'PUT' && rsi < 30))) {

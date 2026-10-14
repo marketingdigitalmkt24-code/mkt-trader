@@ -1133,13 +1133,23 @@ serve(async (req) => {
     // ============= MODO TESTE: resolver operações simuladas vencidas =============
     try {
       const { data: testOpen } = await supabase.from('operation_results')
-        .select('id, asset, direction, entry_price, expiration_time')
+        .select('id, asset, direction, entry_price, expiration_time, created_at')
         .eq('timeframe', 'TEST').eq('result', 'test_open')
         .lte('expiration_time', new Date().toISOString()).limit(20);
       for (const t of testOpen || []) {
         const cs = iqCandles.get(String(t.asset).replace('-OTC', ''));
-        const exit = cs && cs.length ? Number(cs[cs.length - 1].c) : NaN;
-        const entry = Number(t.entry_price);
+        // Entrada e saída medidas no MESMO gráfico da IQ, no momento exato (antes: preço do sinal vs última vela → perdas falsas)
+        const priceAt = (sec: number) => {
+          if (!cs || !cs.length) return NaN;
+          const k = cs.find((x) => x.t <= sec && sec < x.t + 60);
+          if (!k) return NaN;
+          return Number(k.o) + (Number(k.c) - Number(k.o)) * Math.min(1, (sec - k.t) / 60);
+        };
+        const entrySec = Math.floor(new Date(t.created_at).getTime() / 1000);
+        const expSec = Math.floor(new Date(t.expiration_time).getTime() / 1000);
+        const lastT = cs && cs.length ? cs[cs.length - 1].t : 0;
+        const exit = lastT + 60 > expSec ? (lastT > expSec ? priceAt(expSec) : (expSec >= lastT ? Number(cs![cs!.length - 1].c) : NaN)) : NaN;
+        const entry = priceAt(entrySec);
         const tooOld = t.expiration_time && Date.now() - new Date(t.expiration_time).getTime() > 10 * 60 * 1000;
         if (!Number.isFinite(exit) || !Number.isFinite(entry)) {
           if (tooOld) await supabase.from('operation_results').update({ result: 'expired' }).eq('id', t.id);

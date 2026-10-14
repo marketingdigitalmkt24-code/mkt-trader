@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Activity, TrendingUp, TrendingDown, Target, Clock, MonitorSmartphone, Loader2 } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, Target, Clock, MonitorSmartphone, Loader2, Volume2, VolumeX } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -50,6 +50,76 @@ export function LiveOperationsCard() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isFetchingRef = useRef(false);
   const recentRequestRef = useRef(0);
+  const [hornEnabled, setHornEnabled] = useState(false);
+  const hornEnabledRef = useRef(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const seenSignalsRef = useRef<Set<string>>(new Set());
+  const hornPrimedRef = useRef(false);
+
+  // Buzina: dois bips estilo buzina de carro
+  const playHorn = () => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') void ctx.resume();
+      const beep = (startAt: number, duration: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = 440;
+        gain.gain.setValueAtTime(0.0001, startAt);
+        gain.gain.exponentialRampToValueAtTime(0.3, startAt + 0.02);
+        gain.gain.setValueAtTime(0.3, startAt + duration - 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(startAt);
+        osc.stop(startAt + duration);
+      };
+      const now = ctx.currentTime;
+      beep(now, 0.35);
+      beep(now + 0.5, 0.35);
+    } catch {
+      // silent
+    }
+  };
+
+  const toggleHorn = () => {
+    const next = !hornEnabledRef.current;
+    hornEnabledRef.current = next;
+    setHornEnabled(next);
+    if (next && !hornPrimedRef.current) {
+      hornPrimedRef.current = true;
+      playHorn(); // destrava o áudio do navegador com o clique
+    }
+  };
+
+  // Verifica sinais novos (criados nos últimos 90s) e buzina ~1 min antes da entrada
+  const checkNewSignals = async () => {
+    if (!hornEnabledRef.current) return;
+    try {
+      const since = new Date(Date.now() - 90 * 1000).toISOString();
+      const { data } = await supabase
+        .from('trading_signals')
+        .select('signal_id, created_at')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      for (const sig of data || []) {
+        if (!seenSignalsRef.current.has(sig.signal_id)) {
+          seenSignalsRef.current.add(sig.signal_id);
+          playHorn();
+        }
+      }
+      // limita o tamanho do conjunto
+      if (seenSignalsRef.current.size > 200) {
+        seenSignalsRef.current = new Set([...seenSignalsRef.current].slice(-100));
+      }
+    } catch {
+      // silent
+    }
+  };
 
   // Posições abertas na IQ Option (binária, digital e forex)
   const fetchOpen = async () => {
@@ -112,6 +182,12 @@ export function LiveOperationsCard() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
+  // Poll de sinais novos para a buzina (a cada 10s)
+  useEffect(() => {
+    const hornPoll = setInterval(checkNewSignals, 10000);
+    return () => clearInterval(hornPoll);
+  }, []);
+
   // Subscribe to realtime operation_results
   useEffect(() => {
     const channel = supabase
@@ -150,7 +226,16 @@ export function LiveOperationsCard() {
         <div className="flex items-center gap-2 mb-4">
           <Activity className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-semibold">Operações em Tempo Real</h3>
-          
+          <Button
+            size="sm"
+            variant={hornEnabled ? 'default' : 'secondary'}
+            className="h-7 px-2 text-xs ml-auto gap-1"
+            onClick={toggleHorn}
+            title="Avisar com buzina ~1 minuto antes de cada operação"
+          >
+            {hornEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            Buzina
+          </Button>
         </div>
 
         {/* Posições abertas */}

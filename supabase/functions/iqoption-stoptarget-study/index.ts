@@ -23,7 +23,7 @@ async function login(email: string, password: string) {
 type Stat = { n: number; w: number; l: number; t: number; r: number };
 const blank = (): Stat => ({ n: 0, w: 0, l: 0, t: 0, r: 0 });
 
-function sim(cs: K[], spread: number, splitT: number, rr: number, out: Record<string, Stat>) {
+function sim(cs: K[], spread: number, splitT: number, rr: number, out: Record<string, Stat>, st = 1) {
   const ema = (p: number, s: number[]) => { const a = 2 / (p + 1); const r: number[] = []; s.forEach((x, i) => r.push(i ? x * a + r[i - 1] * (1 - a) : x)); return r; };
   const c = cs.map(k => k.c); const e9 = ema(9, c), e21 = ema(21, c), e50 = ema(50, c);
   const atr: number[] = []; cs.forEach((k, i) => { const tr = i ? Math.max(k.h - k.l, Math.abs(k.h - c[i - 1]), Math.abs(k.l - c[i - 1])) : k.h - k.l; atr.push(i ? (atr[i - 1] * 13 + tr) / 14 : tr); });
@@ -33,7 +33,7 @@ function sim(cs: K[], spread: number, splitT: number, rr: number, out: Record<st
     const up = e9[i] > e21[i] && e21[i] > e50[i] && cs[i].l <= e21[i] && c[i] > e21[i];
     const dn = e9[i] < e21[i] && e21[i] < e50[i] && cs[i].h >= e21[i] && c[i] < e21[i];
     if (!up && !dn) continue;
-    const entry = cs[i + 1].o + (up ? spread : -spread), risk = atr[i];
+    const entry = cs[i + 1].o + (up ? spread : -spread), risk = atr[i] * st;
     if (!(risk > 0)) continue;
     const stop = up ? entry - risk : entry + risk, tgt = up ? entry + rr * risk : entry - rr * risk;
     let res = 0, kind = 't', j = i + 1;
@@ -53,7 +53,7 @@ function sim(cs: K[], spread: number, splitT: number, rr: number, out: Record<st
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   const body = await req.json().catch(() => ({}));
-  const rr = Math.min(4, Math.max(1, Number(body.rr) || 2));
+  const rr = Math.min(4, Math.max(1, Number(body.rr) || 2)); const sm = body.spreadMult ?? 1; const st = Math.max(0.5, Number(body.stopAtr) || 1);
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
   const total: Record<string, Stat> = {}; const per: Record<string, Record<string, Stat>> = {};
   for (const [n, raw] of Object.entries(data)) {
     const cs = raw.filter(k => typeof k.c === 'number' && k.h > k.l).sort((a, b) => a.t - b.t).filter((k, i, a) => !i || k.t !== a[i - 1].t);
-    per[n] = {}; sim(cs, SPREAD[n], splitT, rr, per[n]); sim(cs, SPREAD[n], splitT, rr, total);
+    per[n] = {}; sim(cs, SPREAD[n]*sm, splitT, rr, per[n], st); sim(cs, SPREAD[n]*sm, splitT, rr, total, st);
     (per[n] as any).candles = cs.length;
   }
   return Response.json({ success: true, rr, total, per, names: Object.keys(data).length ? undefined : (globalThis as any).__names }, { headers: cors });

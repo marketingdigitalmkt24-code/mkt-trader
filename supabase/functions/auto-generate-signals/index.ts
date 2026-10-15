@@ -1783,7 +1783,7 @@ serve(async (req) => {
                   isAutoTrade: true,
                   isAIAnalyzed: !!bestSignal.aiConfidence,
                   timeframe: 'M1',
-                  entryStrategy: tendenciaOk ? 'TENDENCIA' : undefined,
+                  entryStrategy: realStrategy,
                 },
               });
 

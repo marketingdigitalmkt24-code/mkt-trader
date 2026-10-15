@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 
@@ -350,8 +351,7 @@ async function placeTradeFireAndForget(
           const sendDigital = (reason: string) => {
             usedMode = 'digital';
             tradePlaced = true;
-            const nowMs = Date.now();
-            const expMs = Math.ceil(nowMs / 60000) * 60000 + trade.expiration * 60000;
+            const expMs = candleOpenMs + trade.expiration * 60000;
             const e = new Date(expMs);
             const pad = (n: number) => String(n).padStart(2, '0');
             const instrumentId = `do${foundAsset!.id}A${e.getUTCFullYear()}${pad(e.getUTCMonth()+1)}${pad(e.getUTCDate())}D${pad(e.getUTCHours())}${pad(e.getUTCMinutes())}00T${trade.expiration}M${trade.direction === 'call' ? 'C' : 'P'}SPT`;
@@ -365,11 +365,12 @@ async function placeTradeFireAndForget(
             }));
           };
 
-          // ===== Entrada sincronizada: 2 segundos ANTES da abertura da próxima vela =====
+          // ===== Entrada sincronizada: exatamente na ABERTURA da próxima vela (:00) =====
+          // Envia ~120ms antes para compensar a latência do relay e chegar na IQ às :00.
           const nowMs0 = Date.now();
-          let entryDelay = Math.ceil(nowMs0 / 60000) * 60000 - 2000 - nowMs0;
-          if (entryDelay < 0) entryDelay += 60000;
-          console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar 2s antes da próxima vela`);
+          const candleOpenMs = Math.ceil((nowMs0 + 1000) / 60000) * 60000;
+          const entryDelay = Math.max(0, candleOpenMs - ENTRY_LATENCY_LEAD_MS - nowMs0);
+          console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar na abertura da vela ${new Date(candleOpenMs).toISOString()}`);
 
           const fire = () => {
             const optPayout = payoutById[foundAsset!.turboId || foundAsset!.binaryId || foundAsset!.id] || 0;
@@ -378,10 +379,9 @@ async function placeTradeFireAndForget(
               return;
             }
             usedMode = 'binary';
-            const now = Math.floor(Date.now() / 1000);
-            const expirationTime = Math.ceil(now / 60) * 60 + trade.expiration * 60;
+            const expirationTime = candleOpenMs / 1000 + trade.expiration * 60;
             const useId = foundAsset!.turboId!;
-            console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} | ID:${useId} | TURBO | $${trade.amount} | Exp:${trade.expiration}min | sec:${new Date().getUTCSeconds()}`);
+            console.log(`📤 Placing ${trade.direction.toUpperCase()} on ${matchedName} | ID:${useId} | TURBO | $${trade.amount} | Exp:${trade.expiration}min | offset:${Date.now() - candleOpenMs}ms`);
             tradePlaced = true;
             ws.send(JSON.stringify({
               name: 'sendMessage',
@@ -394,7 +394,7 @@ async function placeTradeFireAndForget(
                 },
               },
             }));
-            setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 5000);
+            setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 2500);
           };
           setTimeout(fire, entryDelay);
         }
@@ -554,8 +554,7 @@ serve(async (req) => {
     // independentemente do navegador e sem esperar o cronômetro de 30 segundos.
     if (notifyEntry) {
       const now = Date.now();
-      let entryAt = Math.ceil(now / 60000) * 60000 - 2000;
-      if (entryAt < now) entryAt += 60000;
+      const entryAt = Math.ceil((now + 1000) / 60000) * 60000;
       const notification = notifyEntry(entryAt).catch(error => console.error('❌ Telegram IQ:', String(error)));
       // @ts-ignore EdgeRuntime is available in the hosted runtime
       if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(notification);

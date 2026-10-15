@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      chart_study: {
+        Row: {
+          candles: number
+          direction: string
+          hour_brt: number
+          n: number
+          symbol: string
+          updated_at: string
+          wins: number
+        }
+        Insert: {
+          candles?: number
+          direction: string
+          hour_brt: number
+          n?: number
+          symbol: string
+          updated_at?: string
+          wins?: number
+        }
+        Update: {
+          candles?: number
+          direction?: string
+          hour_brt?: number
+          n?: number
+          symbol?: string
+          updated_at?: string
+          wins?: number
+        }
+        Relationships: []
+      }
       client_profiles: {
         Row: {
           created_at: string

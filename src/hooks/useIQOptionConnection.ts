@@ -130,13 +130,13 @@ export function useIQOptionConnection() {
       }
 
       console.log('📊 IQ Option daily stats:', { 
-        todayTrades: (results || []).filter(r => r.result !== 'pending').length,
+        todayTrades: results.filter(r => r.result !== 'pending').length,
         wins, losses, ties, profit, consecutiveLosses 
       });
 
       setDailyStats({
         dailyProfit: profit,
-        todayTrades: (results || []).filter(r => r.result?.toLowerCase() !== 'pending').length,
+        todayTrades: results.filter(r => r.result?.toLowerCase() !== 'pending').length,
         wins,
         losses,
         consecutiveLosses,

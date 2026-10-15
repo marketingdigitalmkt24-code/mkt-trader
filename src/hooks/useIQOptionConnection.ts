@@ -95,9 +95,9 @@ export function useIQOptionConnection() {
 
       const all = (allRows || []) as Array<{ id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; created_at: string }>;
       const startIso = brasiliaMidnightUtc.toISOString();
-      // Conta só entradas reais de Histórico bom e Tendência alinhada
+      // Conta só entradas reais da estratégia Tendência alinhada (Histórico bom removido a pedido)
       const results = all.filter((r) => r.timeframe !== 'TEST' && r.created_at >= startIso
-        && (r.entry_strategy === 'HISTORICO' || r.entry_strategy === 'TENDENCIA'));
+        && r.entry_strategy === 'TENDENCIA');
 
       let profit = 0;
       let wins = 0;

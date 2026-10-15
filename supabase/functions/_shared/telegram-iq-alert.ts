@@ -1,5 +1,6 @@
 const TELEGRAM_GATEWAY = 'https://connector-gateway.lovable.dev/telegram';
-const TELEGRAM_CHANNEL = '@agenciaMKT_Trader';
+// Verified channel identity; avoids an upstream username lookup for each alert.
+const TELEGRAM_CHANNEL = '-1001743286485';
 export const IQ_TELEGRAM_CHANNEL = TELEGRAM_CHANNEL;
 
 export interface IQAlert {
@@ -35,7 +36,11 @@ export async function sendIQAlert(
 ): Promise<number | undefined> {
   if (!alert.signalId || alert.timeframe === 'TEST' || alert.timeframe === 'MT5') return;
   if (!credentials.lovableKey || !credentials.telegramKey) throw new Error('Telegram não configurado');
-  const response = await request(`${TELEGRAM_GATEWAY}/sendMessage`, {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // Never resend an expired entry notice as if it were still actionable.
+    if (attempt > 0 && Date.now() >= alert.entryAt) throw new Error('Telegram: entrada prevista já passou; aviso não reenviado');
+    try {
+      const response = await request(`${TELEGRAM_GATEWAY}/sendMessage`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${credentials.lovableKey}`,
@@ -45,10 +50,25 @@ export async function sendIQAlert(
     body: JSON.stringify({ chat_id: TELEGRAM_CHANNEL, text: formatIQAlert(alert) }),
     signal: AbortSignal.timeout(8000),
   });
-  if (!response.ok) throw new Error(`Telegram [${response.status}]: ${await response.text()}`);
+      if (!response.ok) {
+        const details = await response.text();
+        console.error(`Telegram tentativa ${attempt + 1} [${response.status}]: ${details}`);
+        if ([502, 503, 504].includes(response.status) && attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+          continue;
+        }
+        throw new Error(`Telegram [${response.status}]: ${details}`);
+      }
   const data = await response.json();
   if (!data.ok) throw new Error(`Telegram [${response.status}]: ${JSON.stringify(data)}`);
   if (!Number.isSafeInteger(data.result?.message_id)) throw new Error('Telegram: message_id ausente');
   console.log(`📱 Telegram enviado: ${alert.asset} | sinal ${alert.signalId} | mensagem ${data.result?.message_id}`);
   return data.result.message_id;
+    } catch (error) {
+      // Explicit HTTP failures are handled above; don't retry ambiguous timeouts,
+      // which could duplicate a message accepted before the response was lost.
+      throw error;
+    }
+  }
+  throw new Error('Telegram: tentativas de envio esgotadas');
 }

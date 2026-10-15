@@ -68,6 +68,27 @@ export type Database = {
         }
         Relationships: []
       }
+      forex_practice_balance: {
+        Row: {
+          amount: number
+          currency: string
+          id: number
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          currency?: string
+          id?: number
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          currency?: string
+          id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       iqoption_config: {
         Row: {
           account_type: string

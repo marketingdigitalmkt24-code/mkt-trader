@@ -22,10 +22,10 @@ export function formatIQAlert(alert: IQAlert): string {
     `💱 Ativo: ${alert.asset}`,
     `🎯 Estratégia: ${alert.strategy || 'Não identificada'}`,
     `Direção: ${alert.direction === 'call' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`,
-    `⏰ Entrada prevista: ${entryTime} (Brasília)`,
+    `⏰ Entrada aberta agora: ${entryTime} (Brasília)`,
     `⌛ Vencimento: ${alert.expiration} minuto(s)`,
-    '📤 Entrada selecionada para envio à corretora; não é operação TESTE.',
-    '⚠️ Aviso antecipado: a corretora ainda pode recusar a ordem. Sem garantia de lucro.',
+    '📤 Operação já aberta na corretora; não é operação TESTE.',
+    '⚠️ Operação em andamento — sem garantia de lucro.',
   ].join('\n');
 }
 
@@ -37,8 +37,8 @@ export async function sendIQAlert(
   if (!alert.signalId || alert.timeframe === 'TEST' || alert.timeframe === 'MT5') return;
   if (!credentials.lovableKey || !credentials.telegramKey) throw new Error('Telegram não configurado');
   for (let attempt = 0; attempt < 3; attempt++) {
-    // Never resend an expired entry notice as if it were still actionable.
-    if (attempt > 0 && Date.now() >= alert.entryAt) throw new Error('Telegram: entrada prevista já passou; aviso não reenviado');
+    // Never resend an entry notice after the trade's full window has passed.
+    if (attempt > 0 && Date.now() >= alert.entryAt + 60000) throw new Error('Telegram: entrada prevista já passou; aviso não reenviado');
     try {
       const response = await request(`${TELEGRAM_GATEWAY}/sendMessage`, {
     method: 'POST',

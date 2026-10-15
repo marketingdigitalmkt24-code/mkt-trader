@@ -308,6 +308,24 @@ function assetKind(symbol: string): 'forex' | 'crypto' | 'stock' {
   return 'stock';
 }
 
+// Horário real de funcionamento por tipo de mercado (UTC).
+// A IQ Option marca ações/índices como "enabled" mesmo com a bolsa fechada —
+// sem este filtro o robô gerava sinais de ativos fechados.
+function isMarketOpenNow(kind: 'forex' | 'crypto' | 'stock', isOtc: boolean, now = new Date()): boolean {
+  if (isOtc || kind === 'crypto') return true; // OTC e cripto: 24/7
+  const day = now.getUTCDay();
+  const mins = now.getUTCHours() * 60 + now.getUTCMinutes();
+  if (kind === 'forex') {
+    // Forex: Seg 00:00 UTC até Sex 21:00 UTC
+    if (day === 0 || day === 6) return false;
+    if (day === 5 && mins >= 21 * 60) return false;
+    return true;
+  }
+  // Ações/índices (maioria EUA na IQ): Seg–Sex, 13:30–20:00 UTC (horário da bolsa de NY)
+  if (day === 0 || day === 6) return false;
+  return mins >= 13 * 60 + 30 && mins < 20 * 60;
+}
+
 // Converte símbolo da IQ Option para ticker Yahoo Finance (null = sem cotação disponível)
 function yahooTicker(symbol: string): string | null {
   const s = symbol.replace(/[-\s]*OTC$/i, '').replace(/^FRONT\./, '').toUpperCase().trim();
@@ -1101,6 +1119,8 @@ serve(async (req) => {
           if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;
+          // Só gera sinal de ativo com o mercado realmente ABERTO agora (a IQ marca ações como enabled mesmo com a bolsa fechada)
+          if (!isMarketOpenNow(assetKind(base), isOtc)) continue;
           seen.add(symbol);
           if (Array.isArray(a.candles) && a.candles.length > 0) iqCandles.set(base, a.candles);
           if (a.bt24) bt24Map.set(symbol, a.bt24);

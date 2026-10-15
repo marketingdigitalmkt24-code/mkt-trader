@@ -72,7 +72,7 @@ export const HistoricoBomCard = () => {
       </div>
       <p className="text-[10px] text-muted-foreground mb-2">Entradas reais na IQ Option das estratégias Tendência alinhada e Histórico bom, identificadas pelo selo. Placar = hoje; lista guarda 30 dias.</p>
       {ops.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada nos últimos 30 dias</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real — modo teste ativo (Entradas de teste)</p>
       ) : (
         <>
           <div className="space-y-1 flex-1">

@@ -1638,7 +1638,28 @@ serve(async (req) => {
           .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
         if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
       }
-      const realStrategy = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
+      let realStrategy: string | undefined = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
+      // Após EMPATE (pedido 15/10/2026): se a última operação finalizada de Tendência/Histórico bom
+      // (teste ou real) empatou nos últimos 30 min, o PRÓXIMO sinal de qualquer ativo abre REAL + Telegram.
+      try {
+        const { data: lastTie } = await supabase.from('operation_results').select('created_at')
+          .in('entry_strategy', ['TENDENCIA', 'HISTORICO']).eq('result', 'tie').neq('timeframe', 'MT5')
+          .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: false }).limit(1).maybeSingle();
+        if (lastTie) {
+          const { data: used } = await supabase.from('operation_results').select('id')
+            .eq('entry_strategy', 'EMPATE').gt('created_at', lastTie.created_at).limit(1);
+          if (!used || used.length === 0) {
+            const { data: bad } = await supabase.from('trade_queue').select('id')
+              .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
+              .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
+            if (!bad || bad.length === 0) {
+              realTurn = true; realStrategy = 'EMPATE'; reversaoRsi = false;
+              console.log(`🤝 Após empate → REAL: ${bestSignal.asset}`);
+            }
+          }
+        }
+      } catch (e) { console.log('⚠️ Erro empate:', e); }
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);

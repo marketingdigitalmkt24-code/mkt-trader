@@ -524,9 +524,10 @@ serve(async (req) => {
         const signalId = tradeRequest.signalId;
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
         const reqStrategy = (tradeRequest as any).entryStrategy;
-        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA') entryStrategy = reqStrategy;
+        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE') entryStrategy = reqStrategy;
         const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
-          : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada' : 'IA';
+          : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
+          : entryStrategy === 'EMPATE' ? 'Após empate' : 'IA';
         notifyEntry = async entryAt => {
           const messageId = await sendIQAlert({
           asset: tradeRequest.asset, direction: tradeRequest.direction,

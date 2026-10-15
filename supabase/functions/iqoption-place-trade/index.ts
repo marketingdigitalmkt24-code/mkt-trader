@@ -531,7 +531,7 @@ serve(async (req) => {
           console.log(`⏭️ Telegram ignorado: sinal ${tradeRequest.signalId} sem estratégia autorizada`);
         }
         const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom' : 'Tendência alinhada';
-        notifyEntry = async entryAt => {
+         if (entryStrategy) notifyEntry = async entryAt => {
           const messageId = await sendIQAlert({
           asset: tradeRequest.asset, direction: tradeRequest.direction,
           expiration: tradeRequest.expiration, entryAt, signalId,

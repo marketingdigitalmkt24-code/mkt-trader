@@ -1642,11 +1642,11 @@ serve(async (req) => {
       }
       let realStrategy: string | undefined = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
       // Após EMPATE (pedido 15/10/2026): se a última operação finalizada de Tendência/Histórico bom
-      // (teste ou real) empatou nos últimos 30 min, o PRÓXIMO sinal de qualquer ativo abre REAL + Telegram.
+      // (teste ou real) empatou, o PRÓXIMO sinal gerado (imediatamente após, sem janela de tempo)
+      // abre REAL + Telegram (user, 15/10/2026 19h).
       try {
         const { data: lastTie } = await supabase.from('operation_results').select('direction, created_at')
           .in('entry_strategy', ['TENDENCIA', 'HISTORICO']).eq('result', 'tie').neq('timeframe', 'MT5')
-          .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastTie) {
           // Entrada inversa ao PRÓXIMO sinal gerado (user, 15/10/2026): sinal CALL → entra PUT.

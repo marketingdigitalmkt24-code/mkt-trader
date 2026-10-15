@@ -21,8 +21,11 @@ export const HistoricoBomCard = () => {
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('operation_results')
-        .select('id, asset, direction, result, created_at')
-        .eq('timeframe', 'TEST').eq('entry_strategy', 'HISTORICO')
+        .select('id, asset, direction, result, created_at, timeframe, signal_id')
+        .eq('entry_strategy', 'HISTORICO')
+        .neq('timeframe', 'TEST')
+        .or('timeframe.is.null,timeframe.neq.MT5')
+        .not('signal_id', 'like', 'mt5-%')
         .gte('created_at', historyStart())
         .order('created_at', { ascending: false }).limit(1000);
       setOps((data as Op[]) || []);
@@ -53,12 +56,12 @@ export const HistoricoBomCard = () => {
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Estratégia Histórico bom (teste)</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Histórico bom — entradas na IQ Option</span>
         <span className="font-mono text-xs">
           <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
         </span>
       </div>
-      <p className="text-[10px] text-muted-foreground mb-2">Só teste: ativo+direção com ≥3 operações e ≥60% de acerto em 24h. Não usa dinheiro. Placar = hoje; lista guarda 30 dias.</p>
+      <p className="text-[10px] text-muted-foreground mb-2">Entradas reais na IQ Option da estratégia Histórico bom (≥3 operações e ≥60% de acerto em 24h). Placar = hoje; lista guarda 30 dias.</p>
       {ops.length === 0 ? (
         <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada nos últimos 30 dias</p>
       ) : (

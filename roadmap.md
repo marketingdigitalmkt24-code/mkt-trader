@@ -11,6 +11,7 @@
 - [ ] Confirm automatic advance delivery after retry fix on the next naturally authorized IQ Option entry (22:55 alert failed with gateway 502; waiting for next real queued signal; do not force a trade).
 - [x] Include entry origin strategy in Telegram alerts.
 - [x] Hide Histórico bom real entries and their totals from Entradas na IQ Option without changing broker execution.
+- [x] Merge Tendência alinhada and Histórico bom real entries into one card with per-entry strategy badges; Resultado de Hoje counts both again.
 - [x] Verify strategy formatting and authenticated card filtering (7 wins, 1 loss, 88%, +US$47.40 at verification).
 - [x] Send Telegram immediately on the same executing queue signal used by the horn.
 - [x] Align Resultado de Hoje with Entradas na IQ Option and verify displayed totals (+US$47.40, 7 wins, 1 loss).

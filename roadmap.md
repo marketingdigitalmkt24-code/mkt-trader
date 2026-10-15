@@ -7,7 +7,7 @@
 - [x] Obtain verified destination for AGENCIA MKT TRADER (@agenciaMKT_Trader).
 - [x] Send only authorized IQ Option signals approximately 30 seconds before entry (late signals notify immediately).
 - [x] Verify channel delivery with a clearly labeled connection message and TEST/MT5 exclusion with automated checks.
-- [ ] Confirm automatic advance delivery on the next naturally authorized IQ Option entry (waiting for a real queued signal; do not force a trade).
+- [ ] Confirm automatic advance delivery after retry fix on the next naturally authorized IQ Option entry (22:55 alert failed with gateway 502; waiting for next real queued signal; do not force a trade).
 - [x] Include entry origin strategy in Telegram alerts.
 - [x] Hide Histórico bom real entries and their totals from Entradas na IQ Option without changing broker execution.
 - [x] Verify strategy formatting and authenticated card filtering (7 wins, 1 loss, 88%, +US$47.40 at verification).
@@ -15,5 +15,5 @@
 - [x] Align Resultado de Hoje with Entradas na IQ Option and verify displayed totals (+US$47.40, 7 wins, 1 loss).
 - [x] Track delivered Telegram signals and send their final broker results with retry/deduplication.
 - [x] Verify result formatting and delivered-signal-only selection without forcing a trade.
-- [ ] Diagnose horn without Telegram and repair the real queue notification path.
+- [x] Diagnose horn without Telegram (gateway 502); verify channel test delivery and deploy bounded temporary-failure retries.
 - [ ] Confirm automatic result delivery after the next naturally notified broker trade closes (waiting for a real delivered signal; do not force a trade).

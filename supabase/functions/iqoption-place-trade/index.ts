@@ -545,15 +545,6 @@ serve(async (req) => {
         };
       }
     }
-    // A fila executing é também o gatilho da buzina: Telegram sai imediatamente,
-    // independentemente do navegador e sem esperar o cronômetro de 30 segundos.
-    if (notifyEntry) {
-      const now = Date.now();
-      const entryAt = Math.ceil((now + 1000) / 60000) * 60000;
-      const notification = notifyEntry(entryAt).catch(error => console.error('❌ Telegram IQ:', String(error)));
-      // @ts-ignore EdgeRuntime is available in the hosted runtime
-      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(notification);
-    }
     const { ssid, error: loginError } = await loginToIQOption(configData.email, configData.password);
     if (!ssid) {
       return new Response(
@@ -562,6 +553,14 @@ serve(async (req) => {
       );
     }
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
+    // Telegram só depois que a IQ Option confirmou a ordem (pedido 15/10/2026):
+    // ativos recusados ("invalid instrument") não geram sinal no canal.
+    if (notifyEntry && result.success && result.tradeId) {
+      const entryAt = Math.floor(Date.now() / 60000) * 60000;
+      const notification = notifyEntry(entryAt).catch(error => console.error('❌ Telegram IQ:', String(error)));
+      // @ts-ignore EdgeRuntime is available in the hosted runtime
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(notification);
+    }
     console.log('📊 Trade result:', JSON.stringify(result));
 
     // Save to operation_results

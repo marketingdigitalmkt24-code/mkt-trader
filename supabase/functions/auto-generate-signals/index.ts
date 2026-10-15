@@ -1635,7 +1635,7 @@ serve(async (req) => {
       if (realTurn) {
         const { data: bad } = await supabase.from('trade_queue').select('id')
           .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
-          .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
+          .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
         if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
       }
       const realStrategy = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;

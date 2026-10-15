@@ -1574,6 +1574,22 @@ serve(async (req) => {
       // finalizada do MESMO ativo (MESMA direção) foi uma perda nos últimos 15 min.
       // Estratégia ÚNICA: perda anterior (pedido 14/10/2026 — regra de histórico removida).
       let realTurn = false;
+      // Tendência alinhada (pedido 15/10/2026): médias alinhadas + MACD a favor + RSI 30–60 a favor.
+      // Todo sinal dessa estratégia abre REAL na IQ Option imediatamente (sem exigir perda anterior)
+      // e vai ao Telegram; fica fora do Resultado de Hoje e do card Entradas na IQ Option.
+      let tendenciaOk = false;
+      try {
+        const dirT = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
+        const ind = bestSignal.indicators || {};
+        const ma = ind.movingAverages || {};
+        const e9 = Number(ma.ema9), e21 = Number(ma.ema21), s50 = Number(ma.sma50);
+        const rsiT = Number(ind.rsi?.value);
+        const macdT = String(ind.macd?.trend || '');
+        tendenciaOk = dirT === 'CALL'
+          ? e9 > e21 && e21 > s50 && macdT === 'bullish' && rsiT >= 50 && rsiT <= 60
+          : e9 < e21 && e21 < s50 && macdT === 'bearish' && rsiT >= 30 && rsiT <= 50;
+        if (tendenciaOk) console.log(`📐 Tendência alinhada → REAL direto: ${bestSignal.asset} ${dirT} RSI ${rsiT.toFixed(1)}`);
+      } catch (_) { /* ignore */ }
       try {
         const dirH = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
         const { data: last } = await supabase.from('operation_results')
@@ -1592,6 +1608,7 @@ serve(async (req) => {
         }
         console.log(`📊 Perda anterior ${bestSignal.asset} ${dirH}: ${last?.[0]?.result || 'nenhuma'} → ${realTurn ? 'REAL' : 'TESTE'}`);
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
+      if (tendenciaOk) realTurn = true;
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
@@ -1608,20 +1625,8 @@ serve(async (req) => {
             const n = (h || []).length;
             if (n >= 3 && w / n >= 0.6) entryStrategy = 'HISTORICO';
           } catch (_) { /* ignore */ }
-          // Tendência alinhada (somente TESTE, pedido 15/10/2026): médias alinhadas + MACD a favor + RSI 30–60 a favor
-          if (entryStrategy === 'IA') {
-            try {
-              const ind = bestSignal.indicators || {};
-              const ma = ind.movingAverages || {};
-              const e9 = Number(ma.ema9), e21 = Number(ma.ema21), s50 = Number(ma.sma50);
-              const rsi = Number(ind.rsi?.value);
-              const macd = String(ind.macd?.trend || '');
-              const ok = dir === 'CALL'
-                ? e9 > e21 && e21 > s50 && macd === 'bullish' && rsi >= 50 && rsi <= 60
-                : e9 < e21 && e21 < s50 && macd === 'bearish' && rsi >= 30 && rsi <= 50;
-              if (ok) { entryStrategy = 'TENDENCIA'; console.log(`📐 Tendência alinhada (TESTE): ${bestSignal.asset} ${dir} RSI ${rsi.toFixed(1)}`); }
-            } catch (_) { /* ignore */ }
-          }
+          // Tendência alinhada agora abre REAL direto (bloco acima); aqui só rotula o TESTE se cair neste caminho.
+          if (entryStrategy === 'IA' && tendenciaOk) entryStrategy = 'TENDENCIA';
           // Entrada TESTE exatamente no :00 da vela atual (pedido 15/10/2026):
           // o preço ao vivo acima já é o fechamento da última vela fechada (= abertura da vela nova).
           // Fixa created_at no início do minuto para a resolução usar as velas exatas de entrada/saída.
@@ -1777,6 +1782,7 @@ serve(async (req) => {
                   isAutoTrade: true,
                   isAIAnalyzed: !!bestSignal.aiConfidence,
                   timeframe: 'M1',
+                  entryStrategy: tendenciaOk ? 'TENDENCIA' : undefined,
                 },
               });
 

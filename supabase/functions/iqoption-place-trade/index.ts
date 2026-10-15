@@ -530,6 +530,8 @@ serve(async (req) => {
           .gte('created_at', new Date(new Date(queued.created_at).getTime() - 15 * 60000).toISOString())
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (previousLoss) entryStrategy = (previousLoss.entry_strategy === 'HISTORICO' || previousLoss.entry_strategy === 'TENDENCIA') ? previousLoss.entry_strategy : 'PERDA_ANTERIOR';
+        // Tendência alinhada abre REAL direto (sem perda anterior): o gerador autorizado informa a origem.
+        if (!entryStrategy && (tradeRequest as any).entryStrategy === 'TENDENCIA') entryStrategy = 'TENDENCIA';
         const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
           : entryStrategy === 'PERDA_ANTERIOR' ? 'Perda anterior' : 'Não identificada';

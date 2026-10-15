@@ -1689,7 +1689,9 @@ serve(async (req) => {
         const isForexPair = assetParts.length === 2 && assetParts.every((p: string) => forexCurrencies.includes(p));
 
         // Todos os ativos abertos na IQ (moedas, ações, cripto) podem operar opções
-        if (hasAnyPendingIQTrade) {
+        if (forexOpened) {
+          console.log(`🚫 IQ Option: pulando binária — FOREX já aberto para este sinal (1 operação por vez)`);
+        } else if (hasAnyPendingIQTrade) {
           console.log(`🚫 IQ Option: BLOQUEADO — operação anterior pendente`);
         } else {
           const { data: freshPending } = await supabase

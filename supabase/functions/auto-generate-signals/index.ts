@@ -1623,6 +1623,15 @@ serve(async (req) => {
         historicoOk = n >= 3 && w / n >= 0.6;
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
       realTurn = historicoOk || tendenciaOk;
+      // Reversão RSI (pedido 15/10/2026, SOMENTE TESTE): venda com RSI>70 e estocástico>80 vira COMPRA.
+      let reversaoRsi = false;
+      try {
+        const dirR = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
+        const rsiR = Number(bestSignal.indicators?.rsi?.value);
+        const stR = Number(bestSignal.indicators?.stochastic?.k);
+        reversaoRsi = dirR === 'PUT' && rsiR > 70 && stR > 80;
+        if (reversaoRsi) { realTurn = false; console.log(`🔄 Reversão RSI (TESTE): ${bestSignal.asset} PUT→CALL RSI ${rsiR.toFixed(1)} Stoch ${stR.toFixed(1)}`); }
+      } catch (_) { /* ignore */ }
       if (realTurn) {
         const { data: bad } = await supabase.from('trade_queue').select('id')
           .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
@@ -1634,7 +1643,7 @@ serve(async (req) => {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
         if (!openTest || openTest.length === 0) {
-          const dir = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
+          const dir = reversaoRsi ? 'CALL' : String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
           // Histórico bom (somente TESTE): ≥3 ops e ≥60% acerto em 24h no mesmo ativo+direção
           let entryStrategy = 'IA';
           try {
@@ -1648,6 +1657,7 @@ serve(async (req) => {
           } catch (_) { /* ignore */ }
           // Tendência alinhada agora abre REAL direto (bloco acima); aqui só rotula o TESTE se cair neste caminho.
           if (entryStrategy === 'IA' && tendenciaOk) entryStrategy = 'TENDENCIA';
+          if (reversaoRsi) entryStrategy = 'REVERSAO_RSI';
           // Entrada TESTE exatamente no :00 da vela atual (pedido 15/10/2026):
           // o preço ao vivo acima já é o fechamento da última vela fechada (= abertura da vela nova).
           // Fixa created_at no início do minuto para a resolução usar as velas exatas de entrada/saída.

@@ -1575,11 +1575,12 @@ serve(async (req) => {
       try {
         const dirH = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
         const { data: last } = await supabase.from('operation_results')
-          .select('result').eq('asset', bestSignal.asset).eq('direction', dirH)
+          .select('result, entry_strategy').eq('asset', bestSignal.asset).eq('direction', dirH)
           .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
           .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false }).limit(1);
-        if (last && last[0]?.result === 'loss') { realTurn = true; console.log(`🔁 ${bestSignal.asset}: perda anterior → REAL`); }
+        // Estratégia "Tendência alinhada" está em avaliação: suas perdas NÃO liberam entrada real.
+        if (last && last[0]?.result === 'loss' && last[0]?.entry_strategy !== 'TENDENCIA') { realTurn = true; console.log(`🔁 ${bestSignal.asset}: perda anterior → REAL`); }
         // Ativo recusado pela IQ ("invalid instrument") nas últimas 24h → não envia (evita buzina sem operação)
         if (realTurn) {
           const { data: bad } = await supabase.from('trade_queue').select('id')
@@ -1605,6 +1606,20 @@ serve(async (req) => {
             const n = (h || []).length;
             if (n >= 3 && w / n >= 0.6) entryStrategy = 'HISTORICO';
           } catch (_) { /* ignore */ }
+          // Tendência alinhada (somente TESTE, pedido 15/10/2026): médias alinhadas + MACD a favor + RSI 30–60 a favor
+          if (entryStrategy === 'IA') {
+            try {
+              const ind = bestSignal.indicators || {};
+              const ma = ind.movingAverages || {};
+              const e9 = Number(ma.ema9), e21 = Number(ma.ema21), s50 = Number(ma.sma50);
+              const rsi = Number(ind.rsi?.value);
+              const macd = String(ind.macd?.trend || '');
+              const ok = dir === 'CALL'
+                ? e9 > e21 && e21 > s50 && macd === 'bullish' && rsi >= 50 && rsi <= 60
+                : e9 < e21 && e21 < s50 && macd === 'bearish' && rsi >= 30 && rsi <= 50;
+              if (ok) { entryStrategy = 'TENDENCIA'; console.log(`📐 Tendência alinhada (TESTE): ${bestSignal.asset} ${dir} RSI ${rsi.toFixed(1)}`); }
+            } catch (_) { /* ignore */ }
+          }
           await supabase.from('operation_results').insert({
             signal_id: bestSignal.id, asset: bestSignal.asset, direction: dir,
             entry_price: bestSignal.price, result: 'test_open', profit: 0,

@@ -1581,8 +1581,8 @@ serve(async (req) => {
           .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
           .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false }).limit(1);
-        // Estratégia "Tendência alinhada" está em avaliação: suas perdas NÃO liberam entrada real.
-        if (last && last[0]?.result === 'loss' && last[0]?.entry_strategy !== 'TENDENCIA') { realTurn = true; console.log(`🔁 ${bestSignal.asset}: perda anterior → REAL`); }
+        // Perdas de TESTE (inclusive Histórico bom e Tendência alinhada) liberam entrada real.
+        if (last && last[0]?.result === 'loss') { realTurn = true; console.log(`🔁 ${bestSignal.asset}: perda anterior → REAL`); }
         // Ativo recusado pela IQ ("invalid instrument") nas últimas 24h → não envia (evita buzina sem operação)
         if (realTurn) {
           const { data: bad } = await supabase.from('trade_queue').select('id')

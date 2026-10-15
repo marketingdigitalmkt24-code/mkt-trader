@@ -1622,9 +1622,9 @@ serve(async (req) => {
         const { data: st } = await supabase.from('chart_study').select('n, wins')
           .eq('symbol', bestSignal.asset).eq('direction', dirH).eq('hour_brt', hourBrt).maybeSingle();
         historicoOk = !!st && st.n >= 200 && st.wins / st.n >= 0.56;
-        if (st) console.log(`📈 Estudo 30d ${bestSignal.asset} ${dirH} ${hourBrt}h: ${st.wins}/${st.n} → ${historicoOk ? 'Histórico bom (TESTE)' : 'não'}`);
+        if (st) console.log(`📈 Estudo 30d ${bestSignal.asset} ${dirH} ${hourBrt}h: ${st.wins}/${st.n} → ${historicoOk ? 'Histórico bom (REAL)' : 'não'}`);
       } catch (e) { console.log('⚠️ Erro estudo:', e); }
-      realTurn = tendenciaOk; // Histórico bom agora é só TESTE
+      realTurn = historicoOk || tendenciaOk; // Histórico bom (estudo 30d) abre REAL + Telegram (pedido 15/10 16:45)
       // Reversão RSI (pedido 15/10/2026, SOMENTE TESTE): venda com RSI>70 e estocástico>80 vira COMPRA.
       let reversaoRsi = false;
       try {
@@ -1640,7 +1640,7 @@ serve(async (req) => {
           .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
         if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
       }
-      let realStrategy: string | undefined = tendenciaOk ? 'TENDENCIA' : undefined;
+      let realStrategy: string | undefined = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
       // Após EMPATE (pedido 15/10/2026): se a última operação finalizada de Tendência/Histórico bom
       // (teste ou real) empatou, o PRÓXIMO sinal gerado (imediatamente após, sem janela de tempo)
       // abre REAL + Telegram (user, 15/10/2026 19h).

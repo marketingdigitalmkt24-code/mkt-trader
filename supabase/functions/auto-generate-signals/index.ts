@@ -1622,7 +1622,7 @@ serve(async (req) => {
             const n = (h || []).length;
             if (n >= 3 && w / n >= 0.6) entryStrategy = 'HISTORICO';
           } catch (_) { /* ignore */ }
-          // Tendência alinhada agora abre REAL direto (bloco acima); aqui só rotula o TESTE se cair neste caminho.
+          // Rótulo do TESTE: Histórico bom se o histórico bater; senão Tendência alinhada se detectada.
           if (entryStrategy === 'IA' && tendenciaOk) entryStrategy = 'TENDENCIA';
           // Entrada TESTE exatamente no :00 da vela atual (pedido 15/10/2026):
           // o preço ao vivo acima já é o fechamento da última vela fechada (= abertura da vela nova).

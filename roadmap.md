@@ -3,3 +3,6 @@
 - [x] Replace homepage with centered branding and clearly labeled simulated trading chart.
 - [x] Move existing homepage information to admin Dashboard and preserve separate settings tabs.
 - [x] Verify public chart and authenticated admin tab navigation.
+- [ ] Connect Telegram bot and obtain the destination group/channel.
+- [ ] Send only real IQ Option signals approximately 30 seconds before entry.
+- [ ] Verify delivery and exclusion of TEST operations.

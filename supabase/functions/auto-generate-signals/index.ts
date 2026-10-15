@@ -1720,7 +1720,7 @@ serve(async (req) => {
             const { data: fxSet } = fxCfg ? await supabase.from('user_trading_settings')
               .select('trade_amount').eq('user_id', fxCfg.user_id).limit(1).maybeSingle() : { data: null };
             const fxAmount = Number(fxSet?.trade_amount) || 1;
-            const fxDir = (bestSignal.aiDirection || bestSignal.type).toLowerCase();
+            const fxDir = (empateOverride || bestSignal.aiDirection || bestSignal.type).toLowerCase();
             const { data: fxData } = await supabase.functions.invoke('iqoption-place-trade', {
               body: {
                 asset: bestSignal.asset, direction: fxDir, amount: fxAmount, expiration: 1,

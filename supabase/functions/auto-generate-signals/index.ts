@@ -1594,6 +1594,8 @@ serve(async (req) => {
       // finalizada do MESMO ativo (MESMA direção) foi uma perda nos últimos 15 min.
       // Estratégia ÚNICA: perda anterior (pedido 14/10/2026 — regra de histórico removida).
       let realTurn = false;
+      // Após EMPATE: a belépés a KÖTÖTT művelet FORDÍTOTT irányába nyit (user, 15/10/2026).
+      let empateOverride: string | undefined;
       // Tendência alinhada (pedido 15/10/2026): médias alinhadas + MACD a favor + RSI 30–60 a favor.
       // Todo sinal dessa estratégia abre REAL na IQ Option imediatamente (sem exigir perda anterior)
       // e vai ao Telegram; fica fora do Resultado de Hoje e do card Entradas na IQ Option.
@@ -1642,11 +1644,14 @@ serve(async (req) => {
       // Após EMPATE (pedido 15/10/2026): se a última operação finalizada de Tendência/Histórico bom
       // (teste ou real) empatou nos últimos 30 min, o PRÓXIMO sinal de qualquer ativo abre REAL + Telegram.
       try {
-        const { data: lastTie } = await supabase.from('operation_results').select('created_at')
+        const { data: lastTie } = await supabase.from('operation_results').select('direction, created_at')
           .in('entry_strategy', ['TENDENCIA', 'HISTORICO']).eq('result', 'tie').neq('timeframe', 'MT5')
           .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastTie) {
+          // A belépés mindig a kötött művelet FORDÍTOTT irányába nyit (user, 15/10/2026).
+          if (lastTie.direction === 'CALL') empateOverride = 'PUT';
+          else if (lastTie.direction === 'PUT') empateOverride = 'CALL';
           const { data: used } = await supabase.from('operation_results').select('id')
             .eq('entry_strategy', 'EMPATE').gt('created_at', lastTie.created_at).limit(1);
           if (!used || used.length === 0) {
@@ -1655,7 +1660,7 @@ serve(async (req) => {
               .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
             if (!bad || bad.length === 0) {
               realTurn = true; realStrategy = 'EMPATE'; reversaoRsi = false;
-              console.log(`🤝 Após empate → REAL: ${bestSignal.asset}`);
+              console.log(`🤝 Após empate → REAL: ${bestSignal.asset} (kötött: ${lastTie.direction} → fordított: ${empateOverride || '(maradó)'})`);
             }
           }
         }
@@ -1715,7 +1720,7 @@ serve(async (req) => {
             const { data: fxSet } = fxCfg ? await supabase.from('user_trading_settings')
               .select('trade_amount').eq('user_id', fxCfg.user_id).limit(1).maybeSingle() : { data: null };
             const fxAmount = Number(fxSet?.trade_amount) || 1;
-            const fxDir = (bestSignal.aiDirection || bestSignal.type).toLowerCase();
+            const fxDir = (empateOverride || bestSignal.aiDirection || bestSignal.type).toLowerCase();
             const { data: fxData } = await supabase.functions.invoke('iqoption-place-trade', {
               body: {
                 asset: bestSignal.asset, direction: fxDir, amount: fxAmount, expiration: 1,
@@ -1812,7 +1817,7 @@ serve(async (req) => {
 
               // SÓ IA: sem gale, sem filtro de exaustão, sem filtro OTC (pedido do usuário)
               const expiration = 1; // sempre 1 minuto
-              const executionDirection = bestSignal.aiDirection || bestSignal.type;
+              const executionDirection = empateOverride || bestSignal.aiDirection || bestSignal.type;
 
               // Sincronização de entrada (2s antes da vela) é feita em iqoption-place-trade
               console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);

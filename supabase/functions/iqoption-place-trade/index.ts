@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
-import { sendIQAlert } from '../_shared/telegram-iq-alert.ts';
+import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -532,7 +532,8 @@ serve(async (req) => {
         if (previousLoss) entryStrategy = previousLoss.entry_strategy === 'HISTORICO' ? 'HISTORICO' : 'PERDA_ANTERIOR';
         const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'PERDA_ANTERIOR' ? 'Perda anterior' : 'Não identificada';
-        notifyEntry = entryAt => sendIQAlert({
+        notifyEntry = async entryAt => {
+          const messageId = await sendIQAlert({
           asset: tradeRequest.asset, direction: tradeRequest.direction,
           expiration: tradeRequest.expiration, entryAt, signalId,
           timeframe: tradeRequest.timeframe || 'M1',
@@ -540,7 +541,13 @@ serve(async (req) => {
         }, {
           lovableKey: Deno.env.get('LOVABLE_API_KEY') || '',
           telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '',
-        });
+          });
+          if (messageId === undefined) return;
+          const { error: deliveryError } = await supabase.from('telegram_iq_deliveries').upsert({
+            signal_id: signalId, chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy,
+          }, { onConflict: 'signal_id', ignoreDuplicates: true });
+          if (deliveryError) throw deliveryError;
+        };
       }
     }
     // A fila executing é também o gatilho da buzina: Telegram sai imediatamente,

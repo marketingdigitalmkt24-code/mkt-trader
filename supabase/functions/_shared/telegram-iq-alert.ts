@@ -1,5 +1,6 @@
 const TELEGRAM_GATEWAY = 'https://connector-gateway.lovable.dev/telegram';
 const TELEGRAM_CHANNEL = '@agenciaMKT_Trader';
+export const IQ_TELEGRAM_CHANNEL = TELEGRAM_CHANNEL;
 
 export interface IQAlert {
   asset: string;
@@ -31,7 +32,7 @@ export async function sendIQAlert(
   alert: IQAlert,
   credentials: { lovableKey: string; telegramKey: string },
   request: typeof fetch = fetch,
-): Promise<void> {
+): Promise<number | undefined> {
   if (!alert.signalId || alert.timeframe === 'TEST' || alert.timeframe === 'MT5') return;
   if (!credentials.lovableKey || !credentials.telegramKey) throw new Error('Telegram não configurado');
   const response = await request(`${TELEGRAM_GATEWAY}/sendMessage`, {
@@ -47,5 +48,7 @@ export async function sendIQAlert(
   if (!response.ok) throw new Error(`Telegram [${response.status}]: ${await response.text()}`);
   const data = await response.json();
   if (!data.ok) throw new Error(`Telegram [${response.status}]: ${JSON.stringify(data)}`);
+  if (!Number.isSafeInteger(data.result?.message_id)) throw new Error('Telegram: message_id ausente');
   console.log(`📱 Telegram enviado: ${alert.asset} | sinal ${alert.signalId} | mensagem ${data.result?.message_id}`);
+  return data.result.message_id;
 }

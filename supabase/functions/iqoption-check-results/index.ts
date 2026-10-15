@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -550,6 +551,7 @@ serve(async (req) => {
     }
 
     console.log(`Updated ${updatedCount} operation results from IQ Option history`);
+    await dispatchIQResults(supabase).catch(error => console.error('Telegram resultados:', String(error)));
 
 
     const responsePayload = {

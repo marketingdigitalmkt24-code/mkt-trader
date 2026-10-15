@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1047,6 +1048,11 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Retry already closed, notified IQ results even when trading is paused or assets are closed.
+    const telegramResults = dispatchIQResults(supabase).catch(error => console.error('Telegram resultados:', String(error)));
+    // @ts-ignore Hosted background task; never delay analysis or broker execution.
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(telegramResults);
 
     const weekend = isWeekend();
     console.log(`\n🕐 ===== GERAÇÃO DE SINAIS COM DADOS REAIS ===== | Weekend: ${weekend}`);

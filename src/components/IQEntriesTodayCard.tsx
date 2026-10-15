@@ -79,7 +79,14 @@ export const IQEntriesTodayCard = () => {
             {pageOps.map((o, i) => (
               <div key={o.id}>
                 {(i === 0 || brtDayKey(pageOps[i - 1].created_at) !== brtDayKey(o.created_at)) && (
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 pt-2 pb-0.5">{dayLabel(o.created_at)}</div>
+                  {(() => { const s = scoreFor(o.created_at); return (
+                  <div className="flex items-center justify-between pt-2 pb-0.5">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-500">{dayLabel(o.created_at)}</div>
+                    <div className="font-mono text-[10px] tracking-normal">
+                      <span className="text-emerald-500">✓{s.w}</span> <span className="text-rose-500">✗{s.l}</span> <span className="text-amber-500">{s.p}%</span>
+                    </div>
+                  </div>
+                  ); })()}
                 )}
               <div className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
                 <span className="font-mono text-muted-foreground">

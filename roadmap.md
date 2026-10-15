@@ -11,3 +11,5 @@
 - [x] Include entry origin strategy in Telegram alerts.
 - [x] Hide Histórico bom real entries and their totals from Entradas na IQ Option without changing broker execution.
 - [x] Verify strategy formatting and authenticated card filtering (7 wins, 1 loss, 88%, +US$47.40 at verification).
+- [ ] Send Telegram immediately on the same executing queue signal used by the horn.
+- [ ] Align Resultado de Hoje with Entradas na IQ Option and verify displayed totals.

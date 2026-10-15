@@ -99,13 +99,13 @@ export function useIQOptionConnection() {
       // (perda no mesmo ativo+direção nos 15 min anteriores, sem ser teste "Histórico bom")
       const results = all.filter((r) => {
         if (r.timeframe === 'TEST' || r.created_at < startIso) return false;
-        if (r.entry_strategy === 'HISTORICO') return false;
+        if (r.entry_strategy === 'HISTORICO' || r.entry_strategy === 'TENDENCIA') return false;
         if (r.entry_strategy === 'PERDA_ANTERIOR') return true;
         const t = new Date(r.created_at).getTime();
         const prev = [...all].reverse().find((o) => o.id !== r.id && o.asset === r.asset && o.direction === r.direction
           && o.result === 'loss' && new Date(o.created_at).getTime() < t
           && t - new Date(o.created_at).getTime() <= 15 * 60000);
-        return !!prev && prev.entry_strategy !== 'HISTORICO';
+        return !!prev && prev.entry_strategy !== 'HISTORICO' && prev.entry_strategy !== 'TENDENCIA';
       });
 
       let profit = 0;

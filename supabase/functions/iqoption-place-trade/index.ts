@@ -529,8 +529,9 @@ serve(async (req) => {
           .neq('timeframe', 'MT5').lt('created_at', queued.created_at)
           .gte('created_at', new Date(new Date(queued.created_at).getTime() - 15 * 60000).toISOString())
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
-        if (previousLoss) entryStrategy = previousLoss.entry_strategy === 'HISTORICO' ? 'HISTORICO' : 'PERDA_ANTERIOR';
+        if (previousLoss) entryStrategy = (previousLoss.entry_strategy === 'HISTORICO' || previousLoss.entry_strategy === 'TENDENCIA') ? previousLoss.entry_strategy : 'PERDA_ANTERIOR';
         const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
+          : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
           : entryStrategy === 'PERDA_ANTERIOR' ? 'Perda anterior' : 'Não identificada';
         notifyEntry = async entryAt => {
           const messageId = await sendIQAlert({

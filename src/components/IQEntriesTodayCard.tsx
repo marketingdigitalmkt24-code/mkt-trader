@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { dayLabel, brtDayKey, historyStart } from './dayLabel';
 
 type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null };
 type Row = Op & { origin: string };
@@ -23,10 +24,10 @@ export const IQEntriesTodayCard = () => {
       const { data } = await supabase.from('operation_results')
         .select('id, asset, direction, result, profit, created_at, timeframe, entry_strategy')
         .neq('timeframe', 'MT5')
-        .gte('created_at', new Date(new Date(startOfBrtDay()).getTime() - 15 * 60000).toISOString())
+        .gte('created_at', new Date(new Date(historyStart()).getTime() - 15 * 60000).toISOString())
         .order('created_at', { ascending: false }).limit(1000);
       const all = (data as Op[]) || [];
-      const start = startOfBrtDay();
+      const start = historyStart();
       const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start);
       const withOrigin = reals.map((r) => {
         const t = new Date(r.created_at).getTime();
@@ -45,9 +46,11 @@ export const IQEntriesTodayCard = () => {
     return () => clearInterval(id);
   }, []);
 
-  const total = ops.reduce((s, o) => s + Number(o.profit || 0), 0);
-  const wins = ops.filter((o) => o.result === 'win').length;
-  const losses = ops.filter((o) => o.result === 'loss').length;
+  const todayStart = startOfBrtDay();
+  const todayOps = ops.filter((o) => o.created_at >= todayStart);
+  const total = todayOps.reduce((s, o) => s + Number(o.profit || 0), 0);
+  const wins = todayOps.filter((o) => o.result === 'win').length;
+  const losses = todayOps.filter((o) => o.result === 'loss').length;
   const pct = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
   const pageCount = Math.max(1, Math.ceil(ops.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -56,7 +59,7 @@ export const IQEntriesTodayCard = () => {
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option hoje</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
         <span className="font-mono text-xs ml-auto mr-2">
           <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
         </span>
@@ -65,12 +68,16 @@ export const IQEntriesTodayCard = () => {
         </span>
       </div>
       {ops.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real hoje</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real nos últimos 30 dias</p>
       ) : (
         <>
           <div className="space-y-1 flex-1">
-            {pageOps.map((o) => (
-              <div key={o.id} className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
+            {pageOps.map((o, i) => (
+              <div key={o.id}>
+                {(i === 0 || brtDayKey(pageOps[i - 1].created_at) !== brtDayKey(o.created_at)) && (
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 pt-2 pb-0.5">{dayLabel(o.created_at)}</div>
+                )}
+              <div className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
                 <span className="font-mono text-muted-foreground">
                   {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -84,6 +91,7 @@ export const IQEntriesTodayCard = () => {
                     : o.result === 'loss' ? <span className="text-rose-500">{Number(o.profit).toFixed(2)}</span>
                     : <span className="text-muted-foreground">aberta</span>}
                 </span>
+              </div>
               </div>
             ))}
           </div>

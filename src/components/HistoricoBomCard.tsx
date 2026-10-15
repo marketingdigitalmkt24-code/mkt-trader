@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { dayLabel, brtDayKey, historyStart } from './dayLabel';
 
 type Op = { id: string; asset: string; direction: string; result: string; created_at: string };
 
@@ -22,7 +23,7 @@ export const HistoricoBomCard = () => {
       const { data } = await supabase.from('operation_results')
         .select('id, asset, direction, result, created_at')
         .eq('timeframe', 'TEST').eq('entry_strategy', 'HISTORICO')
-        .gte('created_at', startOfBrtDay())
+        .gte('created_at', historyStart())
         .order('created_at', { ascending: false }).limit(1000);
       setOps((data as Op[]) || []);
     };
@@ -31,8 +32,10 @@ export const HistoricoBomCard = () => {
     return () => clearInterval(id);
   }, []);
 
-  const wins = ops.filter((o) => o.result === 'win').length;
-  const losses = ops.filter((o) => o.result === 'loss').length;
+  const todayStart = startOfBrtDay();
+  const todayOps = ops.filter((o) => o.created_at >= todayStart);
+  const wins = todayOps.filter((o) => o.result === 'win').length;
+  const losses = todayOps.filter((o) => o.result === 'loss').length;
   const pct = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
   const pageCount = Math.max(1, Math.ceil(ops.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -46,14 +49,18 @@ export const HistoricoBomCard = () => {
           <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
         </span>
       </div>
-      <p className="text-[10px] text-muted-foreground mb-2">Só teste: ativo+direção com ≥3 operações e ≥60% de acerto em 24h. Não usa dinheiro.</p>
+      <p className="text-[10px] text-muted-foreground mb-2">Só teste: ativo+direção com ≥3 operações e ≥60% de acerto em 24h. Não usa dinheiro. Placar = hoje; lista guarda 30 dias.</p>
       {ops.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada hoje</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada nos últimos 30 dias</p>
       ) : (
         <>
           <div className="space-y-1 flex-1">
-            {pageOps.map((o) => (
-              <div key={o.id} className="flex items-center justify-between text-xs border-b border-border/50 py-1">
+            {pageOps.map((o, i) => (
+              <div key={o.id}>
+                {(i === 0 || brtDayKey(pageOps[i - 1].created_at) !== brtDayKey(o.created_at)) && (
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 pt-2 pb-0.5">{dayLabel(o.created_at)}</div>
+                )}
+              <div className="flex items-center justify-between text-xs border-b border-border/50 py-1">
                 <span className="font-mono text-muted-foreground">
                   {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -64,6 +71,7 @@ export const HistoricoBomCard = () => {
                     : o.result === 'loss' ? <span className="text-rose-500">perda</span>
                     : <span className="text-muted-foreground">aberta</span>}
                 </span>
+              </div>
               </div>
             ))}
           </div>

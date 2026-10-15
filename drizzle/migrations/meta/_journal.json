@@ -15,6 +15,13 @@
       "when": 1792029266385,
       "tag": "0001_telegram_iq_delivery_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792093136610,
+      "tag": "0002_chart_study",
+      "breakpoints": true
     }
   ]
 }

@@ -1648,6 +1648,8 @@ serve(async (req) => {
       console.log(`✅ Histórico favorável em ${bestSignal.asset} → abrindo REAL na IQ Option`);
 
       // ============= FOREX IMEDIATO — sem confirmações, TP x1000 =============
+      // Uma operação por vez: se abrir FOREX, NÃO abre a binária do mesmo sinal.
+      let forexOpened = false;
       try {
         const fxParts = bestSignal.asset.split('/').map((p: string) => p.trim().toUpperCase());
         const fxCur = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];
@@ -1670,6 +1672,7 @@ serve(async (req) => {
               },
             });
             console.log(`💱 FOREX IMEDIATO ${bestSignal.asset} ${fxDir}: ${fxData?.success ? 'aberto ' + fxData.tradeId : 'falhou ' + fxData?.error}`);
+            if (fxData?.success) forexOpened = true;
           } else {
             console.log(`💱 FOREX ${bestSignal.asset}: já existe posição aberta`);
           }
@@ -1686,7 +1689,9 @@ serve(async (req) => {
         const isForexPair = assetParts.length === 2 && assetParts.every((p: string) => forexCurrencies.includes(p));
 
         // Todos os ativos abertos na IQ (moedas, ações, cripto) podem operar opções
-        if (hasAnyPendingIQTrade) {
+        if (forexOpened) {
+          console.log(`🚫 IQ Option: pulando binária — FOREX já aberto para este sinal (1 operação por vez)`);
+        } else if (hasAnyPendingIQTrade) {
           console.log(`🚫 IQ Option: BLOQUEADO — operação anterior pendente`);
         } else {
           const { data: freshPending } = await supabase
@@ -1762,7 +1767,10 @@ serve(async (req) => {
               console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
               // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso
-              await supabase.from('trade_queue').insert({
+              // Trava atômica: o índice único em trade_queue.signal_id garante
+              // que só UM ciclo consegue reivindicar o sinal — se outro ciclo
+              // (cron sobreposto) já inseriu, este insert falha e pulamos.
+              const { error: claimErr } = await supabase.from('trade_queue').insert({
                 asset: bestSignal.asset,
                 direction: executionDirection,
                 amount: iqTradeAmount,
@@ -1772,6 +1780,10 @@ serve(async (req) => {
                 confluence_score: bestSignal.indicators.confluenceScore,
                 status: 'executing',
               });
+              if (claimErr) {
+                console.log(`🚫 Sinal ${bestSignal.id} já reivindicado por outro ciclo — pulando (${claimErr.code || claimErr.message})`);
+                continue;
+              }
 
               const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
                 body: {

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { sendIQAlert } from '../_shared/telegram-iq-alert.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -123,7 +124,8 @@ interface AssetInfo {
 async function placeTradeFireAndForget(
   ssid: string, 
   accountType: string,
-  trade: TradeRequest
+  trade: TradeRequest,
+  notifyEntry?: (entryAt: number) => Promise<void>,
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
   return new Promise((resolve) => {
     console.log('📡 Connecting to IQ Option WebSocket for trading...');
@@ -133,12 +135,14 @@ async function placeTradeFireAndForget(
     let tradeId: string | null = null;
     const activeAssets: Record<string, AssetInfo> = {};
     let tradePlaced = false;
+    let alertTimer: ReturnType<typeof setTimeout> | undefined;
     let fxSender: ((leverage: number) => void) | null = null;
     const fxLevers = [500, 300, 100, 50];
     
     // Shorter timeout - we don't wait for result, just confirmation of placement
     const timeout = setTimeout(() => {
       console.log('⏰ Trade placement timeout');
+      clearTimeout(alertTimer);
       ws.close();
       if (tradePlaced && tradeId) {
         resolve({ success: true, tradeId });
@@ -370,6 +374,16 @@ async function placeTradeFireAndForget(
           if (entryDelay < 0) entryDelay += 60000;
           console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar 2s antes da próxima vela`);
 
+          // Somente sinais reais autorizados na fila; nunca TEST ou forex imediato.
+          // Não atrasar a ordem para cumprir o aviso: sinais tardios avisam assim que possível.
+          if (notifyEntry) {
+            const entryAt = nowMs0 + entryDelay;
+            alertTimer = setTimeout(() => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              void notifyEntry(entryAt).catch(error => console.error('❌ Telegram IQ:', String(error)));
+            }, Math.max(0, entryDelay - 30000));
+          }
+
           const fire = () => {
             const optPayout = payoutById[foundAsset!.turboId || foundAsset!.binaryId || foundAsset!.id] || 0;
             if (!hasTurbo || (optPayout > 0 && optPayout < 80)) {
@@ -519,7 +533,28 @@ serve(async (req) => {
     }
 
     // Place trade (fire-and-forget, don't wait for result)
-    const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
+    // A notificação exige um sinal já autorizado pelo gerador na fila real.
+    // Nenhum parâmetro enviado pelo navegador habilita alertas por si só.
+    let notifyEntry: ((entryAt: number) => Promise<void>) | undefined;
+    if (tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
+      && tradeRequest.timeframe !== 'TEST' && tradeRequest.timeframe !== 'MT5') {
+      const { data: queued } = await supabase.from('trade_queue').select('id')
+        .eq('signal_id', tradeRequest.signalId).eq('asset', tradeRequest.asset)
+        .eq('direction', tradeRequest.direction.toUpperCase()).eq('status', 'executing')
+        .gte('created_at', new Date(Date.now() - 90000).toISOString()).limit(1).maybeSingle();
+      if (queued) {
+        const signalId = tradeRequest.signalId;
+        notifyEntry = entryAt => sendIQAlert({
+          asset: tradeRequest.asset, direction: tradeRequest.direction,
+          expiration: tradeRequest.expiration, entryAt, signalId,
+          timeframe: tradeRequest.timeframe || 'M1',
+        }, {
+          lovableKey: Deno.env.get('LOVABLE_API_KEY') || '',
+          telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '',
+        });
+      }
+    }
+    const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest, notifyEntry);
     console.log('📊 Trade result:', JSON.stringify(result));
 
     // Save to operation_results

@@ -512,7 +512,7 @@ serve(async (req) => {
     // Place trade (fire-and-forget, don't wait for result)
     // A notificação exige um sinal já autorizado pelo gerador na fila real.
     // Nenhum parâmetro enviado pelo navegador habilita alertas por si só.
-    let notifyEntry: ((entryAt: number) => Promise<void>) | undefined;
+    let notifyEntry: ((entryAt: number) => Promise<number | undefined>) | undefined;
     let entryStrategy: string | null = null;
     if (tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
       && tradeRequest.timeframe !== 'TEST' && tradeRequest.timeframe !== 'MT5') {
@@ -537,30 +537,54 @@ serve(async (req) => {
           lovableKey: Deno.env.get('LOVABLE_API_KEY') || '',
           telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '',
           });
-          if (messageId === undefined) return;
+          if (messageId === undefined) return undefined;
           const { error: deliveryError } = await supabase.from('telegram_iq_deliveries').upsert({
             signal_id: signalId, chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy,
           }, { onConflict: 'signal_id', ignoreDuplicates: true });
           if (deliveryError) throw deliveryError;
+          return messageId;
         };
       }
     }
+    // Telegram sai ANTES da entrada (30–60 s, pedido 15/10/2026) para entrada manual.
+    // Se a IQ Option recusar a ordem, uma resposta de CANCELADO é enviada ao sinal.
+    let notification: Promise<number | undefined> | undefined;
+    if (notifyEntry) {
+      const entryAt = Math.ceil((Date.now() + 1000) / 60000) * 60000;
+      notification = notifyEntry(entryAt).catch(error => { console.error('❌ Telegram IQ:', String(error)); return undefined; });
+      // @ts-ignore EdgeRuntime is available in the hosted runtime
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(notification);
+    }
+    const cancelAlert = async () => {
+      if (!notification) return;
+      const msgId = await notification;
+      if (msgId === undefined) return;
+      await supabase.from('telegram_iq_deliveries').update({ result_status: 'cancelled', result_sent_at: new Date().toISOString() })
+        .eq('signal_id', tradeRequest.signalId!);
+      await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${Deno.env.get('LOVABLE_API_KEY') || ''}`,
+          'X-Connection-Api-Key': Deno.env.get('TELEGRAM_API_KEY') || '',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: IQ_TELEGRAM_CHANNEL,
+          text: `🚫 SINAL CANCELADO\n💱 ${tradeRequest.asset}\n⚠️ A corretora recusou este ativo agora. Não entre nesta operação.`,
+          reply_parameters: { message_id: msgId, allow_sending_without_reply: true },
+        }),
+      }).catch(e => console.error('❌ Telegram cancel:', String(e)));
+    };
     const { ssid, error: loginError } = await loginToIQOption(configData.email, configData.password);
     if (!ssid) {
+      await cancelAlert();
       return new Response(
         JSON.stringify({ success: false, error: loginError || 'Failed to login' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
-    // Telegram só depois que a IQ Option confirmou a ordem (pedido 15/10/2026):
-    // ativos recusados ("invalid instrument") não geram sinal no canal.
-    if (notifyEntry && result.success && result.tradeId) {
-      const entryAt = Math.floor(Date.now() / 60000) * 60000;
-      const notification = notifyEntry(entryAt).catch(error => console.error('❌ Telegram IQ:', String(error)));
-      // @ts-ignore EdgeRuntime is available in the hosted runtime
-      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(notification);
-    }
+    if (!(result.success && result.tradeId)) await cancelAlert();
     console.log('📊 Trade result:', JSON.stringify(result));
 
     // Save to operation_results

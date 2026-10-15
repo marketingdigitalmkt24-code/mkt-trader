@@ -377,8 +377,11 @@ export function LiveOperationsCard() {
                     {trade.timeframe === 'TEST' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">TESTE</Badge>
                     )}
-                    {(trade as any).entry_strategy === 'TENDENCIA' && (
+                    {trade.entry_strategy === 'TENDENCIA' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📐 TENDÊNCIA</Badge>
+                    )}
+                    {trade.entry_strategy === 'HISTORICO' && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📜 HISTÓRICO BOM</Badge>
                     )}
                     {trade.timeframe === 'FOREX' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">FOREX</Badge>

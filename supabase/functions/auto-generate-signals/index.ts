@@ -1625,8 +1625,9 @@ serve(async (req) => {
           pairMemory.push({ minute: minuteKey, strategy: historicoOk ? 'HISTORICO' : 'TENDENCIA', dir: dirNow, signal: JSON.parse(JSON.stringify(bestSignal)), used: false });
         }
       }
-      // SEQUÊNCIA (pedido 15/10/2026): Histórico bom logo em seguida de uma Tendência alinhada
-      // no MESMO ativo e MESMA direção (última operação do ativo, ≤15 min) → REAL na direção do sinal.
+      // SEQUÊNCIA (pedido 15/10/2026): Histórico bom IMEDIATAMENTE em seguida de uma
+      // Tendência alinhada no MESMO ativo e MESMA direção (≤15 min) → REAL na direção do sinal.
+      // Se QUALQUER outro sinal aparecer entre a Tendência e este Histórico, NÃO entra.
       if (!realTurn && historicoOk) {
         const { data: prev } = await supabase.from('operation_results')
           .select('entry_strategy, direction, created_at').eq('asset', bestSignal.asset)
@@ -1634,9 +1635,17 @@ serve(async (req) => {
         const p0: any = prev?.[0];
         if (p0 && p0.entry_strategy === 'TENDENCIA' && String(p0.direction).toUpperCase() === dirNow
           && Date.now() - new Date(p0.created_at).getTime() <= 15 * 60 * 1000) {
-          realTurn = true;
-          pairMemory.forEach((p) => { if (p.minute === minuteKey && p.strategy === 'HISTORICO' && p.dir === dirNow) p.used = true; });
-          console.log(`➡️ Sequência Tendência→Histórico ${bestSignal.asset} ${dirNow} → REAL`);
+          // Garante que nenhum outro sinal (de qualquer ativo) foi gerado depois da Tendência.
+          const { count: between } = await supabase.from('operation_results')
+            .select('id', { count: 'exact', head: true })
+            .neq('timeframe', 'MT5').gt('created_at', p0.created_at);
+          if ((between ?? 0) === 0) {
+            realTurn = true;
+            pairMemory.forEach((p) => { if (p.minute === minuteKey && p.strategy === 'HISTORICO' && p.dir === dirNow) p.used = true; });
+            console.log(`➡️ Sequência Tendência→Histórico ${bestSignal.asset} ${dirNow} → REAL (sem sinal no meio)`);
+          } else {
+            console.log(`⛔ Sequência quebrada: ${between} sinal(is) entre a Tendência e este Histórico → TESTE`);
+          }
         }
       }
       if (realTurn) {

@@ -8,3 +8,6 @@
 - [x] Send only authorized IQ Option signals approximately 30 seconds before entry (late signals notify immediately).
 - [x] Verify channel delivery with a clearly labeled connection message and TEST/MT5 exclusion with automated checks.
 - [ ] Confirm automatic advance delivery on the next naturally authorized IQ Option entry (waiting for a real queued signal; do not force a trade).
+- [ ] Include entry origin strategy in Telegram alerts.
+- [ ] Hide Histórico bom real entries and their totals from Entradas na IQ Option without changing broker execution.
+- [ ] Verify strategy formatting and card filtering.

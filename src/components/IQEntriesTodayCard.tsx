@@ -33,10 +33,12 @@ export const IQEntriesTodayCard = () => {
         const prev = all.find((o) => o.id !== r.id && o.asset === r.asset && o.direction === r.direction
           && o.result === 'loss' && new Date(o.created_at).getTime() < t
           && t - new Date(o.created_at).getTime() <= 15 * 60000);
-        const origin = prev ? (prev.entry_strategy === 'HISTORICO' ? 'Histórico bom' : 'Perda anterior') : '—';
+        const origin = r.entry_strategy === 'HISTORICO' ? 'Histórico bom'
+          : r.entry_strategy === 'PERDA_ANTERIOR' ? 'Perda anterior'
+          : prev ? (prev.entry_strategy === 'HISTORICO' ? 'Histórico bom' : 'Perda anterior') : '—';
         return { ...r, origin };
       });
-      setOps(withOrigin.filter((r) => r.origin !== '—'));
+      setOps(withOrigin.filter((r) => r.origin === 'Perda anterior'));
     };
     load();
     const id = setInterval(load, 10000);
@@ -73,7 +75,7 @@ export const IQEntriesTodayCard = () => {
                   {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                 </span>
                 <span className="font-medium flex-1 ml-1 truncate">{o.asset}</span>
-                <span className={`px-1.5 rounded text-[10px] border ${o.origin === 'Histórico bom' ? 'border-amber-500/50 text-amber-500' : 'border-border text-muted-foreground'}`}>
+                <span className="px-1.5 rounded text-[10px] border border-border text-muted-foreground">
                   {o.origin}
                 </span>
                 <span className={o.direction === 'CALL' ? 'text-emerald-500' : 'text-rose-500'}>{o.direction}</span>

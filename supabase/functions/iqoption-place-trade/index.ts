@@ -536,18 +536,30 @@ serve(async (req) => {
     // A notificação exige um sinal já autorizado pelo gerador na fila real.
     // Nenhum parâmetro enviado pelo navegador habilita alertas por si só.
     let notifyEntry: ((entryAt: number) => Promise<void>) | undefined;
+    let entryStrategy: string | null = null;
     if (tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
       && tradeRequest.timeframe !== 'TEST' && tradeRequest.timeframe !== 'MT5') {
-      const { data: queued } = await supabase.from('trade_queue').select('id')
+      const { data: queued } = await supabase.from('trade_queue').select('id, created_at')
         .eq('signal_id', tradeRequest.signalId).eq('asset', tradeRequest.asset)
         .eq('direction', tradeRequest.direction.toUpperCase()).eq('status', 'executing')
         .gte('created_at', new Date(Date.now() - 90000).toISOString()).limit(1).maybeSingle();
       if (queued) {
         const signalId = tradeRequest.signalId;
+        // Identifica a perda que autorizou a fila, sem transformar histórico bom em gatilho independente.
+        const { data: previousLoss } = await supabase.from('operation_results')
+          .select('entry_strategy').eq('asset', tradeRequest.asset)
+          .eq('direction', tradeRequest.direction.toUpperCase()).eq('result', 'loss')
+          .neq('timeframe', 'MT5').lt('created_at', queued.created_at)
+          .gte('created_at', new Date(new Date(queued.created_at).getTime() - 15 * 60000).toISOString())
+          .order('created_at', { ascending: false }).limit(1).maybeSingle();
+        if (previousLoss) entryStrategy = previousLoss.entry_strategy === 'HISTORICO' ? 'HISTORICO' : 'PERDA_ANTERIOR';
+        const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
+          : entryStrategy === 'PERDA_ANTERIOR' ? 'Perda anterior' : 'Não identificada';
         notifyEntry = entryAt => sendIQAlert({
           asset: tradeRequest.asset, direction: tradeRequest.direction,
           expiration: tradeRequest.expiration, entryAt, signalId,
           timeframe: tradeRequest.timeframe || 'M1',
+          strategy,
         }, {
           lovableKey: Deno.env.get('LOVABLE_API_KEY') || '',
           telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '',
@@ -572,6 +584,7 @@ serve(async (req) => {
         iq_option_id: result.tradeId,
         is_auto_trade: tradeRequest.isAutoTrade || false,
         is_ai_analyzed: tradeRequest.isAIAnalyzed || false,
+        entry_strategy: entryStrategy,
         timeframe,
       });
       

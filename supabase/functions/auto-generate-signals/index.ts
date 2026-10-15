@@ -1594,6 +1594,8 @@ serve(async (req) => {
       // finalizada do MESMO ativo (MESMA direção) foi uma perda nos últimos 15 min.
       // Estratégia ÚNICA: perda anterior (pedido 14/10/2026 — regra de histórico removida).
       let realTurn = false;
+      // Após EMPATE: a belépés a KÖTÖTT művelet FORDÍTOTT irányába nyit (user, 15/10/2026).
+      let empateOverride: string | undefined;
       // Tendência alinhada (pedido 15/10/2026): médias alinhadas + MACD a favor + RSI 30–60 a favor.
       // Todo sinal dessa estratégia abre REAL na IQ Option imediatamente (sem exigir perda anterior)
       // e vai ao Telegram; fica fora do Resultado de Hoje e do card Entradas na IQ Option.

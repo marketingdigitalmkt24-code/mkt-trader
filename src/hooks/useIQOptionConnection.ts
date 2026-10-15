@@ -84,15 +84,26 @@ export function useIQOptionConnection() {
 
       console.log('📊 IQ Option stats from (BRT midnight):', brasiliaMidnightUtc.toISOString());
 
-      const { data: results, error } = await supabase
+      const { data: allRows, error } = await supabase
         .from('operation_results')
-        .select('result, profit, entry_price, timeframe')
-        .gte('created_at', brasiliaMidnightUtc.toISOString())
+        .select('id, asset, direction, result, profit, entry_price, timeframe, entry_strategy, created_at')
+        .gte('created_at', new Date(brasiliaMidnightUtc.getTime() - 15 * 60000).toISOString())
         .neq('timeframe', 'MT5')
-        .neq('timeframe', 'TEST')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
+
+      const all = (allRows || []) as Array<{ id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; created_at: string }>;
+      const startIso = brasiliaMidnightUtc.toISOString();
+      // Exclui entradas reais cuja perda que liberou a entrada era um teste "Histórico bom"
+      const results = all.filter((r) => {
+        if (r.timeframe === 'TEST' || r.created_at < startIso) return false;
+        const t = new Date(r.created_at).getTime();
+        const prev = all.find((o) => o.id !== r.id && o.asset === r.asset && o.direction === r.direction
+          && o.result === 'loss' && new Date(o.created_at).getTime() < t
+          && t - new Date(o.created_at).getTime() <= 15 * 60000);
+        return !(prev && prev.entry_strategy === 'HISTORICO');
+      });
 
       let profit = 0;
       let wins = 0;
@@ -101,7 +112,7 @@ export function useIQOptionConnection() {
       let consecutiveLosses = 0;
       let currentStreak = 0;
 
-      for (const result of results || []) {
+      for (const result of results) {
         const resultType = result.result?.toLowerCase();
         if (resultType === 'win') {
           wins++;

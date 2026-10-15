@@ -1613,7 +1613,15 @@ serve(async (req) => {
       realTurn = false;
       if (historicoOk || tendenciaOk) {
         const want = historicoOk ? 'TENDENCIA' : 'HISTORICO';
-        const mate = pairMemory.find((p) => p.minute === minuteKey && p.strategy === want && p.dir === dirNow && !p.used);
+        let mate: any = pairMemory.find((p) => p.minute === minuteKey && p.strategy === want && p.dir === dirNow && !p.used);
+        // Par também entre ciclos diferentes do mesmo minuto: procura no banco.
+        if (!mate && historicoOk) {
+          const mStart = new Date(minuteKey * 60000).toISOString();
+          const { data: tOps } = await supabase.from('operation_results').select('id')
+            .eq('entry_strategy', 'TENDENCIA').eq('direction', dirNow).neq('timeframe', 'MT5')
+            .gte('created_at', mStart).lt('created_at', new Date(minuteKey * 60000 + 60000).toISOString()).limit(1);
+          if (tOps && tOps.length) mate = { used: false, signal: null, fromDb: true };
+        }
         if (mate) {
           mate.used = true;
           if (!historicoOk) Object.assign(bestSignal, JSON.parse(JSON.stringify(mate.signal)));

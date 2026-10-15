@@ -1672,6 +1672,7 @@ serve(async (req) => {
               },
             });
             console.log(`💱 FOREX IMEDIATO ${bestSignal.asset} ${fxDir}: ${fxData?.success ? 'aberto ' + fxData.tradeId : 'falhou ' + fxData?.error}`);
+            if (fxData?.success) forexOpened = true;
           } else {
             console.log(`💱 FOREX ${bestSignal.asset}: já existe posição aberta`);
           }

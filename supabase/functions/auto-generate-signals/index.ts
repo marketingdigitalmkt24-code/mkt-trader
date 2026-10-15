@@ -1649,9 +1649,8 @@ serve(async (req) => {
           .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastTie) {
-          // A belépés mindig a kötött művelet FORDÍTOTT irányába nyit (user, 15/10/2026).
-          if (lastTie.direction === 'CALL') empateOverride = 'PUT';
-          else if (lastTie.direction === 'PUT') empateOverride = 'CALL';
+          // Entrada inversa ao PRÓXIMO sinal gerado (user, 15/10/2026): sinal CALL → entra PUT.
+          const sigDir = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
           const { data: used } = await supabase.from('operation_results').select('id')
             .eq('entry_strategy', 'EMPATE').gt('created_at', lastTie.created_at).limit(1);
           if (!used || used.length === 0) {
@@ -1659,8 +1658,9 @@ serve(async (req) => {
               .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
               .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
             if (!bad || bad.length === 0) {
+              empateOverride = sigDir === 'CALL' ? 'PUT' : sigDir === 'PUT' ? 'CALL' : undefined;
               realTurn = true; realStrategy = 'EMPATE'; reversaoRsi = false;
-              console.log(`🤝 Após empate → REAL: ${bestSignal.asset} (kötött: ${lastTie.direction} → fordított: ${empateOverride || '(maradó)'})`);
+              console.log(`🤝 Após empate → REAL: ${bestSignal.asset} sinal ${sigDir} → entrada ${empateOverride}`);
             }
           }
         }

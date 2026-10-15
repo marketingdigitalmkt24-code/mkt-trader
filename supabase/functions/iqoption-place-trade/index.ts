@@ -512,7 +512,7 @@ serve(async (req) => {
     // Place trade (fire-and-forget, don't wait for result)
     // A notificação exige um sinal já autorizado pelo gerador na fila real.
     // Nenhum parâmetro enviado pelo navegador habilita alertas por si só.
-    let notifyEntry: ((entryAt: number) => Promise<void>) | undefined;
+    let notifyEntry: ((entryAt: number) => Promise<number | undefined>) | undefined;
     let entryStrategy: string | null = null;
     if (tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
       && tradeRequest.timeframe !== 'TEST' && tradeRequest.timeframe !== 'MT5') {

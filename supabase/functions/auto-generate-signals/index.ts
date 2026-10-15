@@ -1644,11 +1644,14 @@ serve(async (req) => {
       // Após EMPATE (pedido 15/10/2026): se a última operação finalizada de Tendência/Histórico bom
       // (teste ou real) empatou nos últimos 30 min, o PRÓXIMO sinal de qualquer ativo abre REAL + Telegram.
       try {
-        const { data: lastTie } = await supabase.from('operation_results').select('created_at')
+        const { data: lastTie } = await supabase.from('operation_results').select('direction, created_at')
           .in('entry_strategy', ['TENDENCIA', 'HISTORICO']).eq('result', 'tie').neq('timeframe', 'MT5')
           .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastTie) {
+          // A belépés mindig a kötött művelet FORDÍTOTT irányába nyit (user, 15/10/2026).
+          if (lastTie.direction === 'CALL') empateOverride = 'PUT';
+          else if (lastTie.direction === 'PUT') empateOverride = 'CALL';
           const { data: used } = await supabase.from('operation_results').select('id')
             .eq('entry_strategy', 'EMPATE').gt('created_at', lastTie.created_at).limit(1);
           if (!used || used.length === 0) {
@@ -1657,7 +1660,7 @@ serve(async (req) => {
               .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
             if (!bad || bad.length === 0) {
               realTurn = true; realStrategy = 'EMPATE'; reversaoRsi = false;
-              console.log(`🤝 Após empate → REAL: ${bestSignal.asset}`);
+              console.log(`🤝 Após empate → REAL: ${bestSignal.asset} (kötött: ${lastTie.direction} → fordított: ${empateOverride || '(maradó)'})`);
             }
           }
         }

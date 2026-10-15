@@ -387,6 +387,9 @@ export function LiveOperationsCard() {
                     {trade.entry_strategy === 'EMPATE' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">🤝 EMPATE</Badge>
                     )}
+                    {trade.result === 'tie' && (trade.entry_strategy === 'TENDENCIA' || trade.entry_strategy === 'HISTORICO') && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 border-amber-500/50 text-amber-500 whitespace-normal">🤝 Empate → próxima entrada REAL</Badge>
+                    )}
                     {trade.entry_strategy === 'REVERSAO_RSI' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 REVERSÃO RSI</Badge>
                     )}

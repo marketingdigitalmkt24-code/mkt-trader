@@ -1,4 +1,5 @@
 - [x] Add strategy badges to IQ Option's latest operations, with honest labels for unmatched history.
+- [x] Add clear emojis throughout automatic Telegram entry alerts and final result messages.
 - [x] Compare recorded losses by strategy using linked IQ Option operations.
 - [x] Replace homepage with centered branding and clearly labeled simulated trading chart.
 - [x] Move existing homepage information to admin Dashboard and preserve separate settings tabs.

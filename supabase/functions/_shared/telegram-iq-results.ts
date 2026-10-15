@@ -21,13 +21,13 @@ export function formatIQResult(op: IQResult, strategy: string | null): string {
   const profit = Number(op.profit);
   const time = new Date(op.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   return [
-    'AGENCIA MKT TRADER — Resultado IQ Option',
-    `Ativo: ${op.asset}`,
-    `Estratégia: ${strategy || 'Não identificada'}`,
-    `Direção: ${op.direction.toUpperCase() === 'CALL' ? 'COMPRA (CALL)' : 'VENDA (PUT)'}`,
-    `Entrada: ${time} (Brasília)`,
+    '📊 AGÊNCIA MKT TRADER — Resultado IQ Option',
+    `💱 Ativo: ${op.asset}`,
+    `🎯 Estratégia: ${strategy || 'Não identificada'}`,
+    `Direção: ${op.direction.toUpperCase() === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`,
+    `⏰ Entrada: ${time} (Brasília)`,
     `Resultado: ${op.result === 'win' ? '✅ GANHO' : op.result === 'loss' ? '❌ PERDA' : '➖ EMPATE'}`,
-    `Resultado líquido: ${profit > 0 ? '+' : profit < 0 ? '-' : ''}US$ ${Math.abs(profit).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    `💰 Resultado líquido: ${profit > 0 ? '+' : profit < 0 ? '-' : ''}US$ ${Math.abs(profit).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
   ].join('\n');
 }
 

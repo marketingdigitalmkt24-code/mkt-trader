@@ -18,14 +18,14 @@ export function formatIQAlert(alert: IQAlert): string {
     timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
   return [
-    'AGENCIA MKT TRADER — IQ Option',
-    `Ativo: ${alert.asset}`,
-    `Estratégia: ${alert.strategy || 'Não identificada'}`,
+    '📣 AGÊNCIA MKT TRADER — Sinal IQ Option',
+    `💱 Ativo: ${alert.asset}`,
+    `🎯 Estratégia: ${alert.strategy || 'Não identificada'}`,
     `Direção: ${alert.direction === 'call' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`,
-    `Entrada prevista: ${entryTime} (Brasília)`,
-    `Vencimento: ${alert.expiration} minuto(s)`,
-    'Entrada selecionada para envio à corretora; não é operação TESTE.',
-    'Aviso antecipado: a corretora ainda pode recusar a ordem. Sem garantia de lucro.',
+    `⏰ Entrada prevista: ${entryTime} (Brasília)`,
+    `⌛ Vencimento: ${alert.expiration} minuto(s)`,
+    '📤 Entrada selecionada para envio à corretora; não é operação TESTE.',
+    '⚠️ Aviso antecipado: a corretora ainda pode recusar a ordem. Sem garantia de lucro.',
   ].join('\n');
 }
 

@@ -15,11 +15,14 @@ const fmt = (v: number, s: string) => Number(v).toFixed(s.includes('JPY') ? 3 : 
 
 export function ForexPracticeCard() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [bal, setBal] = useState<{ amount: number; currency: string; updated_at: string } | null>(null);
   useEffect(() => {
     let alive = true;
     const load = async () => {
       const { data } = await supabase.from('stop_target_positions').select('*').not('iq_status', 'is', null).order('opened_at', { ascending: false }).limit(50);
       if (alive && data) setRows(data as unknown as Row[]);
+      const { data: b } = await supabase.from('forex_practice_balance').select('*').eq('id', 1).maybeSingle();
+      if (alive && b) setBal(b as any);
     };
     load(); const t = setInterval(load, 20000);
     return () => { alive = false; clearInterval(t); };
@@ -44,11 +47,16 @@ export function ForexPracticeCard() {
         <p className="text-xs text-muted-foreground mb-3">
           Ordens de forex abertas de verdade na conta de treino (saldo fictício), com stop e alvo enviados para a IQ Option. Risco de cerca de US$ 10 por entrada. Separado das binárias.
         </p>
+        <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 mb-3 text-center">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo em caixa (conta de treino)</p>
+          <p className="text-2xl font-bold">{bal ? Number(bal.amount).toLocaleString('pt-BR', { style: 'currency', currency: bal.currency || 'USD' }) : '—'}</p>
+          {bal && <p className="text-[10px] text-muted-foreground">atualizado {dt(bal.updated_at)}</p>}
+        </div>
         <div className="grid grid-cols-4 gap-2 mb-3 text-center">
           <div className="p-2 rounded-lg bg-muted"><p className="text-[10px] text-muted-foreground">ORDENS</p><p className="font-bold">{ok.length}</p></div>
           <div className="p-2 rounded-lg bg-call/10"><p className="text-[10px] text-muted-foreground">ALVOS</p><p className="font-bold text-call">{wins}</p></div>
           <div className="p-2 rounded-lg bg-put/10"><p className="text-[10px] text-muted-foreground">STOPS</p><p className="font-bold text-put">{losses}</p></div>
-          <div className="p-2 rounded-lg bg-muted"><p className="text-[10px] text-muted-foreground">RESULTADO</p><p className={`font-bold ${totalR >= 0 ? 'text-call' : 'text-put'}`}>${(totalR * 10).toFixed(2)}</p></div>
+          <div className="p-2 rounded-lg bg-muted"><p className="text-[10px] text-muted-foreground">RESULTADO (R)</p><p className={`font-bold ${totalR >= 0 ? 'text-call' : 'text-put'}`}>{totalR >= 0 ? '+' : ''}{totalR.toFixed(1)}R</p></div>
         </div>
         {rows.length === 0 ? (
           <p className="text-xs text-muted-foreground">Nenhuma ordem ainda — a próxima entrada do teste abre aqui.</p>
@@ -64,7 +72,7 @@ export function ForexPracticeCard() {
                 <div className="text-right shrink-0">
                   {!r.iq_order_id ? <span className="text-put">🚫 {r.iq_error || 'recusada'}</span>
                     : r.status === 'open' ? <span className="text-muted-foreground">⏳ aberta · stop {fmt(r.stop_price, r.symbol)} · alvo {fmt(r.target_price, r.symbol)}</span>
-                    : <span className={`font-bold ${(r.result_r ?? 0) >= 0 ? 'text-call' : 'text-put'}`}>{(r.result_r ?? 0) >= 0 ? '+' : ''}${((r.result_r ?? 0) * 10).toFixed(2)}</span>}
+                    : <span className={`font-bold ${(r.result_r ?? 0) >= 0 ? 'text-call' : 'text-put'}`}>{(r.result_r ?? 0) >= 0 ? '+' : ''}{(r.result_r ?? 0).toFixed(1)}R</span>}
                 </div>
               </div>
             ))}

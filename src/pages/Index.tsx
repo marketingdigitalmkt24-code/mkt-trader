@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Header } from '@/components/Header';
 import { BankManagementCard } from '@/components/BankManagementCard';
 import { IQEntriesTodayCard } from '@/components/IQEntriesTodayCard';
+import { HistoricoBomCard } from '@/components/HistoricoBomCard';
 import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
 import { LiveOperationsCard } from '@/components/LiveOperationsCard';
 import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
@@ -67,9 +68,10 @@ const Index = () => {
         <BrokerConnectionsCard />
 
         {/* Row 2: Bank Management IQ + MT5 side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
           <BankManagementCard />
           <IQEntriesTodayCard />
+          <HistoricoBomCard />
         </div>
 
         {/* Row 3: Live Operations + AI Status side by side */}

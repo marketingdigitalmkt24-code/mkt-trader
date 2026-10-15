@@ -27,7 +27,8 @@ export const HistoricoBomCard = () => {
         .neq('timeframe', 'TEST')
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
-        .gte('created_at', historyStart())
+        // Card cleared when test mode started; older real entries stay saved for AI learning.
+        .gte('created_at', historyStart() > '2026-10-15T15:45:00Z' ? historyStart() : '2026-10-15T15:45:00Z')
         .order('created_at', { ascending: false }).limit(1000);
       const rows = ((data as Op[]) || []).map((r) => ({
         ...r,

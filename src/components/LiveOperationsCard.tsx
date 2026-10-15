@@ -28,6 +28,7 @@ interface RecentTrade {
   is_auto_trade: boolean;
   timeframe: string;
   signal_id: string;
+  entry_strategy?: string;
   strategy?: string;
 }
 

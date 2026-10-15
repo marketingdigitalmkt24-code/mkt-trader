@@ -12,6 +12,7 @@
 - [x] Include entry origin strategy in Telegram alerts.
 - [x] Hide Histórico bom real entries and their totals from Entradas na IQ Option without changing broker execution.
 - [x] Merge Tendência alinhada and Histórico bom real entries into one card with per-entry strategy badges; Resultado de Hoje counts both again.
+- [x] Switch Tendência and Histórico bom to TESTE-only (no real IQ Option, no Telegram): new "Entradas de teste" card with strategy badges; Entradas na IQ Option left blank.
 - [x] Verify strategy formatting and authenticated card filtering (7 wins, 1 loss, 88%, +US$47.40 at verification).
 - [x] Send Telegram immediately on the same executing queue signal used by the horn.
 - [x] Align Resultado de Hoje with Entradas na IQ Option and verify displayed totals (+US$47.40, 7 wins, 1 loss).

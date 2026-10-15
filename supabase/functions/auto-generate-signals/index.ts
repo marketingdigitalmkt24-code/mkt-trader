@@ -1575,8 +1575,8 @@ serve(async (req) => {
       // Estratégia ÚNICA: perda anterior (pedido 14/10/2026 — regra de histórico removida).
       let realTurn = false;
       // Tendência alinhada (pedido 15/10/2026): médias alinhadas + MACD a favor + RSI 30–60 a favor.
-      // Todo sinal dessa estratégia abre REAL na IQ Option imediatamente (sem exigir perda anterior)
-      // e vai ao Telegram; fica fora do Resultado de Hoje e do card Entradas na IQ Option.
+      // SOMENTE TESTE (pedido 15/10/2026 15:45): nenhuma estratégia abre REAL na IQ Option;
+      // rotulamos o TESTE com a estratégia detectada para o card de teste.
       let tendenciaOk = false;
       try {
         const dirT = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
@@ -1588,9 +1588,9 @@ serve(async (req) => {
         tendenciaOk = dirT === 'CALL'
           ? e9 > e21 && e21 > s50 && macdT === 'bullish' && rsiT >= 50 && rsiT <= 60
           : e9 < e21 && e21 < s50 && macdT === 'bearish' && rsiT >= 30 && rsiT <= 50;
-        if (tendenciaOk) console.log(`📐 Tendência alinhada → REAL direto: ${bestSignal.asset} ${dirT} RSI ${rsiT.toFixed(1)}`);
+        if (tendenciaOk) console.log(`📐 Tendência alinhada → TESTE: ${bestSignal.asset} ${dirT} RSI ${rsiT.toFixed(1)}`);
       } catch (_) { /* ignore */ }
-      // "Perda anterior" DESATIVADA (pedido 15/10/2026). REAL direto só para Histórico bom ou Tendência alinhada.
+      // Histórico favorável (≥3 ops e ≥60% acerto em 24h) — usado apenas como rótulo do TESTE.
       let historicoOk = false;
       try {
         const dirH = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
@@ -1602,13 +1602,9 @@ serve(async (req) => {
         const n = (h || []).length;
         historicoOk = n >= 3 && w / n >= 0.6;
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
-      realTurn = historicoOk || tendenciaOk;
-      if (realTurn) {
-        const { data: bad } = await supabase.from('trade_queue').select('id')
-          .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
-          .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
-        if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
-      }
+      // SOMENTE TESTE (pedido 15/10/2026 15:45): nada abre REAL na IQ Option nem vai ao Telegram.
+      // Card "Entradas na IQ Option" fica em branco; testes aparecem no card de teste com selos.
+      realTurn = false;
       const realStrategy = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
@@ -1626,7 +1622,7 @@ serve(async (req) => {
             const n = (h || []).length;
             if (n >= 3 && w / n >= 0.6) entryStrategy = 'HISTORICO';
           } catch (_) { /* ignore */ }
-          // Tendência alinhada agora abre REAL direto (bloco acima); aqui só rotula o TESTE se cair neste caminho.
+          // Rótulo do TESTE: Histórico bom se o histórico bater; senão Tendência alinhada se detectada.
           if (entryStrategy === 'IA' && tendenciaOk) entryStrategy = 'TENDENCIA';
           // Entrada TESTE exatamente no :00 da vela atual (pedido 15/10/2026):
           // o preço ao vivo acima já é o fechamento da última vela fechada (= abertura da vela nova).

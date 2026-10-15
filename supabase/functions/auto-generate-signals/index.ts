@@ -1468,7 +1468,7 @@ serve(async (req) => {
     console.log(`🏁 Ranking lucro: ${aiApprovedSignals.slice(0, 5).map(s => `${s.asset} ${s.aiDirection} ${rankScore(s).toFixed(0)}`).join(' | ')}`);
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
-    const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
+    const signalsToExecute = aiApprovedSignals.slice(0, 10); // vários para casar Tendência+Histórico no mesmo minuto
     
     // Salvar TODOS os sinais aprovados pela IA no banco (não só o melhor)
     for (let i = 1; i < aiApprovedSignals.length; i++) {
@@ -1498,7 +1498,9 @@ serve(async (req) => {
     const executedSignals: any[] = [];
 
     const pairMemory: { minute: number; strategy: string; dir: string; signal: any; used: boolean }[] = [];
+    let realDone = false;
     for (const bestSignal of signalsToExecute) {
+      if (realDone) break;
       console.log(`🎯 MELHOR sinal REAL: ${bestSignal.asset} (${bestSignal.type}) — Score: ${bestSignal.indicators.confluenceScore}% | Preço REAL: ${bestSignal.price}`);
       const hist = assetHistory.get(bestSignal.asset);
       const histInfo = hist ? ` | History: WR ${hist.winRate}% (${hist.wins}W/${hist.losses}L)` : ' | No history';
@@ -1629,6 +1631,7 @@ serve(async (req) => {
           .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
         if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
       }
+      if (realTurn) realDone = true;
       const realStrategy = realTurn ? 'HISTORICO' : undefined;
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')

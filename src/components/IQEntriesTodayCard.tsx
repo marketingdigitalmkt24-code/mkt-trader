@@ -29,9 +29,9 @@ export const IQEntriesTodayCard = () => {
       const all = (data as Op[]) || [];
       const start = historyStart();
       const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start);
+      // Só a estratégia Tendência alinhada aparece neste card (Histórico bom removido a pedido)
       const withOrigin = reals.map((r) => {
-        const origin = r.entry_strategy === 'HISTORICO' ? 'Histórico bom'
-          : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : '—';
+        const origin = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : '—';
         return { ...r, origin };
       });
       setOps(withOrigin.filter((r) => r.origin !== '—'));

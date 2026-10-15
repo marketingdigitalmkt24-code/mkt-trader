@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
   const nowSec = Math.floor(Date.now() / 1000);
 
   // Baixa as últimas ~70 velas 5m de cada par (1 requisição por par)
-  const ws = new WebSocket(WS_URL); let practiceId = 0;
+  const ws = new WebSocket(WS_URL); let practiceId = 0; let practiceBal: { amount: number; currency: string } | null = null;
   const listeners: ((d: any) => void)[] = [];
   const data: Record<string, K[]> = await new Promise((resolve) => {
     const out: Record<string, K[]> = {}; const byReq = new Map<string, string>(); let pending = 0;
@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
     ws.onmessage = (ev) => {
       const d = JSON.parse(ev.data);
       listeners.forEach(f => f(d));
-      if (d.name === 'profile' && Array.isArray(d.msg?.balances)) { const b = d.msg.balances.find((x: any) => x.type === 4); if (b) practiceId = b.id; }
+      if (d.name === 'profile' && Array.isArray(d.msg?.balances)) { const b = d.msg.balances.find((x: any) => x.type === 4); if (b) { practiceId = b.id; practiceBal = { amount: Number(b.amount), currency: String(b.currency || 'USD') }; } }
       if (d.name === 'profile') ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
       if (d.name === 'initialization-data') {
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
@@ -162,6 +162,15 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Saldo real da conta de treino (relido após possíveis ordens)
+  if (practiceId && ws.readyState === WebSocket.OPEN) {
+    await new Promise<void>((res) => {
+      const t = setTimeout(res, 6000);
+      listeners.push((d) => { if (d.request_id === 'bal' && Array.isArray(d.msg)) { const b = d.msg.find((x: any) => x.id === practiceId); if (b) practiceBal = { amount: Number(b.amount), currency: String(b.currency || 'USD') }; clearTimeout(t); res(); } });
+      ws.send(JSON.stringify({ name: 'sendMessage', request_id: 'bal', msg: { name: 'get-balances', version: '1.0', body: {} } }));
+    });
+  }
+  if (practiceBal) await supabase.from('forex_practice_balance').upsert({ id: 1, amount: practiceBal.amount, currency: practiceBal.currency, updated_at: new Date().toISOString() });
   try { ws.close(); } catch (_) { /* */ }
-  return Response.json({ success: true, practiceId, opened, closed, openPositions: stillOpen - closed.length, pairs: Object.fromEntries(Object.entries(cleaned).map(([n, cs]) => [n, cs.length])) }, { headers: cors });
+  return Response.json({ success: true, practiceId, practiceBal, opened, closed, openPositions: stillOpen - closed.length, pairs: Object.fromEntries(Object.entries(cleaned).map(([n, cs]) => [n, cs.length])) }, { headers: cors });
 });

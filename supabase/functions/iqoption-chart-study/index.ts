@@ -104,10 +104,11 @@ Deno.serve(async (req) => {
         if (!list.length) { clearTimeout(timer); finish(); return; }
         const nowSec = Math.floor(now / 1000);
         const chunks = Math.ceil(DAYS * 1440 / 1000);
+        pending = list.length * chunks;
         for (const [symbol, id] of list) {
           const idx = picked.push({ id, symbol, candles: [], pending: chunks }) - 1;
           for (let k = 0; k < chunks; k++) {
-            const rid = `s${id}_${k}`; byReq.set(rid, idx); pending++;
+            const rid = `s${id}_${k}`; byReq.set(rid, idx);
             ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to: nowSec - k * 60000, count: 1000 } } }));
             await new Promise(r => setTimeout(r, 60));
           }

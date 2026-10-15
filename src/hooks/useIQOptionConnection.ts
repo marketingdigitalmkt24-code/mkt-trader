@@ -94,7 +94,10 @@ export function useIQOptionConnection() {
       if (error) throw error;
 
       const all = (allRows || []) as Array<{ id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; created_at: string }>;
-      const startIso = brasiliaMidnightUtc.toISOString();
+      // Zerado em 15/10/2026 12:47 BRT: conta apenas o que aparece no card "Entradas na IQ Option"
+      const REAL_CUTOFF = '2026-10-15T15:47:00.000Z';
+      const midIso = brasiliaMidnightUtc.toISOString();
+      const startIso = midIso > REAL_CUTOFF ? midIso : REAL_CUTOFF;
       // Conta entradas reais das estratégias ativas (Tendência alinhada e Histórico bom)
       const results = all.filter((r) => r.timeframe !== 'TEST' && r.created_at >= startIso
         && (r.entry_strategy === 'TENDENCIA' || r.entry_strategy === 'HISTORICO'));

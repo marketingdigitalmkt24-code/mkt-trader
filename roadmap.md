@@ -13,3 +13,6 @@
 - [x] Verify strategy formatting and authenticated card filtering (7 wins, 1 loss, 88%, +US$47.40 at verification).
 - [x] Send Telegram immediately on the same executing queue signal used by the horn.
 - [x] Align Resultado de Hoje with Entradas na IQ Option and verify displayed totals (+US$47.40, 7 wins, 1 loss).
+- [x] Track delivered Telegram signals and send their final broker results with retry/deduplication.
+- [x] Verify result formatting and delivered-signal-only selection without forcing a trade.
+- [ ] Confirm automatic result delivery after the next naturally notified broker trade closes (waiting for a real delivered signal; do not force a trade).

@@ -8,6 +8,13 @@
       "when": 1792022569510,
       "tag": "0000_add_entry_strategy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792029266385,
+      "tag": "0001_telegram_iq_delivery_tracking",
+      "breakpoints": true
     }
   ]
 }

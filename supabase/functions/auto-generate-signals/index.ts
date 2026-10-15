@@ -1608,6 +1608,7 @@ serve(async (req) => {
         }
         console.log(`📊 Perda anterior ${bestSignal.asset} ${dirH}: ${last?.[0]?.result || 'nenhuma'} → ${realTurn ? 'REAL' : 'TESTE'}`);
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
+      if (tendenciaOk) realTurn = true;
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);

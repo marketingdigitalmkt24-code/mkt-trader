@@ -1,0 +1,1 @@
+ALTER TABLE public.stop_target_positions ADD COLUMN IF NOT EXISTS iq_order_id text, ADD COLUMN IF NOT EXISTS iq_position_id text, ADD COLUMN IF NOT EXISTS iq_status text, ADD COLUMN IF NOT EXISTS iq_error text, ADD COLUMN IF NOT EXISTS iq_account text DEFAULT 'PRACTICE', ADD COLUMN IF NOT EXISTS iq_amount numeric, ADD COLUMN IF NOT EXISTS iq_leverage integer;

@@ -523,37 +523,34 @@ serve(async (req) => {
       if (queued) {
         const signalId = tradeRequest.signalId;
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
+        // Telegram apenas para Tendência alinhada e Histórico bom.
         const reqStrategy = (tradeRequest as any).entryStrategy;
         if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA') entryStrategy = reqStrategy;
-        const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
-          : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada' : 'IA';
-        notifyEntry = async entryAt => {
-          const messageId = await sendIQAlert({
-          asset: tradeRequest.asset, direction: tradeRequest.direction,
-          expiration: tradeRequest.expiration, entryAt, signalId,
-          timeframe: tradeRequest.timeframe || 'M1',
-          strategy,
-        }, {
-          lovableKey: Deno.env.get('LOVABLE_API_KEY') || '',
-          telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '',
-          });
-          if (messageId === undefined) return;
-          const { error: deliveryError } = await supabase.from('telegram_iq_deliveries').upsert({
-            signal_id: signalId, chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy,
-          }, { onConflict: 'signal_id', ignoreDuplicates: true });
-          if (deliveryError) throw deliveryError;
-        };
+        if (entryStrategy) {
+          const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom' : 'Tendência alinhada';
+          notifyEntry = async () => {
+            // A mensagem sai no mesmo minuto da operação: a entrada já está aberta na IQ Option.
+            const entryAt = Math.floor(Date.now() / 60000) * 60000;
+            const messageId = await sendIQAlert({
+            asset: tradeRequest.asset, direction: tradeRequest.direction,
+            expiration: tradeRequest.expiration, entryAt, signalId,
+            timeframe: tradeRequest.timeframe || 'M1',
+            strategy,
+          }, {
+            lovableKey: Deno.env.get('LOVABLE_API_KEY') || '',
+            telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '',
+            });
+            if (messageId === undefined) return;
+            const { error: deliveryError } = await supabase.from('telegram_iq_deliveries').upsert({
+              signal_id: signalId, chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy,
+            }, { onConflict: 'signal_id', ignoreDuplicates: true });
+            if (deliveryError) throw deliveryError;
+          };
+        }
       }
     }
-    // A fila executing é também o gatilho da buzina: Telegram sai imediatamente,
-    // independentemente do navegador e sem esperar o cronômetro de 30 segundos.
-    if (notifyEntry) {
-      const now = Date.now();
-      const entryAt = Math.ceil((now + 1000) / 60000) * 60000;
-      const notification = notifyEntry(entryAt).catch(error => console.error('❌ Telegram IQ:', String(error)));
-      // @ts-ignore EdgeRuntime is available in the hosted runtime
-      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(notification);
-    }
+    // A fila executing também aciona a buzina no navegador. O Telegram agora sai
+    // somente depois da entrada confirmada na corretora, no mesmo minuto da operação.
     const { ssid, error: loginError } = await loginToIQOption(configData.email, configData.password);
     if (!ssid) {
       return new Response(
@@ -584,6 +581,13 @@ serve(async (req) => {
       });
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
+
+      // Telegram só depois da entrada confirmada na IQ Option, no mesmo minuto.
+      if (notifyEntry) {
+        const notification = notifyEntry().catch(error => console.error('❌ Telegram IQ:', String(error)));
+        // @ts-ignore EdgeRuntime is available in the hosted runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(notification);
+      }
 
       // Schedule result checks right at expiry (fast win/loss → instant post-win continuation)
       if (!isForex) {

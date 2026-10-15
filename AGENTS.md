@@ -1,4 +1,4 @@
 - Match IQ Option operations to `trading_signals` by `signal_id` when displaying strategy; there is no declared foreign key, and unmatched historical operations must remain unidentified rather than be guessed as IA.
 - Keep the public simulated chart isolated from broker hooks and real results; real trading cards are composed in TradingDashboard under the authenticated admin Dashboard tab so demonstration activity cannot execute trades.
-- Schedule Telegram alerts inside IQ Option placement after asset discovery, only for fresh authorized executing queue signals; this shares the actual entry clock without notifying TEST operations or delaying trades.
+- Send Telegram immediately inside IQ Option placement for fresh authorized executing queue signals, the same event polled by the horn; do not wait for browser audio or delay broker execution, and label the entry time as estimated.
 - Persist real-entry origin in operation_results.entry_strategy from the loss authorizing its queue row; Telegram and card visibility use this origin, with legacy inference only when the recorded origin is absent.

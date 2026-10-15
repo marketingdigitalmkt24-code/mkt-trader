@@ -1054,6 +1054,23 @@ serve(async (req) => {
     // @ts-ignore Hosted background task; never delay analysis or broker execution.
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(telegramResults);
 
+    // The existing minute cron owns result reconciliation too: leaving the
+    // admin page must not remove the only poller and strand a pending IQ lock.
+    const reconcileResults = async () => {
+      const { data: expired, error: lookupError } = await supabase.from('operation_results')
+        .select('id').eq('result', 'pending').not('iq_option_id', 'is', null)
+        .not('timeframe', 'in', '(TEST,MT5)')
+        .lte('expiration_time', new Date().toISOString()).limit(1);
+      if (lookupError) throw lookupError;
+      if (!expired?.length) return;
+      const { data, error } = await supabase.functions.invoke('iqoption-check-results', { body: {} });
+      if (error) throw error;
+      console.log('🔄 Reconciliação IQ independente do navegador:', data?.updatedResults ?? 0);
+    };
+    const resultSync = reconcileResults().catch(error => console.error('IQ reconciliação:', String(error)));
+    // @ts-ignore Hosted background task; keep it alive even if this cycle returns early.
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(resultSync);
+
     const weekend = isWeekend();
     console.log(`\n🕐 ===== GERAÇÃO DE SINAIS COM DADOS REAIS ===== | Weekend: ${weekend}`);
 
@@ -1123,6 +1140,7 @@ serve(async (req) => {
     // Candles are now stored inside fetchHistoricalQuotes
 
     // ============= CHECK PENDING OPERATIONS =============
+    await resultSync;
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: pendingOps } = await supabase
       .from('operation_results')

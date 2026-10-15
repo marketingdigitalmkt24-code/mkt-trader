@@ -16,4 +16,6 @@
 - [x] Track delivered Telegram signals and send their final broker results with retry/deduplication.
 - [x] Verify result formatting and delivered-signal-only selection without forcing a trade.
 - [x] Diagnose horn without Telegram (gateway 502); verify channel test delivery and deploy bounded temporary-failure retries.
+- [x] Verify authenticated tab/home navigation makes no settings writes, confirm existing minute cron and continued signal generation, and move expired result reconciliation into that cron.
+- [ ] Confirm the next naturally expired notified real trade reconciles with admin closed (waiting for a real eligible trade; do not force a trade).
 - [ ] Confirm automatic result delivery after the next naturally notified broker trade closes (waiting for a real delivered signal; do not force a trade).

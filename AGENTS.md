@@ -4,3 +4,4 @@
 - Persist real-entry origin in operation_results.entry_strategy from the loss authorizing its queue row; Telegram and card visibility use this origin, with legacy inference only when the recorded origin is absent.
 - Track successful Telegram signal message IDs in a service-only delivery ledger; dispatch only linked final broker results with conditional leases from result sync and signal cron so TEST results and unnotified history never reach Telegram.
 - Use the verified numeric Telegram channel ID and bounded retries for explicit temporary gateway failures before estimated entry; never delay trades or resend expired entry alerts.
+- Reconcile expired real IQ results from the existing signal cron before checking pending locks; browser polling is supplementary so navigation cannot strand trades or Telegram results.

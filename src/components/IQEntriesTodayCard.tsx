@@ -31,10 +31,10 @@ export const IQEntriesTodayCard = () => {
       const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start);
       const withOrigin = reals.map((r) => {
         const origin = r.entry_strategy === 'HISTORICO' ? 'Histórico bom'
-          : r.entry_strategy === 'PERDA_ANTERIOR' ? 'Perda anterior' : '—';
+          : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : '—';
         return { ...r, origin };
       });
-      setOps(withOrigin.filter((r) => r.origin === 'Perda anterior'));
+      setOps(withOrigin.filter((r) => r.origin !== '—'));
     };
     load();
     const id = setInterval(load, 10000);

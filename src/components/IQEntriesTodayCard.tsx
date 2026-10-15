@@ -31,7 +31,7 @@ export const IQEntriesTodayCard = () => {
       // Só a estratégia Tendência alinhada aparece neste card
       // Novas entradas reais das regras combinadas (Tendência + Histórico bom)
       const RULE_START = '2026-10-15T14:30:00.000Z';
-      const withOrigin = reals.filter((r) => r.created_at >= RULE_START && (r.entry_strategy === 'TENDENCIA' || r.entry_strategy === 'HISTORICO'));
+      const withOrigin = reals.filter((r) => r.created_at >= RULE_START && r.entry_strategy === 'HISTORICO');
       setOps(withOrigin);
     };
     load();

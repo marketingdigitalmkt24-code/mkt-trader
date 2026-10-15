@@ -522,19 +522,11 @@ serve(async (req) => {
         .gte('created_at', new Date(Date.now() - 90000).toISOString()).limit(1).maybeSingle();
       if (queued) {
         const signalId = tradeRequest.signalId;
-        // Identifica a perda que autorizou a fila, sem transformar histórico bom em gatilho independente.
-        const { data: previousLoss } = await supabase.from('operation_results')
-          .select('entry_strategy').eq('asset', tradeRequest.asset)
-          .eq('direction', tradeRequest.direction.toUpperCase()).eq('result', 'loss')
-          .neq('timeframe', 'MT5').lt('created_at', queued.created_at)
-          .gte('created_at', new Date(new Date(queued.created_at).getTime() - 15 * 60000).toISOString())
-          .order('created_at', { ascending: false }).limit(1).maybeSingle();
-        if (previousLoss) entryStrategy = (previousLoss.entry_strategy === 'HISTORICO' || previousLoss.entry_strategy === 'TENDENCIA') ? previousLoss.entry_strategy : 'PERDA_ANTERIOR';
-        // Tendência alinhada abre REAL direto (sem perda anterior): o gerador autorizado informa a origem.
-        if (!entryStrategy && (tradeRequest as any).entryStrategy === 'TENDENCIA') entryStrategy = 'TENDENCIA';
+        // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
+        const reqStrategy = (tradeRequest as any).entryStrategy;
+        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA') entryStrategy = reqStrategy;
         const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
-          : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
-          : entryStrategy === 'PERDA_ANTERIOR' ? 'Perda anterior' : 'Não identificada';
+          : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada' : 'IA';
         notifyEntry = async entryAt => {
           const messageId = await sendIQAlert({
           asset: tradeRequest.asset, direction: tradeRequest.direction,

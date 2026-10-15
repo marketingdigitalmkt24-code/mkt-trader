@@ -1590,25 +1590,26 @@ serve(async (req) => {
           : e9 < e21 && e21 < s50 && macdT === 'bearish' && rsiT >= 30 && rsiT <= 50;
         if (tendenciaOk) console.log(`📐 Tendência alinhada → REAL direto: ${bestSignal.asset} ${dirT} RSI ${rsiT.toFixed(1)}`);
       } catch (_) { /* ignore */ }
+      // "Perda anterior" DESATIVADA (pedido 15/10/2026). REAL direto só para Histórico bom ou Tendência alinhada.
+      let historicoOk = false;
       try {
         const dirH = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
-        const { data: last } = await supabase.from('operation_results')
-          .select('result, entry_strategy').eq('asset', bestSignal.asset).eq('direction', dirH)
-          .in('result', ['win', 'loss']).neq('timeframe', 'MT5')
-          .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
-          .order('created_at', { ascending: false }).limit(1);
-        // Perdas de TESTE (inclusive Histórico bom e Tendência alinhada) liberam entrada real.
-        if (last && last[0]?.result === 'loss') { realTurn = true; console.log(`🔁 ${bestSignal.asset}: perda anterior → REAL`); }
-        // Ativo recusado pela IQ ("invalid instrument") nas últimas 24h → não envia (evita buzina sem operação)
-        if (realTurn) {
-          const { data: bad } = await supabase.from('trade_queue').select('id')
-            .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
-            .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
-          if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ (invalid instrument) → TESTE`); }
-        }
-        console.log(`📊 Perda anterior ${bestSignal.asset} ${dirH}: ${last?.[0]?.result || 'nenhuma'} → ${realTurn ? 'REAL' : 'TESTE'}`);
+        const { data: h } = await supabase.from('operation_results').select('result')
+          .eq('asset', bestSignal.asset).eq('direction', dirH).in('result', ['win', 'loss'])
+          .neq('timeframe', 'MT5')
+          .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+        const w = (h || []).filter((r: any) => r.result === 'win').length;
+        const n = (h || []).length;
+        historicoOk = n >= 3 && w / n >= 0.6;
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
-      if (tendenciaOk) realTurn = true;
+      realTurn = historicoOk || tendenciaOk;
+      if (realTurn) {
+        const { data: bad } = await supabase.from('trade_queue').select('id')
+          .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
+          .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
+        if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
+      }
+      const realStrategy = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
@@ -1782,7 +1783,7 @@ serve(async (req) => {
                   isAutoTrade: true,
                   isAIAnalyzed: !!bestSignal.aiConfidence,
                   timeframe: 'M1',
-                  entryStrategy: tendenciaOk ? 'TENDENCIA' : undefined,
+                  entryStrategy: realStrategy,
                 },
               });
 

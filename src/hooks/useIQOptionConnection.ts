@@ -95,18 +95,9 @@ export function useIQOptionConnection() {
 
       const all = (allRows || []) as Array<{ id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; created_at: string }>;
       const startIso = brasiliaMidnightUtc.toISOString();
-      // Conta só entradas reais liberadas pela regra "Perda anterior"
-      // (perda no mesmo ativo+direção nos 15 min anteriores, sem ser teste "Histórico bom")
-      const results = all.filter((r) => {
-        if (r.timeframe === 'TEST' || r.created_at < startIso) return false;
-        if (r.entry_strategy === 'HISTORICO' || r.entry_strategy === 'TENDENCIA') return false;
-        if (r.entry_strategy === 'PERDA_ANTERIOR') return true;
-        const t = new Date(r.created_at).getTime();
-        const prev = [...all].reverse().find((o) => o.id !== r.id && o.asset === r.asset && o.direction === r.direction
-          && o.result === 'loss' && new Date(o.created_at).getTime() < t
-          && t - new Date(o.created_at).getTime() <= 15 * 60000);
-        return !!prev && prev.entry_strategy !== 'HISTORICO' && prev.entry_strategy !== 'TENDENCIA';
-      });
+      // Conta só entradas reais de Histórico bom e Tendência alinhada
+      const results = all.filter((r) => r.timeframe !== 'TEST' && r.created_at >= startIso
+        && (r.entry_strategy === 'HISTORICO' || r.entry_strategy === 'TENDENCIA'));
 
       let profit = 0;
       let wins = 0;

@@ -1621,7 +1621,7 @@ serve(async (req) => {
         const hourBrt = new Date(Date.now() - 3 * 3600 * 1000).getUTCHours();
         const { data: st } = await supabase.from('chart_study').select('n, wins')
           .eq('symbol', bestSignal.asset).eq('direction', dirH).eq('hour_brt', hourBrt).maybeSingle();
-        historicoOk = !!st && st.n >= 60 && st.wins / st.n >= 0.56;
+        historicoOk = !!st && st.n >= 200 && st.wins / st.n >= 0.56;
         if (st) console.log(`📈 Estudo 30d ${bestSignal.asset} ${dirH} ${hourBrt}h: ${st.wins}/${st.n} → ${historicoOk ? 'Histórico bom (TESTE)' : 'não'}`);
       } catch (e) { console.log('⚠️ Erro estudo:', e); }
       realTurn = tendenciaOk; // Histórico bom agora é só TESTE

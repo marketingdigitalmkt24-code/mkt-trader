@@ -7,7 +7,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
 const WS_URL = 'wss://iqoption.com/echo/websocket';
-const ASSETS_PER_RUN = 3;
+const ASSETS_PER_RUN = 8;
 const DAYS = 30;
 type K = { t: number; o: number; c: number };
 

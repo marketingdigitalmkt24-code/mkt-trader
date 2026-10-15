@@ -6,7 +6,6 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey, historyStart } from './dayLabel';
 
 type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null };
-type Row = Op & { origin: string };
 
 const PAGE_SIZE = 12;
 
@@ -16,7 +15,7 @@ const startOfBrtDay = () => {
 };
 
 export const IQEntriesTodayCard = () => {
-  const [ops, setOps] = useState<Row[]>([]);
+  const [ops, setOps] = useState<Op[]>([]);
   const [page, setPage] = useState(0);
 
   useEffect(() => {

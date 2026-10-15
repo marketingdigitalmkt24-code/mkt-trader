@@ -6,7 +6,6 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey, historyStart } from './dayLabel';
 
 type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null };
-type Row = Op & { origin: string };
 
 const PAGE_SIZE = 12;
 
@@ -16,7 +15,7 @@ const startOfBrtDay = () => {
 };
 
 export const IQEntriesTodayCard = () => {
-  const [ops, setOps] = useState<Row[]>([]);
+  const [ops, setOps] = useState<Op[]>([]);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -29,12 +28,11 @@ export const IQEntriesTodayCard = () => {
       const all = (data as Op[]) || [];
       const start = historyStart();
       const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start);
-      // Só a estratégia Tendência alinhada aparece neste card (Histórico bom removido a pedido)
-      const withOrigin = reals.map((r) => {
-        const origin = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : '—';
-        return { ...r, origin };
-      });
-      setOps(withOrigin.filter((r) => r.origin !== '—'));
+      // Só a estratégia Tendência alinhada aparece neste card
+      // Novas entradas reais das regras combinadas (Tendência + Histórico bom)
+      const RULE_START = '2026-10-15T14:30:00.000Z';
+      const withOrigin = reals.filter((r) => r.created_at >= RULE_START && r.entry_strategy === 'HISTORICO');
+      setOps(withOrigin);
     };
     load();
     const id = setInterval(load, 10000);
@@ -63,7 +61,7 @@ export const IQEntriesTodayCard = () => {
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option — Tendência + Histórico bom</span>
         <span className="font-mono text-xs ml-auto mr-2">
           <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
         </span>
@@ -71,6 +69,7 @@ export const IQEntriesTodayCard = () => {
           {total >= 0 ? '+' : ''}US$ {total.toFixed(2)}
         </span>
       </div>
+      <p className="text-[10px] text-muted-foreground mb-2">Entradas reais abertas pelas regras combinadas (par no mesmo minuto ou Histórico bom em seguida da Tendência). Placar = hoje; lista guarda 30 dias.</p>
       {ops.length === 0 ? (
         <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real nos últimos 30 dias</p>
       ) : (
@@ -94,9 +93,7 @@ export const IQEntriesTodayCard = () => {
                   {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                 </span>
                 <span className="font-medium flex-1 ml-1 truncate">{o.asset}</span>
-                <span className="px-1.5 rounded text-[10px] border border-border text-muted-foreground">
-                  {o.origin}
-                </span>
+                <span className="text-[9px] px-1 rounded bg-amber-500/15 text-amber-500">{o.entry_strategy === 'TENDENCIA' ? '📐' : '📜'}</span>
                 <span className={o.direction === 'CALL' ? 'text-emerald-500' : 'text-rose-500'}>{o.direction}</span>
                 <span className="ml-1 w-16 text-right font-mono">
                   {o.result === 'win' ? <span className="text-emerald-500">+{Number(o.profit).toFixed(2)}</span>

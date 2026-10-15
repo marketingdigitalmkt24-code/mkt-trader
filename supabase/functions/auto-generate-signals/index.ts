@@ -1468,7 +1468,7 @@ serve(async (req) => {
     console.log(`🏁 Ranking lucro: ${aiApprovedSignals.slice(0, 5).map(s => `${s.asset} ${s.aiDirection} ${rankScore(s).toFixed(0)}`).join(' | ')}`);
 
     // ============= EXECUTE BEST SIGNAL (IQ: 1, MT5: até 20) =============
-    const signalsToExecute = aiApprovedSignals.length > 0 ? [aiApprovedSignals[0]] : [];
+    const signalsToExecute = aiApprovedSignals.slice(0, 10); // vários para casar Tendência+Histórico no mesmo minuto
     
     // Salvar TODOS os sinais aprovados pela IA no banco (não só o melhor)
     for (let i = 1; i < aiApprovedSignals.length; i++) {
@@ -1497,7 +1497,10 @@ serve(async (req) => {
     let totalWhatsApp = 0;
     const executedSignals: any[] = [];
 
+    const pairMemory: { minute: number; strategy: string; dir: string; signal: any; used: boolean }[] = [];
+    let realDone = false;
     for (const bestSignal of signalsToExecute) {
+      if (realDone) break;
       console.log(`🎯 MELHOR sinal REAL: ${bestSignal.asset} (${bestSignal.type}) — Score: ${bestSignal.indicators.confluenceScore}% | Preço REAL: ${bestSignal.price}`);
       const hist = assetHistory.get(bestSignal.asset);
       const histInfo = hist ? ` | History: WR ${hist.winRate}% (${hist.wins}W/${hist.losses}L)` : ' | No history';
@@ -1602,31 +1605,71 @@ serve(async (req) => {
         const n = (h || []).length;
         historicoOk = n >= 3 && w / n >= 0.6;
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
-      realTurn = historicoOk || tendenciaOk;
+      // PAR DE SINAIS (pedido 15/10/2026): REAL só quando Tendência alinhada e Histórico bom
+      // saem no MESMO minuto e na MESMA direção. Entra no ativo do Histórico bom com direção INVERTIDA.
+      // Sinais isolados ficam só em TESTE.
+      const dirNow = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
+      const minuteKey = Math.floor(Date.now() / 60000);
+      realTurn = false;
+      if (historicoOk || tendenciaOk) {
+        const want = historicoOk ? 'TENDENCIA' : 'HISTORICO';
+        let mate: any = pairMemory.find((p) => p.minute === minuteKey && p.strategy === want && p.dir === dirNow && !p.used);
+        // Par também entre ciclos diferentes do mesmo minuto: procura no banco.
+        if (!mate && historicoOk) {
+          const mStart = new Date(minuteKey * 60000).toISOString();
+          const { data: tOps } = await supabase.from('operation_results').select('id')
+            .eq('entry_strategy', 'TENDENCIA').eq('direction', dirNow).neq('timeframe', 'MT5')
+            .gte('created_at', mStart).lt('created_at', new Date(minuteKey * 60000 + 60000).toISOString()).limit(1);
+          if (tOps && tOps.length) mate = { used: false, signal: null, fromDb: true };
+        }
+        if (mate) {
+          mate.used = true;
+          if (!historicoOk) Object.assign(bestSignal, JSON.parse(JSON.stringify(mate.signal)));
+          const inv = dirNow === 'CALL' ? 'PUT' : 'CALL';
+          bestSignal.type = inv; bestSignal.aiDirection = inv;
+          realTurn = true;
+          console.log(`🔗 Par Tendência+Histórico ${dirNow} → REAL invertido ${bestSignal.asset} ${inv}`);
+        } else {
+          pairMemory.push({ minute: minuteKey, strategy: historicoOk ? 'HISTORICO' : 'TENDENCIA', dir: dirNow, signal: JSON.parse(JSON.stringify(bestSignal)), used: false });
+        }
+      }
+      // SEQUÊNCIA (pedido 15/10/2026): Histórico bom IMEDIATAMENTE em seguida de uma
+      // Tendência alinhada no MESMO ativo e MESMA direção (≤15 min) → REAL na direção do sinal.
+      // Se QUALQUER outro sinal aparecer entre a Tendência e este Histórico, NÃO entra.
+      if (!realTurn && historicoOk) {
+        const { data: prev } = await supabase.from('operation_results')
+          .select('entry_strategy, direction, created_at').eq('asset', bestSignal.asset)
+          .neq('timeframe', 'MT5').order('created_at', { ascending: false }).limit(1);
+        const p0: any = prev?.[0];
+        if (p0 && p0.entry_strategy === 'TENDENCIA' && String(p0.direction).toUpperCase() === dirNow
+          && Date.now() - new Date(p0.created_at).getTime() <= 15 * 60 * 1000) {
+          // Garante que nenhum outro sinal (de qualquer ativo) foi gerado depois da Tendência.
+          const { count: between } = await supabase.from('operation_results')
+            .select('id', { count: 'exact', head: true })
+            .neq('timeframe', 'MT5').gt('created_at', p0.created_at);
+          if ((between ?? 0) === 0) {
+            realTurn = true;
+            pairMemory.forEach((p) => { if (p.minute === minuteKey && p.strategy === 'HISTORICO' && p.dir === dirNow) p.used = true; });
+            console.log(`➡️ Sequência Tendência→Histórico ${bestSignal.asset} ${dirNow} → REAL (sem sinal no meio)`);
+          } else {
+            console.log(`⛔ Sequência quebrada: ${between} sinal(is) entre a Tendência e este Histórico → TESTE`);
+          }
+        }
+      }
       if (realTurn) {
         const { data: bad } = await supabase.from('trade_queue').select('id')
           .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
           .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
         if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
       }
-      const realStrategy = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
+      if (realTurn) realDone = true;
+      const realStrategy = realTurn ? 'HISTORICO' : undefined;
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
-          .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
+          .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').eq('asset', bestSignal.asset).limit(1);
         if (!openTest || openTest.length === 0) {
           const dir = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
-          // Histórico bom (somente TESTE): ≥3 ops e ≥60% acerto em 24h no mesmo ativo+direção
-          let entryStrategy = 'IA';
-          try {
-            const { data: h } = await supabase.from('operation_results').select('result')
-              .eq('asset', bestSignal.asset).eq('direction', dir).in('result', ['win', 'loss'])
-              .neq('timeframe', 'MT5')
-              .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString());
-            const w = (h || []).filter((r: any) => r.result === 'win').length;
-            const n = (h || []).length;
-            if (n >= 3 && w / n >= 0.6) entryStrategy = 'HISTORICO';
-          } catch (_) { /* ignore */ }
-          // Tendência alinhada agora abre REAL direto (bloco acima); aqui só rotula o TESTE se cair neste caminho.
+          let entryStrategy = historicoOk ? 'HISTORICO' : 'IA';
           if (entryStrategy === 'IA' && tendenciaOk) entryStrategy = 'TENDENCIA';
           // Entrada TESTE exatamente no :00 da vela atual (pedido 15/10/2026):
           // o preço ao vivo acima já é o fechamento da última vela fechada (= abertura da vela nova).

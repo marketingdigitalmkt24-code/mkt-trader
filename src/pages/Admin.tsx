@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut, Users, MonitorSmartphone, Zap, Eye } from 'lucide-react';
+import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut, Users, MonitorSmartphone, Zap, Eye, LayoutDashboard } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { TradingDashboard } from '@/components/TradingDashboard';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
@@ -117,7 +118,7 @@ const Admin = () => {
         </div>
       </header>
 
-      <main className="container px-4 py-4 sm:py-6 max-w-5xl">
+      <main className="container px-4 py-4 sm:py-6 max-w-7xl">
         {/* Quick Stats - Compact */}
         <div className="grid grid-cols-4 gap-2 mb-4 sm:mb-6">
           <div className="p-2.5 rounded-lg bg-gradient-to-br from-call/10 to-call/5 border border-call/20 text-center">
@@ -143,8 +144,9 @@ const Admin = () => {
         </div>
 
         {/* Tabbed Layout */}
-        <Tabs defaultValue="trading" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 h-auto">
+        <Tabs defaultValue="dashboard" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto gap-1">
+            <TabsTrigger value="dashboard" className="text-xs sm:text-sm py-2 gap-1"><LayoutDashboard className="w-3.5 h-3.5" />Dashboard</TabsTrigger>
             <TabsTrigger value="trading" className="text-xs sm:text-sm py-2 gap-1">
               <Bot className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Auto</span> Trading
@@ -164,6 +166,8 @@ const Admin = () => {
               Usuários
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dashboard"><TradingDashboard /></TabsContent>
 
           {/* Auto Trading Tab */}
           <TabsContent value="trading" className="space-y-4">

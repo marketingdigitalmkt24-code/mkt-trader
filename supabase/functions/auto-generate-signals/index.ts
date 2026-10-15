@@ -1291,9 +1291,10 @@ serve(async (req) => {
     try {
       const { data: results } = await supabase
         .from('operation_results')
-        .select('asset, result')
+        .select('asset, result, direction, entry_strategy, created_at')
+        .neq('timeframe', 'MT5')
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(300);
 
       if (results && results.length > 0) {
         const assetStats = new Map<string, { wins: number; losses: number }>();
@@ -1309,6 +1310,8 @@ serve(async (req) => {
           losses: stats.losses,
           winRate: stats.wins + stats.losses > 0 ? (stats.wins / (stats.wins + stats.losses)) * 100 : 50,
         }));
+        // últimas 40 operações (ativo, direção, estratégia, hora BRT, resultado) para a IA aprender padrões de lucro
+        historicalResults.push({ asset: 'RECENT_OPERATIONS', recent: results.slice(0, 40).filter((r: any) => r.result === 'win' || r.result === 'loss').map((r: any) => `${r.asset} ${r.direction} ${r.entry_strategy || 'IA'} ${((new Date(r.created_at).getUTCHours() + 21) % 24)}h ${r.result}`) });
       }
     } catch (e) {
       console.log('⚠️ Erro ao buscar histórico para IA:', e);
@@ -1415,27 +1418,49 @@ serve(async (req) => {
       );
     }
 
-    // MODO LUCRO: ranking = confiança IA + saldo win/loss (últimas 300 operações) por ativo+direção; perdas pesam mais. Nunca bloqueia.
-    const dirStats = new Map<string, { w: number; l: number }>();
+    // MODO LUCRO multi-dimensão: aprende com 30 dias (recentes pesam mais) por ativo+direção, horário BRT+direção,
+    // mercado (OTC/aberto), tipo de ativo, estratégia de origem e sequência recente do ativo. Perdas pesam 1,5x. Nunca bloqueia.
+    const learn = new Map<string, { w: number; l: number }>();
+    const add = (k: string, win: boolean, wt: number) => { const st = learn.get(k) || { w: 0, l: 0 }; if (win) st.w += wt; else st.l += wt; learn.set(k, st); };
+    const hourBrt = (iso: string) => (new Date(iso).getUTCHours() + 21) % 24;
     try {
       const { data: hist } = await supabase
         .from('operation_results')
-        .select('asset, direction, result')
+        .select('asset, direction, result, created_at, entry_strategy, timeframe')
         .neq('timeframe', 'MT5')
         .in('result', ['win', 'loss'])
+        .gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString())
         .order('created_at', { ascending: false })
-        .limit(300);
-      for (const r of hist || []) {
-        const k = `${String(r.asset).toUpperCase()}|${String(r.direction || '').toUpperCase()}`;
-        const st = dirStats.get(k) || { w: 0, l: 0 };
-        if (r.result === 'win') st.w++; else st.l++;
-        dirStats.set(k, st);
-      }
+        .limit(3000);
+      (hist || []).forEach((r: any, i: number) => {
+        const win = r.result === 'win';
+        const wt = i < 50 ? 2 : i < 300 ? 1 : 0.5; // últimas operações ensinam mais
+        const asset = String(r.asset).toUpperCase(); const dir = String(r.direction || '').toUpperCase();
+        add(`A|${asset}|${dir}`, win, wt);
+        add(`H|${hourBrt(r.created_at)}|${dir}`, win, wt);
+        add(`M|${asset.includes('OTC') ? 'OTC' : 'OPEN'}|${dir}`, win, wt);
+        add(`K|${assetKind(asset.replace('-OTC', ''))}|${dir}`, win, wt);
+        add(`S|${r.entry_strategy || (r.timeframe === 'TEST' ? 'TESTE_IA' : 'REAL')}`, win, wt);
+        if (i < 400) add(`R|${asset}`, win, 1);
+      });
+      const strat = [...learn.entries()].filter(([k]) => k.startsWith('S|')).map(([k, v]) => `${k.slice(2)} ${v.w.toFixed(0)}W/${v.l.toFixed(0)}L`);
+      console.log(`📚 Aprendizado por estratégia: ${strat.join(' | ')}`);
     } catch (e) { console.log('⚠️ Erro histórico ranking:', e); }
+    const edge = (k: string, cap: number) => {
+      const st = learn.get(k); if (!st) return 0;
+      const n = st.w + st.l; if (n < 3) return 0;
+      const wr = (st.w - st.l * 1.5) / n; // >0 lucrativo considerando payout
+      return Math.max(-cap, Math.min(cap, wr * cap * Math.min(1, n / 15)));
+    };
     const rankScore = (s: any) => {
-      const st = dirStats.get(`${String(s.asset).toUpperCase()}|${String(s.aiDirection || s.type).toUpperCase()}`);
-      const net = st ? st.w * 6 - st.l * 9 : 0; // perdas pesam 1,5x
-      return (s.aiConfidence || 0) + Math.max(-40, Math.min(25, net));
+      const asset = String(s.asset).toUpperCase(); const dir = String(s.aiDirection || s.type).toUpperCase();
+      const h = (new Date().getUTCHours() + 21) % 24;
+      return (s.aiConfidence || 0)
+        + edge(`A|${asset}|${dir}`, 30)
+        + edge(`H|${h}|${dir}`, 12)
+        + edge(`M|${asset.includes('OTC') ? 'OTC' : 'OPEN'}|${dir}`, 8)
+        + edge(`K|${assetKind(asset.replace('-OTC', ''))}|${dir}`, 8)
+        + edge(`R|${asset}`, 10);
     };
     aiApprovedSignals.sort((a, b) => rankScore(b) - rankScore(a));
     console.log(`🏁 Ranking lucro: ${aiApprovedSignals.slice(0, 5).map(s => `${s.asset} ${s.aiDirection} ${rankScore(s).toFixed(0)}`).join(' | ')}`);

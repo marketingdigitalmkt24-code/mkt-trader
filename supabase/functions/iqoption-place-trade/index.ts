@@ -528,27 +528,6 @@ serve(async (req) => {
         const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada' : 'IA';
         notifyEntry = async entryAt => {
-          // Regra do usuário (15/10/2026): Telegram só recebe (A) entradas reais
-          // abertas no mesmo minuto que outra entrada real, ou (B) Histórico bom
-          // logo após um ganho real da Tendência alinhada no mesmo ativo.
-          // Aviso sai 45s antes da entrada (janela pedida: 30–60s) para dar tempo
-          // de entrar na operação; nunca atrasa a ordem (roda em waitUntil).
-          const waitMs = Math.max(0, entryAt - 45000 - Date.now());
-          if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs));
-          const { data: sameMinute } = await supabase.from('trade_queue').select('signal_id, status')
-            .neq('signal_id', signalId).gte('created_at', new Date(entryAt - 90000).toISOString())
-            .lte('created_at', new Date(entryAt).toISOString())
-            .not('status', 'in', '(failed,error,cancelled)').neq('timeframe', 'TEST').neq('timeframe', 'MT5').limit(1);
-          let allowed = (sameMinute?.length ?? 0) > 0;
-          if (!allowed && entryStrategy === 'HISTORICO') {
-            const { data: prev } = await supabase.from('operation_results')
-              .select('entry_strategy, result, iq_option_id, timeframe')
-              .eq('asset', tradeRequest.asset).neq('signal_id', signalId)
-              .order('created_at', { ascending: false }).limit(1).maybeSingle();
-            allowed = !!prev && prev.entry_strategy === 'TENDENCIA' && prev.result === 'win'
-              && !!prev.iq_option_id && prev.timeframe !== 'TEST' && prev.timeframe !== 'MT5';
-          }
-          if (!allowed) { console.log('🔕 Telegram ignorado (fora do modelo):', tradeRequest.asset); return; }
           const messageId = await sendIQAlert({
           asset: tradeRequest.asset, direction: tradeRequest.direction,
           expiration: tradeRequest.expiration, entryAt, signalId,

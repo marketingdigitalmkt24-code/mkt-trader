@@ -2,20 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
 
-// Telegram para TESTE (pedido 15/10/2026): só nos dois padrões combinados.
-async function tgSend(text: string, replyTo?: number): Promise<number | undefined> {
-  const lk = Deno.env.get('LOVABLE_API_KEY'), tk = Deno.env.get('TELEGRAM_API_KEY');
-  if (!lk || !tk) return;
-  const r = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
-    method: 'POST', headers: { Authorization: `Bearer ${lk}`, 'X-Connection-Api-Key': tk, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: '-1001743286485', text, ...(replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}) }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!r.ok) { console.error(`Telegram TESTE [${r.status}]: ${await r.text()}`); return; }
-  const d = await r.json(); return d?.result?.message_id;
-}
-const stratName = (s: string) => s === 'TENDENCIA' ? 'Tendência alinhada' : s === 'HISTORICO' ? 'Histórico bom' : s;
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -1198,17 +1184,6 @@ serve(async (req) => {
         const up = String(t.direction).toUpperCase() === 'CALL';
         const res = exit === entry ? 'tie' : (exit > entry) === up ? 'win' : 'loss';
         await supabase.from('operation_results').update({ result: res, exit_price: exit }).eq('id', t.id);
-        try {
-          const { data: dl } = await supabase.from('telegram_iq_deliveries').select('signal_message_id, strategy, result_status')
-            .eq('signal_id', `test-${t.id}`).maybeSingle();
-          if (dl && dl.result_status === 'pending') {
-            await supabase.from('telegram_iq_deliveries').update({ result_status: 'sending', claimed_at: new Date().toISOString() }).eq('signal_id', `test-${t.id}`).eq('result_status', 'pending');
-            const mid = await tgSend(['🧪 AGÊNCIA MKT TRADER — Resultado (MODO TESTE)', `💱 Ativo: ${t.asset}`, `🎯 Estratégia: ${dl.strategy}`,
-              `Direção: ${up ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `Resultado: ${res === 'win' ? '✅ GANHO' : res === 'loss' ? '❌ PERDA' : '➖ EMPATE'}`,
-              '⚠️ Operação simulada, não aberta na corretora.'].join('\n'), dl.signal_message_id);
-            await supabase.from('telegram_iq_deliveries').update(mid ? { result_status: 'sent', result_message_id: mid, result_sent_at: new Date().toISOString() } : { result_status: 'pending' }).eq('signal_id', `test-${t.id}`);
-          }
-        } catch (e) { console.error('Telegram resultado TESTE:', String(e)); }
         console.log(`🧪 TESTE ${t.asset} ${t.direction}: ${entry} → ${exit} = ${res}`);
       }
     } catch (e) { console.log('⚠️ Erro resolvendo testes:', e); }
@@ -1600,8 +1575,8 @@ serve(async (req) => {
       // Estratégia ÚNICA: perda anterior (pedido 14/10/2026 — regra de histórico removida).
       let realTurn = false;
       // Tendência alinhada (pedido 15/10/2026): médias alinhadas + MACD a favor + RSI 30–60 a favor.
-      // SOMENTE TESTE (pedido 15/10/2026 15:45): nenhuma estratégia abre REAL na IQ Option;
-      // rotulamos o TESTE com a estratégia detectada para o card de teste.
+      // Todo sinal dessa estratégia abre REAL na IQ Option imediatamente (sem exigir perda anterior)
+      // e vai ao Telegram; fica fora do Resultado de Hoje e do card Entradas na IQ Option.
       let tendenciaOk = false;
       try {
         const dirT = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
@@ -1613,9 +1588,9 @@ serve(async (req) => {
         tendenciaOk = dirT === 'CALL'
           ? e9 > e21 && e21 > s50 && macdT === 'bullish' && rsiT >= 50 && rsiT <= 60
           : e9 < e21 && e21 < s50 && macdT === 'bearish' && rsiT >= 30 && rsiT <= 50;
-        if (tendenciaOk) console.log(`📐 Tendência alinhada → TESTE: ${bestSignal.asset} ${dirT} RSI ${rsiT.toFixed(1)}`);
+        if (tendenciaOk) console.log(`📐 Tendência alinhada → REAL direto: ${bestSignal.asset} ${dirT} RSI ${rsiT.toFixed(1)}`);
       } catch (_) { /* ignore */ }
-      // Histórico favorável (≥3 ops e ≥60% acerto em 24h) — usado apenas como rótulo do TESTE.
+      // "Perda anterior" DESATIVADA (pedido 15/10/2026). REAL direto só para Histórico bom ou Tendência alinhada.
       let historicoOk = false;
       try {
         const dirH = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
@@ -1627,9 +1602,13 @@ serve(async (req) => {
         const n = (h || []).length;
         historicoOk = n >= 3 && w / n >= 0.6;
       } catch (e) { console.log('⚠️ Erro histórico:', e); }
-      // SOMENTE TESTE (pedido 15/10/2026 15:45): nada abre REAL na IQ Option nem vai ao Telegram.
-      // Card "Entradas na IQ Option" fica em branco; testes aparecem no card de teste com selos.
-      realTurn = false;
+      realTurn = historicoOk || tendenciaOk;
+      if (realTurn) {
+        const { data: bad } = await supabase.from('trade_queue').select('id')
+          .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
+          .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()).limit(1);
+        if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
+      }
       const realStrategy = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
@@ -1647,42 +1626,20 @@ serve(async (req) => {
             const n = (h || []).length;
             if (n >= 3 && w / n >= 0.6) entryStrategy = 'HISTORICO';
           } catch (_) { /* ignore */ }
-          // Rótulo do TESTE: Histórico bom se o histórico bater; senão Tendência alinhada se detectada.
+          // Tendência alinhada agora abre REAL direto (bloco acima); aqui só rotula o TESTE se cair neste caminho.
           if (entryStrategy === 'IA' && tendenciaOk) entryStrategy = 'TENDENCIA';
           // Entrada TESTE exatamente no :00 da vela atual (pedido 15/10/2026):
           // o preço ao vivo acima já é o fechamento da última vela fechada (= abertura da vela nova).
           // Fixa created_at no início do minuto para a resolução usar as velas exatas de entrada/saída.
           const minuteStart = Math.floor(Date.now() / 60000) * 60000;
-          const { data: inserted } = await supabase.from('operation_results').insert({
+          await supabase.from('operation_results').insert({
             signal_id: bestSignal.id, asset: bestSignal.asset, direction: dir,
             entry_price: bestSignal.price, result: 'test_open', profit: 0,
             created_at: new Date(minuteStart).toISOString(),
             expiration_time: new Date(minuteStart + 60 * 1000).toISOString(),
             is_auto_trade: true, is_ai_analyzed: !!bestSignal.aiConfidence, timeframe: 'TEST',
             entry_strategy: entryStrategy,
-          }).select('id').single();
-          // Telegram só em 2 padrões: (A) outra entrada no mesmo minuto; (B) Histórico bom logo após ganho da Tendência no mesmo ativo.
-          try {
-            if (inserted?.id) {
-              const iso = new Date(minuteStart).toISOString();
-              const { data: same } = await supabase.from('operation_results').select('id').neq('timeframe', 'MT5')
-                .eq('created_at', iso).neq('id', inserted.id).limit(1);
-              const { data: prev } = await supabase.from('operation_results').select('entry_strategy, result')
-                .eq('asset', bestSignal.asset).neq('timeframe', 'MT5').lt('created_at', iso)
-                .order('created_at', { ascending: false }).limit(1).maybeSingle();
-              const patA = (same || []).length > 0;
-              const patB = entryStrategy === 'HISTORICO' && prev?.entry_strategy === 'TENDENCIA' && prev?.result === 'win';
-              if (patA || patB) {
-                const hhmm = new Date(minuteStart).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-                const strat = stratName(entryStrategy) + ' (TESTE)';
-                const mid = await tgSend(['🧪 AGÊNCIA MKT TRADER — Sinal (MODO TESTE)', `💱 Ativo: ${bestSignal.asset}`, `🎯 Estratégia: ${strat}`,
-                  `📌 Padrão: ${patB ? 'Histórico bom após ganho da Tendência' : 'Duas entradas no mesmo minuto'}`,
-                  `Direção: ${dir === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hhmm} (Brasília)`, '⌛ Vencimento: 1 minuto',
-                  '⚠️ Operação simulada, não aberta na corretora. Sem garantia de lucro.'].join('\n'));
-                if (mid) await supabase.from('telegram_iq_deliveries').insert({ signal_id: `test-${inserted.id}`, chat_id: '-1001743286485', signal_message_id: mid, strategy: strat });
-              }
-            }
-          } catch (e) { console.error('Telegram TESTE:', String(e)); }
+          });
           console.log(`🧪 TESTE aberto: ${bestSignal.asset} ${dir} @ ${bestSignal.price} (entrada ${new Date(minuteStart).toISOString()})`);
         }
         executedSignals.push({ asset: bestSignal.asset, type: bestSignal.type, test: true });

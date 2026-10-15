@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey, historyStart } from './dayLabel';
 
-type Op = { id: string; asset: string; direction: string; result: string; created_at: string; entry_strategy: string | null };
-type Row = Op & { badge: string };
+type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null };
+type Row = Op & { origin: string };
 
 const PAGE_SIZE = 12;
 
@@ -15,23 +15,26 @@ const startOfBrtDay = () => {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 3)).toISOString();
 };
 
-export const TestEntriesCard = () => {
+export const IQEntriesTodayCard = () => {
   const [ops, setOps] = useState<Row[]>([]);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('operation_results')
-        .select('id, asset, direction, result, created_at, timeframe, entry_strategy')
-        .eq('timeframe', 'TEST')
-        .in('entry_strategy', ['HISTORICO', 'TENDENCIA'])
-        .gte('created_at', historyStart())
+        .select('id, asset, direction, result, profit, created_at, timeframe, entry_strategy')
+        .neq('timeframe', 'MT5')
+        .gte('created_at', new Date(new Date(historyStart()).getTime() - 15 * 60000).toISOString())
         .order('created_at', { ascending: false }).limit(1000);
-      const rows = ((data as Op[]) || []).map((r) => ({
-        ...r,
-        badge: r.entry_strategy === 'TENDENCIA' ? '📐 Tendência' : '📜 Histórico bom',
-      }));
-      setOps(rows);
+      const all = (data as Op[]) || [];
+      const start = historyStart();
+      const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start);
+      // Só a estratégia Tendência alinhada aparece neste card (Histórico bom removido a pedido)
+      const withOrigin = reals.map((r) => {
+        const origin = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : '—';
+        return { ...r, origin };
+      });
+      setOps(withOrigin.filter((r) => r.origin !== '—'));
     };
     load();
     const id = setInterval(load, 10000);
@@ -40,6 +43,7 @@ export const TestEntriesCard = () => {
 
   const todayStart = startOfBrtDay();
   const todayOps = ops.filter((o) => o.created_at >= todayStart);
+  const total = todayOps.reduce((s, o) => s + Number(o.profit || 0), 0);
   const wins = todayOps.filter((o) => o.result === 'win').length;
   const losses = todayOps.filter((o) => o.result === 'loss').length;
   const pct = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
@@ -58,15 +62,17 @@ export const TestEntriesCard = () => {
 
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas de teste 🧪</span>
-        <span className="font-mono text-xs">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
+        <span className="font-mono text-xs ml-auto mr-2">
           <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
         </span>
+        <span className={`font-mono text-sm font-bold ${total >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+          {total >= 0 ? '+' : ''}US$ {total.toFixed(2)}
+        </span>
       </div>
-      <p className="text-[10px] text-muted-foreground mb-2">Simulações (TESTE) das estratégias Tendência alinhada e Histórico bom, identificadas pelo selo. Nada é aberto na IQ Option. Placar = hoje; lista guarda 30 dias.</p>
       {ops.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada de teste nos últimos 30 dias</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real nos últimos 30 dias</p>
       ) : (
         <>
           <div className="space-y-1 flex-1">
@@ -88,13 +94,13 @@ export const TestEntriesCard = () => {
                   {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                 </span>
                 <span className="font-medium flex-1 ml-1 truncate">{o.asset}</span>
-                <span className="px-1.5 rounded text-[10px] border border-border text-muted-foreground whitespace-nowrap">
-                  {o.badge}
+                <span className="px-1.5 rounded text-[10px] border border-border text-muted-foreground">
+                  {o.origin}
                 </span>
                 <span className={o.direction === 'CALL' ? 'text-emerald-500' : 'text-rose-500'}>{o.direction}</span>
-                <span className="ml-1 w-14 text-right">
-                  {o.result === 'win' ? <span className="text-emerald-500">ganho</span>
-                    : o.result === 'loss' ? <span className="text-rose-500">perda</span>
+                <span className="ml-1 w-16 text-right font-mono">
+                  {o.result === 'win' ? <span className="text-emerald-500">+{Number(o.profit).toFixed(2)}</span>
+                    : o.result === 'loss' ? <span className="text-rose-500">{Number(o.profit).toFixed(2)}</span>
                     : <span className="text-muted-foreground">aberta</span>}
                 </span>
               </div>

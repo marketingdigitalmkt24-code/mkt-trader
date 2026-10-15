@@ -23,14 +23,15 @@ export const IQEntriesTodayCard = () => {
       const all = (data as Op[]) || [];
       const start = startOfBrtDay();
       const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start).slice(0, 50);
-      setOps(reals.map((r) => {
+      const withOrigin = reals.map((r) => {
         const t = new Date(r.created_at).getTime();
         const prev = all.find((o) => o.id !== r.id && o.asset === r.asset && o.direction === r.direction
           && o.result === 'loss' && new Date(o.created_at).getTime() < t
           && t - new Date(o.created_at).getTime() <= 15 * 60000);
         const origin = prev ? (prev.entry_strategy === 'HISTORICO' ? 'Histórico bom' : 'Perda anterior') : '—';
         return { ...r, origin };
-      }));
+      });
+      setOps(withOrigin.filter((r) => r.origin !== 'Histórico bom'));
     };
     load();
     const id = setInterval(load, 10000);

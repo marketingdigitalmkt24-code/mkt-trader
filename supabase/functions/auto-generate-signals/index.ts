@@ -1651,8 +1651,10 @@ serve(async (req) => {
         if (lastTie) {
           // Entrada inversa ao PRÓXIMO sinal gerado (user, 15/10/2026): sinal CALL → entra PUT.
           const sigDir = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
+          // O empate é consumido por QUALQUER operação criada depois dele (teste ou real),
+          // para não disparar de novo horas depois (pedido 15/10/2026 19h).
           const { data: used } = await supabase.from('operation_results').select('id')
-            .eq('entry_strategy', 'EMPATE').gt('created_at', lastTie.created_at).limit(1);
+            .neq('timeframe', 'MT5').gt('created_at', lastTie.created_at).limit(1);
           if (!used || used.length === 0) {
             const { data: bad } = await supabase.from('trade_queue').select('id')
               .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')

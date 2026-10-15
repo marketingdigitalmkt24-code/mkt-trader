@@ -531,7 +531,9 @@ serve(async (req) => {
           // Regra do usuário (15/10/2026): Telegram só recebe (A) entradas reais
           // abertas no mesmo minuto que outra entrada real, ou (B) Histórico bom
           // logo após um ganho real da Tendência alinhada no mesmo ativo.
-          const waitMs = Math.max(0, entryAt - 12000 - Date.now());
+          // Aviso sai 45s antes da entrada (janela pedida: 30–60s) para dar tempo
+          // de entrar na operação; nunca atrasa a ordem (roda em waitUntil).
+          const waitMs = Math.max(0, entryAt - 45000 - Date.now());
           if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs));
           const { data: sameMinute } = await supabase.from('trade_queue').select('signal_id, status')
             .neq('signal_id', signalId).gte('created_at', new Date(entryAt - 90000).toISOString())

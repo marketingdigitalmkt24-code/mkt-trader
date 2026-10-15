@@ -525,8 +525,12 @@ serve(async (req) => {
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
         const reqStrategy = (tradeRequest as any).entryStrategy;
         if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA') entryStrategy = reqStrategy;
-        const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
-          : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada' : 'IA';
+        // Telegram só recebe sinais das duas estratégias (Histórico bom / Tendência alinhada);
+        // qualquer outra origem não gera aviso no canal.
+        if (!entryStrategy) {
+          console.log(`⏭️ Telegram ignorado: sinal ${tradeRequest.signalId} sem estratégia autorizada`);
+        }
+        const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom' : 'Tendência alinhada';
         notifyEntry = async entryAt => {
           const messageId = await sendIQAlert({
           asset: tradeRequest.asset, direction: tradeRequest.direction,

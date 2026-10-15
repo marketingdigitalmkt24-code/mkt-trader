@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
       if (d.name === 'initialization-data') {
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
         const ids = new Map<string, number>();
-        for (const [id, a] of Object.entries<any>(all)) { const n = String(a.name || '').toUpperCase().replace('FRONT.', ''); if (PAIRS.includes(n) && !ids.has(n)) ids.set(n, Number(id)); }
+        for (const [id, a] of Object.entries<any>(all)) { const n = String(a.name || '').toUpperCase().replace('FRONT.', '').replace('/', '').replace(/-OP$/, ''); (globalThis as any).__names = [...((globalThis as any).__names || []), n].slice(0, 400); if (PAIRS.includes(n) && !ids.has(n)) ids.set(n, Number(id)); }
         pending = ids.size * 9;
         if (!pending) { clearTimeout(timer); finish(); return; }
         for (const [n, id] of ids) { out[n] = []; for (let k = 0; k < 9; k++) { const rid = `s${id}_${k}`; byReq.set(rid, n);
@@ -93,5 +93,5 @@ Deno.serve(async (req) => {
     per[n] = {}; sim(cs, SPREAD[n], splitT, rr, per[n]); sim(cs, SPREAD[n], splitT, rr, total);
     (per[n] as any).candles = cs.length;
   }
-  return Response.json({ success: true, rr, total, per }, { headers: cors });
+  return Response.json({ success: true, rr, total, per, names: Object.keys(data).length ? undefined : (globalThis as any).__names }, { headers: cors });
 });

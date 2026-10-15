@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey, historyStart } from './dayLabel';
 
-type Op = { id: string; asset: string; direction: string; result: string; created_at: string };
+type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; entry_strategy: string | null };
+type Row = Op & { badge: string };
 
 const PAGE_SIZE = 12;
 
@@ -15,20 +16,24 @@ const startOfBrtDay = () => {
 };
 
 export const HistoricoBomCard = () => {
-  const [ops, setOps] = useState<Op[]>([]);
+  const [ops, setOps] = useState<Row[]>([]);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('operation_results')
-        .select('id, asset, direction, result, created_at, timeframe, signal_id')
-        .eq('entry_strategy', 'HISTORICO')
+        .select('id, asset, direction, result, profit, created_at, timeframe, entry_strategy, signal_id')
+        .in('entry_strategy', ['HISTORICO', 'TENDENCIA'])
         .neq('timeframe', 'TEST')
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
         .gte('created_at', historyStart())
         .order('created_at', { ascending: false }).limit(1000);
-      setOps((data as Op[]) || []);
+      const rows = ((data as Op[]) || []).map((r) => ({
+        ...r,
+        badge: r.entry_strategy === 'TENDENCIA' ? '📐 Tendência' : '📜 Histórico bom',
+      }));
+      setOps(rows);
     };
     load();
     const id = setInterval(load, 10000);
@@ -37,6 +42,7 @@ export const HistoricoBomCard = () => {
 
   const todayStart = startOfBrtDay();
   const todayOps = ops.filter((o) => o.created_at >= todayStart);
+  const total = todayOps.reduce((s, o) => s + Number(o.profit || 0), 0);
   const wins = todayOps.filter((o) => o.result === 'win').length;
   const losses = todayOps.filter((o) => o.result === 'loss').length;
   const pct = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
@@ -56,12 +62,15 @@ export const HistoricoBomCard = () => {
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Histórico bom — entradas na IQ Option</span>
-        <span className="font-mono text-xs">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option</span>
+        <span className="font-mono text-xs ml-auto mr-2">
           <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
         </span>
+        <span className={`font-mono text-sm font-bold ${total >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+          {total >= 0 ? '+' : ''}US$ {total.toFixed(2)}
+        </span>
       </div>
-      <p className="text-[10px] text-muted-foreground mb-2">Entradas reais na IQ Option da estratégia Histórico bom (≥3 operações e ≥60% de acerto em 24h). Placar = hoje; lista guarda 30 dias.</p>
+      <p className="text-[10px] text-muted-foreground mb-2">Entradas reais na IQ Option das estratégias Tendência alinhada e Histórico bom, identificadas pelo selo. Placar = hoje; lista guarda 30 dias.</p>
       {ops.length === 0 ? (
         <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada nos últimos 30 dias</p>
       ) : (
@@ -80,15 +89,18 @@ export const HistoricoBomCard = () => {
                   </div>
                     );
                   })()}
-              <div className="flex items-center justify-between text-xs border-b border-border/50 py-1">
+              <div className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
                 <span className="font-mono text-muted-foreground">
                   {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                 </span>
-                <span className="font-medium flex-1 ml-2 truncate">{o.asset}</span>
+                <span className="font-medium flex-1 ml-1 truncate">{o.asset}</span>
+                <span className="px-1.5 rounded text-[10px] border border-border text-muted-foreground whitespace-nowrap">
+                  {o.badge}
+                </span>
                 <span className={o.direction === 'CALL' ? 'text-emerald-500' : 'text-rose-500'}>{o.direction}</span>
-                <span className="ml-2 w-14 text-right">
-                  {o.result === 'win' ? <span className="text-emerald-500">ganho</span>
-                    : o.result === 'loss' ? <span className="text-rose-500">perda</span>
+                <span className="ml-1 w-16 text-right font-mono">
+                  {o.result === 'win' ? <span className="text-emerald-500">+{Number(o.profit).toFixed(2)}</span>
+                    : o.result === 'loss' ? <span className="text-rose-500">{Number(o.profit).toFixed(2)}</span>
                     : <span className="text-muted-foreground">aberta</span>}
                 </span>
               </div>

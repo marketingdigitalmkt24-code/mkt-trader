@@ -1622,14 +1622,19 @@ serve(async (req) => {
               if (ok) { entryStrategy = 'TENDENCIA'; console.log(`📐 Tendência alinhada (TESTE): ${bestSignal.asset} ${dir} RSI ${rsi.toFixed(1)}`); }
             } catch (_) { /* ignore */ }
           }
+          // Entrada TESTE exatamente no :00 da vela atual (pedido 15/10/2026):
+          // o preço ao vivo acima já é o fechamento da última vela fechada (= abertura da vela nova).
+          // Fixa created_at no início do minuto para a resolução usar as velas exatas de entrada/saída.
+          const minuteStart = Math.floor(Date.now() / 60000) * 60000;
           await supabase.from('operation_results').insert({
             signal_id: bestSignal.id, asset: bestSignal.asset, direction: dir,
             entry_price: bestSignal.price, result: 'test_open', profit: 0,
-            expiration_time: new Date(Date.now() + 60 * 1000).toISOString(),
+            created_at: new Date(minuteStart).toISOString(),
+            expiration_time: new Date(minuteStart + 60 * 1000).toISOString(),
             is_auto_trade: true, is_ai_analyzed: !!bestSignal.aiConfidence, timeframe: 'TEST',
             entry_strategy: entryStrategy,
           });
-          console.log(`🧪 TESTE aberto: ${bestSignal.asset} ${dir} @ ${bestSignal.price}`);
+          console.log(`🧪 TESTE aberto: ${bestSignal.asset} ${dir} @ ${bestSignal.price} (entrada ${new Date(minuteStart).toISOString()})`);
         }
         executedSignals.push({ asset: bestSignal.asset, type: bestSignal.type, test: true });
         continue;

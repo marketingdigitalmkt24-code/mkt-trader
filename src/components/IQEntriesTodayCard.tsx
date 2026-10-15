@@ -36,7 +36,7 @@ export const IQEntriesTodayCard = () => {
         const origin = prev ? (prev.entry_strategy === 'HISTORICO' ? 'Histórico bom' : 'Perda anterior') : '—';
         return { ...r, origin };
       });
-      setOps(withOrigin.filter((r) => r.origin === 'Perda anterior'));
+      setOps(withOrigin.filter((r) => r.origin !== '—'));
     };
     load();
     const id = setInterval(load, 10000);

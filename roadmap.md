@@ -1,5 +1,5 @@
 - [x] Add strategy badges to IQ Option's latest operations, with honest labels for unmatched history.
 - [x] Compare recorded losses by strategy using linked IQ Option operations.
-- [ ] Replace homepage with centered branding and clearly labeled simulated trading chart.
-- [ ] Move existing homepage information to admin Dashboard and preserve separate settings tabs.
-- [ ] Verify public chart and authenticated admin tab navigation.
+- [x] Replace homepage with centered branding and clearly labeled simulated trading chart.
+- [x] Move existing homepage information to admin Dashboard and preserve separate settings tabs.
+- [x] Verify public chart and authenticated admin tab navigation.

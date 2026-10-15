@@ -937,9 +937,11 @@ async function analyzeAssetWithRealData(
     ema9,
     ema21,
     sma50,
-    trend: isCall
-      ? (ema9 < ema21 ? 'bullish' : 'neutral')
-      : (ema9 > ema21 ? 'bearish' : 'neutral'),
+    trend: ema9 > ema21 && ema21 > sma50
+      ? 'bullish'
+      : ema9 < ema21 && ema21 < sma50
+        ? 'bearish'
+        : 'neutral',
   };
 
   // Count confluences from REAL data

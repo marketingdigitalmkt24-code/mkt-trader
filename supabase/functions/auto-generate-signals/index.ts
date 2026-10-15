@@ -1625,6 +1625,20 @@ serve(async (req) => {
           pairMemory.push({ minute: minuteKey, strategy: historicoOk ? 'HISTORICO' : 'TENDENCIA', dir: dirNow, signal: JSON.parse(JSON.stringify(bestSignal)), used: false });
         }
       }
+      // SEQUÊNCIA (pedido 15/10/2026): Histórico bom logo em seguida de uma Tendência alinhada
+      // no MESMO ativo e MESMA direção (última operação do ativo, ≤15 min) → REAL na direção do sinal.
+      if (!realTurn && historicoOk) {
+        const { data: prev } = await supabase.from('operation_results')
+          .select('entry_strategy, direction, created_at').eq('asset', bestSignal.asset)
+          .neq('timeframe', 'MT5').order('created_at', { ascending: false }).limit(1);
+        const p0: any = prev?.[0];
+        if (p0 && p0.entry_strategy === 'TENDENCIA' && String(p0.direction).toUpperCase() === dirNow
+          && Date.now() - new Date(p0.created_at).getTime() <= 15 * 60 * 1000) {
+          realTurn = true;
+          pairMemory.forEach((p) => { if (p.minute === minuteKey && p.strategy === 'HISTORICO' && p.dir === dirNow) p.used = true; });
+          console.log(`➡️ Sequência Tendência→Histórico ${bestSignal.asset} ${dirNow} → REAL`);
+        }
+      }
       if (realTurn) {
         const { data: bad } = await supabase.from('trade_queue').select('id')
           .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')

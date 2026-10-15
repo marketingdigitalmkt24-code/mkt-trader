@@ -1817,7 +1817,7 @@ serve(async (req) => {
 
               // SÓ IA: sem gale, sem filtro de exaustão, sem filtro OTC (pedido do usuário)
               const expiration = 1; // sempre 1 minuto
-              const executionDirection = bestSignal.aiDirection || bestSignal.type;
+              const executionDirection = empateOverride || bestSignal.aiDirection || bestSignal.type;
 
               // Sincronização de entrada (2s antes da vela) é feita em iqoption-place-trade
               console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);

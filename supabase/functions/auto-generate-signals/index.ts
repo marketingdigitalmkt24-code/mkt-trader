@@ -1119,6 +1119,8 @@ serve(async (req) => {
           if (weekend && !isOtc) continue;
           // Cripto OTC da IQ tem preço sintético que diverge do mercado real (Yahoo) — gerava perdas
           if (isOtc && assetKind(base) === 'crypto') continue;
+          // Só gera sinal de ativo com o mercado realmente ABERTO agora (a IQ marca ações como enabled mesmo com a bolsa fechada)
+          if (!isMarketOpenNow(assetKind(base), isOtc)) continue;
           seen.add(symbol);
           if (Array.isArray(a.candles) && a.candles.length > 0) iqCandles.set(base, a.candles);
           if (a.bt24) bt24Map.set(symbol, a.bt24);

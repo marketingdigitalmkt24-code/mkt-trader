@@ -32,6 +32,26 @@ function indicators(cs: K[]) {
   return { e9, e21, e50, atr };
 }
 
+function placePractice(ws: WebSocket, listeners: ((d: any) => void)[], balanceId: number, sym: string, dir: string, amount: number, leverage: number, stop: number, target: number): Promise<{ id?: string; error?: string }> {
+  return new Promise((resolve) => {
+    if (!balanceId) return resolve({ error: 'conta de treino não encontrada' });
+    if (ws.readyState !== WebSocket.OPEN) return resolve({ error: 'conexão fechada' });
+    let done = false; const end = (r: { id?: string; error?: string }) => { if (!done) { done = true; clearTimeout(t); resolve(r); } };
+    const t = setTimeout(() => end({ error: 'sem resposta da IQ Option' }), 15000);
+    listeners.push((d) => {
+      if (d.request_id === 'fxp') { if (d.msg?.id) end({ id: String(d.msg.id) }); else if (d.msg?.message || d.status >= 400) end({ error: String(d.msg?.message || d.status) }); }
+      if ((d.name === 'order-changed' || d.name === 'position-changed') && d.msg?.id && d.msg?.instrument_id === sym) end({ id: String(d.msg.id) });
+    });
+    ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'set-active-balance', version: '1.0', body: { balance_id: balanceId } } }));
+    ws.send(JSON.stringify({ name: 'sendMessage', request_id: 'fxp', msg: { name: 'place-order-temp', version: '4.0', body: {
+      user_balance_id: balanceId, client_platform_id: 9, instrument_type: 'forex', instrument_id: sym,
+      side: dir === 'CALL' ? 'buy' : 'sell', type: 'market', amount, leverage, limit_price: null, stop_price: null,
+      use_token_for_commission: false, auto_margin_call: false, use_trail_stop: false,
+      take_profit_kind: 'price', take_profit_value: target, stop_lose_kind: 'price', stop_lose_value: stop,
+    } } }));
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -42,14 +62,18 @@ Deno.serve(async (req) => {
   const nowSec = Math.floor(Date.now() / 1000);
 
   // Baixa as últimas ~70 velas 5m de cada par (1 requisição por par)
+  const ws = new WebSocket(WS_URL); let practiceId = 0;
+  const listeners: ((d: any) => void)[] = [];
   const data: Record<string, K[]> = await new Promise((resolve) => {
-    const ws = new WebSocket(WS_URL); const out: Record<string, K[]> = {}; const byReq = new Map<string, string>(); let pending = 0;
-    const finish = () => { try { ws.close(); } catch (_) { /* */ } resolve(out); };
+    const out: Record<string, K[]> = {}; const byReq = new Map<string, string>(); let pending = 0;
+    const finish = () => resolve(out);
     const timer = setTimeout(finish, 45000);
     ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
     ws.onerror = () => { clearTimeout(timer); finish(); };
     ws.onmessage = (ev) => {
       const d = JSON.parse(ev.data);
+      listeners.forEach(f => f(d));
+      if (d.name === 'profile' && Array.isArray(d.msg?.balances)) { const b = d.msg.balances.find((x: any) => x.type === 4); if (b) practiceId = b.id; }
       if (d.name === 'profile') ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
       if (d.name === 'initialization-data') {
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
@@ -126,9 +150,18 @@ Deno.serve(async (req) => {
         symbol: n, direction, entry_price: entry, stop_price: stop, target_price: target,
         risk_distance: risk, risk_usd: 10, status: 'open', opened_at: nowIso,
       }).select().single();
-      if (!error && ins) { opened = { symbol: n, direction, entry, stop, target }; break outer; }
+      if (!error && ins) {
+        opened = { symbol: n, direction, entry, stop, target };
+        // Ordem forex de verdade na conta de TREINO (PRACTICE) com stop e alvo no preço
+        const lev = 100; const amount = Math.max(1, Math.min(5000, Math.round(10 * entry / (lev * risk))));
+        const iq = await placePractice(ws, listeners, practiceId, n, direction, amount, lev, stop, target);
+        await supabase.from('stop_target_positions').update({ iq_account: 'PRACTICE', iq_amount: amount, iq_leverage: lev, iq_order_id: iq.id || null, iq_status: iq.id ? 'open' : 'failed', iq_error: iq.error || null }).eq('id', ins.id);
+        opened.iq = iq;
+        break outer;
+      }
     }
   }
 
-  return Response.json({ success: true, opened, closed, openPositions: stillOpen - closed.length, pairs: Object.fromEntries(Object.entries(cleaned).map(([n, cs]) => [n, cs.length])) }, { headers: cors });
+  try { ws.close(); } catch (_) { /* */ }
+  return Response.json({ success: true, practiceId, opened, closed, openPositions: stillOpen - closed.length, pairs: Object.fromEntries(Object.entries(cleaned).map(([n, cs]) => [n, cs.length])) }, { headers: cors });
 });

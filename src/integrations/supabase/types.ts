@@ -235,6 +235,13 @@ export type Database = {
           direction: string
           entry_price: number
           id: string
+          iq_account: string | null
+          iq_amount: number | null
+          iq_error: string | null
+          iq_leverage: number | null
+          iq_order_id: string | null
+          iq_position_id: string | null
+          iq_status: string | null
           opened_at: string
           result_kind: string | null
           result_r: number | null
@@ -252,6 +259,13 @@ export type Database = {
           direction: string
           entry_price: number
           id?: string
+          iq_account?: string | null
+          iq_amount?: number | null
+          iq_error?: string | null
+          iq_leverage?: number | null
+          iq_order_id?: string | null
+          iq_position_id?: string | null
+          iq_status?: string | null
           opened_at?: string
           result_kind?: string | null
           result_r?: number | null
@@ -269,6 +283,13 @@ export type Database = {
           direction?: string
           entry_price?: number
           id?: string
+          iq_account?: string | null
+          iq_amount?: number | null
+          iq_error?: string | null
+          iq_leverage?: number | null
+          iq_order_id?: string | null
+          iq_position_id?: string | null
+          iq_status?: string | null
           opened_at?: string
           result_kind?: string | null
           result_r?: number | null

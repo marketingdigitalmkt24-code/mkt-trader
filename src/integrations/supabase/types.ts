@@ -128,6 +128,7 @@ export type Database = {
           created_at: string
           direction: string
           entry_price: number | null
+          entry_strategy: string | null
           exit_price: number | null
           expiration_time: string | null
           id: string
@@ -144,6 +145,7 @@ export type Database = {
           created_at?: string
           direction: string
           entry_price?: number | null
+          entry_strategy?: string | null
           exit_price?: number | null
           expiration_time?: string | null
           id?: string
@@ -160,6 +162,7 @@ export type Database = {
           created_at?: string
           direction?: string
           entry_price?: number | null
+          entry_strategy?: string | null
           exit_price?: number | null
           expiration_time?: string | null
           id?: string

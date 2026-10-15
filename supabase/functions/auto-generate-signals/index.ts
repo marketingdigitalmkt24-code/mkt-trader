@@ -1545,11 +1545,23 @@ serve(async (req) => {
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
         if (!openTest || openTest.length === 0) {
           const dir = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
+          // Histórico bom (somente TESTE): ≥3 ops e ≥60% acerto em 24h no mesmo ativo+direção
+          let entryStrategy = 'IA';
+          try {
+            const { data: h } = await supabase.from('operation_results').select('result')
+              .eq('asset', bestSignal.asset).eq('direction', dir).in('result', ['win', 'loss'])
+              .neq('timeframe', 'MT5')
+              .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+            const w = (h || []).filter((r: any) => r.result === 'win').length;
+            const n = (h || []).length;
+            if (n >= 3 && w / n >= 0.6) entryStrategy = 'HISTORICO';
+          } catch (_) { /* ignore */ }
           await supabase.from('operation_results').insert({
             signal_id: bestSignal.id, asset: bestSignal.asset, direction: dir,
             entry_price: bestSignal.price, result: 'test_open', profit: 0,
             expiration_time: new Date(Date.now() + 60 * 1000).toISOString(),
             is_auto_trade: true, is_ai_analyzed: !!bestSignal.aiConfidence, timeframe: 'TEST',
+            entry_strategy: entryStrategy,
           });
           console.log(`🧪 TESTE aberto: ${bestSignal.asset} ${dir} @ ${bestSignal.price}`);
         }

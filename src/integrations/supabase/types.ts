@@ -227,6 +227,60 @@ export type Database = {
         }
         Relationships: []
       }
+      stop_target_positions: {
+        Row: {
+          close_price: number | null
+          closed_at: string | null
+          created_at: string
+          direction: string
+          entry_price: number
+          id: string
+          opened_at: string
+          result_kind: string | null
+          result_r: number | null
+          risk_distance: number
+          risk_usd: number
+          status: string
+          stop_price: number
+          symbol: string
+          target_price: number
+        }
+        Insert: {
+          close_price?: number | null
+          closed_at?: string | null
+          created_at?: string
+          direction: string
+          entry_price: number
+          id?: string
+          opened_at?: string
+          result_kind?: string | null
+          result_r?: number | null
+          risk_distance: number
+          risk_usd?: number
+          status?: string
+          stop_price: number
+          symbol: string
+          target_price: number
+        }
+        Update: {
+          close_price?: number | null
+          closed_at?: string | null
+          created_at?: string
+          direction?: string
+          entry_price?: number
+          id?: string
+          opened_at?: string
+          result_kind?: string | null
+          result_r?: number | null
+          risk_distance?: number
+          risk_usd?: number
+          status?: string
+          stop_price?: number
+          symbol?: string
+          target_price?: number
+        }
+        Relationships: []
+      }
       telegram_iq_deliveries: {
         Row: {
           chat_id: string

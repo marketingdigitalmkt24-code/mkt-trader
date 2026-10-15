@@ -8,6 +8,7 @@ export interface IQAlert {
   entryAt: number;
   signalId: string;
   timeframe: string;
+  strategy?: string;
 }
 
 export function formatIQAlert(alert: IQAlert): string {
@@ -17,6 +18,7 @@ export function formatIQAlert(alert: IQAlert): string {
   return [
     'AGENCIA MKT TRADER — IQ Option',
     `Ativo: ${alert.asset}`,
+    `Estratégia: ${alert.strategy || 'Não identificada'}`,
     `Direção: ${alert.direction === 'call' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`,
     `Entrada prevista: ${entryTime} (Brasília)`,
     `Vencimento: ${alert.expiration} minuto(s)`,

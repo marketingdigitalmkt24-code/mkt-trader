@@ -51,6 +51,15 @@ export const IQEntriesTodayCard = () => {
   const safePage = Math.min(page, pageCount - 1);
   const pageOps = ops.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
+  const scoreFor = (iso: string) => {
+    const key = brtDayKey(iso);
+    const dayOps = ops.filter((o) => brtDayKey(o.created_at) === key);
+    const w = dayOps.filter((o) => o.result === 'win').length;
+    const l = dayOps.filter((o) => o.result === 'loss').length;
+    const p = w + l ? Math.round((w / (w + l)) * 100) : 0;
+    return { w, l, p };
+  };
+
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-2">

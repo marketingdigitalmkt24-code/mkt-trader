@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null };
 type Row = Op & { origin: string };
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 12;
 
 const startOfBrtDay = () => {
   const now = new Date(Date.now() - 3 * 3600 * 1000);
@@ -44,14 +44,20 @@ export const IQEntriesTodayCard = () => {
   }, []);
 
   const total = ops.reduce((s, o) => s + Number(o.profit || 0), 0);
+  const wins = ops.filter((o) => o.result === 'win').length;
+  const losses = ops.filter((o) => o.result === 'loss').length;
+  const pct = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
   const pageCount = Math.max(1, Math.ceil(ops.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pageOps = ops.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
-    <Card className="p-3 sm:p-4 h-full">
+    <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option hoje</span>
+        <span className="font-mono text-xs ml-auto mr-2">
+          <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
+        </span>
         <span className={`font-mono text-sm font-bold ${total >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
           {total >= 0 ? '+' : ''}US$ {total.toFixed(2)}
         </span>
@@ -60,7 +66,7 @@ export const IQEntriesTodayCard = () => {
         <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real hoje</p>
       ) : (
         <>
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1">
             {pageOps.map((o) => (
               <div key={o.id} className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
                 <span className="font-mono text-muted-foreground">
@@ -79,7 +85,7 @@ export const IQEntriesTodayCard = () => {
               </div>
             ))}
           </div>
-          {pageCount > 1 && (
+          {ops.length > 0 && (
             <div className="flex items-center justify-between mt-2">
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
                 <ChevronLeft className="h-3 w-3 mr-1" /> Anterior

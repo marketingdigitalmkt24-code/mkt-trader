@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 type Op = { id: string; asset: string; direction: string; result: string; created_at: string };
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 12;
 
 const startOfBrtDay = () => {
   const now = new Date(Date.now() - 3 * 3600 * 1000);
@@ -39,7 +39,7 @@ export const HistoricoBomCard = () => {
   const pageOps = ops.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
-    <Card className="p-3 sm:p-4 h-full">
+    <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Estratégia Histórico bom (teste)</span>
         <span className="font-mono text-xs">
@@ -51,7 +51,7 @@ export const HistoricoBomCard = () => {
         <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada hoje</p>
       ) : (
         <>
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1">
             {pageOps.map((o) => (
               <div key={o.id} className="flex items-center justify-between text-xs border-b border-border/50 py-1">
                 <span className="font-mono text-muted-foreground">
@@ -67,7 +67,7 @@ export const HistoricoBomCard = () => {
               </div>
             ))}
           </div>
-          {pageCount > 1 && (
+          {ops.length > 0 && (
             <div className="flex items-center justify-between mt-2">
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
                 <ChevronLeft className="h-3 w-3 mr-1" /> Anterior

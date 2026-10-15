@@ -5,5 +5,6 @@
 - [x] Verify public chart and authenticated admin tab navigation.
 - [x] Connect Telegram bot.
 - [x] Obtain verified destination for AGENCIA MKT TRADER (@agenciaMKT_Trader).
-- [ ] Send only real IQ Option signals approximately 30 seconds before entry.
-- [ ] Verify delivery and exclusion of TEST operations.
+- [x] Send only authorized IQ Option signals approximately 30 seconds before entry (late signals notify immediately).
+- [x] Verify channel delivery with a clearly labeled connection message and TEST/MT5 exclusion with automated checks.
+- [ ] Confirm automatic advance delivery on the next naturally authorized IQ Option entry (waiting for a real queued signal; do not force a trade).

@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null };
 type Row = Op & { origin: string };
+
+const PAGE_SIZE = 8;
 
 const startOfBrtDay = () => {
   const now = new Date(Date.now() - 3 * 3600 * 1000);
@@ -12,6 +16,7 @@ const startOfBrtDay = () => {
 
 export const IQEntriesTodayCard = () => {
   const [ops, setOps] = useState<Row[]>([]);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -22,7 +27,7 @@ export const IQEntriesTodayCard = () => {
         .order('created_at', { ascending: false }).limit(1000);
       const all = (data as Op[]) || [];
       const start = startOfBrtDay();
-      const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start).slice(0, 50);
+      const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start);
       const withOrigin = reals.map((r) => {
         const t = new Date(r.created_at).getTime();
         const prev = all.find((o) => o.id !== r.id && o.asset === r.asset && o.direction === r.direction
@@ -39,6 +44,9 @@ export const IQEntriesTodayCard = () => {
   }, []);
 
   const total = ops.reduce((s, o) => s + Number(o.profit || 0), 0);
+  const pageCount = Math.max(1, Math.ceil(ops.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageOps = ops.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <Card className="p-3 sm:p-4 h-full">
@@ -51,25 +59,38 @@ export const IQEntriesTodayCard = () => {
       {ops.length === 0 ? (
         <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real hoje</p>
       ) : (
-        <div className="space-y-1 max-h-64 overflow-y-auto">
-          {ops.map((o) => (
-            <div key={o.id} className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
-              <span className="font-mono text-muted-foreground">
-                {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
-              </span>
-              <span className="font-medium flex-1 ml-1 truncate">{o.asset}</span>
-              <span className={`px-1.5 rounded text-[10px] border ${o.origin === 'Histórico bom' ? 'border-amber-500/50 text-amber-500' : 'border-border text-muted-foreground'}`}>
-                {o.origin}
-              </span>
-              <span className={o.direction === 'CALL' ? 'text-emerald-500' : 'text-rose-500'}>{o.direction}</span>
-              <span className="ml-1 w-16 text-right font-mono">
-                {o.result === 'win' ? <span className="text-emerald-500">+{Number(o.profit).toFixed(2)}</span>
-                  : o.result === 'loss' ? <span className="text-rose-500">{Number(o.profit).toFixed(2)}</span>
-                  : <span className="text-muted-foreground">aberta</span>}
-              </span>
+        <>
+          <div className="space-y-1">
+            {pageOps.map((o) => (
+              <div key={o.id} className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
+                <span className="font-mono text-muted-foreground">
+                  {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="font-medium flex-1 ml-1 truncate">{o.asset}</span>
+                <span className={`px-1.5 rounded text-[10px] border ${o.origin === 'Histórico bom' ? 'border-amber-500/50 text-amber-500' : 'border-border text-muted-foreground'}`}>
+                  {o.origin}
+                </span>
+                <span className={o.direction === 'CALL' ? 'text-emerald-500' : 'text-rose-500'}>{o.direction}</span>
+                <span className="ml-1 w-16 text-right font-mono">
+                  {o.result === 'win' ? <span className="text-emerald-500">+{Number(o.profit).toFixed(2)}</span>
+                    : o.result === 'loss' ? <span className="text-rose-500">{Number(o.profit).toFixed(2)}</span>
+                    : <span className="text-muted-foreground">aberta</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between mt-2">
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
+                <ChevronLeft className="h-3 w-3 mr-1" /> Anterior
+              </Button>
+              <span className="text-[10px] text-muted-foreground font-mono">{safePage + 1}/{pageCount}</span>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>
+                Próxima <ChevronRight className="h-3 w-3 ml-1" />
+              </Button>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </Card>
   );

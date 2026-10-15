@@ -1648,6 +1648,8 @@ serve(async (req) => {
       console.log(`✅ Histórico favorável em ${bestSignal.asset} → abrindo REAL na IQ Option`);
 
       // ============= FOREX IMEDIATO — sem confirmações, TP x1000 =============
+      // Uma operação por vez: se abrir FOREX, NÃO abre a binária do mesmo sinal.
+      let forexOpened = false;
       try {
         const fxParts = bestSignal.asset.split('/').map((p: string) => p.trim().toUpperCase());
         const fxCur = ['EUR', 'USD', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];

@@ -1762,7 +1762,10 @@ serve(async (req) => {
               console.log(`📡 IQ REAL: ${bestSignal.asset} ${bestSignal.originalType || bestSignal.type}→${executionDirection} (IA) $${iqTradeAmount} | Preço REAL: ${bestSignal.price} | Score: ${bestSignal.indicators.confluenceScore}%`);
 
               // NÃO inserir em operation_results aqui — iqoption-place-trade já faz isso
-              await supabase.from('trade_queue').insert({
+              // Trava atômica: o índice único em trade_queue.signal_id garante
+              // que só UM ciclo consegue reivindicar o sinal — se outro ciclo
+              // (cron sobreposto) já inseriu, este insert falha e pulamos.
+              const { error: claimErr } = await supabase.from('trade_queue').insert({
                 asset: bestSignal.asset,
                 direction: executionDirection,
                 amount: iqTradeAmount,
@@ -1772,6 +1775,10 @@ serve(async (req) => {
                 confluence_score: bestSignal.indicators.confluenceScore,
                 status: 'executing',
               });
+              if (claimErr) {
+                console.log(`🚫 Sinal ${bestSignal.id} já reivindicado por outro ciclo — pulando (${claimErr.code || claimErr.message})`);
+                continue;
+              }
 
               const { data: iqData, error: iqError } = await supabase.functions.invoke('iqoption-place-trade', {
                 body: {

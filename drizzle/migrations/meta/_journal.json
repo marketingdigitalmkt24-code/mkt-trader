@@ -22,6 +22,13 @@
       "when": 1792093136610,
       "tag": "0002_chart_study",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792093250272,
+      "tag": "0003_schedule_chart_study",
+      "breakpoints": true
     }
   ]
 }

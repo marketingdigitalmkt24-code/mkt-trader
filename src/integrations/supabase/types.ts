@@ -197,6 +197,42 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_iq_deliveries: {
+        Row: {
+          chat_id: string
+          claimed_at: string | null
+          created_at: string
+          result_message_id: number | null
+          result_sent_at: string | null
+          result_status: string
+          signal_id: string
+          signal_message_id: number
+          strategy: string | null
+        }
+        Insert: {
+          chat_id: string
+          claimed_at?: string | null
+          created_at?: string
+          result_message_id?: number | null
+          result_sent_at?: string | null
+          result_status?: string
+          signal_id: string
+          signal_message_id: number
+          strategy?: string | null
+        }
+        Update: {
+          chat_id?: string
+          claimed_at?: string | null
+          created_at?: string
+          result_message_id?: number | null
+          result_sent_at?: string | null
+          result_status?: string
+          signal_id?: string
+          signal_message_id?: number
+          strategy?: string | null
+        }
+        Relationships: []
+      }
       trade_queue: {
         Row: {
           amount: number

@@ -1677,6 +1677,20 @@ serve(async (req) => {
           }
         } catch (e) { console.log('⚠️ Erro Tendência V1:', e); }
       }
+      // Pausa por ativo (pedido 16/10/2026): 2 perdas REAIS seguidas no mesmo ativo → 30 min sem entrada real
+      // nesse ativo (vira TESTE). Os demais ativos continuam operando normalmente.
+      if (realTurn) {
+        try {
+          const { data: lastTwo } = await supabase.from('operation_results').select('result, created_at')
+            .eq('asset', bestSignal.asset).not('iq_option_id', 'is', null).neq('timeframe', 'MT5').neq('timeframe', 'TEST')
+            .in('result', ['win', 'loss', 'tie']).order('created_at', { ascending: false }).limit(2);
+          if (lastTwo && lastTwo.length === 2 && lastTwo.every(r => r.result === 'loss')
+            && Date.now() - new Date(lastTwo[0].created_at).getTime() < 30 * 60000) {
+            console.log(`⏸️ Pausa 30 min: ${bestSignal.asset} teve 2 perdas reais seguidas → sem entrada real`);
+            realTurn = false; realStrategy = undefined;
+          }
+        } catch (e) { console.log('⚠️ Erro pausa por ativo:', e); }
+      }
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);

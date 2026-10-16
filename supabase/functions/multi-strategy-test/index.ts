@@ -145,8 +145,7 @@ Deno.serve(async (req) => {
 
   // 1) Resolver entradas TESTE vencidas com a vela real da IQ Option.
   let resolved = 0;
-  const bestByMin = new Map<number, { o: any; score: number }>();
-  const { data: open } = await supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at')
+    const { data: open } = await supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
     .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000);
   for (const o of open || []) {
     const entrySec = Math.floor(new Date(o.created_at).getTime() / 1000);
@@ -161,27 +160,13 @@ Deno.serve(async (req) => {
       .eq('id', o.id).eq('result', OPEN).select('id');
     if (!upd?.length) continue;
     resolved++;
-    if (res === 'win' && o.entry_strategy === 'TENDENCIA') {
-      // Força do ganho = movimento da vela em relação ao preço (melhor do horário).
-      const score = Math.abs(k.c - k.o) / (k.o || 1);
-      const prev = bestByMin.get(entrySec);
-      if (!prev || score > prev.score) bestByMin.set(entrySec, { o, score });
+    if (o.telegram_sent) {
+      const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+      const head = res === 'win' ? '✅ RESULTADO: WIN' : res === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
+      await sendTelegram([head + ' — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, '🎯 Estratégia: Tendência',
+        `Direção: ${o.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
+        '🧪 Operação TESTE (sem ordem real).'].join('\n')).catch(e => console.error('Telegram:', String(e)));
     }
-  }
-  // Telegram: um sinal por vez — só o melhor WIN de Tendência de cada minuto.
-  for (const [entrySec, { o }] of [...bestByMin].sort((a, b) => a[0] - b[0])) {
-    const iso = new Date(entrySec * 1000).toISOString();
-    const { data: already } = await supabase.from('operation_results').select('id').eq('created_at', iso)
-      .eq('entry_strategy', 'TENDENCIA').eq('telegram_sent', true).limit(1);
-    if (already?.length) continue;
-    const { data: claim } = await supabase.from('operation_results').update({ telegram_sent: true })
-      .eq('id', o.id).eq('telegram_sent', false).select('id');
-    if (!claim?.length) continue;
-    const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-    await sendTelegram(['✅ WIN — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, '🎯 Estratégia: Tendência',
-      `Direção: ${o.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
-      '🏆 Melhor sinal do horário',
-      '🧪 Operação TESTE (sem ordem real). Sem garantia de lucro.'].join('\n')).catch(e => console.error('Telegram:', String(e)));
   }
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
@@ -195,6 +180,7 @@ Deno.serve(async (req) => {
         result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
         expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: true, is_ai_analyzed: false,
         timeframe: 'TEST', entry_strategy: strat,
+        _score: strat === 'TENDENCIA' ? Math.abs(closed[closed.length - 1].c - closed[closed.length - 1].o) / (closed[closed.length - 1].o || 1) : -1,
       });
     }
   }
@@ -203,7 +189,19 @@ Deno.serve(async (req) => {
     const { data: exist } = await supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id));
     const seen = new Set((exist || []).map((e: any) => e.signal_id));
     const fresh = rows.filter(r => !seen.has(r.signal_id));
-    if (fresh.length) { const { error } = await supabase.from('operation_results').insert(fresh); if (error) console.error(error.message); else inserted = fresh.length; }
+    // Telegram: um sinal por vez — só o melhor sinal de Tendência deste minuto.
+    const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
+    const iso = new Date(curMin * 1000).toISOString();
+    const { data: already } = await supabase.from('operation_results').select('id').eq('created_at', iso).eq('telegram_sent', true).limit(1);
+    if (best && !already?.length) best.telegram_sent = true;
+    const clean = fresh.map(({ _score, ...r }) => r);
+    if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
+    if (best?.telegram_sent && inserted) {
+      const hh = new Date(curMin * 1000).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+      await sendTelegram(['📣 SINAL — AGÊNCIA MKT TRADER', `💱 Ativo: ${best.asset}`, '🎯 Estratégia: Tendência',
+        `Direção: ${best.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
+        '🏆 Melhor sinal do horário', '🧪 Operação TESTE (sem ordem real). Sem garantia de lucro.'].join('\n')).catch(e => console.error('Telegram:', String(e)));
+    }
   }
   return Response.json({ success: true, assets: series.size, inserted, resolved }, { headers: cors });
 });

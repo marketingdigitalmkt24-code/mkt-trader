@@ -55,6 +55,18 @@ function analyze(cs: K[], splitT: number, acc: Acc) {
     return hi === lo ? 50 : (c[i] - lo) / (hi - lo) * 100;
   });
   const body = cs.map(k => Math.abs(k.c - k.o));
+  // KDJ (9,3,3)
+  const kk: number[] = [], dd: number[] = [], jj: number[] = [];
+  for (let i = 0; i < cs.length; i++) {
+    let hi = -Infinity, lo = Infinity;
+    for (let j = Math.max(0, i - 8); j <= i; j++) { hi = Math.max(hi, cs[j].h); lo = Math.min(lo, cs[j].l); }
+    const rsv = hi === lo ? 50 : (c[i] - lo) / (hi - lo) * 100;
+    const k = (i ? kk[i - 1] : 50) * 2 / 3 + rsv / 3; const d2 = (i ? dd[i - 1] : 50) * 2 / 3 + k / 3;
+    kk.push(k); dd.push(d2); jj.push(3 * k - 2 * d2);
+  }
+  // Ichimoku simplificado: Tenkan 9, Kijun 26, nuvem (SpanA/SpanB 52) deslocada 26
+  const mid = (i: number, n: number) => { let hi = -Infinity, lo = Infinity; for (let j = Math.max(0, i - n + 1); j <= i; j++) { hi = Math.max(hi, cs[j].h); lo = Math.min(lo, cs[j].l); } return (hi + lo) / 2; };
+  const tk = cs.map((_, i) => mid(i, 9)), kj = cs.map((_, i) => mid(i, 26)), sb = cs.map((_, i) => mid(i, 52));
   for (let i = 60; i < cs.length - 5; i++) {
     const nx = cs[i + 1];
     if (nx.t - cs[i].t !== 60) continue;
@@ -74,6 +86,12 @@ function analyze(cs: K[], splitT: number, acc: Acc) {
     if (c[i] < lo) pats.push(['Rompimento 20 velas', 'PUT']);
     if (upT && cs[i].l <= e21[i] && c[i] > e21[i]) pats.push(['Recuo na média 21', 'CALL']);
     if (dnT && cs[i].h >= e21[i] && c[i] < e21[i]) pats.push(['Recuo na média 21', 'PUT']);
+    if (kk[i - 1] <= dd[i - 1] && kk[i] > dd[i] && jj[i] < 20) pats.push(['KDJ cruzamento', 'CALL']);
+    if (kk[i - 1] >= dd[i - 1] && kk[i] < dd[i] && jj[i] > 80) pats.push(['KDJ cruzamento', 'PUT']);
+    const sa = (tk[i - 26] + kj[i - 26]) / 2, sB = sb[i - 26];
+    const top = Math.max(sa, sB), bot = Math.min(sa, sB);
+    if (tk[i - 1] <= kj[i - 1] && tk[i] > kj[i] && c[i] > top) pats.push(['Ichimoku simplificado', 'CALL']);
+    if (tk[i - 1] >= kj[i - 1] && tk[i] < kj[i] && c[i] < bot) pats.push(['Ichimoku simplificado', 'PUT']);
     if (!pats.length) continue;
     // Dia BRT (UTC-3) para conferência separada por data.
     const part = new Date((nx.t - 3 * 3600) * 1000).toISOString().slice(0, 10);

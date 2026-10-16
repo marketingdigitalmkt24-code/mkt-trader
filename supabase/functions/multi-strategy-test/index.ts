@@ -3,7 +3,7 @@
 // e resolvida pelas velas reais da IQ Option. Telegram: só o resultado WIN da Tendência (mesmo em teste).
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
-import { FOUR_WIN_STRATEGY } from '../_shared/four-win-reversal.ts';
+import { FOUR_WIN_STRATEGY, nextReversalMinute } from '../_shared/four-win-reversal.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -142,7 +142,8 @@ Deno.serve(async (req) => {
         }
       }
       if (d.name === 'candles' && byReq.has(d.request_id)) {
-        const s = byReq.get(d.request_id)!; byReq.delete(d.request_id);
+        const s = byReq.get(d.request_id); byReq.delete(d.request_id);
+        if (!s) return;
         series.set(s, (d.msg?.candles || []).map((c: any) => ({ t: c.from, o: c.open, c: c.close, h: c.max, l: c.min }))
           .filter((k: K) => typeof k.c === 'number').sort((a: K, b: K) => a.t - b.t));
         if (--pending <= 0) { clearTimeout(timer); finish(); }
@@ -214,7 +215,7 @@ Deno.serve(async (req) => {
       const { data: trade, error: claimError } = await supabase.rpc('claim_four_win_reversal', { p_candidate: best.signal_id });
       if (claimError) console.error('Four-win claim:', claimError.message);
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
-        const entryAt = (curMin + 60) * 1000;
+        const entryAt = nextReversalMinute(curMin * 1000);
         const task = (async () => {
           const { data, error } = await supabase.functions.invoke('iqoption-place-trade', { body: { ...trade, entryAt } });
           const details = error && 'context' in error && error.context instanceof Response

@@ -385,6 +385,9 @@ export function LiveOperationsCard() {
                     {trade.entry_strategy === 'TENDENCIA_V1' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📐 TENDÊNCIA V1</Badge>
                     )}
+                    {trade.entry_strategy === 'FOUR_WIN_REVERSAL' && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 APÓS 4 GANHOS</Badge>
+                    )}
                     {trade.entry_strategy === 'HISTORICO' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📜 HISTÓRICO BOM</Badge>
                     )}

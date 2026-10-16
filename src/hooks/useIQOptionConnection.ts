@@ -98,7 +98,7 @@ export function useIQOptionConnection() {
       // Entradas reais (Tendência/Histórico/Empate/Reversão) + as operações de teste
       // de Tendência e Reversão RSI que aparecem no card Entradas na IQ Option
       const isStrategyRow = (r: { timeframe: string; entry_strategy: string | null }) =>
-        r.entry_strategy === 'TENDENCIA' || r.entry_strategy === 'TENDENCIA_V1' || r.entry_strategy === 'EMPATE' || r.entry_strategy === 'HISTORICO' || r.entry_strategy === 'REVERSAO_RSI';
+        r.entry_strategy === 'FOUR_WIN_REVERSAL' || r.entry_strategy === 'TENDENCIA' || r.entry_strategy === 'TENDENCIA_V1' || r.entry_strategy === 'EMPATE' || r.entry_strategy === 'HISTORICO' || r.entry_strategy === 'REVERSAO_RSI';
       const results = all.filter((r) => r.created_at >= startIso && r.timeframe !== 'MT5'
         && (r.timeframe === 'TEST' ? (r.entry_strategy === 'TENDENCIA' || r.entry_strategy === 'REVERSAO_RSI') : isStrategyRow(r)));
 

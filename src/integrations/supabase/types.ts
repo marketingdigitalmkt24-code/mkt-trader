@@ -89,6 +89,24 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_four_win_state: {
+        Row: {
+          activated_at: string
+          consumed_through: string
+          id: number
+        }
+        Insert: {
+          activated_at?: string
+          consumed_through?: string
+          id?: number
+        }
+        Update: {
+          activated_at?: string
+          consumed_through?: string
+          id?: number
+        }
+        Relationships: []
+      }
       iqoption_config: {
         Row: {
           account_type: string
@@ -628,6 +646,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_four_win_reversal: { Args: { p_candidate: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

@@ -184,19 +184,29 @@ Deno.serve(async (req) => {
       '🧪 Operação TESTE (sem ordem real). Sem garantia de lucro.'].join('\n')).catch(e => console.error('Telegram:', String(e)));
   }
 
-  // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
-  const rows: any[] = [];
+  // 2) Só UMA entrada TESTE por minuto: o melhor sinal (mais estratégias concordando no mesmo ativo/direção;
+  //    desempate prefere Tendência).
+  let best: { asset: string; dir: 'CALL' | 'PUT'; strats: string[]; price: number } | null = null;
   for (const [asset, cs] of series) {
     const closed = cs.filter(k => k.t + 60 <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
-    for (const [strat, dir] of detect(closed)) {
-      rows.push({
-        signal_id: `t7-${asset}-${strat}-${curMin}`, asset, direction: dir, entry_price: closed[closed.length - 1].c,
-        result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
-        expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: true, is_ai_analyzed: false,
-        timeframe: 'TEST', entry_strategy: strat,
-      });
+    const byDir = new Map<'CALL' | 'PUT', string[]>();
+    for (const [strat, dir] of detect(closed)) byDir.set(dir, [...(byDir.get(dir) || []), strat]);
+    for (const [dir, strats] of byDir) {
+      const sc = strats.length * 2 + (strats.includes('TENDENCIA') ? 1 : 0);
+      const bs = best ? best.strats.length * 2 + (best.strats.includes('TENDENCIA') ? 1 : 0) : -1;
+      if (sc > bs) best = { asset, dir, strats, price: closed[closed.length - 1].c };
     }
+  }
+  const rows: any[] = [];
+  if (best) {
+    const strat = best.strats.includes('TENDENCIA') ? 'TENDENCIA' : best.strats[0];
+    rows.push({
+      signal_id: `t7-${best.asset}-${strat}-${curMin}`, asset: best.asset, direction: best.dir, entry_price: best.price,
+      result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
+      expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: true, is_ai_analyzed: false,
+      timeframe: 'TEST', entry_strategy: strat,
+    });
   }
   let inserted = 0;
   if (rows.length) {

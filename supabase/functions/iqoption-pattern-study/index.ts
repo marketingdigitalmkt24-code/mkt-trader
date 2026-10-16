@@ -115,6 +115,7 @@ Deno.serve(async (req) => {
   const nowSec = Math.floor(Date.now() / 1000);
   const splitT = nowSec - 10 * 86400;
 
+  const meta = new Map<string, { pay: number; kind: string; otc: boolean }>();
   const picked: { symbol: string; candles: K[] }[] = await new Promise((resolve) => {
     const ws = new WebSocket(WS_URL);
     const out: { symbol: string; candles: K[] }[] = [];
@@ -134,6 +135,9 @@ Deno.serve(async (req) => {
           const s = symbolOf(a.name);
           if (s.otc && s.crypto) continue;
           if (!cand.has(s.symbol)) cand.set(s.symbol, Number(id));
+          const pay = 100 - Number(a?.option?.profit?.commission ?? 100);
+          const kind = s.crypto ? 'CRIPTO' : /^[A-Z]{3}\/[A-Z]{3}/.test(s.symbol) ? 'MOEDA' : 'ACAO/INDICE';
+          if (!meta.has(s.symbol) || pay > meta.get(s.symbol)!.pay) meta.set(s.symbol, { pay, kind, otc: s.otc });
         }
         const list = wanted ? [...cand.entries()].filter(([s]) => wanted.includes(s)) : [...cand.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(offset, offset + count);
         if (!list.length) { clearTimeout(timer); finish(); return; }
@@ -162,7 +166,10 @@ Deno.serve(async (req) => {
   for (const p of picked) {
     const cs = p.candles.filter(k => typeof k.o === 'number' && typeof k.c === 'number')
       .sort((a, b) => a.t - b.t).filter((k, i, arr) => i === 0 || k.t !== arr[i - 1].t);
-    analyze(cs, splitT, acc, wanted ? p.symbol : '');
+    const m = meta.get(p.symbol);
+    const grp = body.group && m ? `${m.otc ? 'OTC' : 'ABERTO'}|${m.kind}|${m.pay >= 90 ? 'PAY90+' : 'PAY<90'}` : '';
+    analyze(cs, splitT, acc, grp || (wanted ? p.symbol : ''));
+    if (m) syms.push(`${p.symbol}=${m.pay}`);
     syms.push(`${p.symbol}:${cs.length}`);
   }
   return Response.json({ success: true, symbols: syms, acc }, { headers: cors });

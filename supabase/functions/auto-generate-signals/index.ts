@@ -1651,6 +1651,22 @@ serve(async (req) => {
           }
         }
       } catch (e) { console.log('⚠️ Erro empate:', e); }
+      // Tendência V1 (pedido 16/10/2026): se houve WIN de Tendência há ~4 minutos,
+      // o sinal de Tendência deste minuto abre REAL + Telegram com selo Tendência V1.
+      if (tendenciaOk && realStrategy !== 'EMPATE') {
+        try {
+          const fourMinAgo = Math.floor(Date.now() / 60000) * 60000 - 4 * 60000;
+          const { data: v1Win } = await supabase.from('operation_results').select('id')
+            .eq('entry_strategy', 'TENDENCIA').eq('result', 'win').neq('timeframe', 'MT5')
+            .gte('created_at', new Date(fourMinAgo).toISOString())
+            .lt('created_at', new Date(fourMinAgo + 60000).toISOString())
+            .limit(1);
+          if (v1Win && v1Win.length > 0) {
+            realTurn = true; realStrategy = 'TENDENCIA_V1';
+            console.log(`📐 Tendência V1 → REAL: ${bestSignal.asset} (WIN de Tendência há 4 min)`);
+          }
+        } catch (e) { console.log('⚠️ Erro Tendência V1:', e); }
+      }
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);

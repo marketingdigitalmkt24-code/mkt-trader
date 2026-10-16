@@ -530,15 +530,31 @@ serve(async (req) => {
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'
           : entryStrategy === 'EMPATE' ? 'Após empate' : 'IA';
         notifyEntry = async entryAt => {
-          // Regra (16/10/2026): só envia ao Telegram quando houver OUTRO sinal real
-          // autorizado no mesmo minuto com a estratégia complementar:
-          // Tendência alinhada + Reversão RSI juntas. Sinal sozinho não sai no canal.
+          // Regra (16/10/2026): só envia ao Telegram quando houver OUTRO sinal
+          // no mesmo minuto com a estratégia complementar (Tendência + Reversão RSI).
+          // O par pode ser real (trade_queue) ou TESTE (operation_results, ativo
+          // recusado pela corretora); par de teste também libera o envio e recebe
+          // uma mensagem própria marcada como TESTE.
+          const complementary = entryStrategy === 'TENDENCIA' ? 'REVERSAO_RSI'
+            : entryStrategy === 'REVERSAO_RSI' ? 'TENDENCIA' : null;
+          if (!complementary) {
+            console.log(`📵 Telegram ignorado: sinal ${signalId} (${entryStrategy}) sem estratégia complementar`);
+            return undefined;
+          }
           const { data: pairSignals } = await supabase.from('trade_queue').select('signal_id, entry_strategy')
             .eq('status', 'executing').neq('signal_id', signalId)
             .gte('created_at', new Date(Date.now() - 120000).toISOString()).limit(5);
-          const hasComplementaryPair = (pairSignals || []).some(p =>
-            (entryStrategy === 'TENDENCIA' && p.entry_strategy === 'REVERSAO_RSI') ||
-            (entryStrategy === 'REVERSAO_RSI' && p.entry_strategy === 'TENDENCIA'));
+          let hasComplementaryPair = (pairSignals || []).some(p => p.entry_strategy === complementary);
+          let testPair: { signal_id: string; asset: string; direction: string } | null = null;
+          if (!hasComplementaryPair) {
+            const { data: testPairs } = await supabase.from('operation_results')
+              .select('signal_id, asset, direction')
+              .eq('timeframe', 'TEST').eq('entry_strategy', complementary)
+              .gte('created_at', new Date(Date.now() - 120000).toISOString())
+              .order('created_at', { ascending: false }).limit(1);
+            testPair = (testPairs || [])[0] || null;
+            hasComplementaryPair = !!testPair;
+          }
           if (!hasComplementaryPair) {
             console.log(`📵 Telegram ignorado: sinal ${signalId} (${entryStrategy}) sem par Tendência+Reversão RSI no mesmo minuto`);
             return undefined;

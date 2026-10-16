@@ -161,11 +161,26 @@ Deno.serve(async (req) => {
     if (!upd?.length) continue;
     resolved++;
     if (res === 'win' && o.entry_strategy === 'TENDENCIA') {
-      const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-      await sendTelegram(['✅ WIN — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, '🎯 Estratégia: Tendência',
-        `Direção: ${o.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
-        '🧪 Operação TESTE (sem ordem real). Sem garantia de lucro.'].join('\n')).catch(e => console.error('Telegram:', String(e)));
+      // Força do ganho = movimento da vela em relação ao preço (melhor do horário).
+      const score = Math.abs(k.c - k.o) / (k.o || 1);
+      const prev = bestByMin.get(entrySec);
+      if (!prev || score > prev.score) bestByMin.set(entrySec, { o, score });
     }
+  }
+  // Telegram: um sinal por vez — só o melhor WIN de Tendência de cada minuto.
+  for (const [entrySec, { o }] of [...bestByMin].sort((a, b) => a[0] - b[0])) {
+    const iso = new Date(entrySec * 1000).toISOString();
+    const { data: already } = await supabase.from('operation_results').select('id').eq('created_at', iso)
+      .eq('entry_strategy', 'TENDENCIA').eq('telegram_sent', true).limit(1);
+    if (already?.length) continue;
+    const { data: claim } = await supabase.from('operation_results').update({ telegram_sent: true })
+      .eq('id', o.id).eq('telegram_sent', false).select('id');
+    if (!claim?.length) continue;
+    const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    await sendTelegram(['✅ WIN — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, '🎯 Estratégia: Tendência',
+      `Direção: ${o.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
+      '🏆 Melhor sinal do horário',
+      '🧪 Operação TESTE (sem ordem real). Sem garantia de lucro.'].join('\n')).catch(e => console.error('Telegram:', String(e)));
   }
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.

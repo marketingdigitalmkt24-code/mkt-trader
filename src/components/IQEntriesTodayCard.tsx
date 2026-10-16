@@ -93,7 +93,10 @@ export const IQEntriesTodayCard = () => {
                 <span className="font-mono text-muted-foreground">
                   {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                 </span>
-                <span className="font-medium flex-1 ml-1 truncate">{o.asset}</span>
+                <span className="flex-1 ml-1 min-w-0 flex flex-col leading-tight">
+                  <span className="font-medium truncate">{o.asset}</span>
+                  <span className="font-mono text-[9px] text-muted-foreground truncate">#{o.iq_option_id}</span>
+                </span>
                 <span className="px-1.5 rounded text-[10px] border border-border text-muted-foreground">
                   {o.origin}
                 </span>

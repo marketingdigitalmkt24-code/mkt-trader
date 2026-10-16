@@ -1632,7 +1632,8 @@ serve(async (req) => {
         const rsiR = Number(bestSignal.indicators?.rsi?.value);
         const stR = Number(bestSignal.indicators?.stochastic?.k);
         reversaoRsi = dirR === 'PUT' && rsiR > 70 && stR > 80;
-        if (reversaoRsi) { realTurn = false; console.log(`🔄 Reversão RSI (TESTE): ${bestSignal.asset} PUT→CALL RSI ${rsiR.toFixed(1)} Stoch ${stR.toFixed(1)}`); }
+        // Reversão RSI agora abre REAL + Telegram (pedido 16/10/2026), entrando em COMPRA.
+        if (reversaoRsi) { realTurn = true; empateOverride = 'CALL'; console.log(`🔄 Reversão RSI → REAL: ${bestSignal.asset} PUT→CALL RSI ${rsiR.toFixed(1)} Stoch ${stR.toFixed(1)}`); }
       } catch (_) { /* ignore */ }
       if (realTurn) {
         const { data: bad } = await supabase.from('trade_queue').select('id')
@@ -1640,7 +1641,7 @@ serve(async (req) => {
           .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
         if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
       }
-      let realStrategy: string | undefined = historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
+      let realStrategy: string | undefined = reversaoRsi ? 'REVERSAO_RSI' : historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
       // Após EMPATE (pedido 15/10/2026): se a última operação finalizada de Tendência/Histórico bom
       // (teste ou real) empatou, o PRÓXIMO sinal gerado (imediatamente após, sem janela de tempo)
       // abre REAL + Telegram (user, 15/10/2026 19h).

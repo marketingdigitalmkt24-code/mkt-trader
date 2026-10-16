@@ -23,12 +23,12 @@ async function login(email: string, password: string) {
 type Stat = { n: number; w: number; l: number; t: number; r: number };
 const blank = (): Stat => ({ n: 0, w: 0, l: 0, t: 0, r: 0 });
 
-function sim(cs: K[], spread: number, splitT: number, rr: number, out: Record<string, Stat>, st = 1) {
+function sim(cs: K[], spread: number, splitT: number, rr: number, out: Record<string, Stat>, st = 1, hold = 24) {
   const ema = (p: number, s: number[]) => { const a = 2 / (p + 1); const r: number[] = []; s.forEach((x, i) => r.push(i ? x * a + r[i - 1] * (1 - a) : x)); return r; };
   const c = cs.map(k => k.c); const e9 = ema(9, c), e21 = ema(21, c), e50 = ema(50, c);
   const atr: number[] = []; cs.forEach((k, i) => { const tr = i ? Math.max(k.h - k.l, Math.abs(k.h - c[i - 1]), Math.abs(k.l - c[i - 1])) : k.h - k.l; atr.push(i ? (atr[i - 1] * 13 + tr) / 14 : tr); });
   let busyUntil = 0;
-  for (let i = 60; i < cs.length - 25; i++) {
+  for (let i = 60; i < cs.length - hold - 1; i++) {
     if (cs[i].t < busyUntil) continue;
     const up = e9[i] > e21[i] && e21[i] > e50[i] && cs[i].l <= e21[i] && c[i] > e21[i];
     const dn = e9[i] < e21[i] && e21[i] < e50[i] && cs[i].h >= e21[i] && c[i] < e21[i];
@@ -37,7 +37,7 @@ function sim(cs: K[], spread: number, splitT: number, rr: number, out: Record<st
     if (!(risk > 0)) continue;
     const stop = up ? entry - risk : entry + risk, tgt = up ? entry + rr * risk : entry - rr * risk;
     let res = 0, kind = 't', j = i + 1;
-    for (; j <= i + 24; j++) {
+    for (; j <= i + hold; j++) {
       const k = cs[j];
       const hitS = up ? k.l <= stop : k.h >= stop, hitT = up ? k.h >= tgt : k.l <= tgt;
       if (hitS) { res = -1; kind = 'l'; break; }
@@ -53,7 +53,7 @@ function sim(cs: K[], spread: number, splitT: number, rr: number, out: Record<st
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   const body = await req.json().catch(() => ({}));
-  const rr = Math.min(4, Math.max(1, Number(body.rr) || 2)); const sm = body.spreadMult ?? 1; const st = Math.max(0.5, Number(body.stopAtr) || 1);
+  const rr = Math.min(4, Math.max(1, Number(body.rr) || 2)); const sm = body.spreadMult ?? 1; const st = Math.max(0.5, Number(body.stopAtr) || 1); const size = [300,900,3600].includes(Number(body.size)) ? Number(body.size) : 300; const hold = Math.min(96, Math.max(4, Number(body.hold) || 24)); const nReq = Math.ceil(30*86400/size/1000)+1;
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
@@ -74,10 +74,10 @@ Deno.serve(async (req) => {
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
         const ids = new Map<string, number>();
         for (const [id, a] of Object.entries<any>(all)) { const n = String(a.name || '').toUpperCase().replace('FRONT.', '').replace('/', '').replace(/-OP$/, ''); (globalThis as any).__names = [...((globalThis as any).__names || []), n].slice(0, 400); if (PAIRS.includes(n) && !ids.has(n)) ids.set(n, Number(id)); }
-        pending = ids.size * 9;
+        pending = ids.size * nReq;
         if (!pending) { clearTimeout(timer); finish(); return; }
-        for (const [n, id] of ids) { out[n] = []; for (let k = 0; k < 9; k++) { const rid = `s${id}_${k}`; byReq.set(rid, n);
-          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 300, to: nowSec - k * 300000, count: 1000 } } }));
+        for (const [n, id] of ids) { out[n] = []; for (let k = 0; k < nReq; k++) { const rid = `s${id}_${k}`; byReq.set(rid, n);
+          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size, to: nowSec - k * size * 1000, count: 1000 } } }));
           await new Promise(r => setTimeout(r, 50)); } }
       }
       if (d.name === 'candles' && byReq.has(d.request_id)) {
@@ -90,8 +90,8 @@ Deno.serve(async (req) => {
   const total: Record<string, Stat> = {}; const per: Record<string, Record<string, Stat>> = {};
   for (const [n, raw] of Object.entries(data)) {
     const cs = raw.filter(k => typeof k.c === 'number' && k.h > k.l).sort((a, b) => a.t - b.t).filter((k, i, a) => !i || k.t !== a[i - 1].t);
-    per[n] = {}; sim(cs, SPREAD[n]*sm, splitT, rr, per[n], st); sim(cs, SPREAD[n]*sm, splitT, rr, total, st);
+    per[n] = {}; sim(cs, SPREAD[n]*sm, splitT, rr, per[n], st, hold); sim(cs, SPREAD[n]*sm, splitT, rr, total, st, hold);
     (per[n] as any).candles = cs.length;
   }
-  return Response.json({ success: true, rr, total, per, names: Object.keys(data).length ? undefined : (globalThis as any).__names }, { headers: cors });
+  return Response.json({ success: true, rr, size, hold, total, per, names: Object.keys(data).length ? undefined : (globalThis as any).__names }, { headers: cors });
 });

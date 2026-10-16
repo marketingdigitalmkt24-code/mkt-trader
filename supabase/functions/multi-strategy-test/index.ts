@@ -176,7 +176,10 @@ Deno.serve(async (req) => {
     if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
     // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
     const fired = detect(closed);
-    const pick = fired.find(([st]) => st === 'TENDENCIA') || fired[0];
+    // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
+    const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
+    const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];
+    const pick = agree.find(([st]) => st === 'TENDENCIA') || agree[0];
     for (const [strat, dir] of pick ? [pick] : []) {
       rows.push({
         signal_id: `t7-${asset}-${strat}-${curMin}`, asset, direction: dir, entry_price: closed[closed.length - 1].c,

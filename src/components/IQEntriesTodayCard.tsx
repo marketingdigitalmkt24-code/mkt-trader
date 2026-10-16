@@ -28,11 +28,14 @@ export const IQEntriesTodayCard = () => {
         .order('created_at', { ascending: false }).limit(1000);
       const all = (data as Op[]) || [];
       const start = historyStart();
-      const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start);
-      // Tendência, Histórico bom (estudo 30d dos gráficos) e Empate
-      const withOrigin = reals.map((r) => {
-        const origin = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : '—';
-        return { ...r, origin };
+      const inRange = all.filter((o) => o.created_at >= start);
+      // Reais: Tendência, Histórico bom, Empate e Reversão RSI.
+      // Testes: só Tendência e Reversão RSI (pedido do usuário), marcados como TESTE.
+      const withOrigin = inRange.map((r) => {
+        const isTest = r.timeframe === 'TEST';
+        if (isTest && r.entry_strategy !== 'TENDENCIA' && r.entry_strategy !== 'REVERSAO_RSI') return { ...r, origin: '—' };
+        const base = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : '—';
+        return { ...r, origin: isTest && base !== '—' ? `${base} · TESTE` : base };
       });
       setOps(withOrigin.filter((r) => r.origin !== '—'));
     };

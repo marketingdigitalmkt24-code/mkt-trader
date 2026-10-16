@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
-import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL } from '../_shared/four-win-reversal.ts';
+import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal } from '../_shared/four-win-reversal.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -173,6 +173,11 @@ async function placeTradeFireAndForget(
             } else if (accountType === 'REAL' && balance.type === 1) {
               balanceId = balance.id; break;
             }
+          }
+          if (!balanceId && trade.entryStrategy === FOUR_WIN_STRATEGY) {
+            clearTimeout(timeout); ws.close();
+            resolve({ success: false, error: 'Conta configurada não disponível; inversão cancelada' });
+            return;
           }
           if (!balanceId && balances.length > 0) balanceId = balances[0].id;
           
@@ -382,6 +387,12 @@ async function placeTradeFireAndForget(
           console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar na abertura da vela ${new Date(candleOpenMs).toISOString()}`);
 
           const fire = () => {
+            // Recheck at actual submission: event-loop delay must never create a late order.
+            if (trade.entryStrategy === FOUR_WIN_STRATEGY && !canSendReversal(candleOpenMs, Date.now())) {
+              clearTimeout(timeout); ws.close();
+              resolve({ success: false, error: 'Virada do minuto perdida; inversão cancelada sem ordem atrasada' });
+              return;
+            }
             const optPayout = payoutById[foundAsset!.turboId || foundAsset!.binaryId || foundAsset!.id] || 0;
             if (!hasTurbo || (optPayout > 0 && optPayout < 80)) {
               sendDigital(!hasTurbo ? 'sem turbo' : `payout ${optPayout}%`);
@@ -693,6 +704,8 @@ serve(async (req) => {
       const timeframe = isForex ? 'FOREX' : (tradeRequest.timeframe || (tradeRequest.expiration <= 1 ? 'M1' : 'M5'));
       // Expiração = início do minuto de entrada (arredondado) + duração, para a sincronização achar a ordem logo ao vencer.
       const expirationIso = isForex ? null
+        : tradeRequest.entryStrategy === FOUR_WIN_STRATEGY && tradeRequest.entryAt
+        ? new Date(tradeRequest.entryAt + tradeRequest.expiration * 60000).toISOString()
         : new Date((Math.round(Date.now() / 60000) + (tradeRequest.expiration || 1)) * 60000).toISOString();
       
       await supabase.from('operation_results').insert({

@@ -1818,6 +1818,7 @@ serve(async (req) => {
                 timeframe: 'M1',
                 confluence_score: bestSignal.indicators.confluenceScore,
                 status: 'executing',
+                entry_strategy: realStrategy,
               });
               if (claimErr) {
                 console.log(`🚫 Sinal ${bestSignal.id} já reivindicado por outro ciclo — pulando (${claimErr.code || claimErr.message})`);

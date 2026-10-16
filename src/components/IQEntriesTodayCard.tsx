@@ -31,7 +31,7 @@ export const IQEntriesTodayCard = () => {
       const reals = all.filter((o) => o.timeframe !== 'TEST' && o.created_at >= start);
       // Tendência, Histórico bom (estudo 30d dos gráficos) e Empate
       const withOrigin = reals.map((r) => {
-        const origin = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : '—';
+        const origin = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : '—';
         return { ...r, origin };
       });
       setOps(withOrigin.filter((r) => r.origin !== '—'));

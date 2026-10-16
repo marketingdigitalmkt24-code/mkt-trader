@@ -1077,10 +1077,13 @@ serve(async (req) => {
     // The existing minute cron owns result reconciliation too: leaving the
     // admin page must not remove the only poller and strand a pending IQ lock.
     const reconcileResults = async () => {
+      // Ordens reais podem ficar sem expiration_time: usa created_at + 70s como fallback.
+      const nowIso = new Date().toISOString();
+      const oldIso = new Date(Date.now() - 70_000).toISOString();
       const { data: expired, error: lookupError } = await supabase.from('operation_results')
         .select('id').eq('result', 'pending').not('iq_option_id', 'is', null)
         .not('timeframe', 'in', '(TEST,MT5)')
-        .lte('expiration_time', new Date().toISOString()).limit(1);
+        .or(`expiration_time.lte.${nowIso},and(expiration_time.is.null,created_at.lte.${oldIso})`).limit(1);
       if (lookupError) throw lookupError;
       if (!expired?.length) return;
       const { data, error } = await supabase.functions.invoke('iqoption-check-results', { body: {} });
@@ -1656,11 +1659,18 @@ serve(async (req) => {
       if (tendenciaOk && realStrategy !== 'EMPATE') {
         try {
           const fourMinAgo = Math.floor(Date.now() / 60000) * 60000 - 4 * 60000;
-          const { data: v1Win } = await supabase.from('operation_results').select('id')
-            .eq('entry_strategy', 'TENDENCIA').eq('result', 'win').neq('timeframe', 'MT5')
+          const findV1 = () => supabase.from('operation_results').select('id, result')
+            .eq('entry_strategy', 'TENDENCIA').in('result', ['win', 'pending']).neq('timeframe', 'MT5')
             .gte('created_at', new Date(fourMinAgo).toISOString())
             .lt('created_at', new Date(fourMinAgo + 60000).toISOString())
-            .limit(1);
+            .limit(5);
+          let { data: v1Rows } = await findV1();
+          // Resultado ainda pendente: sincroniza com a IQ Option agora antes de decidir.
+          if (v1Rows?.some(r => r.result === 'pending')) {
+            try { await supabase.functions.invoke('iqoption-check-results', { body: {} }); } catch (_) { /* ignore */ }
+            ({ data: v1Rows } = await findV1());
+          }
+          const v1Win = (v1Rows || []).filter(r => r.result === 'win');
           if (v1Win && v1Win.length > 0) {
             realTurn = true; realStrategy = 'TENDENCIA_V1';
             console.log(`📐 Tendência V1 → REAL: ${bestSignal.asset} (WIN de Tendência há 4 min)`);

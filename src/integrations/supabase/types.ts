@@ -189,6 +189,7 @@ export type Database = {
           profit: number
           result: string
           signal_id: string
+          telegram_sent: boolean
           timeframe: string
         }
         Insert: {
@@ -206,6 +207,7 @@ export type Database = {
           profit?: number
           result: string
           signal_id: string
+          telegram_sent?: boolean
           timeframe?: string
         }
         Update: {
@@ -223,6 +225,7 @@ export type Database = {
           profit?: number
           result?: string
           signal_id?: string
+          telegram_sent?: boolean
           timeframe?: string
         }
         Relationships: []

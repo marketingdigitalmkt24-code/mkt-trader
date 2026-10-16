@@ -1,6 +1,10 @@
 export const FOUR_WIN_STRATEGY = 'FOUR_WIN_REVERSAL';
 export const FOUR_WIN_LABEL = 'Inversão após 4 ganhos';
 
+export function canReuseBrokerSession(serviceAuthorized: boolean, sessionConfigId: string, activeConfigId: string): boolean {
+  return serviceAuthorized && sessionConfigId.length > 0 && sessionConfigId === activeConfigId;
+}
+
 // Never roll a selected candidate forward when its next-minute deadline is missed.
 export function nextReversalMinute(candidateMinuteMs: number): number {
   return candidateMinuteMs + 60000;

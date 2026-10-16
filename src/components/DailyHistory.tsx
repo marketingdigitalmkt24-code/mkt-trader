@@ -57,8 +57,8 @@ export function DailyHistory({
     if (timeframeFilter) {
       query = query.eq('timeframe', timeframeFilter);
     } else {
-      // Card de resultados IQ Option: só operações reais, sem testes nem MT5
-      query = query.neq('timeframe', 'TEST').neq('timeframe', 'MT5');
+      // Card de resultados IQ Option: somente ordens reais com número da corretora
+      query = query.neq('timeframe', 'MT5').not('iq_option_id', 'is', null);
     }
     if (excludeTimeframe) {
       query = query.neq('timeframe', excludeTimeframe);

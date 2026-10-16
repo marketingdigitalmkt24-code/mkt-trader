@@ -205,10 +205,8 @@ Deno.serve(async (req) => {
     const top = rows.filter(r => !seen.has(r.signal_id)).sort((x, y) => y._score - x._score)[0];
     const { data: minuteTaken } = await supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').limit(1);
     const fresh = top && !minuteTaken?.length ? [top] : [];
-    // Telegram: um sinal por vez — só o melhor sinal de Tendência deste minuto.
+    // One best candidate; Telegram is reserved for the four-win reversal.
     const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
-    const iso = new Date(curMin * 1000).toISOString();
-    const { data: already } = await supabase.from('operation_results').select('id').eq('created_at', iso).eq('telegram_sent', true).limit(1);
     // Persist the selected TEST first: the atomic claim checks its four predecessors.
     const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
@@ -226,7 +224,11 @@ Deno.serve(async (req) => {
             executed_at: data?.success ? new Date().toISOString() : null,
             error: data?.success ? null : details || data?.error || 'Placement failed',
           }).eq('signal_id', String(trade.signalId)).eq('entry_strategy', FOUR_WIN_STRATEGY);
-        })().catch(e => console.error('Four-win placement:', String(e)));
+        })().catch(async e => {
+          console.error('Four-win placement:', String(e));
+          await supabase.from('trade_queue').update({ status: 'failed', error: String(e) })
+            .eq('signal_id', String(trade.signalId)).eq('status', 'executing');
+        });
         // Keep broker placement alive without blocking the minute analysis.
         // @ts-ignore Hosted background runtime
         if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(task);
@@ -236,12 +238,6 @@ Deno.serve(async (req) => {
     }
     // Other entries remain TEST, but no longer generate new Telegram signals.
     // Previously notified tests still receive their final result above.
-    if (false && best?.telegram_sent && inserted) {
-      const hh = new Date(curMin * 1000).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-      await sendTelegram(['📣 SINAL — AGÊNCIA MKT TRADER', `💱 Ativo: ${best.asset}`, `🎯 Estratégia: ${LABELS[best.entry_strategy] || best.entry_strategy}`,
-        `Direção: ${best.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
-        '🏆 Melhor sinal do horário', '🧪 Operação TESTE (sem ordem real). Sem garantia de lucro.'].join('\n')).catch(e => console.error('Telegram:', String(e)));
-    }
   }
   return Response.json({ success: true, assets: series.size, inserted, resolved }, { headers: cors });
 });

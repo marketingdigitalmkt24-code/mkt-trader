@@ -1,5 +1,6 @@
 - [x] Disable Histórico bom strategy and remove its dedicated card; verify requested Dashboard card pairs.
-- [ ] Add and verify one real inverted next-signal entry after four consecutive test wins, Telegram and broker-order card.
+- [x] Add next-signal reversal after four consecutive test wins, service-only one-shot queue claim, Telegram and broker-order card; unit tests pass and authenticated cards checked.
+- [ ] Verify next natural four-win reversal, Telegram entry/result and broker order read-back (waiting for four new consecutive TEST wins; current broker account is PRACTICE, not cash REAL; do not force a trade).
 - [x] Add strategy badges to IQ Option's latest operations, with honest labels for unmatched history.
 - [x] Add clear emojis throughout automatic Telegram entry alerts and final result messages.
 - [x] Compare recorded losses by strategy using linked IQ Option operations.

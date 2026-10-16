@@ -391,11 +391,13 @@ export function LiveOperationsCard() {
                     {trade.entry_strategy === 'EMPATE' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">🤝 EMPATE</Badge>
                     )}
-                    {trade.result === 'tie' && (trade.entry_strategy === 'TENDENCIA' || trade.entry_strategy === 'HISTORICO') && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 border-amber-500/50 text-amber-500 whitespace-normal">🤝 Empate → próxima entrada REAL</Badge>
-                    )}
                     {trade.entry_strategy === 'REVERSAO_RSI' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 REVERSÃO RSI</Badge>
+                    )}
+                    {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy] && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">
+                        {({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy]}
+                      </Badge>
                     )}
                     {trade.telegram_sent && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-sky-500/50 text-sky-500">📣 Telegram</Badge>

@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
     const iso = new Date(curMin * 1000).toISOString();
     const { data: already } = await supabase.from('operation_results').select('id').eq('created_at', iso).eq('telegram_sent', true).limit(1);
     if (best && !already?.length) best.telegram_sent = true;
-    const clean = fresh.map(({ _score, ...r }) => r);
+    const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: r.telegram_sent === true }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
     if (best?.telegram_sent && inserted) {
       const hh = new Date(curMin * 1000).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });

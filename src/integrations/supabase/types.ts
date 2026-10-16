@@ -366,6 +366,7 @@ export type Database = {
           confluence_score: number
           created_at: string
           direction: string
+          entry_strategy: string | null
           error: string | null
           executed_at: string | null
           expiration: number
@@ -383,6 +384,7 @@ export type Database = {
           confluence_score?: number
           created_at?: string
           direction: string
+          entry_strategy?: string | null
           error?: string | null
           executed_at?: string | null
           expiration?: number
@@ -400,6 +402,7 @@ export type Database = {
           confluence_score?: number
           created_at?: string
           direction?: string
+          entry_strategy?: string | null
           error?: string | null
           executed_at?: string | null
           expiration?: number

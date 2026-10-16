@@ -33,6 +33,7 @@ export function ForexPracticeCard() {
   const wins = closed.filter(r => (r.result_r ?? 0) > 0).length;
   const losses = closed.filter(r => (r.result_r ?? 0) < 0).length;
   const totalR = closed.reduce((s, r) => s + (r.result_r ?? 0), 0);
+  // (somente ordens aceitas pela IQ Option; recusadas aparecem com o motivo)
 
   return (
     <Card className="border-accent/30">

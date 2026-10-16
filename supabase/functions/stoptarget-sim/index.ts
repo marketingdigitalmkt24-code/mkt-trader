@@ -102,7 +102,9 @@ Deno.serve(async (req) => {
 
   const nowIso = new Date().toISOString();
   // 1) Posições abertas: checa stop/alvo/tempo
-  const { data: openPos } = await supabase.from('stop_target_positions').select('*').eq('status', 'open');
+  // Simuladas antigas (sem ordem na IQ Option) são descartadas
+  await supabase.from('stop_target_positions').delete().is('iq_status', null);
+  const { data: openPos } = await supabase.from('stop_target_positions').select('*').eq('status', 'open').not('iq_order_id', 'is', null);
   const closed: any[] = []; const stillOpen = (openPos || []).length;
   for (const p of openPos || []) {
     const cs = cleaned[p.symbol] || [];
@@ -155,7 +157,8 @@ Deno.serve(async (req) => {
         // Ordem forex de verdade na conta de TREINO (PRACTICE) com stop e alvo no preço
         const lev = 100; const amount = Math.max(1, Math.min(5000, Math.round(10 * entry / (lev * risk))));
         const iq = await placePractice(ws, listeners, practiceId, n, direction, amount, lev, stop, target);
-        await supabase.from('stop_target_positions').update({ iq_account: 'PRACTICE', iq_amount: amount, iq_leverage: lev, iq_order_id: iq.id || null, iq_status: iq.id ? 'open' : 'failed', iq_error: iq.error || null }).eq('id', ins.id);
+        // Sem simulado: se a IQ Option recusar, a linha fica fechada como recusada (não bloqueia e não conta resultado)
+        await supabase.from('stop_target_positions').update({ iq_account: 'PRACTICE', iq_amount: amount, iq_leverage: lev, iq_order_id: iq.id || null, iq_status: iq.id ? 'open' : 'failed', iq_error: iq.error || null, ...(iq.id ? {} : { status: 'closed', result_kind: 'rejected', result_r: null, closed_at: new Date().toISOString() }) }).eq('id', ins.id);
         opened.iq = iq;
         break outer;
       }

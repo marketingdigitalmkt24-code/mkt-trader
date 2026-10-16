@@ -75,11 +75,10 @@ function analyze(cs: K[], splitT: number, acc: Acc) {
     if (upT && cs[i].l <= e21[i] && c[i] > e21[i]) pats.push(['Recuo na média 21', 'CALL']);
     if (dnT && cs[i].h >= e21[i] && c[i] < e21[i]) pats.push(['Recuo na média 21', 'PUT']);
     if (!pats.length) continue;
-    const part = nx.t < splitT ? 'busca' : 'valida';
-    const ok5 = cs[i + 5].t - nx.t === 240;
+    // Dia BRT (UTC-3) para conferência separada por data.
+    const part = new Date((nx.t - 3 * 3600) * 1000).toISOString().slice(0, 10);
     for (const [p, dir] of pats) {
       if (nx.c !== nx.o) add(acc, `${p}|1m|${part}`, dir === 'CALL' ? nx.c > nx.o : nx.c < nx.o);
-      if (ok5) { const ex = cs[i + 5].c; if (ex !== nx.o) add(acc, `${p}|5m|${part}`, dir === 'CALL' ? ex > nx.o : ex < nx.o); }
     }
   }
 }

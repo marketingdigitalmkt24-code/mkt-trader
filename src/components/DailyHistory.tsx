@@ -50,15 +50,15 @@ export function DailyHistory({
 
     let query = supabase
       .from('operation_results')
-      .select('created_at, profit, result, timeframe')
+      .select('created_at, profit, result, timeframe, iq_option_id')
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false });
 
     if (timeframeFilter) {
       query = query.eq('timeframe', timeframeFilter);
     } else {
-      // Card de resultados IQ Option: só operações reais, sem testes nem MT5
-      query = query.neq('timeframe', 'TEST').neq('timeframe', 'MT5');
+      // Card de resultados IQ Option: somente ordens reais com número da corretora
+      query = query.neq('timeframe', 'MT5').not('iq_option_id', 'is', null);
     }
     if (excludeTimeframe) {
       query = query.neq('timeframe', excludeTimeframe);
@@ -68,7 +68,9 @@ export function DailyHistory({
     if (error || !data) return;
 
     const grouped: Record<string, { profit: number; wins: number; losses: number; trades: number }> = {};
-    for (const r of data) {
+    for (const r of (data as Array<{ created_at: string; profit: number; result: string; timeframe: string; iq_option_id: string | null }>)) {
+      // Ignora qualquer registro de teste, mesmo que carregue um id simulado
+      if (!timeframeFilter && r.iq_option_id && String(r.iq_option_id).toLowerCase().startsWith('test')) continue;
       const date = getBrasiliaDateKey(new Date(r.created_at));
       if (!grouped[date]) grouped[date] = { profit: 0, wins: 0, losses: 0, trades: 0 };
       grouped[date].profit += r.profit;

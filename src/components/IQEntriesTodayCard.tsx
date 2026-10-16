@@ -35,7 +35,11 @@ export const IQEntriesTodayCard = () => {
         const isTest = r.timeframe === 'TEST';
         if (isTest && r.entry_strategy !== 'TENDENCIA' && r.entry_strategy !== 'REVERSAO_RSI') return { ...r, origin: '—' };
         const base = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : '—';
-        return { ...r, origin: base };
+        // Entradas de teste vêm com lucro 0: calcula com entrada de US$10 (payout 85%).
+        const profit = isTest && !Number(r.profit)
+          ? (r.result === 'win' ? 8.5 : r.result === 'loss' ? -10 : 0)
+          : Number(r.profit || 0);
+        return { ...r, profit, origin: base };
       });
       setOps(withOrigin.filter((r) => r.origin !== '—'));
     };

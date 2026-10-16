@@ -36,6 +36,13 @@
       "when": 1792192100492,
       "tag": "0004_four_win_reversal_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792192227252,
+      "tag": "0005_four_win_safety_settings",
+      "breakpoints": true
     }
   ]
 }

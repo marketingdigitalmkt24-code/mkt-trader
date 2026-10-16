@@ -1691,10 +1691,11 @@ serve(async (req) => {
           }
         } catch (e) { console.log('⚠️ Erro pausa por ativo:', e); }
       }
+      // Modo TESTE total (pedido 16/10/2026 13:56): nenhuma entrada real; as 7 estratégias rodam em TESTE
+      // em todos os ativos abertos pela função multi-strategy-test. Este gerador não abre mais nada.
+      realTurn = false;
       if (!realTurn) {
-        const { data: openTest } = await supabase.from('operation_results')
-          .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
-        if (!openTest || openTest.length === 0) {
+        if (false) {
           const dir = reversaoRsi ? 'CALL' : String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
           let entryStrategy = 'IA';
           // Tendência alinhada agora abre REAL direto (bloco acima); aqui só rotula o TESTE se cair neste caminho.

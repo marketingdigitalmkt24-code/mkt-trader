@@ -174,7 +174,10 @@ Deno.serve(async (req) => {
   for (const [asset, cs] of series) {
     const closed = cs.filter(k => k.t + 60 <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
-    for (const [strat, dir] of detect(closed)) {
+    // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
+    const fired = detect(closed);
+    const pick = fired.find(([st]) => st === 'TENDENCIA') || fired[0];
+    for (const [strat, dir] of pick ? [pick] : []) {
       rows.push({
         signal_id: `t7-${asset}-${strat}-${curMin}`, asset, direction: dir, entry_price: closed[closed.length - 1].c,
         result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),

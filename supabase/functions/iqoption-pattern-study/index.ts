@@ -115,6 +115,7 @@ Deno.serve(async (req) => {
   const nowSec = Math.floor(Date.now() / 1000);
   const splitT = nowSec - 10 * 86400;
 
+  let dbg: any = null;
   const meta = new Map<string, { pay: number; kind: string; otc: boolean }>();
   const picked: { symbol: string; candles: K[] }[] = await new Promise((resolve) => {
     const ws = new WebSocket(WS_URL);
@@ -128,6 +129,7 @@ Deno.serve(async (req) => {
       const d = JSON.parse(ev.data);
       if (d.name === 'profile') ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
       if (d.name === 'initialization-data') {
+        if (body.debug) { const pick = (o: any) => Object.values<any>(o?.actives || {}).filter((a: any) => /EURUSD/i.test(a.name)).map((a: any) => ({ name: a.name, enabled: a.enabled, option: a.option })); dbg = { binary: pick(d.msg?.binary), turbo: pick(d.msg?.turbo), keys: Object.keys(d.msg || {}) }; clearTimeout(timer); finish(); return; }
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
         const cand = new Map<string, number>();
         for (const [id, a] of Object.entries<any>(all)) {
@@ -161,6 +163,7 @@ Deno.serve(async (req) => {
     };
   });
 
+  if (dbg) return Response.json(dbg, { headers: cors });
   const acc: Acc = {};
   const syms: string[] = [];
   for (const p of picked) {

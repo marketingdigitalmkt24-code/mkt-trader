@@ -1068,6 +1068,10 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    // Teste das 7 estratégias em todos os ativos abertos, disparado pelo mesmo job de 1 minuto.
+    const multiTest = supabase.functions.invoke('multi-strategy-test', { body: {} }).catch((e) => console.log('⚠️ multi-strategy-test:', e));
+    // @ts-ignore EdgeRuntime is available in the hosted runtime
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(multiTest);
 
     // Retry already closed, notified IQ results even when trading is paused or assets are closed.
     const telegramResults = dispatchIQResults(supabase).catch(error => console.error('Telegram resultados:', String(error)));

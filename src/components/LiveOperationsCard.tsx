@@ -30,6 +30,7 @@ interface RecentTrade {
   signal_id: string;
   entry_strategy?: string;
   strategy?: string;
+  telegram_sent?: boolean;
 }
 
 const strategyLabels: Record<string, string> = {
@@ -149,7 +150,7 @@ export function LiveOperationsCard() {
       const from = (pageRef.current - 1) * PAGE_SIZE;
       const { data, count, error } = await supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy', { count: 'exact' })
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent', { count: 'exact' })
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
         .order('created_at', { ascending: false })
@@ -392,6 +393,9 @@ export function LiveOperationsCard() {
                     )}
                     {trade.entry_strategy === 'REVERSAO_RSI' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 REVERSÃO RSI</Badge>
+                    )}
+                    {trade.telegram_sent && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-sky-500/50 text-sky-500">📣 Telegram</Badge>
                     )}
                     {trade.timeframe === 'FOREX' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">FOREX</Badge>

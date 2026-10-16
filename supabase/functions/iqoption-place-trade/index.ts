@@ -530,15 +530,31 @@ serve(async (req) => {
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'
           : entryStrategy === 'EMPATE' ? 'Após empate' : 'IA';
         notifyEntry = async entryAt => {
-          // Regra (16/10/2026): só envia ao Telegram quando houver OUTRO sinal real
-          // autorizado no mesmo minuto com a estratégia complementar:
-          // Tendência alinhada + Reversão RSI juntas. Sinal sozinho não sai no canal.
+          // Regra (16/10/2026): só envia ao Telegram quando houver OUTRO sinal
+          // no mesmo minuto com a estratégia complementar (Tendência + Reversão RSI).
+          // O par pode ser real (trade_queue) ou TESTE (operation_results, ativo
+          // recusado pela corretora); par de teste também libera o envio e recebe
+          // uma mensagem própria marcada como TESTE.
+          const complementary = entryStrategy === 'TENDENCIA' ? 'REVERSAO_RSI'
+            : entryStrategy === 'REVERSAO_RSI' ? 'TENDENCIA' : null;
+          if (!complementary) {
+            console.log(`📵 Telegram ignorado: sinal ${signalId} (${entryStrategy}) sem estratégia complementar`);
+            return undefined;
+          }
           const { data: pairSignals } = await supabase.from('trade_queue').select('signal_id, entry_strategy')
             .eq('status', 'executing').neq('signal_id', signalId)
             .gte('created_at', new Date(Date.now() - 120000).toISOString()).limit(5);
-          const hasComplementaryPair = (pairSignals || []).some(p =>
-            (entryStrategy === 'TENDENCIA' && p.entry_strategy === 'REVERSAO_RSI') ||
-            (entryStrategy === 'REVERSAO_RSI' && p.entry_strategy === 'TENDENCIA'));
+          let hasComplementaryPair = (pairSignals || []).some(p => p.entry_strategy === complementary);
+          let testPair: { signal_id: string; asset: string; direction: string } | null = null;
+          if (!hasComplementaryPair) {
+            const { data: testPairs } = await supabase.from('operation_results')
+              .select('signal_id, asset, direction')
+              .eq('timeframe', 'TEST').eq('entry_strategy', complementary)
+              .gte('created_at', new Date(Date.now() - 120000).toISOString())
+              .order('created_at', { ascending: false }).limit(1);
+            testPair = (testPairs || [])[0] || null;
+            hasComplementaryPair = !!testPair;
+          }
           if (!hasComplementaryPair) {
             console.log(`📵 Telegram ignorado: sinal ${signalId} (${entryStrategy}) sem par Tendência+Reversão RSI no mesmo minuto`);
             return undefined;
@@ -557,6 +573,42 @@ serve(async (req) => {
             signal_id: signalId, chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy,
           }, { onConflict: 'signal_id', ignoreDuplicates: true });
           if (deliveryError) throw deliveryError;
+          await supabase.from('operation_results').update({ telegram_sent: true }).eq('signal_id', signalId);
+          // Par de teste (ativo recusado): avisa no canal com marcação de TESTE,
+          // sem registrar no ledger de resultados (não há resultado real a enviar).
+          if (testPair) {
+            const testEntryTime = new Date(entryAt).toLocaleTimeString('pt-BR', {
+              timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit',
+            });
+            const testText = [
+              '🧪 AGÊNCIA MKT TRADER — Sinal TESTE (sem ordem real)',
+              `💱 Ativo: ${testPair.asset}`,
+              `🎯 Estratégia: ${complementary === 'REVERSAO_RSI' ? 'Reversão RSI' : 'Tendência alinhada'}`,
+              `Direção: ${String(testPair.direction).toUpperCase() === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`,
+              `⏰ Entrada prevista: ${testEntryTime} (Brasília)`,
+              '⚠️ A corretora recusou este ativo; entrada apenas simulada. Sem garantia de lucro.',
+            ].join('\n');
+            try {
+              const testResp = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${Deno.env.get('LOVABLE_API_KEY') || ''}`,
+                  'X-Connection-Api-Key': Deno.env.get('TELEGRAM_API_KEY') || '',
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ chat_id: IQ_TELEGRAM_CHANNEL, text: testText }),
+                signal: AbortSignal.timeout(8000),
+              });
+              if (testResp.ok) {
+                await supabase.from('operation_results').update({ telegram_sent: true }).eq('signal_id', testPair.signal_id);
+                console.log(`📱 Telegram TESTE enviado: ${testPair.asset} | sinal ${testPair.signal_id}`);
+              } else {
+                console.error(`❌ Telegram TESTE [${testResp.status}]: ${await testResp.text()}`);
+              }
+            } catch (e) {
+              console.error('❌ Telegram TESTE:', String(e));
+            }
+          }
           return messageId;
         };
       }

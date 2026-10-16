@@ -1,0 +1,193 @@
+// Modo TESTE com 7 estratégias (pedido 16/10/2026): roda a cada minuto em TODOS os ativos abertos da IQ Option.
+// Nada abre na corretora. Cada entrada é registrada como TESTE na vela :00 com expiração de 1 minuto
+// e resolvida pelas velas reais da IQ Option. Telegram: só o resultado WIN da Tendência (mesmo em teste).
+import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
+
+const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
+const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
+const WS_URL = 'wss://iqoption.com/echo/websocket';
+const OPEN = 'test7_open';
+type K = { t: number; o: number; c: number; h: number; l: number };
+
+export const LABELS: Record<string, string> = {
+  TENDENCIA: 'Tendência', REVERSAO_RSI: 'Reversão RSI', VELA_FORCA: 'Vela de força', ROMPIMENTO: 'Rompimento',
+  RECUO_EMA21: 'Recuo na média 21', KDJ: 'KDJ', ICHIMOKU: 'Ichimoku',
+};
+
+async function login(email: string, password: string): Promise<string | null> {
+  for (const u of AUTH_URLS) {
+    try {
+      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(10000) });
+      const d = await r.json();
+      if (d.code === 'success' && d.ssid) return d.ssid;
+    } catch (_) { /* */ }
+  }
+  return null;
+}
+
+function symbolOf(rawName: string) {
+  let n = String(rawName || '').toUpperCase().replace('FRONT.', '');
+  const otc = n.includes('-OTC') || /otc/i.test(rawName);
+  n = n.replace('-OTC', '').replace('-OP', '');
+  if (/^[A-Z]{6}$/.test(n)) n = `${n.slice(0, 3)}/${n.slice(3)}`;
+  const base = n.replace(/[-\s]*BLITZ/i, '').replace(/[-\s]*OTC$/i, '').trim();
+  return otc ? `${base}-OTC` : base;
+}
+
+const ema = (p: number, src: number[]) => { const a = 2 / (p + 1); const r: number[] = []; src.forEach((x, i) => r.push(i ? x * a + r[i - 1] * (1 - a) : x)); return r; };
+
+// Retorna as estratégias que dispararam na última vela fechada (índice i).
+export function detect(cs: K[]): [string, 'CALL' | 'PUT'][] {
+  const i = cs.length - 1;
+  if (i < 80) return [];
+  const c = cs.map(k => k.c);
+  const e9 = ema(9, c), e21 = ema(21, c), e12 = ema(12, c), e26 = ema(26, c);
+  const macd = c.map((_, j) => e12[j] - e26[j]); const sig = ema(9, macd);
+  let s50 = 0; for (let j = i - 49; j <= i; j++) s50 += c[j]; s50 /= 50;
+  let ag = 0, al = 0; const rsi: number[] = [50];
+  for (let j = 1; j < c.length; j++) {
+    const d = c[j] - c[j - 1], g = Math.max(d, 0), l = Math.max(-d, 0);
+    if (j <= 14) { ag += g / 14; al += l / 14; } else { ag = (ag * 13 + g) / 14; al = (al * 13 + l) / 14; }
+    rsi.push(al === 0 ? 100 : 100 - 100 / (1 + ag / al));
+  }
+  let hi14 = -Infinity, lo14 = Infinity; for (let j = i - 13; j <= i; j++) { hi14 = Math.max(hi14, cs[j].h); lo14 = Math.min(lo14, cs[j].l); }
+  const stoch = hi14 === lo14 ? 50 : (c[i] - lo14) / (hi14 - lo14) * 100;
+  const out: [string, 'CALL' | 'PUT'][] = [];
+  const h = macd[i] - sig[i];
+  const upT = e9[i] > e21[i] && e21[i] > s50 && c[i] > e21[i];
+  const dnT = e9[i] < e21[i] && e21[i] < s50 && c[i] < e21[i];
+  if (upT && h > 0 && rsi[i] >= 50 && rsi[i] <= 60) out.push(['TENDENCIA', 'CALL']);
+  else if (dnT && h < 0 && rsi[i] >= 30 && rsi[i] <= 50) out.push(['TENDENCIA', 'PUT']);
+  if (rsi[i] > 70 && stoch > 80) out.push(['REVERSAO_RSI', 'PUT']);
+  else if (rsi[i] < 30 && stoch < 20) out.push(['REVERSAO_RSI', 'CALL']);
+  let avgB = 0; for (let j = i - 20; j < i; j++) avgB += Math.abs(cs[j].c - cs[j].o); avgB /= 20;
+  const b = Math.abs(cs[i].c - cs[i].o);
+  if (avgB > 0 && b > 2 * avgB) out.push(['VELA_FORCA', cs[i].c > cs[i].o ? 'CALL' : 'PUT']);
+  let hi = -Infinity, lo = Infinity; for (let j = i - 20; j < i; j++) { hi = Math.max(hi, cs[j].h); lo = Math.min(lo, cs[j].l); }
+  if (c[i] > hi) out.push(['ROMPIMENTO', 'CALL']); else if (c[i] < lo) out.push(['ROMPIMENTO', 'PUT']);
+  if (upT && cs[i].l <= e21[i] && c[i] > e21[i]) out.push(['RECUO_EMA21', 'CALL']);
+  else if (dnT && cs[i].h >= e21[i] && c[i] < e21[i]) out.push(['RECUO_EMA21', 'PUT']);
+  // KDJ (9,3,3)
+  let k = 50, d = 50, pk = 50, pd = 50;
+  for (let j = 0; j <= i; j++) {
+    let h9 = -Infinity, l9 = Infinity; for (let m = Math.max(0, j - 8); m <= j; m++) { h9 = Math.max(h9, cs[m].h); l9 = Math.min(l9, cs[m].l); }
+    const rsv = h9 === l9 ? 50 : (c[j] - l9) / (h9 - l9) * 100;
+    pk = k; pd = d; k = k * 2 / 3 + rsv / 3; d = d * 2 / 3 + k / 3;
+  }
+  const jv = 3 * k - 2 * d;
+  if (pk <= pd && k > d && jv < 20) out.push(['KDJ', 'CALL']);
+  else if (pk >= pd && k < d && jv > 80) out.push(['KDJ', 'PUT']);
+  // Ichimoku simplificado
+  const mid = (x: number, n: number) => { let a = -Infinity, z = Infinity; for (let m = Math.max(0, x - n + 1); m <= x; m++) { a = Math.max(a, cs[m].h); z = Math.min(z, cs[m].l); } return (a + z) / 2; };
+  const tk = mid(i, 9), kj = mid(i, 26), ptk = mid(i - 1, 9), pkj = mid(i - 1, 26);
+  const sa = (mid(i - 26, 9) + mid(i - 26, 26)) / 2, sb = mid(i - 26, 52);
+  if (ptk <= pkj && tk > kj && c[i] > Math.max(sa, sb)) out.push(['ICHIMOKU', 'CALL']);
+  else if (ptk >= pkj && tk < kj && c[i] < Math.min(sa, sb)) out.push(['ICHIMOKU', 'PUT']);
+  return out;
+}
+
+async function sendTelegram(text: string) {
+  const lk = Deno.env.get('LOVABLE_API_KEY'), tk = Deno.env.get('TELEGRAM_API_KEY');
+  if (!lk || !tk) { console.error('Telegram não configurado'); return; }
+  const r = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
+    method: 'POST', headers: { Authorization: `Bearer ${lk}`, 'X-Connection-Api-Key': tk, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: IQ_TELEGRAM_CHANNEL, text }), signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) console.error(`Telegram [${r.status}]: ${await r.text()}`);
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
+  if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
+  const ssid = await login(cfg.email, cfg.password);
+  if (!ssid) return Response.json({ success: false, error: 'login failed' }, { headers: cors });
+  const nowSec = Math.floor(Date.now() / 1000);
+  const curMin = Math.floor(nowSec / 60) * 60;
+
+  const series = new Map<string, K[]>();
+  await new Promise<void>((resolve) => {
+    const ws = new WebSocket(WS_URL);
+    let pending = 0; const byReq = new Map<string, string>();
+    const finish = () => { try { ws.close(); } catch (_) { /* */ } resolve(); };
+    const timer = setTimeout(finish, 40000);
+    ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
+    ws.onerror = () => { clearTimeout(timer); finish(); };
+    ws.onmessage = async (ev) => {
+      const d = JSON.parse(ev.data);
+      if (d.name === 'profile') ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
+      if (d.name === 'initialization-data') {
+        const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
+        const cand = new Map<string, number>();
+        for (const [id, a] of Object.entries<any>(all)) {
+          if (!a.enabled || a.is_suspended) continue;
+          const s = symbolOf(a.name);
+          if (!cand.has(s)) cand.set(s, Number(id));
+        }
+        pending = cand.size;
+        if (!pending) { clearTimeout(timer); finish(); return; }
+        for (const [s, id] of cand) {
+          const rid = `m${id}`; byReq.set(rid, s);
+          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to: nowSec, count: 130 } } }));
+          await new Promise(r => setTimeout(r, 40));
+        }
+      }
+      if (d.name === 'candles' && byReq.has(d.request_id)) {
+        const s = byReq.get(d.request_id)!; byReq.delete(d.request_id);
+        series.set(s, (d.msg?.candles || []).map((c: any) => ({ t: c.from, o: c.open, c: c.close, h: c.max, l: c.min }))
+          .filter((k: K) => typeof k.c === 'number').sort((a: K, b: K) => a.t - b.t));
+        if (--pending <= 0) { clearTimeout(timer); finish(); }
+      }
+    };
+  });
+
+  // 1) Resolver entradas TESTE vencidas com a vela real da IQ Option.
+  let resolved = 0;
+  const { data: open } = await supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at')
+    .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000);
+  for (const o of open || []) {
+    const entrySec = Math.floor(new Date(o.created_at).getTime() / 1000);
+    const k = series.get(o.asset)?.find(x => x.t === entrySec);
+    if (!k || k.t + 60 > nowSec) {
+      if (nowSec - entrySec > 600) await supabase.from('operation_results').update({ result: 'expired' }).eq('id', o.id).eq('result', OPEN);
+      continue;
+    }
+    const res = k.c === k.o ? 'tie' : (k.c > k.o) === (o.direction === 'CALL') ? 'win' : 'loss';
+    const profit = res === 'win' ? 8.5 : res === 'loss' ? -10 : 0;
+    const { data: upd } = await supabase.from('operation_results').update({ result: res, profit, entry_price: k.o, exit_price: k.c })
+      .eq('id', o.id).eq('result', OPEN).select('id');
+    if (!upd?.length) continue;
+    resolved++;
+    if (res === 'win' && o.entry_strategy === 'TENDENCIA') {
+      const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+      await sendTelegram(['✅ WIN — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, '🎯 Estratégia: Tendência',
+        `Direção: ${o.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
+        '🧪 Operação TESTE (sem ordem real). Sem garantia de lucro.'].join('\n')).catch(e => console.error('Telegram:', String(e)));
+    }
+  }
+
+  // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
+  const rows: any[] = [];
+  for (const [asset, cs] of series) {
+    const closed = cs.filter(k => k.t + 60 <= curMin);
+    if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
+    for (const [strat, dir] of detect(closed)) {
+      rows.push({
+        signal_id: `t7-${asset}-${strat}-${curMin}`, asset, direction: dir, entry_price: closed[closed.length - 1].c,
+        result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
+        expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: true, is_ai_analyzed: false,
+        timeframe: 'TEST', entry_strategy: strat,
+      });
+    }
+  }
+  let inserted = 0;
+  if (rows.length) {
+    const { data: exist } = await supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id));
+    const seen = new Set((exist || []).map((e: any) => e.signal_id));
+    const fresh = rows.filter(r => !seen.has(r.signal_id));
+    if (fresh.length) { const { error } = await supabase.from('operation_results').insert(fresh); if (error) console.error(error.message); else inserted = fresh.length; }
+  }
+  return Response.json({ success: true, assets: series.size, inserted, resolved }, { headers: cors });
+});

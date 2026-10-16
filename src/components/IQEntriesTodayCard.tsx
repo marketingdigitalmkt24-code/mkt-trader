@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey, historyStart } from './dayLabel';
 
-type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null };
+type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null; iq_option_id: string | null };
 type Row = Op & { origin: string };
 
 const PAGE_SIZE = 12;
@@ -22,26 +22,19 @@ export const IQEntriesTodayCard = () => {
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, timeframe, entry_strategy')
+        .select('id, asset, direction, result, profit, created_at, timeframe, entry_strategy, iq_option_id')
         .neq('timeframe', 'MT5')
-        .gte('created_at', new Date(new Date(historyStart()).getTime() - 15 * 60000).toISOString())
+        .neq('timeframe', 'TEST')
+        .not('iq_option_id', 'is', null)
+        .gte('created_at', historyStart())
         .order('created_at', { ascending: false }).limit(1000);
-      const all = (data as Op[]) || [];
-      const start = historyStart();
-      const inRange = all.filter((o) => o.created_at >= start);
-      // Reais: Tendência, Histórico bom, Empate e Reversão RSI.
-      // Testes: só Tendência e Reversão RSI, sem rótulo de teste — mostram o valor do ganho/perda.
-      const withOrigin = inRange.map((r) => {
-        const isTest = r.timeframe === 'TEST';
-        if (isTest && r.entry_strategy !== 'TENDENCIA' && r.entry_strategy !== 'REVERSAO_RSI') return { ...r, origin: '—' };
-        const base = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : '—';
-        // Entradas de teste vêm com lucro 0: calcula com entrada de US$10 (payout 85%).
-        const profit = isTest && !Number(r.profit)
-          ? (r.result === 'win' ? 8.5 : r.result === 'loss' ? -10 : 0)
-          : Number(r.profit || 0);
-        return { ...r, profit, origin: base };
+      const all = ((data as Op[]) || []).filter((o) => o.iq_option_id && !String(o.iq_option_id).toLowerCase().startsWith('test'));
+      // Somente ordens reais aceitas pela IQ Option (com número de ordem).
+      const withOrigin = all.map((r) => {
+        const base = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'IA';
+        return { ...r, profit: Number(r.profit || 0), origin: base };
       });
-      setOps(withOrigin.filter((r) => r.origin !== '—'));
+      setOps(withOrigin);
     };
     load();
     const id = setInterval(load, 10000);

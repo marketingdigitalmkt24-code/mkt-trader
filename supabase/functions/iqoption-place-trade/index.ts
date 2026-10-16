@@ -531,12 +531,16 @@ serve(async (req) => {
           : entryStrategy === 'EMPATE' ? 'Após empate' : 'IA';
         notifyEntry = async entryAt => {
           // Regra (16/10/2026): só envia ao Telegram quando houver OUTRO sinal real
-          // autorizado no mesmo minuto (par de sinais). Sinal sozinho não sai no canal.
-          const { data: pairSignals } = await supabase.from('trade_queue').select('signal_id')
+          // autorizado no mesmo minuto com a estratégia complementar:
+          // Tendência alinhada + Reversão RSI juntas. Sinal sozinho não sai no canal.
+          const { data: pairSignals } = await supabase.from('trade_queue').select('signal_id, entry_strategy')
             .eq('status', 'executing').neq('signal_id', signalId)
             .gte('created_at', new Date(Date.now() - 120000).toISOString()).limit(5);
-          if (!pairSignals || pairSignals.length === 0) {
-            console.log(`📵 Telegram ignorado: sinal ${signalId} sem par no mesmo minuto`);
+          const hasComplementaryPair = (pairSignals || []).some(p =>
+            (entryStrategy === 'TENDENCIA' && p.entry_strategy === 'REVERSAO_RSI') ||
+            (entryStrategy === 'REVERSAO_RSI' && p.entry_strategy === 'TENDENCIA'));
+          if (!hasComplementaryPair) {
+            console.log(`📵 Telegram ignorado: sinal ${signalId} (${entryStrategy}) sem par Tendência+Reversão RSI no mesmo minuto`);
             return undefined;
           }
           const messageId = await sendIQAlert({

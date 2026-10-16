@@ -661,6 +661,9 @@ serve(async (req) => {
     if (result.success && result.tradeId) {
       const isForex = usedMode === 'forex';
       const timeframe = isForex ? 'FOREX' : (tradeRequest.timeframe || (tradeRequest.expiration <= 1 ? 'M1' : 'M5'));
+      // Expiração = início do minuto de entrada (arredondado) + duração, para a sincronização achar a ordem logo ao vencer.
+      const expirationIso = isForex ? null
+        : new Date((Math.round(Date.now() / 60000) + (tradeRequest.expiration || 1)) * 60000).toISOString();
       
       await supabase.from('operation_results').insert({
         signal_id: tradeRequest.signalId || `auto_${Date.now()}`,
@@ -674,16 +677,17 @@ serve(async (req) => {
         is_ai_analyzed: tradeRequest.isAIAnalyzed || false,
         entry_strategy: entryStrategy,
         timeframe,
+        expiration_time: expirationIso,
       });
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
 
       // Schedule result checks right at expiry (fast win/loss → instant post-win continuation)
       if (!isForex) {
-        const expMs = (Math.ceil(Date.now() / 60000) + (tradeRequest.expiration || 1)) * 60000;
+        const expMs = expirationIso ? new Date(expirationIso).getTime() : Date.now() + 60000;
         const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/iqoption-check-results`;
         const key = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-        const delays = [2000, 6000, 12000, 20000].map(d => Math.max(0, expMs - Date.now() + d));
+        const delays = [1500, 4000, 8000, 14000, 25000, 45000].map(d => Math.max(0, expMs - Date.now() + d));
         const task = (async () => {
           let last = 0;
           for (const d of delays) {

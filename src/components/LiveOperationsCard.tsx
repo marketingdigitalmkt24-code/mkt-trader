@@ -34,6 +34,17 @@ interface RecentTrade {
 }
 
 const strategyLabels: Record<string, string> = {
+  TENDENCIA: 'Tendência',
+  TENDENCIA_V1: 'Tendência V1',
+  FOUR_WIN_REVERSAL: 'Após 4 ganhos',
+  HISTORICO: 'Histórico bom',
+  EMPATE: 'Empate',
+  REVERSAO_RSI: 'Reversão RSI',
+  VELA_FORCA: 'Vela de força',
+  ROMPIMENTO: 'Rompimento',
+  RECUO_EMA21: 'Recuo na média 21',
+  KDJ: 'KDJ',
+  ICHIMOKU: 'Ichimoku',
   PULLBACK: 'Pullback + Pavio',
   EDGE: 'Edge Scanner',
   AI: 'IA',
@@ -408,9 +419,11 @@ export function LiveOperationsCard() {
                     {trade.timeframe === 'FOREX' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">FOREX</Badge>
                     )}
-                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal text-muted-foreground">
-                      {strategyLabels[trade.strategy || ''] || 'Não identificada'}
-                    </Badge>
+                    {!strategyLabels[trade.entry_strategy || ''] && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal text-muted-foreground">
+                        {trade.entry_strategy ? 'Não identificada' : strategyLabels[trade.strategy || ''] || 'Não identificada'}
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-auto">
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>

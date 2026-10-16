@@ -4,7 +4,6 @@ import { HistoricoBomCard } from '@/components/HistoricoBomCard';
 import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
 import { LiveOperationsCard } from '@/components/LiveOperationsCard';
 import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
-import { StopTargetTestCard } from '@/components/StopTargetTestCard';
 import { ForexPracticeCard } from '@/components/ForexPracticeCard';
 
 export function TradingDashboard() {
@@ -12,7 +11,6 @@ export function TradingDashboard() {
     <div className="space-y-3 sm:space-y-4">
       <BrokerConnectionsCard />
       <ForexPracticeCard />
-      <StopTargetTestCard />
       <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
         <BankManagementCard />
         <IQEntriesTodayCard />

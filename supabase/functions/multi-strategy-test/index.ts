@@ -3,6 +3,7 @@
 // e resolvida pelas velas reais da IQ Option. Telegram: só o resultado WIN da Tendência (mesmo em teste).
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
+import { FOUR_WIN_STRATEGY } from '../_shared/four-win-reversal.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -99,7 +100,13 @@ async function sendTelegram(text: string) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
-  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const url = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !serviceKey) return Response.json({ error: 'Missing configuration' }, { status: 500, headers: cors });
+  if (req.method !== 'POST' || req.headers.get('Authorization') !== `Bearer ${serviceKey}`) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors });
+  }
+  const supabase = createClient(url, serviceKey);
   const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
   const ssid = await login(cfg.email, cfg.password);
@@ -202,10 +209,34 @@ Deno.serve(async (req) => {
     const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
     const iso = new Date(curMin * 1000).toISOString();
     const { data: already } = await supabase.from('operation_results').select('id').eq('created_at', iso).eq('telegram_sent', true).limit(1);
-    if (best && !already?.length) best.telegram_sent = true;
-    const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: r.telegram_sent === true }));
+    // Persist the selected TEST first: the atomic claim checks its four predecessors.
+    const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
-    if (best?.telegram_sent && inserted) {
+    if (best && inserted) {
+      const { data: trade, error: claimError } = await supabase.rpc('claim_four_win_reversal', { p_candidate: best.signal_id });
+      if (claimError) console.error('Four-win claim:', claimError.message);
+      if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
+        const entryAt = (curMin + 60) * 1000;
+        const task = (async () => {
+          const { data, error } = await supabase.functions.invoke('iqoption-place-trade', { body: { ...trade, entryAt } });
+          const details = error && 'context' in error && error.context instanceof Response
+            ? await error.context.text() : error?.message;
+          await supabase.from('trade_queue').update({
+            status: data?.success ? 'executed' : 'failed', iq_option_id: data?.tradeId || null,
+            executed_at: data?.success ? new Date().toISOString() : null,
+            error: data?.success ? null : details || data?.error || 'Placement failed',
+          }).eq('signal_id', String(trade.signalId)).eq('entry_strategy', FOUR_WIN_STRATEGY);
+        })().catch(e => console.error('Four-win placement:', String(e)));
+        // Keep broker placement alive without blocking the minute analysis.
+        // @ts-ignore Hosted background runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(task);
+        else await task;
+        return Response.json({ success: true, assets: series.size, inserted, resolved, reversal: true }, { headers: cors });
+      }
+    }
+    // Other entries remain TEST, but no longer generate new Telegram signals.
+    // Previously notified tests still receive their final result above.
+    if (false && best?.telegram_sent && inserted) {
       const hh = new Date(curMin * 1000).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
       await sendTelegram(['📣 SINAL — AGÊNCIA MKT TRADER', `💱 Ativo: ${best.asset}`, `🎯 Estratégia: ${LABELS[best.entry_strategy] || best.entry_strategy}`,
         `Direção: ${best.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,

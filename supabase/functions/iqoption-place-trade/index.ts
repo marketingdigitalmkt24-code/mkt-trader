@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
+import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL } from '../_shared/four-win-reversal.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +19,8 @@ interface TradeRequest {
   isAIAnalyzed?: boolean;
   timeframe?: string;
   mode?: 'option' | 'forex';
+  entryStrategy?: string;
+  entryAt?: number;
 }
 
 const payoutById: Record<number, number> = {};
@@ -277,7 +280,7 @@ async function placeTradeFireAndForget(
           }
           
           // OTC fallback if not found and not OTC asset
-          if (!foundAsset && !isOTCAsset) {
+          if (!foundAsset && !isOTCAsset && trade.entryStrategy !== FOUR_WIN_STRATEGY) {
             const otcVariations = [
               `${cleanAsset}-OTC`, `${cleanAsset} OTC`, `${withSlash}-OTC`, `${withSlash} OTC`,
             ];
@@ -368,7 +371,13 @@ async function placeTradeFireAndForget(
           // ===== Entrada sincronizada: exatamente na ABERTURA da próxima vela (:00) =====
           // Envia ~120ms antes para compensar a latência do relay e chegar na IQ às :00.
           const nowMs0 = Date.now();
-          const candleOpenMs = Math.ceil((nowMs0 + 1000) / 60000) * 60000;
+          const candleOpenMs = trade.entryStrategy === FOUR_WIN_STRATEGY && trade.entryAt
+            ? trade.entryAt : Math.ceil((nowMs0 + 1000) / 60000) * 60000;
+          if (trade.entryStrategy === FOUR_WIN_STRATEGY && nowMs0 >= candleOpenMs - ENTRY_LATENCY_LEAD_MS) {
+            clearTimeout(timeout); ws.close();
+            resolve({ success: false, error: 'Entrada prevista passou; ordem não enviada atrasada' });
+            return;
+          }
           const entryDelay = Math.max(0, candleOpenMs - ENTRY_LATENCY_LEAD_MS - nowMs0);
           console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar na abertura da vela ${new Date(candleOpenMs).toISOString()}`);
 
@@ -394,7 +403,9 @@ async function placeTradeFireAndForget(
                 },
               },
             }));
-            setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 2500);
+            if (trade.entryStrategy !== FOUR_WIN_STRATEGY) {
+              setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 2500);
+            }
           };
           setTimeout(fire, entryDelay);
         }
@@ -485,6 +496,24 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const tradeRequest: TradeRequest = await req.json();
+    if (tradeRequest.entryStrategy === FOUR_WIN_STRATEGY) {
+      if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+      }
+      if (!Number.isFinite(tradeRequest.entryAt) || Number(tradeRequest.entryAt) <= Date.now()
+        || Number(tradeRequest.entryAt) > Date.now() + 60000
+        || Number(tradeRequest.entryAt) % 60000 !== 0
+        || !['call', 'put'].includes(tradeRequest.direction) || tradeRequest.expiration !== 1) {
+        return Response.json({ error: 'Invalid reversal entry' }, { status: 400, headers: corsHeaders });
+      }
+      // Conditional lease: even a duplicate server invocation cannot place twice.
+      const { data: lease } = await supabase.from('trade_queue').update({ error: 'placement_claimed' })
+        .eq('signal_id', tradeRequest.signalId || '').eq('asset', tradeRequest.asset)
+        .eq('direction', tradeRequest.direction.toUpperCase()).eq('amount', tradeRequest.amount)
+        .eq('entry_strategy', FOUR_WIN_STRATEGY).eq('status', 'executing').is('error', null)
+        .select('id');
+      if (!lease?.length) return Response.json({ error: 'Reversal already claimed or unauthorized' }, { status: 409, headers: corsHeaders });
+    }
     console.log('📥 Trade request:', JSON.stringify(tradeRequest));
     
     if (!tradeRequest.asset || !tradeRequest.direction || !tradeRequest.amount) {
@@ -516,16 +545,16 @@ serve(async (req) => {
     let entryStrategy: string | null = null;
     if (tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
       && tradeRequest.timeframe !== 'TEST' && tradeRequest.timeframe !== 'MT5') {
-      const { data: queued } = await supabase.from('trade_queue').select('id, created_at')
+      const { data: queued } = await supabase.from('trade_queue').select('id, created_at, entry_strategy')
         .eq('signal_id', tradeRequest.signalId).eq('asset', tradeRequest.asset)
         .eq('direction', tradeRequest.direction.toUpperCase()).eq('status', 'executing')
         .gte('created_at', new Date(Date.now() - 90000).toISOString()).limit(1).maybeSingle();
       if (queued) {
         const signalId = tradeRequest.signalId;
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
-        const reqStrategy = (tradeRequest as any).entryStrategy;
-        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI' || reqStrategy === 'TENDENCIA_V1') entryStrategy = reqStrategy;
-        const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
+        const reqStrategy = queued.entry_strategy;
+        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI' || reqStrategy === 'TENDENCIA_V1' || reqStrategy === FOUR_WIN_STRATEGY) entryStrategy = reqStrategy;
+        const strategy = entryStrategy === FOUR_WIN_STRATEGY ? FOUR_WIN_LABEL : entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
           : entryStrategy === 'TENDENCIA_V1' ? 'Tendência V1'
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'
@@ -537,7 +566,7 @@ serve(async (req) => {
           // recusado pela corretora); par de teste também libera o envio e recebe
           // uma mensagem própria marcada como TESTE.
           // Tendência V1 (pedido 16/10/2026): vai ao Telegram direto, sem exigir par.
-          const complementary = entryStrategy === 'TENDENCIA_V1' ? 'DIRECT'
+          const complementary = entryStrategy === FOUR_WIN_STRATEGY || entryStrategy === 'TENDENCIA_V1' ? 'DIRECT'
             : entryStrategy === 'TENDENCIA' ? 'REVERSAO_RSI'
             : entryStrategy === 'REVERSAO_RSI' ? 'TENDENCIA' : null;
           if (!complementary) {
@@ -620,7 +649,8 @@ serve(async (req) => {
     // Se a IQ Option recusar a ordem, uma resposta de CANCELADO é enviada ao sinal.
     let notification: Promise<number | undefined> | undefined;
     if (notifyEntry) {
-      const entryAt = Math.ceil((Date.now() + 1000) / 60000) * 60000;
+      const entryAt = tradeRequest.entryStrategy === FOUR_WIN_STRATEGY && tradeRequest.entryAt
+        ? tradeRequest.entryAt : Math.ceil((Date.now() + 1000) / 60000) * 60000;
       notification = notifyEntry(entryAt).catch(error => { console.error('❌ Telegram IQ:', String(error)); return undefined; });
       // @ts-ignore EdgeRuntime is available in the hosted runtime
       if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(notification);

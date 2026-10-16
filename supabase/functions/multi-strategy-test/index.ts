@@ -145,6 +145,7 @@ Deno.serve(async (req) => {
 
   // 1) Resolver entradas TESTE vencidas com a vela real da IQ Option.
   let resolved = 0;
+  const bestByMin = new Map<number, { o: any; score: number }>();
   const { data: open } = await supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at')
     .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000);
   for (const o of open || []) {

@@ -248,14 +248,14 @@ export function LiveOperationsCard() {
   const getResultColor = (result: string) => {
     if (result === 'win') return 'text-call';
     if (result === 'loss') return 'text-put';
-    if (result === 'pending' || result === 'open' || result === 'test_open' || trade.result === 'test7_open') return 'text-gold';
+    if (result === 'pending' || result === 'open' || result === 'test_open' || result === 'test7_open') return 'text-gold';
     return 'text-muted-foreground';
   };
 
   const getResultBg = (result: string) => {
     if (result === 'win') return 'bg-call/10';
     if (result === 'loss') return 'bg-put/10';
-    if (result === 'pending' || result === 'open' || result === 'test_open' || trade.result === 'test7_open') return 'bg-gold/10';
+    if (result === 'pending' || result === 'open' || result === 'test_open' || result === 'test7_open') return 'bg-gold/10';
     return 'bg-secondary/50';
   };
 

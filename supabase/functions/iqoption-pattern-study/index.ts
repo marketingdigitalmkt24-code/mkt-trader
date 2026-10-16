@@ -33,7 +33,7 @@ function symbolOf(rawName: string) {
 type Acc = Record<string, { n: number; w: number }>;
 const add = (a: Acc, k: string, win: boolean) => { const s = a[k] || (a[k] = { n: 0, w: 0 }); s.n++; if (win) s.w++; };
 
-function analyze(cs: K[], splitT: number, acc: Acc) {
+function analyze(cs: K[], splitT: number, acc: Acc, sym = '') {
   if (cs.length < 200) return;
   const ema = (p: number, src: number[]) => { const a = 2 / (p + 1); const r: number[] = []; src.forEach((x, i) => r.push(i ? x * a + r[i - 1] * (1 - a) : x)); return r; };
   const c = cs.map(k => k.c);
@@ -96,7 +96,7 @@ function analyze(cs: K[], splitT: number, acc: Acc) {
     // Dia BRT (UTC-3) para conferência separada por data.
     const part = new Date((nx.t - 3 * 3600) * 1000).toISOString().slice(0, 10);
     for (const [p, dir] of pats) {
-      if (nx.c !== nx.o) add(acc, `${p}|1m|${part}`, dir === 'CALL' ? nx.c > nx.o : nx.c < nx.o);
+      if (nx.c !== nx.o) add(acc, `${sym ? sym + '|' : ''}${p}|1m|${part}`, dir === 'CALL' ? nx.c > nx.o : nx.c < nx.o);
     }
   }
 }
@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   const body = await req.json().catch(() => ({}));
   const offset = Math.max(0, Number(body.offset) || 0);
+  const wanted: string[] | null = Array.isArray(body.symbols) ? body.symbols.map((x: string) => String(x).toUpperCase()) : null;
   const count = Math.min(6, Math.max(1, Number(body.count) || 4));
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
@@ -134,7 +135,7 @@ Deno.serve(async (req) => {
           if (s.otc && s.crypto) continue;
           if (!cand.has(s.symbol)) cand.set(s.symbol, Number(id));
         }
-        const list = [...cand.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(offset, offset + count);
+        const list = wanted ? [...cand.entries()].filter(([s]) => wanted.includes(s)) : [...cand.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(offset, offset + count);
         if (!list.length) { clearTimeout(timer); finish(); return; }
         const chunks = Math.ceil(DAYS * 1440 / 1000);
         pending = list.length * chunks;
@@ -161,7 +162,7 @@ Deno.serve(async (req) => {
   for (const p of picked) {
     const cs = p.candles.filter(k => typeof k.o === 'number' && typeof k.c === 'number')
       .sort((a, b) => a.t - b.t).filter((k, i, arr) => i === 0 || k.t !== arr[i - 1].t);
-    analyze(cs, splitT, acc);
+    analyze(cs, splitT, acc, wanted ? p.symbol : '');
     syms.push(`${p.symbol}:${cs.length}`);
   }
   return Response.json({ success: true, symbols: syms, acc }, { headers: cors });

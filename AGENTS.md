@@ -5,4 +5,4 @@
 - Track successful Telegram signal message IDs in a service-only delivery ledger; dispatch only linked final broker results with conditional leases from result sync and signal cron so TEST results and unnotified history never reach Telegram.
 - Use the verified numeric Telegram channel ID and bounded retries for explicit temporary gateway failures before estimated entry; never delay trades or resend expired entry alerts.
 - Reconcile expired real IQ results from the existing signal cron before checking pending locks; browser polling is supplementary so navigation cannot strand trades or Telegram results.
-- The Histórico bom criterion reads public.chart_study, filled hourly by the iqoption-chart-study function from 30 days of IQ Option 1m candles; why: hundreds of simulated cases per slot beat a handful of past trades.
+- Chart studies are research-only and do not authorize or label trades in the signal generator; why: removing a strategy must also remove its execution and downstream tie triggers while retaining historical records.

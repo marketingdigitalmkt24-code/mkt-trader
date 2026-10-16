@@ -1643,14 +1643,10 @@ serve(async (req) => {
           const { data: used } = await supabase.from('operation_results').select('id')
             .neq('timeframe', 'MT5').gt('created_at', lastTie.created_at).limit(1);
           if (!used || used.length === 0) {
-            const { data: bad } = await supabase.from('trade_queue').select('id')
-              .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
-              .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
-            if (!bad || bad.length === 0) {
-              empateOverride = sigDir === 'CALL' ? 'PUT' : sigDir === 'PUT' ? 'CALL' : undefined;
-              realTurn = true; realStrategy = 'EMPATE'; reversaoRsi = false;
-              console.log(`🤝 Após empate → REAL: ${bestSignal.asset} sinal ${sigDir} → entrada ${empateOverride}`);
-            }
+            // Sem bloqueio de 7 dias: ativo recusado só fica fora naquele momento.
+            empateOverride = sigDir === 'CALL' ? 'PUT' : sigDir === 'PUT' ? 'CALL' : undefined;
+            realTurn = true; realStrategy = 'EMPATE'; reversaoRsi = false;
+            console.log(`🤝 Após empate → REAL: ${bestSignal.asset} sinal ${sigDir} → entrada ${empateOverride}`);
           }
         }
       } catch (e) { console.log('⚠️ Erro empate:', e); }

@@ -1,4 +1,5 @@
 - [x] Disable Histórico bom strategy and remove its dedicated card; verify requested Dashboard card pairs.
+- [x] Reduce reversal preparation latency by reusing the server-authenticated same-account broker session while Telegram sends in parallel; six tests passed and both functions deployed.
 - [x] Reinforce next-minute reversal deadline, confirm broker enabled/not-suspended asset selection and prevent account fallback; five tests pass, functions deployed without forcing broker orders.
 - [x] Add next-signal reversal after four consecutive test wins, service-only one-shot queue claim, Telegram and broker-order card; unit tests pass and authenticated cards checked.
 - [ ] Verify next natural four-win reversal, Telegram entry/result and broker order read-back (waiting for four new consecutive TEST wins; current broker account is PRACTICE, not cash REAL; do not force a trade).

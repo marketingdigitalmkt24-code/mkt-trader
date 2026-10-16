@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
-import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal } from '../_shared/four-win-reversal.ts';
+import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +21,7 @@ interface TradeRequest {
   mode?: 'option' | 'forex';
   entryStrategy?: string;
   entryAt?: number;
+  brokerSession?: { ssid: string; configId: string };
 }
 
 const payoutById: Record<number, number> = {};
@@ -525,7 +526,8 @@ serve(async (req) => {
         .select('id');
       if (!lease?.length) return Response.json({ error: 'Reversal already claimed or unauthorized' }, { status: 409, headers: corsHeaders });
     }
-    console.log('📥 Trade request:', JSON.stringify(tradeRequest));
+    const { brokerSession: privateSession, ...loggedRequest } = tradeRequest;
+    console.log('📥 Trade request:', JSON.stringify(loggedRequest));
     
     if (!tradeRequest.asset || !tradeRequest.direction || !tradeRequest.amount) {
       return new Response(
@@ -535,12 +537,16 @@ serve(async (req) => {
     }
 
     // Get IQ Option credentials
-    const { data: configData } = await supabase
+    const configQuery = supabase
       .from('iqoption_config')
-      .select('email, password, account_type')
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
+      .select('id, email, password, account_type')
+      .eq('is_active', true);
+    const serverReversal = tradeRequest.entryStrategy === FOUR_WIN_STRATEGY
+      && req.headers.get('Authorization') === `Bearer ${supabaseKey}`;
+    if (serverReversal && typeof privateSession?.configId === 'string') {
+      configQuery.eq('id', privateSession.configId);
+    }
+    const { data: configData } = await configQuery.limit(1).maybeSingle();
 
     if (!configData) {
       return new Response(
@@ -686,7 +692,13 @@ serve(async (req) => {
         }),
       }).catch(e => console.error('❌ Telegram cancel:', String(e)));
     };
-    const { ssid, error: loginError } = await loginToIQOption(configData.email, configData.password);
+    const reusableSession = typeof privateSession?.ssid === 'string' && privateSession.ssid.length > 0
+      && privateSession.ssid.length <= 4096 && typeof privateSession.configId === 'string'
+      && canReuseBrokerSession(serverReversal, privateSession.configId, configData.id);
+    // Telegram already sends in parallel; skip repeated login only for a trusted same-account session.
+    const { ssid, error: loginError } = reusableSession
+      ? { ssid: privateSession?.ssid, error: null }
+      : await loginToIQOption(configData.email, configData.password);
     if (!ssid) {
       await cancelAlert();
       return new Response(

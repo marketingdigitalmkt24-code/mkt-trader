@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors });
   }
   const supabase = createClient(url, serviceKey);
-  const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
+  const { data: cfg } = await supabase.from('iqoption_config').select('id, email, password').eq('is_active', true).limit(1).maybeSingle();
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
   const ssid = await login(cfg.email, cfg.password);
   if (!ssid) return Response.json({ success: false, error: 'login failed' }, { headers: cors });
@@ -217,7 +217,11 @@ Deno.serve(async (req) => {
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
         const entryAt = nextReversalMinute(curMin * 1000);
         const task = (async () => {
-          const { data, error } = await supabase.functions.invoke('iqoption-place-trade', { body: { ...trade, entryAt } });
+          // Reuse the session that just fetched these candles, avoiding another broker login.
+          // This secret travels server-to-server only, never to browser, storage or logs.
+          const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
+            body: { ...trade, entryAt, brokerSession: { ssid, configId: cfg.id } },
+          });
           const details = error && 'context' in error && error.context instanceof Response
             ? await error.context.text() : error?.message;
           await supabase.from('trade_queue').update({

@@ -524,9 +524,10 @@ serve(async (req) => {
         const signalId = tradeRequest.signalId;
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
         const reqStrategy = (tradeRequest as any).entryStrategy;
-        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI') entryStrategy = reqStrategy;
+        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI' || reqStrategy === 'TENDENCIA_V1') entryStrategy = reqStrategy;
         const strategy = entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
+          : entryStrategy === 'TENDENCIA_V1' ? 'Tendência V1'
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'
           : entryStrategy === 'EMPATE' ? 'Após empate' : 'IA';
         notifyEntry = async entryAt => {
@@ -535,7 +536,9 @@ serve(async (req) => {
           // O par pode ser real (trade_queue) ou TESTE (operation_results, ativo
           // recusado pela corretora); par de teste também libera o envio e recebe
           // uma mensagem própria marcada como TESTE.
-          const complementary = entryStrategy === 'TENDENCIA' ? 'REVERSAO_RSI'
+          // Tendência V1 (pedido 16/10/2026): vai ao Telegram direto, sem exigir par.
+          const complementary = entryStrategy === 'TENDENCIA_V1' ? 'DIRECT'
+            : entryStrategy === 'TENDENCIA' ? 'REVERSAO_RSI'
             : entryStrategy === 'REVERSAO_RSI' ? 'TENDENCIA' : null;
           if (!complementary) {
             console.log(`📵 Telegram ignorado: sinal ${signalId} (${entryStrategy}) sem estratégia complementar`);

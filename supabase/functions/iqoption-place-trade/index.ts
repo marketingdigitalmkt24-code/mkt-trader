@@ -573,6 +573,42 @@ serve(async (req) => {
             signal_id: signalId, chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy,
           }, { onConflict: 'signal_id', ignoreDuplicates: true });
           if (deliveryError) throw deliveryError;
+          await supabase.from('operation_results').update({ telegram_sent: true }).eq('signal_id', signalId);
+          // Par de teste (ativo recusado): avisa no canal com marcação de TESTE,
+          // sem registrar no ledger de resultados (não há resultado real a enviar).
+          if (testPair) {
+            const testEntryTime = new Date(entryAt).toLocaleTimeString('pt-BR', {
+              timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit',
+            });
+            const testText = [
+              '🧪 AGÊNCIA MKT TRADER — Sinal TESTE (sem ordem real)',
+              `💱 Ativo: ${testPair.asset}`,
+              `🎯 Estratégia: ${complementary === 'REVERSAO_RSI' ? 'Reversão RSI' : 'Tendência alinhada'}`,
+              `Direção: ${String(testPair.direction).toUpperCase() === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`,
+              `⏰ Entrada prevista: ${testEntryTime} (Brasília)`,
+              '⚠️ A corretora recusou este ativo; entrada apenas simulada. Sem garantia de lucro.',
+            ].join('\n');
+            try {
+              const testResp = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${Deno.env.get('LOVABLE_API_KEY') || ''}`,
+                  'X-Connection-Api-Key': Deno.env.get('TELEGRAM_API_KEY') || '',
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ chat_id: IQ_TELEGRAM_CHANNEL, text: testText }),
+                signal: AbortSignal.timeout(8000),
+              });
+              if (testResp.ok) {
+                await supabase.from('operation_results').update({ telegram_sent: true }).eq('signal_id', testPair.signal_id);
+                console.log(`📱 Telegram TESTE enviado: ${testPair.asset} | sinal ${testPair.signal_id}`);
+              } else {
+                console.error(`❌ Telegram TESTE [${testResp.status}]: ${await testResp.text()}`);
+              }
+            } catch (e) {
+              console.error('❌ Telegram TESTE:', String(e));
+            }
+          }
           return messageId;
         };
       }

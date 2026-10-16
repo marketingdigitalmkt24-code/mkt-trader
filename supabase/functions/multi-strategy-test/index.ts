@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
         result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
         expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: true, is_ai_analyzed: false,
         timeframe: 'TEST', entry_strategy: strat,
-        _score: strat === 'TENDENCIA' ? Math.abs(closed[closed.length - 1].c - closed[closed.length - 1].o) / (closed[closed.length - 1].o || 1) : -1,
+        _score: agree.length + Math.min(0.99, 100 * Math.abs(closed[closed.length - 1].c - closed[closed.length - 1].o) / (closed[closed.length - 1].o || 1)),
       });
     }
   }
@@ -194,7 +194,10 @@ Deno.serve(async (req) => {
   if (rows.length) {
     const { data: exist } = await supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id));
     const seen = new Set((exist || []).map((e: any) => e.signal_id));
-    const fresh = rows.filter(r => !seen.has(r.signal_id));
+    // Melhor par do minuto: só UMA entrada (mais estratégias concordando, depois vela mais forte).
+    const top = rows.filter(r => !seen.has(r.signal_id)).sort((x, y) => y._score - x._score)[0];
+    const { data: minuteTaken } = await supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').limit(1);
+    const fresh = top && !minuteTaken?.length ? [top] : [];
     // Telegram: um sinal por vez — só o melhor sinal de Tendência deste minuto.
     const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
     const iso = new Date(curMin * 1000).toISOString();

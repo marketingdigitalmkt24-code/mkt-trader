@@ -29,27 +29,6 @@
       "when": 1792093250272,
       "tag": "0003_schedule_chart_study",
       "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1792107115980,
-      "tag": "0004_create_stop_target_positions",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1792107512200,
-      "tag": "0005_stop_target_iq_order",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1792107643681,
-      "tag": "0006_forex_practice_balance",
-      "breakpoints": true
     }
   ]
 }

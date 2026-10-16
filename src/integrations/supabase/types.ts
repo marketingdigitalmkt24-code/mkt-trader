@@ -68,27 +68,6 @@ export type Database = {
         }
         Relationships: []
       }
-      forex_practice_balance: {
-        Row: {
-          amount: number
-          currency: string
-          id: number
-          updated_at: string
-        }
-        Insert: {
-          amount?: number
-          currency?: string
-          id?: number
-          updated_at?: string
-        }
-        Update: {
-          amount?: number
-          currency?: string
-          id?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
       iqoption_config: {
         Row: {
           account_type: string
@@ -245,81 +224,6 @@ export type Database = {
           id?: string
           price?: number
           symbol?: string
-        }
-        Relationships: []
-      }
-      stop_target_positions: {
-        Row: {
-          close_price: number | null
-          closed_at: string | null
-          created_at: string
-          direction: string
-          entry_price: number
-          id: string
-          iq_account: string | null
-          iq_amount: number | null
-          iq_error: string | null
-          iq_leverage: number | null
-          iq_order_id: string | null
-          iq_position_id: string | null
-          iq_status: string | null
-          opened_at: string
-          result_kind: string | null
-          result_r: number | null
-          risk_distance: number
-          risk_usd: number
-          status: string
-          stop_price: number
-          symbol: string
-          target_price: number
-        }
-        Insert: {
-          close_price?: number | null
-          closed_at?: string | null
-          created_at?: string
-          direction: string
-          entry_price: number
-          id?: string
-          iq_account?: string | null
-          iq_amount?: number | null
-          iq_error?: string | null
-          iq_leverage?: number | null
-          iq_order_id?: string | null
-          iq_position_id?: string | null
-          iq_status?: string | null
-          opened_at?: string
-          result_kind?: string | null
-          result_r?: number | null
-          risk_distance: number
-          risk_usd?: number
-          status?: string
-          stop_price: number
-          symbol: string
-          target_price: number
-        }
-        Update: {
-          close_price?: number | null
-          closed_at?: string | null
-          created_at?: string
-          direction?: string
-          entry_price?: number
-          id?: string
-          iq_account?: string | null
-          iq_amount?: number | null
-          iq_error?: string | null
-          iq_leverage?: number | null
-          iq_order_id?: string | null
-          iq_position_id?: string | null
-          iq_status?: string | null
-          opened_at?: string
-          result_kind?: string | null
-          result_r?: number | null
-          risk_distance?: number
-          risk_usd?: number
-          status?: string
-          stop_price?: number
-          symbol?: string
-          target_price?: number
         }
         Relationships: []
       }

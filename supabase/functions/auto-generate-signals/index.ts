@@ -1667,13 +1667,6 @@ serve(async (req) => {
           }
         }
       } catch (e) { console.log('⚠️ Erro empate:', e); }
-      // PAUSA (user, 15/10/2026 19:55): todas entradas reais pausadas; tudo roda em TESTE
-      // enquanto o plano stop/alvo em forex é avaliado. Mudar para false para religar.
-      const REAL_PAUSED = true;
-      if (REAL_PAUSED && realTurn) {
-        console.log(`⏸️ Real pausado → TESTE (${realStrategy})`);
-        realTurn = false; realStrategy = undefined; empateOverride = undefined;
-      }
       if (!realTurn) {
         const { data: openTest } = await supabase.from('operation_results')
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);

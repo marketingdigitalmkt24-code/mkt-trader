@@ -30,12 +30,12 @@ export const IQEntriesTodayCard = () => {
       const start = historyStart();
       const inRange = all.filter((o) => o.created_at >= start);
       // Reais: Tendência, Histórico bom, Empate e Reversão RSI.
-      // Testes: só Tendência e Reversão RSI (pedido do usuário), marcados como TESTE.
+      // Testes: só Tendência e Reversão RSI, sem rótulo de teste — mostram o valor do ganho/perda.
       const withOrigin = inRange.map((r) => {
         const isTest = r.timeframe === 'TEST';
         if (isTest && r.entry_strategy !== 'TENDENCIA' && r.entry_strategy !== 'REVERSAO_RSI') return { ...r, origin: '—' };
         const base = r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : '—';
-        return { ...r, origin: isTest && base !== '—' ? `${base} · TESTE` : base };
+        return { ...r, origin: base };
       });
       setOps(withOrigin.filter((r) => r.origin !== '—'));
     };

@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
     if (o.telegram_sent) {
       const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
       const head = res === 'win' ? '✅ RESULTADO: WIN' : res === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
-      await sendTelegram([head + ' — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, '🎯 Estratégia: Tendência',
+      await sendTelegram([head + ' — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, `🎯 Estratégia: ${LABELS[o.entry_strategy] || o.entry_strategy}`,
         `Direção: ${o.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
         '🧪 Operação TESTE (sem ordem real).'].join('\n')).catch(e => console.error('Telegram:', String(e)));
     }
@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
     if (best?.telegram_sent && inserted) {
       const hh = new Date(curMin * 1000).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-      await sendTelegram(['📣 SINAL — AGÊNCIA MKT TRADER', `💱 Ativo: ${best.asset}`, '🎯 Estratégia: Tendência',
+      await sendTelegram(['📣 SINAL — AGÊNCIA MKT TRADER', `💱 Ativo: ${best.asset}`, `🎯 Estratégia: ${LABELS[best.entry_strategy] || best.entry_strategy}`,
         `Direção: ${best.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
         '🏆 Melhor sinal do horário', '🧪 Operação TESTE (sem ordem real). Sem garantia de lucro.'].join('\n')).catch(e => console.error('Telegram:', String(e)));
     }

@@ -1,3 +1,4 @@
+- [x] Disable Histórico bom strategy and remove its dedicated card; verify requested Dashboard card pairs.
 - [x] Add strategy badges to IQ Option's latest operations, with honest labels for unmatched history.
 - [x] Add clear emojis throughout automatic Telegram entry alerts and final result messages.
 - [x] Compare recorded losses by strategy using linked IQ Option operations.

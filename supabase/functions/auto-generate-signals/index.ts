@@ -1612,19 +1612,8 @@ serve(async (req) => {
           : e9 < e21 && e21 < s50 && macdT === 'bearish' && rsiT >= 30 && rsiT <= 50;
         if (tendenciaOk) console.log(`📐 Tendência alinhada → REAL direto: ${bestSignal.asset} ${dirT} RSI ${rsiT.toFixed(1)}`);
       } catch (_) { /* ignore */ }
-      // "Perda anterior" DESATIVADA (pedido 15/10/2026). REAL direto só para Histórico bom ou Tendência alinhada.
-      // Histórico bom (pedido 15/10/2026): usa o ESTUDO de 30 dias nos gráficos da IQ Option (chart_study)
-      // por ativo + direção + hora BRT, em vez das operações feitas. Fica SOMENTE em TESTE até provar acerto.
-      let historicoOk = false;
-      try {
-        const dirH = String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
-        const hourBrt = new Date(Date.now() - 3 * 3600 * 1000).getUTCHours();
-        const { data: st } = await supabase.from('chart_study').select('n, wins')
-          .eq('symbol', bestSignal.asset).eq('direction', dirH).eq('hour_brt', hourBrt).maybeSingle();
-        historicoOk = !!st && st.n >= 200 && st.wins / st.n >= 0.56;
-        if (st) console.log(`📈 Estudo 30d ${bestSignal.asset} ${dirH} ${hourBrt}h: ${st.wins}/${st.n} → ${historicoOk ? 'Histórico bom (REAL)' : 'não'}`);
-      } catch (e) { console.log('⚠️ Erro estudo:', e); }
-      realTurn = historicoOk || tendenciaOk; // Histórico bom (estudo 30d) abre REAL + Telegram (pedido 15/10 16:45)
+      // Histórico bom removido (pedido 16/10/2026): o estudo não autoriza nem rotula novas entradas.
+      realTurn = tendenciaOk;
       // Reversão RSI (pedido 15/10/2026, SOMENTE TESTE): venda com RSI>70 e estocástico>80 vira COMPRA.
       let reversaoRsi = false;
       try {
@@ -1641,13 +1630,14 @@ serve(async (req) => {
           .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
         if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
       }
-      let realStrategy: string | undefined = reversaoRsi ? 'REVERSAO_RSI' : historicoOk ? 'HISTORICO' : tendenciaOk ? 'TENDENCIA' : undefined;
-      // Após EMPATE (pedido 15/10/2026): se a última operação finalizada de Tendência/Histórico bom
+      let realStrategy: string | undefined = reversaoRsi ? 'REVERSAO_RSI' : tendenciaOk ? 'TENDENCIA' : undefined;
+      // Após EMPATE: somente Tendência pode autorizar após a remoção de Histórico bom.
+      // Se a última operação finalizada de Tendência
       // (teste ou real) empatou, o PRÓXIMO sinal gerado (imediatamente após, sem janela de tempo)
       // abre REAL + Telegram (user, 15/10/2026 19h).
       try {
         const { data: lastTie } = await supabase.from('operation_results').select('direction, created_at')
-          .in('entry_strategy', ['TENDENCIA', 'HISTORICO']).eq('result', 'tie').neq('timeframe', 'MT5')
+          .eq('entry_strategy', 'TENDENCIA').eq('result', 'tie').neq('timeframe', 'MT5')
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastTie) {
           // Entrada inversa ao PRÓXIMO sinal gerado (user, 15/10/2026): sinal CALL → entra PUT.
@@ -1673,9 +1663,7 @@ serve(async (req) => {
           .select('id').eq('timeframe', 'TEST').eq('result', 'test_open').limit(1);
         if (!openTest || openTest.length === 0) {
           const dir = reversaoRsi ? 'CALL' : String(bestSignal.aiDirection || bestSignal.type).toUpperCase();
-          // Histórico bom (somente TESTE): ≥3 ops e ≥60% acerto em 24h no mesmo ativo+direção
           let entryStrategy = 'IA';
-          if (historicoOk && dir === String(bestSignal.aiDirection || bestSignal.type).toUpperCase()) entryStrategy = 'HISTORICO';
           // Tendência alinhada agora abre REAL direto (bloco acima); aqui só rotula o TESTE se cair neste caminho.
           if (entryStrategy === 'IA' && tendenciaOk) entryStrategy = 'TENDENCIA';
           if (reversaoRsi) entryStrategy = 'REVERSAO_RSI';

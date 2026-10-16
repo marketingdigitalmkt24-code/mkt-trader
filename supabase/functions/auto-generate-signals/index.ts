@@ -1621,8 +1621,9 @@ serve(async (req) => {
         const rsiR = Number(bestSignal.indicators?.rsi?.value);
         const stR = Number(bestSignal.indicators?.stochastic?.k);
         reversaoRsi = dirR === 'PUT' && rsiR > 70 && stR > 80;
-        // Reversão RSI agora abre REAL + Telegram (pedido 16/10/2026), entrando em COMPRA.
-        if (reversaoRsi) { realTurn = true; empateOverride = 'CALL'; console.log(`🔄 Reversão RSI → REAL: ${bestSignal.asset} PUT→CALL RSI ${rsiR.toFixed(1)} Stoch ${stR.toFixed(1)}`); }
+        // Reversão RSI volta a ser SOMENTE TESTE (pedido 16/10/2026): só Tendência abre REAL na IQ Option;
+        // o par Tendência+Reversão no mesmo minuto ainda libera o envio ao Telegram (par de teste conta).
+        if (reversaoRsi) { empateOverride = 'CALL'; console.log(`🔄 Reversão RSI → TESTE: ${bestSignal.asset} PUT→CALL RSI ${rsiR.toFixed(1)} Stoch ${stR.toFixed(1)}`); }
       } catch (_) { /* ignore */ }
       // Sem bloqueio de 7 dias (pedido 16/10/2026): ativo recusado só fica fora naquele momento;
       // o filtro de ativos abertos (horário) já impede sinais de ativos fechados.

@@ -394,6 +394,9 @@ export function LiveOperationsCard() {
                     {trade.entry_strategy === 'REVERSAO_RSI' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 REVERSÃO RSI</Badge>
                     )}
+                    {trade.telegram_sent && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-sky-500/50 text-sky-500">📣 Telegram</Badge>
+                    )}
                     {trade.timeframe === 'FOREX' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">FOREX</Badge>
                     )}

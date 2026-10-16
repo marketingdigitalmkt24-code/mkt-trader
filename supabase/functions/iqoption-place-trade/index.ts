@@ -547,7 +547,7 @@ serve(async (req) => {
           const { data: pairSignals } = await supabase.from('trade_queue').select('signal_id, entry_strategy')
             .eq('status', 'executing').neq('signal_id', signalId)
             .gte('created_at', new Date(Date.now() - 120000).toISOString()).limit(5);
-          let hasComplementaryPair = (pairSignals || []).some(p => p.entry_strategy === complementary);
+          let hasComplementaryPair = complementary === 'DIRECT' || (pairSignals || []).some(p => p.entry_strategy === complementary);
           let testPair: { signal_id: string; asset: string; direction: string } | null = null;
           if (!hasComplementaryPair) {
             const { data: testPairs } = await supabase.from('operation_results')

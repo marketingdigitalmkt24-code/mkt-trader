@@ -1624,12 +1624,8 @@ serve(async (req) => {
         // Reversão RSI agora abre REAL + Telegram (pedido 16/10/2026), entrando em COMPRA.
         if (reversaoRsi) { realTurn = true; empateOverride = 'CALL'; console.log(`🔄 Reversão RSI → REAL: ${bestSignal.asset} PUT→CALL RSI ${rsiR.toFixed(1)} Stoch ${stR.toFixed(1)}`); }
       } catch (_) { /* ignore */ }
-      if (realTurn) {
-        const { data: bad } = await supabase.from('trade_queue').select('id')
-          .eq('asset', bestSignal.asset).eq('status', 'failed').ilike('error', '%invalid instrument%')
-          .gte('created_at', new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()).limit(1);
-        if (bad && bad.length) { realTurn = false; console.log(`⛔ ${bestSignal.asset} recusado pela IQ → TESTE`); }
-      }
+      // Sem bloqueio de 7 dias (pedido 16/10/2026): ativo recusado só fica fora naquele momento;
+      // o filtro de ativos abertos (horário) já impede sinais de ativos fechados.
       let realStrategy: string | undefined = reversaoRsi ? 'REVERSAO_RSI' : tendenciaOk ? 'TENDENCIA' : undefined;
       // Após EMPATE: somente Tendência pode autorizar após a remoção de Histórico bom.
       // Se a última operação finalizada de Tendência

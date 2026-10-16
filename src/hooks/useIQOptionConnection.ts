@@ -86,21 +86,18 @@ export function useIQOptionConnection() {
 
       const { data: allRows, error } = await supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, entry_price, timeframe, entry_strategy, created_at')
+        .select('id, asset, direction, result, profit, entry_price, timeframe, entry_strategy, iq_option_id, created_at')
         .gte('created_at', new Date(brasiliaMidnightUtc.getTime() - 15 * 60000).toISOString())
         .neq('timeframe', 'MT5')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
 
-      const all = (allRows || []) as Array<{ id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; created_at: string }>;
+      const all = (allRows || []) as Array<{ id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; iq_option_id: string | null; created_at: string }>;
       const startIso = brasiliaMidnightUtc.toISOString();
-      // Entradas reais (Tendência/Histórico/Empate/Reversão) + as operações de teste
-      // de Tendência e Reversão RSI que aparecem no card Entradas na IQ Option
-      const isStrategyRow = (r: { timeframe: string; entry_strategy: string | null }) =>
-        r.entry_strategy === 'FOUR_WIN_REVERSAL' || r.entry_strategy === 'TENDENCIA' || r.entry_strategy === 'TENDENCIA_V1' || r.entry_strategy === 'EMPATE' || r.entry_strategy === 'HISTORICO' || r.entry_strategy === 'REVERSAO_RSI';
+      // Mesmo filtro do card "Entradas na IQ Option": somente ordens reais confirmadas pela corretora
       const results = all.filter((r) => r.created_at >= startIso && r.timeframe !== 'MT5'
-        && (r.timeframe === 'TEST' ? (r.entry_strategy === 'TENDENCIA' || r.entry_strategy === 'REVERSAO_RSI') : isStrategyRow(r)));
+        && r.iq_option_id && !String(r.iq_option_id).toLowerCase().startsWith('test'));
 
       let profit = 0;
       let wins = 0;

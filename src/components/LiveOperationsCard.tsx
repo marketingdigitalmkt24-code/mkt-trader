@@ -248,14 +248,14 @@ export function LiveOperationsCard() {
   const getResultColor = (result: string) => {
     if (result === 'win') return 'text-call';
     if (result === 'loss') return 'text-put';
-    if (result === 'pending' || result === 'open' || result === 'test_open') return 'text-gold';
+    if (result === 'pending' || result === 'open' || result === 'test_open' || result === 'test7_open') return 'text-gold';
     return 'text-muted-foreground';
   };
 
   const getResultBg = (result: string) => {
     if (result === 'win') return 'bg-call/10';
     if (result === 'loss') return 'bg-put/10';
-    if (result === 'pending' || result === 'open' || result === 'test_open') return 'bg-gold/10';
+    if (result === 'pending' || result === 'open' || result === 'test_open' || result === 'test7_open') return 'bg-gold/10';
     return 'bg-secondary/50';
   };
 
@@ -391,11 +391,13 @@ export function LiveOperationsCard() {
                     {trade.entry_strategy === 'EMPATE' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">🤝 EMPATE</Badge>
                     )}
-                    {trade.result === 'tie' && (trade.entry_strategy === 'TENDENCIA' || trade.entry_strategy === 'HISTORICO') && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 border-amber-500/50 text-amber-500 whitespace-normal">🤝 Empate → próxima entrada REAL</Badge>
-                    )}
                     {trade.entry_strategy === 'REVERSAO_RSI' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 REVERSÃO RSI</Badge>
+                    )}
+                    {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy] && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">
+                        {({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy]}
+                      </Badge>
                     )}
                     {trade.telegram_sent && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-sky-500/50 text-sky-500">📣 Telegram</Badge>
@@ -409,10 +411,10 @@ export function LiveOperationsCard() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-auto">
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
-                      {trade.result === 'pending' || trade.result === 'open' || trade.result === 'test_open' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
+                      {trade.result === 'pending' || trade.result === 'open' || trade.result === 'test_open' || trade.result === 'test7_open' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
                     </span>
                     <Badge variant="secondary" className={cn("text-[9px] px-1 py-0", getResultColor(trade.result))}>
-                      {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result === 'open' ? 'ABERTA' : trade.result === 'test_open' ? 'TESTE' : trade.result.toUpperCase()}
+                      {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result === 'open' ? 'ABERTA' : trade.result === 'test_open' || trade.result === 'test7_open' ? 'TESTE' : trade.result.toUpperCase()}
                     </Badge>
                   </div>
                 </div>

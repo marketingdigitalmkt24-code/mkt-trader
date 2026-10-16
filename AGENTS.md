@@ -6,3 +6,4 @@
 - Use the verified numeric Telegram channel ID and bounded retries for explicit temporary gateway failures before estimated entry; never delay trades or resend expired entry alerts.
 - Reconcile expired real IQ results from the existing signal cron before checking pending locks; browser polling is supplementary so navigation cannot strand trades or Telegram results.
 - Chart studies are research-only and do not authorize or label trades in the signal generator; why: removing a strategy must also remove its execution and downstream tie triggers while retaining historical records.
+- The 7-strategy TESTE runner (multi-strategy-test) is invoked by auto-generate-signals each minute instead of its own cron; why: one minute job, no duplicate polling.

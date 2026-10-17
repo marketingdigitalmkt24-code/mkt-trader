@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fiveTouches, resistanceStudy, type Candle } from './resistance-study.ts';
 function fixture(touches = 5): Candle[] {
-  const cs = Array.from({ length: 181 }, (_, i) => ({ t: i * 60, o: 95, c: i < 60 ? 94 + i / 60 : 95, h: i < 60 ? 100 : 98, l: 90 }));
+  const cs = Array.from({ length: 181 }, (_, i) => ({ t: i * 60, o: i <= 60 ? 95 : 93, c: i <= 60 ? 94 + i / 60 : 93, h: i <= 60 ? 100 : 94, l: 90 }));
   for (let n = 0; n < touches; n++) cs[180 - n * 20].h = 100;
   return cs;
 }

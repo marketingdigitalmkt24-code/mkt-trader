@@ -23,9 +23,10 @@ interface IQOptionConfig {
 
 interface IQOptionSettingsCardProps {
   defaultOpen?: boolean;
+  embedded?: boolean;
 }
 
-export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCardProps) {
+export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: IQOptionSettingsCardProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -217,7 +218,7 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
   }
 
   return (
-    <Card className="border-orange-500/20">
+    <Card className={embedded ? 'border-0 rounded-none shadow-none bg-transparent' : 'border-orange-500/20'}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -230,9 +231,9 @@ export function IQOptionSettingsCard({ defaultOpen = false }: IQOptionSettingsCa
               </Badge>
             )}
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
+          {!embedded && <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
             ✕
-          </Button>
+          </Button>}
         </div>
         <CardDescription>
           Configure suas credenciais para buscar resultados reais

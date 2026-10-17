@@ -4,6 +4,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 import { FORCE_LOSS_WIN_STRATEGY, FORCE_LOSS_WIN_LABEL, isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
+import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -136,10 +137,7 @@ async function mirrorCopyTrades(
       .eq('enabled', true);
     if (!copies?.length) return;
 
-    const dayStart = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' });
-    const brtNow = new Date(dayStart);
-    brtNow.setHours(0, 0, 0, 0);
-    const dayStartIso = new Date(brtNow.getTime() - brtNow.getTimezoneOffset() * 60000).toISOString();
+    const dayStartIso = copyDayStart();
 
     // Clientes em paralelo: o login de um não atrasa a ordem do outro
     await Promise.allSettled(copies.map(async (copy: any) => {
@@ -150,7 +148,7 @@ async function mirrorCopyTrades(
           supabase.from('user_trading_settings').select('trade_amount, profit_target_type, profit_target_value')
             .eq('user_id', copy.user_id).maybeSingle(),
         ]);
-        if (!cfg?.email || !cfg?.password) { console.log(`⏭️ Copy ${copy.user_id}: sem credenciais IQ Option`); continue; }
+        if (!cfg?.email || !cfg?.password) { console.log(`⏭️ Copy ${copy.user_id}: sem credenciais IQ Option`); return; }
 
         const amount = Number(settings?.trade_amount) > 0 ? Number(settings.trade_amount) : tradeRequest.amount;
 
@@ -159,14 +157,15 @@ async function mirrorCopyTrades(
           const { data: todayOps } = await supabase.from('operation_results').select('profit')
             .like('signal_id', `copy-${copy.user_id}-%`).gte('created_at', dayStartIso);
           const dailyProfit = (todayOps || []).reduce((s: number, o: any) => s + Number(o.profit || 0), 0);
-          if (dailyProfit >= Number(settings.profit_target_value)) {
+          if (copyTargetReached(dailyProfit, Number(settings.profit_target_value))) {
+            await supabase.from('copy_trading_configs').update({ enabled: false }).eq('user_id', copy.user_id);
             console.log(`🎯 Copy ${copy.user_id}: meta de lucro atingida, pulando`);
-            continue;
+            return;
           }
         }
 
         const { ssid } = await loginToIQOption(cfg.email, cfg.password);
-        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou`); continue; }
+        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou`); return; }
 
         const res = await placeTradeFireAndForget(ssid, copy.account_type, { ...tradeRequest, amount });
         if (res.success && res.tradeId) {

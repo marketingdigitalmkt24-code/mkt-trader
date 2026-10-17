@@ -1,7 +1,6 @@
 import { LogOut, Bot, TrendingUp, BarChart3, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
-import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { ClientCopyTradingCard } from '@/components/ClientCopyTradingCard';
 import { ClientResultsCard } from '@/components/ClientResultsCard';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
@@ -49,7 +48,7 @@ const ClientDashboard = () => {
                   Painel do Cliente
                 </h1>
                 <p className="text-xs text-muted-foreground hidden sm:block">
-                  Auto Trading & IQ Option
+                  Copy Trading & IQ Option
                 </p>
               </div>
             </div>
@@ -162,25 +161,10 @@ const ClientDashboard = () => {
           </Card>
         </div>
 
-        {/* IQ Option Section */}
-        <section>
-          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-call/20 flex items-center justify-center">
-              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-call" />
-            </div>
-            <h2 className="text-lg sm:text-xl font-bold text-foreground">IQ Option</h2>
-          </div>
-          <Card className="border-call/20">
-            <CardContent className="pt-6">
-              <IQOptionSettingsCard defaultOpen={true} />
-            </CardContent>
-          </Card>
-        </section>
-
         {/* Copy Trading + Resultados */}
-        <div className="grid gap-4 sm:gap-8 lg:grid-cols-2 mt-4 sm:mt-8">
-          <ClientCopyTradingCard />
+        <div className="grid items-start gap-4 sm:gap-8 lg:grid-cols-2">
           <ClientResultsCard />
+          <ClientCopyTradingCard />
         </div>
 
         {/* Action Buttons */}

@@ -39,3 +39,7 @@ test('other four-win sequences still send', () => {
   assert.equal(isBlockedByMiddleForceCandles(['VELA_FORCA', 'TENDENCIA', 'VELA_FORCA', 'TENDENCIA']), false);
   assert.equal(isBlockedByMiddleForceCandles(['TENDENCIA', 'VELA_FORCA', 'TENDENCIA', 'VELA_FORCA']), false);
 });
+test('adjacent Vela de Força pair blocks in any position', () => {
+  assert.equal(isBlockedByMiddleForceCandles(['TENDENCIA', 'VELA_FORCA', 'VELA_FORCA', 'TENDENCIA']), true);
+  assert.equal(isBlockedByMiddleForceCandles(['VELA_FORCA', 'TENDENCIA', 'VELA_FORCA', 'VELA_FORCA']), true);
+});

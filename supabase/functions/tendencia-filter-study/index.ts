@@ -23,9 +23,9 @@ const ema = (p: number, src: number[]) => { const a = 2 / (p + 1); const r: numb
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+  const since = new Date(Date.now() - 3 * 86400000).toISOString();
   const { data: ops } = await supabase.from('operation_results').select('asset, direction, result, profit, created_at, entry_strategy')
-    .not('iq_option_id', 'is', null).not('timeframe','in','(TEST,MT5)').neq('entry_strategy','COPY_TRADE').in('result', ['win', 'loss']).gte('created_at', since).order('created_at');
+    .eq('timeframe','TEST').in('entry_strategy', ['TENDENCIA']).in('result', ['win', 'loss']).gte('created_at', since).order('created_at');
   const trades = (ops || []) as any[];
   const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });

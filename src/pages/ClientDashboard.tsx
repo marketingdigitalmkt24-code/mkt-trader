@@ -1,5 +1,6 @@
 import { LogOut, Bot, TrendingUp, BarChart3, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { ClientCopyTradingCard } from '@/components/ClientCopyTradingCard';
 import { ClientResultsCard } from '@/components/ClientResultsCard';

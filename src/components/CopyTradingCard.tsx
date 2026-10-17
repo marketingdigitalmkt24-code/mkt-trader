@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { readCopyAccount } from '@/lib/client-copy-state';
-import { countClientCopyResults } from '@/lib/admin-copy-results';
+import { countClientCopyResults, copyResultRates } from '@/lib/admin-copy-results';
 import { copyDayStart } from '../../supabase/functions/_shared/copy-target';
 
 interface ClientProfile {
@@ -172,6 +172,10 @@ export function CopyTradingCard() {
                   <div>
                     <dt className="text-xs text-muted-foreground">Loss hoje</dt>
                     <dd className="text-sm font-semibold tabular-nums text-put">{totals?.losses ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Win rate</dt>
+                    <dd className="text-sm font-semibold tabular-nums text-call">{rates ? `${rates.winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—'}</dd>
                   </div>
                 </dl>
                 <div className="flex items-center gap-2 shrink-0">

@@ -24,9 +24,10 @@ interface IQOptionConfig {
 interface IQOptionSettingsCardProps {
   defaultOpen?: boolean;
   embedded?: boolean;
+  onConnectionChange?: () => void;
 }
 
-export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: IQOptionSettingsCardProps) {
+export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, onConnectionChange }: IQOptionSettingsCardProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -40,6 +41,8 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accountType, setAccountType] = useState('PRACTICE');
+  const [needsReconnect, setNeedsReconnect] = useState(false);
+  const connected = config?.is_active === true && Boolean(config.last_connected_at);
 
   useEffect(() => {
     if (isOpen && user) {
@@ -56,7 +59,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
         .from('iqoption_config')
         .select('*')
         .eq('user_id', user.id)
-        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -65,6 +68,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
         setEmail(data.email);
         setPassword(data.password);
         setAccountType(data.account_type);
+        setNeedsReconnect(!data.is_active || !data.last_connected_at);
       } else {
         // Reset form if no config found
         setConfig(null);
@@ -101,6 +105,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
       if (result.success) {
         const values = {
           email: email.trim(), password: password.trim(), account_type: accountType,
+          is_active: true,
           last_connected_at: new Date().toISOString(),
         };
         const { error: saveError } = config
@@ -112,7 +117,9 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
           return;
         }
         setTestResult('success');
-        loadConfig(); // Reload to get updated last_connected_at
+        setNeedsReconnect(false);
+        await loadConfig();
+        onConnectionChange?.();
         
         toast({ 
           title: '✅ Conexão bem sucedida!', 
@@ -147,10 +154,28 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
     }
   };
 
-  const disconnectFromIQ = () => {
-    iqOptionClient.disconnect();
-    setTestResult(null);
-    toast({ title: 'Desconectado', description: 'Conexão com IQ Option encerrada' });
+  const invalidateConnection = async (nextAccount: string) => {
+    if (!user || isLoading || isTesting) return;
+    setIsLoading(true);
+    try {
+      if (config) {
+        const { data, error } = await supabase.from('iqoption_config')
+          .update({ account_type: nextAccount, is_active: false, last_connected_at: null })
+          .eq('id', config.id).eq('user_id', user.id).select().single();
+        if (error) throw error;
+        setConfig(data);
+      }
+      iqOptionClient.disconnect();
+      setAccountType(nextAccount);
+      setNeedsReconnect(true);
+      setTestResult(null);
+      onConnectionChange?.();
+      toast({ title: 'Copy desligado', description: 'Conecte a conta IQ Option novamente antes de ligar o copy.' });
+    } catch {
+      toast({ title: 'Não foi possível desconectar', description: 'A alteração não foi salva. Tente novamente.', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isOpen) {
@@ -174,7 +199,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-orange-500" />
             <CardTitle className="text-lg">IQ Option</CardTitle>
-            {config?.last_connected_at && (
+            {connected && (
               <Badge variant="outline" className="text-xs">
                 <Wifi className="w-3 h-3 mr-1" />
                 Conectado
@@ -197,6 +222,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
           <Input
             placeholder="seu@email.com"
             value={email}
+            disabled={isLoading || isTesting}
             onChange={(e) => setEmail(e.target.value)}
             type="email"
           />
@@ -209,6 +235,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
             <Input
               placeholder="Sua senha"
               value={password}
+              disabled={isLoading || isTesting}
               onChange={(e) => setPassword(e.target.value)}
               type={showPassword ? 'text' : 'password'}
             />
@@ -226,7 +253,11 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
         {/* Account Type */}
         <div>
           <Label className="text-xs text-muted-foreground">Tipo de conta</Label>
-          <Select value={accountType} onValueChange={setAccountType}>
+          <Select value={accountType} disabled={isLoading || isTesting} onValueChange={(value) => {
+            if (value === accountType) return;
+            if (embedded) void invalidateConnection(value);
+            else setAccountType(value);
+          }}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -236,6 +267,12 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
             </SelectContent>
           </Select>
         </div>
+
+        {needsReconnect && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Copy desligado. Conecte a conta IQ Option novamente para ativar o copy trading.
+          </p>
+        )}
 
         {/* Warning */}
         <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
@@ -263,14 +300,15 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
             Conectar
           </Button>
           
-          {iqOptionClient.isConnected() && (
+          {(embedded || connected || iqOptionClient.isConnected()) && (
             <Button 
-              variant="ghost" 
-              onClick={disconnectFromIQ} 
-              className="gap-2"
-              size="icon"
+              variant="outline"
+              onClick={() => void invalidateConnection(accountType)}
+              disabled={isLoading || isTesting || !connected}
+              className="flex-1 gap-2"
             >
               <WifiOff className="w-4 h-4 text-destructive" />
+              Desconectar
             </Button>
           )}
         </div>

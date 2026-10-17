@@ -169,8 +169,8 @@ Deno.serve(async (req) => {
         if (!pending) { clearTimeout(timer); finish(); return; }
         for (const [s, id] of prioritizeResultAssets(cand, (open || []).map(o => o.asset))) {
           const rid = `m${id}`; byReq.set(rid, s);
-          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to: nowSec, count: 130 } } }));
-          await new Promise(r => setTimeout(r, 40));
+          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to: nowSec, count: 90 } } }));
+          await new Promise(r => setTimeout(r, 15));
         }
       }
       if (d.name === 'candles' && byReq.has(d.request_id)) {

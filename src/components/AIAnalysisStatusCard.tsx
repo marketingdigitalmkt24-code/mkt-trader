@@ -40,6 +40,36 @@ export function AIAnalysisStatusCard() {
   const [lastSignalTime, setLastSignalTime] = useState<Date | null>(null);
   const [isActive, setIsActive] = useState(false);
 
+  const brtDayStartIso = () => {
+    const brNow = new Date(Date.now() - 3 * 3600 * 1000);
+    return new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()) + 3 * 3600 * 1000).toISOString();
+  };
+
+  const fetchStrategyStats = async () => {
+    try {
+      const { data } = await supabase
+        .from('operation_results')
+        .select('entry_strategy, result')
+        .gte('created_at', brtDayStartIso())
+        .or('timeframe.is.null,timeframe.neq.MT5')
+        .not('signal_id', 'like', 'mt5-%')
+        .not('signal_id', 'like', 'copy-%')
+        .not('entry_strategy', 'is', null);
+      if (!data) return;
+      const byStrategy = new Map<string, StrategyStat>();
+      for (const row of data) {
+        const strategy = String(row.entry_strategy);
+        const stat = byStrategy.get(strategy) ?? { strategy, wins: 0, losses: 0 };
+        if (row.result === 'win') stat.wins += 1;
+        else if (row.result === 'loss') stat.losses += 1;
+        byStrategy.set(strategy, stat);
+      }
+      setStrategyStats([...byStrategy.values()].sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses)));
+    } catch {
+      // silent
+    }
+  };
+
   const fetchSignals = async () => {
     try {
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();

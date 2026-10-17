@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, Zap, Clock, CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Brain, Zap, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, Target } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
@@ -13,10 +13,62 @@ interface SignalEntry {
   created_at: string;
 }
 
+interface StrategyStat {
+  strategy: string;
+  wins: number;
+  losses: number;
+}
+
+const strategyLabels: Record<string, string> = {
+  TENDENCIA: 'Tendência',
+  TENDENCIA_V1: 'Tendência V1',
+  FOUR_WIN_REVERSAL: 'Após 4 ganhos',
+  FORCE_LOSS_WIN: 'Força LOSS → WIN',
+  THREE_FORCE: 'Após 3 Velas de Força',
+  REVERSAO_RSI: 'Reversão RSI',
+  VELA_FORCA: 'Vela de força',
+  ROMPIMENTO: 'Rompimento',
+  RECUO_EMA21: 'Recuo na média 21',
+  KDJ: 'KDJ',
+  ICHIMOKU: 'Ichimoku',
+  AI: 'IA',
+};
+
 export function AIAnalysisStatusCard() {
   const [recentSignals, setRecentSignals] = useState<SignalEntry[]>([]);
+  const [strategyStats, setStrategyStats] = useState<StrategyStat[]>([]);
   const [lastSignalTime, setLastSignalTime] = useState<Date | null>(null);
   const [isActive, setIsActive] = useState(false);
+
+  const brtDayStartIso = () => {
+    const brNow = new Date(Date.now() - 3 * 3600 * 1000);
+    return new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()) + 3 * 3600 * 1000).toISOString();
+  };
+
+  const fetchStrategyStats = async () => {
+    try {
+      const { data } = await supabase
+        .from('operation_results')
+        .select('entry_strategy, result')
+        .gte('created_at', brtDayStartIso())
+        .or('timeframe.is.null,timeframe.neq.MT5')
+        .not('signal_id', 'like', 'mt5-%')
+        .not('signal_id', 'like', 'copy-%')
+        .not('entry_strategy', 'is', null);
+      if (!data) return;
+      const byStrategy = new Map<string, StrategyStat>();
+      for (const row of data) {
+        const strategy = String(row.entry_strategy);
+        const stat = byStrategy.get(strategy) ?? { strategy, wins: 0, losses: 0 };
+        if (row.result === 'win') stat.wins += 1;
+        else if (row.result === 'loss') stat.losses += 1;
+        byStrategy.set(strategy, stat);
+      }
+      setStrategyStats([...byStrategy.values()].sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses)));
+    } catch {
+      // silent
+    }
+  };
 
   const fetchSignals = async () => {
     try {
@@ -44,7 +96,11 @@ export function AIAnalysisStatusCard() {
 
   useEffect(() => {
     fetchSignals();
-    const interval = setInterval(fetchSignals, 10000);
+    fetchStrategyStats();
+    const interval = setInterval(() => {
+      fetchSignals();
+      fetchStrategyStats();
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -160,6 +216,36 @@ export function AIAnalysisStatusCard() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Assertividade do dia por estratégia */}
+        {strategyStats.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-border/40">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Target className="w-3.5 h-3.5 text-gold" />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Assertividade do dia por estratégia</span>
+            </div>
+            <div className="space-y-1">
+              {strategyStats.map(stat => {
+                const settled = stat.wins + stat.losses;
+                const percent = settled > 0 ? (stat.wins / settled) * 100 : 0;
+                return (
+                  <div key={stat.strategy} className="flex items-center justify-between text-xs p-1.5 rounded bg-secondary/20">
+                    <span className="truncate">{strategyLabels[stat.strategy] ?? stat.strategy}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-muted-foreground tabular-nums">{settled} ent.</span>
+                      <span className={cn(
+                        'font-bold tabular-nums',
+                        percent >= 52 ? 'text-call' : percent >= 45 ? 'text-gold' : 'text-put'
+                      )}>
+                        {percent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

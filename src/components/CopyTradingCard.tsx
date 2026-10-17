@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { readCopyAccount } from '@/lib/client-copy-state';
-import { countClientCopyResults, copyResultRates } from '@/lib/admin-copy-results';
+import { countClientCopyResults } from '@/lib/admin-copy-results';
 import { copyDayStart } from '../../supabase/functions/_shared/copy-target';
 
 interface ClientProfile {
@@ -137,7 +137,6 @@ export function CopyTradingCard() {
             const accountType = accounts[client.user_id];
             const balance = balances[client.user_id];
             const totals = results[client.user_id];
-            const rates = totals ? copyResultRates(totals.wins, totals.losses) : null;
             return (
               <div key={client.id} className="flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-3 p-3 bg-secondary/20 rounded-lg">
                 <div className="flex items-center gap-3 min-w-0">
@@ -151,7 +150,7 @@ export function CopyTradingCard() {
                     </p>
                   </div>
                 </div>
-                <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:ml-auto text-center">
+                <dl className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4 lg:ml-auto text-center">
                   <div>
                     <dt className="text-xs text-muted-foreground">Saldo</dt>
                     <dd className="text-sm font-semibold tabular-nums">
@@ -169,16 +168,10 @@ export function CopyTradingCard() {
                   <div>
                     <dt className="text-xs text-muted-foreground">Win hoje</dt>
                     <dd className="text-sm font-semibold tabular-nums text-call">{totals?.wins ?? '—'}</dd>
-                    <dd className="text-xs tabular-nums text-call">{rates ? `${rates.winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—'}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Loss hoje</dt>
                     <dd className="text-sm font-semibold tabular-nums text-put">{totals?.losses ?? '—'}</dd>
-                    <dd className="text-xs tabular-nums text-put">{rates ? `${rates.lossPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Win rate</dt>
-                    <dd className="text-sm font-semibold tabular-nums text-call">{rates ? `${rates.winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—'}</dd>
                   </div>
                 </dl>
                 <div className="flex items-center gap-2 shrink-0">

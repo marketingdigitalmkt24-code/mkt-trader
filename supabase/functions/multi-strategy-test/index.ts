@@ -10,6 +10,7 @@ import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
+import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -246,7 +247,19 @@ Deno.serve(async (req) => {
     // One best candidate; Telegram is reserved for the four-win reversal.
     const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
     // Persist the selected TEST first: the atomic claim checks its four predecessors.
-    const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false }));
+    // Observe the same base TEST signal; never duplicate/relabel it or authorize an order.
+    const { data: sequenceHistory, error: sequenceError } = fresh.length
+      ? await supabase.from('operation_results').select('entry_strategy, result, created_at')
+        .eq('timeframe', 'TEST').like('signal_id', 't7-%')
+        .lt('created_at', new Date(curMin * 1000).toISOString())
+        .gte('created_at', new Date((curMin - 180) * 1000).toISOString())
+        .order('created_at', { ascending: false }).order('signal_id', { ascending: false }).limit(4)
+      : { data: [], error: null };
+    if (sequenceError) console.error('TEST sequence read:', sequenceError.message);
+    const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false,
+      test_sequence_strategy: !sequenceError && matchesTrendSequence(sequenceHistory || [], r.entry_strategy, curMin * 1000)
+        ? TREND_SEQUENCE_TEST : null,
+    }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
     if (best && inserted) {
       const threeClaim = await supabase.rpc('claim_three_force', { p_candidate: best.signal_id });

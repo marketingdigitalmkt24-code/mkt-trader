@@ -31,6 +31,7 @@ interface RecentTrade {
   entry_strategy?: string;
   strategy?: string;
   telegram_sent?: boolean;
+  test_sequence_strategy?: string | null;
 }
 
 const strategyLabels: Record<string, string> = {
@@ -163,7 +164,7 @@ export function LiveOperationsCard() {
       const from = (pageRef.current - 1) * PAGE_SIZE;
       const { data, count, error } = await supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent', { count: 'exact' })
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy', { count: 'exact' })
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
         .order('created_at', { ascending: false })
@@ -391,6 +392,9 @@ export function LiveOperationsCard() {
                     </span>
                     {trade.timeframe === 'TEST' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">TESTE</Badge>
+                    )}
+                    {trade.timeframe === 'TEST' && trade.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS' && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal border-primary/50 text-primary">📐 TENDÊNCIA APÓS WIN → LOSS → LOSS</Badge>
                     )}
                     {trade.entry_strategy === 'TENDENCIA' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📐 TENDÊNCIA</Badge>

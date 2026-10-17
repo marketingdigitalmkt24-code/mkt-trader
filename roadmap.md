@@ -1,3 +1,4 @@
+- [ ] Isolate admin IQ entries and bank results from client copies; verify principal broker balance and matching daily totals.
 - [x] Isolate client dashboard totals and entries by logged-in client's copied orders; shared paginated query with BRT days, realtime and 10-second polling; eight tests passed, authenticated client UI verified 35 orders/14 wins/21 losses/-$942 matching stored client results, no forced trades.
 - [x] Incorporate settled recent TEST outcomes into minute candidate ranking with bounded, recency-weighted asset/direction/strategy feedback; 22 tests passed and runner deployed, authorizations unchanged.
 - [ ] Validate impact of recent-outcome ranking on accuracy and profit (needs new naturally settled signals; no forced orders or guaranteed improvement).

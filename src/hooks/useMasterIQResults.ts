@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,6 +36,6 @@ export function useMasterIQResults() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, reload).subscribe();
     return () => { window.removeEventListener(IQ_RESULTS_RESET_EVENT, reload); void supabase.removeChannel(channel); };
   }, [userId, queryClient]);
-  const operations = (query.data || []).filter(row => isMasterIQOrder(row, cutoff));
+  const operations = useMemo(() => (query.data || []).filter(row => isMasterIQOrder(row, cutoff)), [query.data, cutoff]);
   return { operations, dailyStats: masterIQDailyStats(operations, cutoff), isError: query.isError };
 }

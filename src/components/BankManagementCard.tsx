@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { DailyHistory } from './DailyHistory';
 import { useAuth } from '@/contexts/AuthContext';
 import { resetIQResults } from '@/lib/iq-results-reset';
+import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 
 export function BankManagementCard() {
   const { toast } = useToast();
@@ -18,11 +19,11 @@ export function BankManagementCard() {
   const [isResetting, setIsResetting] = useState(false);
   const {
     balance,
-    dailyStats,
     isLoading,
     lastUpdate,
     refreshBalance,
-  } = useIQOptionConnection();
+  } = useIQOptionConnection({ fetchStatistics: false, balanceOnly: true });
+  const { dailyStats, isError: resultsError } = useMasterIQResults();
 
   // Use REAL stats from IQ Option API (not simulated)
   const wins = dailyStats.wins;
@@ -37,7 +38,7 @@ export function BankManagementCard() {
   
   const currency = balance?.currency || 'USD';
   const accountType = balance?.accountType || 'PRACTICE';
-  const currentBalance = balance?.balance || 0;
+  const currentBalance = balance?.balance ?? 0;
 
   const maxDailyTrades = 20;
   const riskPerTrade = 2;
@@ -165,7 +166,7 @@ export function BankManagementCard() {
           )}
         </div>
         <div className="text-2xl font-bold font-mono text-foreground">
-          {formatCurrency(currentBalance)}
+          {balance ? formatCurrency(currentBalance) : 'Saldo não confirmado'}
         </div>
       </div>
 
@@ -181,6 +182,7 @@ export function BankManagementCard() {
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resultado de Hoje</span>
         </div>
 
+        {resultsError && <p className="text-xs text-destructive mb-2">Não foi possível atualizar os resultados.</p>}
         {/* Main P&L */}
         <div className="flex items-center justify-center gap-3 mb-4">
           <div className={cn(

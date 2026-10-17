@@ -21,7 +21,7 @@ interface DailyStats {
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export function useIQOptionConnection({ silentMissingCredentials = false, fetchStatistics = true }: { silentMissingCredentials?: boolean; fetchStatistics?: boolean } = {}) {
+export function useIQOptionConnection({ silentMissingCredentials = false, fetchStatistics = true, balanceOnly = false }: { silentMissingCredentials?: boolean; fetchStatistics?: boolean; balanceOnly?: boolean } = {}) {
   const { user } = useAuth();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [balance, setBalance] = useState<BalanceInfo | null>(null);
@@ -86,16 +86,18 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
 
       console.log('📊 IQ Option stats from (BRT midnight):', brasiliaMidnightUtc.toISOString());
 
-      const { data: allRows, error } = await supabase
-        .from('operation_results')
-        .select('id, asset, direction, result, profit, entry_price, timeframe, entry_strategy, iq_option_id, created_at')
-        .gte('created_at', new Date(brasiliaMidnightUtc.getTime() - 15 * 60000).toISOString())
-        .neq('timeframe', 'MT5')
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
-      const all = (allRows || []) as Array<{ id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; iq_option_id: string | null; created_at: string }>;
+      const all: Array<{ id: string; signal_id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; iq_option_id: string | null; created_at: string }> = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await supabase.from('operation_results')
+          .select('id, signal_id, asset, direction, result, profit, timeframe, entry_strategy, iq_option_id, created_at')
+          .gte('created_at', brasiliaMidnightUtc.toISOString())
+          .not('signal_id', 'like', 'copy-%').not('signal_id', 'like', 'mt5-%')
+          .not('timeframe', 'in', '(TEST,MT5)').not('iq_option_id', 'is', null)
+          .order('created_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + 999);
+        if (error) throw error;
+        all.push(...(data || []));
+        if (!data || data.length < 1000) break;
+      }
       const startIso = brasiliaMidnightUtc.toISOString();
       // Mesmo filtro do card "Entradas na IQ Option": somente ordens reais confirmadas pela corretora
       const results = all.filter((r) => r.created_at >= startIso && afterIQReset(r.created_at, getIQResultsReset(user?.id)) && r.timeframe !== 'MT5'
@@ -110,14 +112,13 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
 
       for (const result of results) {
         const resultType = result.result?.toLowerCase();
-        const isTestZero = result.timeframe === 'TEST' && !Number(result.profit);
         if (resultType === 'win') {
           wins++;
-          profit += isTestZero ? 8.5 : (result.profit || 0);
+          profit += Number(result.profit || 0);
           currentStreak = 0;
         } else if (resultType === 'loss' || resultType === 'loose') {
           losses++;
-          profit += isTestZero ? -10 : (result.profit || 0); // profit is already negative for losses
+          profit += Number(result.profit || 0); // profit is already negative for losses
           currentStreak++;
           consecutiveLosses = Math.max(consecutiveLosses, currentStreak);
         } else if (resultType === 'tie' || resultType === 'equal') {
@@ -133,7 +134,7 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
 
       setDailyStats({
         dailyProfit: profit,
-        todayTrades: results.filter(r => r.result?.toLowerCase() !== 'pending').length,
+        todayTrades: results.filter(r => ['win', 'loss', 'loose', 'tie', 'draw', 'equal'].includes(r.result?.toLowerCase() || '')).length,
         wins,
         losses,
         consecutiveLosses,
@@ -145,8 +146,10 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
 
   useEffect(() => {
     const reload = () => { void fetchDailyStats(); };
+    reload();
+    const interval = setInterval(reload, 10000);
     window.addEventListener(IQ_RESULTS_RESET_EVENT, reload);
-    return () => window.removeEventListener(IQ_RESULTS_RESET_EVENT, reload);
+    return () => { clearInterval(interval); window.removeEventListener(IQ_RESULTS_RESET_EVENT, reload); };
   }, [fetchDailyStats]);
 
   // Connect to IQ Option
@@ -285,6 +288,7 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
 
   // Set up callbacks
   useEffect(() => {
+    if (balanceOnly) return;
     iqOptionClient.setCallbacks(
       (status) => {
         setConnectionStatus(status);
@@ -307,14 +311,23 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
         clearInterval(balanceRefreshInterval.current);
       }
     };
-  }, []);
+  }, [balanceOnly]);
 
   // Auto-connect when user is available
   useEffect(() => {
+    if (balanceOnly) return;
     if (user && !hasConnected.current) {
       connect();
     }
-  }, [user, connect]);
+  }, [user, connect, balanceOnly]);
+
+  // Read broker balance without another login or shared callback ownership.
+  useEffect(() => {
+    if (!balanceOnly || !user) return;
+    void refreshBalanceFromAPI();
+    const interval = setInterval(() => { void refreshBalanceFromAPI(); }, 15000);
+    return () => clearInterval(interval);
+  }, [balanceOnly, user, refreshBalanceFromAPI]);
 
   // Refresh balance periodically (every 15 seconds) and when operation results change
   useEffect(() => {

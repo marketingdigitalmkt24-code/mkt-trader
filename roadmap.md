@@ -1,4 +1,5 @@
-- [ ] Incorporate settled recent outcomes into active minute candidate ranking without changing real-entry authorizations or adding broker delays.
+- [x] Incorporate settled recent TEST outcomes into minute candidate ranking with bounded, recency-weighted asset/direction/strategy feedback; 22 tests passed and runner deployed, authorizations unchanged.
+- [ ] Validate impact of recent-outcome ranking on accuracy and profit (needs new naturally settled signals; no forced orders or guaranteed improvement).
 - [x] Reduce shared candle-request pacing for all authorized strategies; 22 tests passed, runner deployed, full-market ranking and :00 candidate preserved. Actual broker timing awaits a natural authorized entry; no forced orders.
 - [x] Add three consecutive Vela de Força signals → next same-direction principal IQ order and Telegram; 21 tests passed, service-only permissions verified, functions deployed and build OK.
 - [ ] Verify natural THREE_FORCE broker order and Telegram entry/result (waiting for three new consecutive force signals after activation; no forced or retrospective order).

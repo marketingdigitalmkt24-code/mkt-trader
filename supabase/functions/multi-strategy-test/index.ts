@@ -259,7 +259,8 @@ Deno.serve(async (req) => {
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
         const claimedStrategy = trade.entryStrategy === THREE_FORCE_STRATEGY ? THREE_FORCE_STRATEGY : trade.entryStrategy === FORCE_LOSS_WIN_STRATEGY ? FORCE_LOSS_WIN_STRATEGY : FOUR_WIN_STRATEGY;
         const entryAt = nextReversalMinute(curMin * 1000);
-        // User rule (17/10): every real IQ/Telegram entry is inverted. Four-win claim already inverts.
+        // User rule (17/10 19:xx UTC): real IQ/Telegram entries are inverted, EXCEPT Após 4 ganhos —
+        // it enters in the signal's normal direction (the claim no longer inverts).
         if (claimedStrategy !== FOUR_WIN_STRATEGY) {
           trade.direction = String(trade.direction).toLowerCase() === 'call' ? 'put' : 'call';
           await supabase.from('trade_queue').update({ direction: trade.direction.toUpperCase() })

@@ -23,9 +23,9 @@ const ema = (p: number, src: number[]) => { const a = 2 / (p + 1); const r: numb
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+  const since = new Date(Date.now() - 1 * 86400000).toISOString();
   const { data: ops } = await supabase.from('operation_results').select('asset, direction, result, profit, created_at, entry_strategy')
-    .not('iq_option_id', 'is', null).not('timeframe','in','(TEST,MT5)').neq('entry_strategy','COPY_TRADE').in('result', ['win', 'loss']).gte('created_at', since).order('created_at');
+    .eq('timeframe','TEST').in('entry_strategy', ['TENDENCIA']).in('result', ['win', 'loss']).gte('created_at', since).order('created_at');
   const trades = (ops || []) as any[];
   const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     const ws = new WebSocket(WS_URL);
     let pending = 0;
     const finish = () => { try { ws.close(); } catch (_) { /* */ } resolve(); };
-    const timer = setTimeout(finish, 130000);
+    const timer = setTimeout(finish, 40000);
     ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
     ws.onerror = () => { clearTimeout(timer); finish(); };
     ws.onmessage = async (ev) => {
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
         for (const { i, id } of reqs) {
           const to = Math.floor(new Date(trades[i].created_at).getTime() / 60000) * 60 - 1;
           ws.send(JSON.stringify({ name: 'sendMessage', request_id: `t${i}`, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to, count: 400 } } }));
-          await new Promise(r => setTimeout(r, 60));
+          await new Promise(r => setTimeout(r, 15));
         }
       }
       if (d.name === 'candles' && String(d.request_id || '').startsWith('t')) {

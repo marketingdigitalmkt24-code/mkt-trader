@@ -693,6 +693,26 @@ export type Database = {
     Functions: {
       claim_force_loss_win: { Args: { p_candidate: string }; Returns: Json }
       claim_four_win_reversal: { Args: { p_candidate: string }; Returns: Json }
+      get_master_iq_config: {
+        Args: never
+        Returns: {
+          account_type: string
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          last_connected_at: string | null
+          password: string
+          updated_at: string
+          user_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "iqoption_config"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

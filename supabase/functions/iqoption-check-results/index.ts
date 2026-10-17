@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
 import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
+import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -402,12 +403,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Get IQ Option credentials from database
-    const { data: configData, error: configError } = await supabase
-      .from('iqoption_config')
-      .select('email, password, account_type')
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
+    const { data: configData, error: configError } = await readMasterIQConfig(supabase);
 
     if (configError || !configData) {
       console.error('No IQ Option credentials found');
@@ -455,7 +451,7 @@ serve(async (req) => {
     await supabase
       .from('iqoption_config')
       .update({ last_connected_at: new Date().toISOString() })
-      .eq('email', credentials.email);
+      .eq('id', configData.id);
 
     // Get ALL pending operations AND ALL tie results (which should be verified)
     // TIE results are often temporary placeholders - we should always verify them

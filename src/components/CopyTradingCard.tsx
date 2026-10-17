@@ -136,7 +136,7 @@ export function CopyTradingCard() {
             const enabled = cfg?.enabled ?? false;
             const accountType = accounts[client.user_id];
             const balance = balances[client.user_id];
-            const totals = results[client.user_id];
+            const rates = totals ? copyResultRates(totals.wins, totals.losses) : null;
             return (
               <div key={client.id} className="flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-3 p-3 bg-secondary/20 rounded-lg">
                 <div className="flex items-center gap-3 min-w-0">
@@ -150,7 +150,7 @@ export function CopyTradingCard() {
                     </p>
                   </div>
                 </div>
-                <dl className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4 lg:ml-auto text-center">
+                <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:ml-auto text-center">
                   <div>
                     <dt className="text-xs text-muted-foreground">Saldo</dt>
                     <dd className="text-sm font-semibold tabular-nums">

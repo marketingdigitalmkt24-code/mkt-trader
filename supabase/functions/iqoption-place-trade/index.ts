@@ -191,7 +191,7 @@ async function mirrorCopyTrades(
       } catch (e) {
         console.error(`❌ Copy ${copy.user_id} erro:`, String(e));
       }
-    }
+    }));
   } catch (e) {
     console.error('❌ Copy mirror fatal:', String(e));
   }

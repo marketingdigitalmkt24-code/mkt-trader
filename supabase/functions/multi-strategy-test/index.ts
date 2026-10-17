@@ -6,6 +6,7 @@ import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { FOUR_WIN_STRATEGY, nextReversalMinute } from '../_shared/four-win-reversal.ts';
 import { FORCE_LOSS_WIN_STRATEGY } from '../_shared/force-loss-win.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
+import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -110,7 +111,7 @@ Deno.serve(async (req) => {
   }
   const supabase = createClient(url, serviceKey);
   const [{ data: cfg }, { data: open }] = await Promise.all([
-    supabase.from('iqoption_config').select('id, email, password').eq('is_active', true).not('user_id', 'is', null).order('last_connected_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle(),
+    readMasterIQConfig(supabase),
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000),
   ]);

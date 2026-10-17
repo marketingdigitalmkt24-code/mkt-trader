@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
+import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1735,9 +1736,7 @@ serve(async (req) => {
           const { data: fxOpen } = await supabase.from('operation_results')
             .select('id').eq('timeframe', 'FOREX').eq('result', 'open').eq('asset', bestSignal.asset).limit(1);
           if (!fxOpen || fxOpen.length === 0) {
-            const { data: fxCfg } = await supabase.from('iqoption_config').select('user_id')
-              .eq('is_active', true).not('user_id', 'is', null)
-              .order('last_connected_at', { ascending: false }).limit(1).maybeSingle();
+            const { data: fxCfg } = await readMasterIQConfig(supabase);
             const { data: fxSet } = fxCfg ? await supabase.from('user_trading_settings')
               .select('trade_amount').eq('user_id', fxCfg.user_id).limit(1).maybeSingle() : { data: null };
             const fxAmount = Number(fxSet?.trade_amount) || 1;
@@ -1781,14 +1780,7 @@ serve(async (req) => {
           if (freshPending && freshPending.length > 0) {
             console.log(`🚫 IQ Option: BLOQUEADO — re-check detectou operação pendente`);
           } else {
-            const { data: iqConfig } = await supabase
-              .from('iqoption_config')
-              .select('*')
-              .eq('is_active', true)
-              .not('user_id', 'is', null)
-              .order('last_connected_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
+            const { data: iqConfig } = await readMasterIQConfig(supabase);
 
             if (iqConfig) {
               const { data: tradeSettings } = await supabase
@@ -1961,12 +1953,7 @@ serve(async (req) => {
           if (slotsAvailable <= 0) {
             console.log(`🚫 MT5: Limite de ${MAX_MT5_POSITIONS} posições atingido`);
           } else {
-            const { data: iqCfgForUser } = await supabase
-              .from('iqoption_config')
-              .select('user_id')
-              .eq('is_active', true)
-              .limit(1)
-              .maybeSingle();
+            const { data: iqCfgForUser } = await readMasterIQConfig(supabase);
 
             const { data: tradeSettings } = await supabase
               .from('user_trading_settings')

@@ -6,6 +6,7 @@ import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal, canReuseBrokerSessi
 import { FORCE_LOSS_WIN_STRATEGY, FORCE_LOSS_WIN_LABEL, isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
 import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
+import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -618,16 +619,11 @@ serve(async (req) => {
     }
 
     // Get IQ Option credentials
-    const configQuery = supabase
-      .from('iqoption_config')
-      .select('id, email, password, account_type')
-      .eq('is_active', true);
     const serverReversal = isNextMinuteStrategy(tradeRequest.entryStrategy)
       && req.headers.get('Authorization') === `Bearer ${supabaseKey}`;
-    if (serverReversal && typeof privateSession?.configId === 'string') {
-      configQuery.eq('id', privateSession.configId);
-    }
-    const { data: configData } = await configQuery.limit(1).maybeSingle();
+    const expectedConfigId = serverReversal && typeof privateSession?.configId === 'string'
+      ? privateSession.configId : undefined;
+    const { data: configData } = await readMasterIQConfig(supabase, expectedConfigId);
 
     if (!configData) {
       return new Response(

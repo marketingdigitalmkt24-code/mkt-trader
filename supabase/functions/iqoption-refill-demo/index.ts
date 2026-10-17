@@ -1,5 +1,5 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { corsHeaders } from 'npm:@supabase/supabase-js@2.118.0/cors';
 import { isPracticeAccount, verifiedDemoBalance } from '../_shared/demo-refill.ts';
 
 const reply = (data: object, status = 200) => Response.json(data, { status, headers: corsHeaders });

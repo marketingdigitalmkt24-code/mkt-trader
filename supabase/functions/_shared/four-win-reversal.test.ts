@@ -21,12 +21,11 @@ test('only authorized server calls can reuse the same active broker account sess
   assert.equal(canReuseBrokerSession(true, 'account-a', 'account-b'), false);
   assert.equal(canReuseBrokerSession(true, '', ''), false);
 });
-test('candidate at 20:16 BRT targets exactly 20:17 BRT, never another minute', () => {
-  assert.equal(nextReversalMinute(Date.parse('2026-10-16T20:16:00-03:00')), Date.parse('2026-10-16T20:17:00-03:00'));
+test('wins at 20:54-20:57 BRT: reversal enters at 20:58 BRT, not 20:59', () => {
+  assert.equal(nextReversalMinute(Date.parse('2026-10-16T20:58:00-03:00')), Date.parse('2026-10-16T20:58:00-03:00'));
 });
-test('a delayed timer must not submit at or after the selected minute', () => {
-  const entryAt = Date.parse('2026-10-16T20:17:00-03:00');
-  assert.equal(canSendReversal(entryAt, entryAt - 120), true);
-  assert.equal(canSendReversal(entryAt, entryAt), false);
-  assert.equal(canSendReversal(entryAt, entryAt + 2500), false);
+test('reversal may be sent early in the entry minute but never after 30 seconds', () => {
+  const entryAt = Date.parse('2026-10-16T20:58:00-03:00');
+  assert.equal(canSendReversal(entryAt, entryAt + 5000), true);
+  assert.equal(canSendReversal(entryAt, entryAt + 30000), false);
 });

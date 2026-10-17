@@ -5,13 +5,17 @@ export function canReuseBrokerSession(serviceAuthorized: boolean, sessionConfigI
   return serviceAuthorized && sessionConfigId.length > 0 && sessionConfigId === activeConfigId;
 }
 
-// Never roll a selected candidate forward when its next-minute deadline is missed.
+// The fourth win is only known when its candle closes, at the opening of the selected
+// candidate's minute. Enter that SAME minute immediately; never roll forward to another.
 export function nextReversalMinute(candidateMinuteMs: number): number {
-  return candidateMinuteMs + 60000;
+  return candidateMinuteMs;
 }
 
+// Latest safe submission inside the entry minute (1-minute turbo closes purchases ~30 s before expiry).
+export const REVERSAL_SUBMIT_WINDOW_MS = 30000;
+
 export function canSendReversal(entryAt: number, nowMs: number): boolean {
-  return Number.isFinite(entryAt) && entryAt % 60000 === 0 && nowMs < entryAt;
+  return Number.isFinite(entryAt) && entryAt % 60000 === 0 && nowMs < entryAt + REVERSAL_SUBMIT_WINDOW_MS;
 }
 
 export function invertDirection(direction: 'CALL' | 'PUT'): 'CALL' | 'PUT' {

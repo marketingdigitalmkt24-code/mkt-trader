@@ -1,4 +1,4 @@
-- [ ] Study PUT after five separate resistance touches on 30 days of IQ Option candles; report collection coverage and held-out results without enabling trading.
+- [x] Study PUT after five separate resistance touches, fixed prior resistance and next-minute expiry on Sept 17–Oct 17 IQ Option candles: 175 enabled/non-suspended assets (174 OTC), 7,534,890 candles; search 12W/13L, held-out 7W/6L (53.85%, only 13 cases); three tests passed, no trading or Telegram changes.
 - [x] Show daily copied profit and win/loss percentages in admin Copy Trading; four calculation tests passed, authenticated client display verified, mobile has no overflow and build OK.
 - [x] Stop client copy on Demo/Real changes or disconnect; require reconnection and show explicit connection buttons; eight tests passed, installed trigger verified, authenticated controls checked without changing a live broker account.
 - [x] Show client broker balance and today's copied wins/losses in admin Copy Trading; authenticated display read back USD 10,029.70 and 0 wins/0 losses; isolation test passed.

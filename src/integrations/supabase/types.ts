@@ -89,6 +89,24 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_force_loss_win_state: {
+        Row: {
+          activated_at: string
+          consumed_through: string
+          id: number
+        }
+        Insert: {
+          activated_at?: string
+          consumed_through?: string
+          id?: number
+        }
+        Update: {
+          activated_at?: string
+          consumed_through?: string
+          id?: number
+        }
+        Relationships: []
+      }
       iq_four_win_state: {
         Row: {
           activated_at: string
@@ -646,6 +664,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_force_loss_win: { Args: { p_candidate: string }; Returns: Json }
       claim_four_win_reversal: { Args: { p_candidate: string }; Returns: Json }
       has_role: {
         Args: {

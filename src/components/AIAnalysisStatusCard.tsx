@@ -36,6 +36,7 @@ const strategyLabels: Record<string, string> = {
 
 export function AIAnalysisStatusCard() {
   const [recentSignals, setRecentSignals] = useState<SignalEntry[]>([]);
+  const [strategyStats, setStrategyStats] = useState<StrategyStat[]>([]);
   const [lastSignalTime, setLastSignalTime] = useState<Date | null>(null);
   const [isActive, setIsActive] = useState(false);
 

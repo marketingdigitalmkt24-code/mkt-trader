@@ -5,6 +5,7 @@
 - [ ] Verify next natural four-win reversal, Telegram entry/result and broker order read-back (waiting for four new consecutive TEST wins; current broker account is PRACTICE, not cash REAL; do not force a trade).
 - [x] Correct one-minute reversal shift: wins at 54–57 enter the selected 58 signal immediately after confirmation, never shift to 59; six regression tests passed.
 - [x] Prioritize expired TEST candle requests and confirm results as responses arrive; eight tests passed and runner deployed without forcing orders. Natural reversal timing still awaits a new four-win sequence.
+- [ ] Make result reset nondestructive and isolated from live TEST operations; add authenticated broker demo refill to 10,000 and verify controls.
 - [x] Add strategy badges to IQ Option's latest operations, with honest labels for unmatched history.
 - [x] Add clear emojis throughout automatic Telegram entry alerts and final result messages.
 - [x] Compare recorded losses by strategy using linked IQ Option operations.

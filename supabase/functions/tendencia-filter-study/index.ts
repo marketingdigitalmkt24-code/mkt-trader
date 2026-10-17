@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
   const { data: ops } = await supabase.from('operation_results').select('asset, direction, result, profit, created_at, entry_strategy')
-    .not('iq_option_id', 'is', null).in('entry_strategy', ['TENDENCIA', 'TENDENCIA_V1']).in('result', ['win', 'loss']).gte('created_at', since).order('created_at');
+    .not('iq_option_id', 'is', null).not('timeframe','in','(TEST,MT5)').neq('entry_strategy','COPY_TRADE').in('result', ['win', 'loss']).gte('created_at', since).order('created_at');
   const trades = (ops || []) as any[];
   const { data: cfg } = await supabase.from('iqoption_config').select('email, password').eq('is_active', true).limit(1).maybeSingle();
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
@@ -69,6 +69,11 @@ Deno.serve(async (req) => {
     };
   });
 
+  const trend: any = { a_favor: { w: 0, l: 0, p: 0 }, contra: { w: 0, l: 0, p: 0 }, sem_dados: { w: 0, l: 0, p: 0 } };
+  trades.forEach((t, i) => { const cs = candles.get(i) || []; let k = 'sem_dados';
+    if (cs.length >= 60) { const c = cs.map(x => x.c); const n = c.length - 1; const e9 = ema(9, c)[n], e21 = ema(21, c)[n]; const sma = c.slice(n - 49).reduce((a, b) => a + b, 0) / 50;
+      const up = e9 > e21 && e21 > sma && c[n] > e21, dn = e9 < e21 && e21 < sma && c[n] < e21; k = (t.direction === 'CALL' ? up : dn) ? 'a_favor' : 'contra'; }
+    const b = trend[k]; if (t.result === 'win') b.w++; else b.l++; b.p += Number(t.profit); });
   type S = { cutW: number; cutL: number; cutP: number };
   const mk = (): S => ({ cutW: 0, cutL: 0, cutP: 0 });
   const st: Record<string, S> = { maior: mk(), esticado: mk(), ultimas: mk(), qualquer: mk() };
@@ -106,5 +111,5 @@ Deno.serve(async (req) => {
     if (t.asset === 'BTC/USD' && t.created_at.startsWith('2026-10-16T05:4')) examples.push({ t: t.created_at, r: t.result, ...flags });
   });
   const w = trades.filter(t => t.result === 'win').length;
-  return Response.json({ success: true, total: trades.length, wins: w, losses: trades.length - w, profit: trades.reduce((s, t) => s + Number(t.profit), 0), analyzed, missing, st, examples }, { headers: cors });
+  return Response.json({ success: true, trend, total: trades.length, wins: w, losses: trades.length - w, profit: trades.reduce((s, t) => s + Number(t.profit), 0), analyzed, missing, st, examples }, { headers: cors });
 });

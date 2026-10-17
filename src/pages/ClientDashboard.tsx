@@ -161,47 +161,20 @@ const ClientDashboard = () => {
           </Card>
         </div>
 
-        {/* Main Configuration Sections */}
-        <div className="grid gap-4 sm:gap-8 lg:grid-cols-2">
-          {/* Auto Trading Section */}
-          <section>
-            <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-              </div>
-              <h2 className="text-lg sm:text-xl font-bold text-foreground">Auto Trading</h2>
+        {/* IQ Option Section */}
+        <section>
+          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-call/20 flex items-center justify-center">
+              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-call" />
             </div>
-            <Card className="border-primary/20">
-              <CardContent className="pt-6">
-                <AutoTradingCard 
-                  config={autoTradingConfig}
-                  updateConfig={updateAutoTradingConfig}
-                  isPlacingTrade={isPlacingTrade}
-                  isAnalyzingAI={isAnalyzingAI}
-                  lastTradeResult={lastTradeResult}
-                  defaultOpen={true}
-                  currentBalance={balance}
-                  dailyProfit={dailyProfit}
-                />
-              </CardContent>
-            </Card>
-          </section>
-
-          {/* IQ Option Section */}
-          <section>
-            <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-call/20 flex items-center justify-center">
-                <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-call" />
-              </div>
-              <h2 className="text-lg sm:text-xl font-bold text-foreground">IQ Option</h2>
-            </div>
-            <Card className="border-call/20">
-              <CardContent className="pt-6">
-                <IQOptionSettingsCard defaultOpen={true} />
-              </CardContent>
-            </Card>
-          </section>
-        </div>
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">IQ Option</h2>
+          </div>
+          <Card className="border-call/20">
+            <CardContent className="pt-6">
+              <IQOptionSettingsCard defaultOpen={true} />
+            </CardContent>
+          </Card>
+        </section>
 
         {/* Copy Trading + Resultados */}
         <div className="grid gap-4 sm:gap-8 lg:grid-cols-2 mt-4 sm:mt-8">

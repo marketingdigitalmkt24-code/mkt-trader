@@ -134,7 +134,7 @@ export function ClientCopyTradingCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <IQOptionSettingsCard defaultOpen embedded />
+        <IQOptionSettingsCard defaultOpen embedded onConnectionChange={() => { void load(); }} />
         {!connected && (
           <p className="text-xs text-muted-foreground">Conecte sua conta IQ Option para ligar o copy trading.</p>
         )}

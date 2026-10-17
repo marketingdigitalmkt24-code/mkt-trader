@@ -78,6 +78,13 @@
       "when": 1792214334362,
       "tag": "0010_allow_clients_create_own_copy_config",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792214978159,
+      "tag": "0011_invalidate_copy_on_iq_account_change",
+      "breakpoints": true
     }
   ]
 }

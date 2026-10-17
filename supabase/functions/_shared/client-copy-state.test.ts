@@ -23,6 +23,15 @@ test('activation requires a confirmed connected IQ Option account', () => {
   assert.equal(canEnableCopy({ is_active: false, last_connected_at: '2026-10-17T05:02:00Z' }), false);
   assert.equal(canEnableCopy({ is_active: true, last_connected_at: '2026-10-17T05:02:00Z' }), true);
 });
+test('changing Demo to Real requires fresh confirmation before copy can activate', () => {
+  const changedAccount = { account_type: 'REAL', is_active: false, last_connected_at: null };
+  assert.equal(readCopyAccount(changedAccount), 'REAL');
+  assert.equal(canEnableCopy(changedAccount), false);
+  assert.equal(canEnableCopy({ ...changedAccount, is_active: true, last_connected_at: '2026-10-17T05:30:00Z' }), true);
+});
+test('disconnecting the selected account prevents copy activation', () => {
+  assert.equal(canEnableCopy({ is_active: false, last_connected_at: null }), false);
+});
 test('daily target stops copying at the target, never below it or with no target', () => {
   assert.equal(copyTargetReached(9.99, 10), false);
   assert.equal(copyTargetReached(10, 10), true);

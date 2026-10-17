@@ -129,8 +129,7 @@ async function mirrorCopyTrades(
   supabase: any,
   tradeRequest: TradeRequest,
   masterSignalId: string,
-  timeframe: string,
-  expirationIso: string | null,
+  master: Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>,
 ) {
   try {
     if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
@@ -172,7 +171,9 @@ async function mirrorCopyTrades(
         const { ssid } = await loginToIQOption(cfg.email, cfg.password);
         if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou`); return; }
 
-        const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount });
+        // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.
+        const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount }, master.then(m => m.ok));
+        const { timeframe, expirationIso } = await master;
         if (res.success && res.tradeId) {
           await supabase.from('operation_results').insert({
             signal_id: `copy-${copy.user_id}-${masterSignalId}`,
@@ -213,6 +214,7 @@ async function placeTradeFireAndForget(
   ssid: string, 
   accountType: string,
   trade: TradeRequest,
+  gate?: Promise<boolean>,
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
   return new Promise((resolve) => {
     console.log('📡 Connecting to IQ Option WebSocket for trading...');
@@ -470,7 +472,12 @@ async function placeTradeFireAndForget(
           const entryDelay = Math.max(0, candleOpenMs - ENTRY_LATENCY_LEAD_MS - nowMs0);
           console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar na abertura da vela ${new Date(candleOpenMs).toISOString()}`);
 
-          const fire = () => {
+          const fire = async () => {
+            if (gate && !(await gate)) {
+              clearTimeout(timeout); ws.close();
+              resolve({ success: false, error: 'Ordem principal não confirmada; copy não enviado' });
+              return;
+            }
             // Recheck at actual submission: event-loop delay must never create a late order.
             if (isNextMinuteStrategy(trade.entryStrategy) && !canSendReversal(candleOpenMs, Date.now())) {
               clearTimeout(timeout); ws.close();
@@ -784,7 +791,14 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    // Copy: prepara login/gráfico dos clientes em paralelo e envia assim que a principal confirmar.
+    let settleMaster!: (m: { ok: boolean; timeframe: string; expirationIso: string | null }) => void;
+    const masterOutcome = new Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>(res => { settleMaster = res; });
+    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome);
+    // @ts-ignore EdgeRuntime exists in Supabase runtime
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
+    if (!(result.success && result.tradeId)) settleMaster({ ok: false, timeframe: '', expirationIso: null });
     if (!(result.success && result.tradeId)) await cancelAlert();
     console.log('📊 Trade result:', JSON.stringify(result));
 
@@ -797,6 +811,7 @@ serve(async (req) => {
         : isNextMinuteStrategy(tradeRequest.entryStrategy) && tradeRequest.entryAt
         ? new Date(tradeRequest.entryAt + tradeRequest.expiration * 60000).toISOString()
         : new Date((Math.round(Date.now() / 60000) + (tradeRequest.expiration || 1)) * 60000).toISOString();
+      settleMaster({ ok: true, timeframe, expirationIso });
       
       await supabase.from('operation_results').insert({
         signal_id: tradeRequest.signalId || `auto_${Date.now()}`,
@@ -816,10 +831,6 @@ serve(async (req) => {
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
 
       // Copy trading: espelha a ordem confirmada para os clientes com copy ativo
-      const masterSignalId = tradeRequest.signalId || `auto_${Date.now()}`;
-      const copyTask = mirrorCopyTrades(supabase, tradeRequest, masterSignalId, timeframe, expirationIso);
-      // @ts-ignore EdgeRuntime exists in Supabase runtime
-      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
 
       // Schedule result checks right at expiry (fast win/loss → instant post-win continuation)
       if (!isForex) {

@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'bun:test';
-import { clientCopyResults, clientDayStart } from '../../../src/lib/client-copy-results';
+import { clientCopyResults, clientDayStart, clientSignalsPage } from '../../../src/lib/client-copy-results';
 
 const now = new Date('2026-10-17T21:54:00Z');
 const row = { id: 'copy', signal_id: 'copy-client-a-master', asset: 'JUP/USD-OTC', direction: 'CALL', result: 'win', profit: 82, iq_option_id: '14364506418', timeframe: 'M1', created_at: '2026-10-17T15:14:05Z' };
 describe('client dashboard isolation', () => {
+  it('shows 20 signals per page and retains the remaining history without duplicates', () => {
+    const signals = Array.from({ length: 45 }, (_, id) => id);
+    expect(clientSignalsPage(signals, 1).operations).toEqual(signals.slice(0, 20));
+    expect(clientSignalsPage(signals, 2).operations).toEqual(signals.slice(20, 40));
+    expect(clientSignalsPage(signals, 3).operations).toEqual(signals.slice(40));
+    expect(clientSignalsPage(signals, 3).totalPages).toBe(3);
+    expect(clientSignalsPage(signals.slice(0, 20), 3).page).toBe(1);
+  });
   it('retains the client’s $82 win without merging the principal’s $10 loss on the same broker account', () => {
     const result = clientCopyResults([row,
       { ...row, id: 'master', signal_id: 'fourwin-master', result: 'loss', profit: -10, iq_option_id: '14364506363' },

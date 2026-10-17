@@ -1,14 +1,19 @@
-import { BarChart3, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
+import { useState } from 'react';
+import { BarChart3, Loader2, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { copyResultRates } from '@/lib/admin-copy-results';
+import { clientSignalsPage } from '@/lib/client-copy-results';
 
 // Resultados do cliente: nunca exibe a estratégia utilizada.
 export function ClientResultsCard() {
   const { operations: ops, profit, wins, losses, trades, isLoading, isError } = useClientCopyResults();
   const { winPercent } = copyResultRates(wins, losses);
+  const [requestedPage, setRequestedPage] = useState(1);
+  const { page, totalPages, operations: visibleOps } = clientSignalsPage(ops, requestedPage);
 
   return (
     <Card className="border-border/50">
@@ -55,7 +60,7 @@ export function ClientResultsCard() {
           </p>
         ) : (
           <div className="space-y-1.5 max-h-72 overflow-y-auto">
-            {ops.map((op) => (
+            {visibleOps.map((op) => (
               <div key={op.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/20">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className={cn(
@@ -80,6 +85,17 @@ export function ClientResultsCard() {
               </div>
             ))}
           </div>
+        )}
+        {!isLoading && !isError && ops.length > 20 && (
+          <nav aria-label="Histórico de sinais" className="flex items-center justify-between gap-2 mt-3">
+            <Button variant="outline" size="icon" aria-label="Página anterior" title="Página anterior" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>
+              <ChevronLeft />
+            </Button>
+            <span className="text-xs text-muted-foreground tabular-nums">Página {page} de {totalPages}</span>
+            <Button variant="outline" size="icon" aria-label="Próxima página" title="Próxima página" disabled={page === totalPages} onClick={() => setRequestedPage(page + 1)}>
+              <ChevronRight />
+            </Button>
+          </nav>
         )}
       </CardContent>
     </Card>

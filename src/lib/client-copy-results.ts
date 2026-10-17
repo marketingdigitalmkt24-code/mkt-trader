@@ -7,6 +7,13 @@ export interface ClientCopyOperation extends CopyResultRow {
   created_at: string;
 }
 
+export function clientSignalsPage<T>(operations: T[], requestedPage: number) {
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(operations.length / pageSize));
+  const page = Math.min(Math.max(1, requestedPage), totalPages);
+  return { page, totalPages, operations: operations.slice((page - 1) * pageSize, page * pageSize) };
+}
+
 export function clientDayStart(now = new Date()) {
   const brt = new Date(now.getTime() - 3 * 3600000);
   return new Date(Date.UTC(brt.getUTCFullYear(), brt.getUTCMonth(), brt.getUTCDate(), 3)).toISOString();

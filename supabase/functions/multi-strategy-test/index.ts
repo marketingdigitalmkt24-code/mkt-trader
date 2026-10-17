@@ -8,6 +8,7 @@ import { FORCE_LOSS_WIN_STRATEGY } from '../_shared/force-loss-win.ts';
 import { THREE_FORCE_STRATEGY } from '../_shared/three-force.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
+import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -169,11 +170,11 @@ Deno.serve(async (req) => {
         }
         pending = cand.size;
         if (!pending) { clearTimeout(timer); finish(); return; }
-        for (const [s, id] of prioritizeResultAssets(cand, (open || []).map(o => o.asset))) {
+        await sendCandleRequestBatches(prioritizeResultAssets(cand, (open || []).map(o => o.asset)), ([s, id]) => {
+          if (ws.readyState !== WebSocket.OPEN) return;
           const rid = `m${id}`; byReq.set(rid, s);
           ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to: nowSec, count: 90 } } }));
-          await new Promise(r => setTimeout(r, 15));
-        }
+        });
       }
       if (d.name === 'candles' && byReq.has(d.request_id)) {
         const s = byReq.get(d.request_id); byReq.delete(d.request_id);

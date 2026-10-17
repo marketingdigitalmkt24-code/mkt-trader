@@ -1,3 +1,4 @@
+- [x] Reduce shared candle-request pacing for all authorized strategies; 22 tests passed, runner deployed, full-market ranking and :00 candidate preserved. Actual broker timing awaits a natural authorized entry; no forced orders.
 - [x] Add three consecutive Vela de Força signals → next same-direction principal IQ order and Telegram; 21 tests passed, service-only permissions verified, functions deployed and build OK.
 - [ ] Verify natural THREE_FORCE broker order and Telegram entry/result (waiting for three new consecutive force signals after activation; no forced or retrospective order).
 - [x] Restrict master collection, both claims, placement and reconciliation to service-only admin IQ resolver; 17 tests passed, permissions verified and four functions deployed; selected admin PRACTICE connection has auto trading enabled, no forced trade.

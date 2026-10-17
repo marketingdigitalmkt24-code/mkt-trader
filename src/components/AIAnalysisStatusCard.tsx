@@ -219,6 +219,36 @@ export function AIAnalysisStatusCard() {
           </div>
         )}
 
+        {/* Assertividade do dia por estratégia */}
+        {strategyStats.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-border/40">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Target className="w-3.5 h-3.5 text-gold" />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Assertividade do dia por estratégia</span>
+            </div>
+            <div className="space-y-1">
+              {strategyStats.map(stat => {
+                const settled = stat.wins + stat.losses;
+                const percent = settled > 0 ? (stat.wins / settled) * 100 : 0;
+                return (
+                  <div key={stat.strategy} className="flex items-center justify-between text-xs p-1.5 rounded bg-secondary/20">
+                    <span className="truncate">{strategyLabels[stat.strategy] ?? stat.strategy}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-muted-foreground tabular-nums">{settled} ent.</span>
+                      <span className={cn(
+                        'font-bold tabular-nums',
+                        percent >= 52 ? 'text-call' : percent >= 45 ? 'text-gold' : 'text-put'
+                      )}>
+                        {percent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {recentSignals.length === 0 && (
           <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-lg">
             <Brain className="w-5 h-5 mx-auto mb-1 opacity-30" />

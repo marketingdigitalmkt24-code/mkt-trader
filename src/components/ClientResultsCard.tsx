@@ -3,10 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
+import { copyResultRates } from '@/lib/admin-copy-results';
 
 // Resultados do cliente: nunca exibe a estratégia utilizada.
 export function ClientResultsCard() {
   const { operations: ops, profit, wins, losses, trades, isLoading, isError } = useClientCopyResults();
+  const { winPercent } = copyResultRates(wins, losses);
 
   return (
     <Card className="border-border/50">
@@ -22,7 +24,7 @@ export function ClientResultsCard() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
           <div className="p-2 rounded-lg bg-secondary/30 text-center">
             <p className="text-[10px] text-muted-foreground uppercase">Operações</p>
             <p className="text-sm font-bold">{trades}</p>
@@ -34,6 +36,10 @@ export function ClientResultsCard() {
           <div className="p-2 rounded-lg bg-put/10 text-center">
             <p className="text-[10px] text-muted-foreground uppercase">Losses</p>
             <p className="text-sm font-bold text-put">{losses}</p>
+          </div>
+          <div className="p-2 rounded-lg bg-secondary/30 text-center">
+            <p className="text-[10px] text-muted-foreground uppercase">Win rate</p>
+            <p className="text-sm font-bold text-call tabular-nums">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</p>
           </div>
         </div>
 

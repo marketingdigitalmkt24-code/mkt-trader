@@ -80,6 +80,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
   };
 
   const testConnection = async () => {
+    if (!user) return;
     if (!email.trim() || !password.trim()) {
       toast({ title: 'Erro', description: 'Preencha email e senha primeiro', variant: 'destructive' });
       return;
@@ -98,6 +99,18 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
       });
       
       if (result.success) {
+        const values = {
+          email: email.trim(), password: password.trim(), account_type: accountType,
+          last_connected_at: new Date().toISOString(),
+        };
+        const { error: saveError } = config
+          ? await supabase.from('iqoption_config').update(values).eq('id', config.id).eq('user_id', user.id)
+          : await supabase.from('iqoption_config').insert({ ...values, user_id: user.id });
+        if (saveError) {
+          setTestResult('error');
+          toast({ title: 'Não foi possível configurar o copy', description: 'A conta conectou, mas não foi possível salvar a configuração. Tente conectar novamente.', variant: 'destructive' });
+          return;
+        }
         setTestResult('success');
         loadConfig(); // Reload to get updated last_connected_at
         

@@ -1,4 +1,4 @@
-import { LogOut, TrendingUp, BarChart3, Shield } from 'lucide-react';
+import { LogOut, Bot, TrendingUp, BarChart3, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { ClientCopyTradingCard } from '@/components/ClientCopyTradingCard';

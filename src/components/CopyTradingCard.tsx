@@ -116,7 +116,7 @@ export function CopyTradingCard() {
           <CardTitle>Copy Trading</CardTitle>
         </div>
         <CardDescription>
-          Contas e status do copy configurados pelos clientes.
+          Contas, saldo e resultados de hoje dos clientes.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

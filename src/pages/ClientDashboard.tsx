@@ -13,14 +13,7 @@ const ClientDashboard = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   
-  const {
-    config: autoTradingConfig,
-    updateConfig: updateAutoTradingConfig,
-    isPlacingTrade,
-    isAnalyzingAI,
-    lastTradeResult,
-    resetDailyTrades,
-  } = useAutoTrading();
+  const { resetDailyTrades } = useAutoTrading();
 
   const {
     balance: iqBalance,

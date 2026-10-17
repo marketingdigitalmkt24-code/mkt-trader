@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ClientCopyTradingCard } from '@/components/ClientCopyTradingCard';
 import { ClientResultsCard } from '@/components/ClientResultsCard';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
+import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,14 +15,14 @@ const ClientDashboard = () => {
   
   const {
     balance: iqBalance,
-    dailyStats,
-  } = useIQOptionConnection({ silentMissingCredentials: true });
+  } = useIQOptionConnection({ silentMissingCredentials: true, fetchStatistics: false });
+  const copyResults = useClientCopyResults();
 
   const balance = iqBalance?.balance ?? 0;
-  const dailyProfit = dailyStats?.dailyProfit ?? 0;
-  const todayTrades = dailyStats?.todayTrades ?? 0;
-  const wins = dailyStats?.wins ?? 0;
-  const losses = dailyStats?.losses ?? 0;
+  const dailyProfit = copyResults.profit;
+  const todayTrades = copyResults.trades;
+  const wins = copyResults.wins;
+  const losses = copyResults.losses;
 
   const handleLogout = async () => {
     await signOut();

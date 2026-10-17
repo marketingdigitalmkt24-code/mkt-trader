@@ -1,3 +1,4 @@
+- [ ] Isolate client dashboard totals and entries by logged-in client's copied orders, use BRT daily boundaries and verify continuous updates without mixing shared broker accounts.
 - [x] Incorporate settled recent TEST outcomes into minute candidate ranking with bounded, recency-weighted asset/direction/strategy feedback; 22 tests passed and runner deployed, authorizations unchanged.
 - [ ] Validate impact of recent-outcome ranking on accuracy and profit (needs new naturally settled signals; no forced orders or guaranteed improvement).
 - [x] Reduce shared candle-request pacing for all authorized strategies; 22 tests passed, runner deployed, full-market ranking and :00 candidate preserved. Actual broker timing awaits a natural authorized entry; no forced orders.

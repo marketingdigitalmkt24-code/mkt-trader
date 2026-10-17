@@ -21,7 +21,7 @@ interface DailyStats {
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export function useIQOptionConnection({ silentMissingCredentials = false }: { silentMissingCredentials?: boolean } = {}) {
+export function useIQOptionConnection({ silentMissingCredentials = false, fetchStatistics = true }: { silentMissingCredentials?: boolean; fetchStatistics?: boolean } = {}) {
   const { user } = useAuth();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [balance, setBalance] = useState<BalanceInfo | null>(null);
@@ -74,6 +74,7 @@ export function useIQOptionConnection({ silentMissingCredentials = false }: { si
 
   // Fetch daily stats from database (IQ Option only, exclude MT5)
   const fetchDailyStats = useCallback(async () => {
+    if (!fetchStatistics) return;
     try {
       // Use Brasília midnight (UTC-3) for "today"
       const now = new Date();
@@ -140,7 +141,7 @@ export function useIQOptionConnection({ silentMissingCredentials = false }: { si
     } catch (error) {
       console.error('Error fetching daily stats:', error);
     }
-  }, [user?.id]);
+  }, [user?.id, fetchStatistics]);
 
   useEffect(() => {
     const reload = () => { void fetchDailyStats(); };

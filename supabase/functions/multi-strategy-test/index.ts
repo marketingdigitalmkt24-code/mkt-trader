@@ -259,6 +259,12 @@ Deno.serve(async (req) => {
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
         const claimedStrategy = trade.entryStrategy === THREE_FORCE_STRATEGY ? THREE_FORCE_STRATEGY : trade.entryStrategy === FORCE_LOSS_WIN_STRATEGY ? FORCE_LOSS_WIN_STRATEGY : FOUR_WIN_STRATEGY;
         const entryAt = nextReversalMinute(curMin * 1000);
+        // User rule (17/10): every real IQ/Telegram entry is inverted. Four-win claim already inverts.
+        if (claimedStrategy !== FOUR_WIN_STRATEGY) {
+          trade.direction = String(trade.direction).toLowerCase() === 'call' ? 'put' : 'call';
+          await supabase.from('trade_queue').update({ direction: trade.direction.toUpperCase() })
+            .eq('signal_id', String(trade.signalId)).eq('entry_strategy', claimedStrategy);
+        }
         const task = (async () => {
           // Reuse the session that just fetched these candles, avoiding another broker login.
           // This secret travels server-to-server only, never to browser, storage or logs.

@@ -6,16 +6,34 @@ export function touchReversalStudy(cs: Candle[], end: number) {
   const counts = () => ({ wins: 0, losses: 0, ties: 0 });
   const result = Object.fromEntries(variants.map(v => [v, { search: counts(), validation: counts() }])) as Record<Variant, { search: Counts; validation: Counts }>;
   const last: Record<Variant, number> = { resistanceTouch: -Infinity, resistanceRejection: -Infinity, supportTouch: -Infinity, supportRejection: -Infinity };
-  for (let i = 60; i < cs.length - 1; i++) {
-    const k = cs[i], next = cs[i + 1], prior = cs.slice(i - 60, i);
+  const highs: number[] = [], lows: number[] = [];
+  let hh = 0, lh = 0, rangeSum = 0, gaps = 0;
+  for (let i = 0; i < cs.length - 1; i++) {
+    if (i > 0) {
+      const j = i - 1;
+      rangeSum += cs[j].h - cs[j].l;
+      if (j > 0 && cs[j].t - cs[j - 1].t !== 60) gaps++;
+      while (highs.length > hh && cs[highs[highs.length - 1]].h <= cs[j].h) highs.pop();
+      while (lows.length > lh && cs[lows[lows.length - 1]].l >= cs[j].l) lows.pop();
+      highs.push(j); lows.push(j);
+    }
+    if (i > 60) {
+      const old = i - 61;
+      rangeSum -= cs[old].h - cs[old].l;
+      if (cs[old + 1].t - cs[old].t !== 60) gaps--;
+    }
+    while (hh < highs.length && highs[hh] < i - 60) hh++;
+    while (lh < lows.length && lows[lh] < i - 60) lh++;
+    if (i < 60) continue;
+    const k = cs[i], next = cs[i + 1];
     if (next.t < end - 30 * 86400 || next.t + 60 > end || next.t - k.t !== 60) continue;
-    if (prior.some((p, j) => (j ? p.t - prior[j - 1].t : k.t - prior[59].t) !== 60)) continue;
-    const range = prior.reduce((s, p) => s + p.h - p.l, 0) / 60;
+    if (gaps || k.t - cs[i - 1].t !== 60) continue;
+    const range = rangeSum / 60;
     if (!(range > 0)) continue;
-    const resistance = Math.max(...prior.map(p => p.h)), support = Math.min(...prior.map(p => p.l));
+    const resistance = cs[highs[hh]].h, support = cs[lows[lh]].l;
     const tol = range * 0.15;
     // Prior 10 closed candles must approach the level; never inspect the outcome candle.
-    const rising = prior[59].c > prior[50].c, falling = prior[59].c < prior[50].c;
+    const rising = cs[i - 1].c > cs[i - 10].c, falling = cs[i - 1].c < cs[i - 10].c;
     const rt = rising && k.h >= resistance - tol && k.h <= resistance + tol && k.c <= resistance + tol;
     const st = falling && k.l >= support - tol && k.l <= support + tol && k.c >= support - tol;
     const body = Math.abs(k.c - k.o);

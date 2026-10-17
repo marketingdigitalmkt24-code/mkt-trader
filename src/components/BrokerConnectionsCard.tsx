@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Wifi, WifiOff, Loader2, Server, MonitorSmartphone, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, Loader2, MonitorSmartphone, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
-import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -24,20 +23,11 @@ export function BrokerConnectionsCard() {
     details: 'Verificando...',
   });
 
-  const [mt5Status, setMt5Status] = useState<BrokerStatus>({
-    name: 'MetaTrader 5',
-    icon: <Server className="w-4 h-4" />,
-    connected: false,
-    loading: true,
-    details: 'Verificando...',
-  });
-
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const checkConnections = async () => {
     setIsRefreshing(true);
 
-    // Check IQ Option
     try {
       const { data: iqConfig } = await supabase
         .from('iqoption_config')
@@ -63,32 +53,6 @@ export function BrokerConnectionsCard() {
       setIqStatus(prev => ({ ...prev, loading: false, details: 'Erro ao verificar' }));
     }
 
-    // Check MT5
-    try {
-      const { data: metaConfig } = await supabase
-        .from('metaapi_config')
-        .select('is_active, connection_status, account_name, mt5_login, updated_at')
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-
-      if (metaConfig) {
-        const isConn = metaConfig.connection_status === 'connected';
-        setMt5Status({
-          name: 'MetaTrader 5',
-          icon: <Server className="w-4 h-4" />,
-          connected: isConn || metaConfig.is_active,
-          loading: false,
-          details: metaConfig.account_name || metaConfig.mt5_login || 'Configurado',
-          lastActivity: metaConfig.updated_at ? new Date(metaConfig.updated_at).toLocaleTimeString('pt-BR') : undefined,
-        });
-      } else {
-        setMt5Status(prev => ({ ...prev, loading: false, details: 'Não configurado' }));
-      }
-    } catch {
-      setMt5Status(prev => ({ ...prev, loading: false, details: 'Erro ao verificar' }));
-    }
-
     setIsRefreshing(false);
   };
 
@@ -98,47 +62,13 @@ export function BrokerConnectionsCard() {
     return () => clearInterval(interval);
   }, []);
 
-  const renderBroker = (status: BrokerStatus) => (
-    <div className={cn(
-      "flex items-center justify-between p-3 rounded-lg border transition-all",
-      status.connected
-        ? "bg-call/5 border-call/20"
-        : "bg-secondary/50 border-border/50"
-    )}>
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={cn(
-          "w-8 h-8 rounded-lg flex items-center justify-center",
-          status.connected ? "bg-call/20 text-call" : "bg-muted text-muted-foreground"
-        )}>
-          {status.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : status.icon}
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium truncate">{status.name}</span>
-          </div>
-          <p className="text-xs text-muted-foreground truncate">{status.details}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {status.lastActivity && (
-          <span className="text-[10px] text-muted-foreground hidden sm:block">{status.lastActivity}</span>
-        )}
-        {status.connected ? (
-          <Wifi className="w-4 h-4 text-call" />
-        ) : (
-          <WifiOff className="w-4 h-4 text-muted-foreground" />
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <Card className="border-border/50">
       <CardContent className="p-3 sm:p-4">
         <div className="flex items-center justify-between mb-2 sm:mb-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-call animate-pulse" />
-            <h3 className="text-sm font-semibold">Conexões Brokers</h3>
+            <h3 className="text-sm font-semibold">Conexão Corretora</h3>
           </div>
           <button
             onClick={checkConnections}
@@ -149,7 +79,37 @@ export function BrokerConnectionsCard() {
           </button>
         </div>
         <div className="grid grid-cols-1 gap-2">
-          {renderBroker(iqStatus)}
+          <div className={cn(
+            "flex items-center justify-between p-3 rounded-lg border transition-all",
+            iqStatus.connected
+              ? "bg-call/5 border-call/20"
+              : "bg-secondary/50 border-border/50"
+          )}>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={cn(
+                "w-8 h-8 rounded-lg flex items-center justify-center",
+                iqStatus.connected ? "bg-call/20 text-call" : "bg-muted text-muted-foreground"
+              )}>
+                {iqStatus.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : iqStatus.icon}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium truncate">{iqStatus.name}</span>
+                </div>
+                <p className="text-xs text-muted-foreground truncate">{iqStatus.details}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {iqStatus.lastActivity && (
+                <span className="text-[10px] text-muted-foreground hidden sm:block">{iqStatus.lastActivity}</span>
+              )}
+              {iqStatus.connected ? (
+                <Wifi className="w-4 h-4 text-call" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-muted-foreground" />
+              )}
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

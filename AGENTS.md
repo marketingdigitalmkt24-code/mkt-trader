@@ -12,7 +12,7 @@
 - Reconcile expired real IQ results from the existing signal cron before checking pending locks; browser polling is supplementary so navigation cannot strand trades or Telegram results.
 - Chart studies never authorize trades or tie triggers; why: research must remain separate from execution and retain history.
 - Resistance/support research compares fixed past-only levels and closed-candle rejection with separated events and an untouched final validation period in an admin-only read-only function; why: future data, repeated touches and outcome-based selection must not inflate measured accuracy.
-- Run multi-strategy-test only from auto-generate-signals; why: one minute job avoids duplicates.
+- Run multi-strategy-test only from auto-generate-signals, with bounded settled TEST feedback fetched during login; why: avoid duplicates and ranking delays.
 - Claim next-signal reversals through the service-only transactional streak state and queue lease, then use the existing broker placement and Telegram ledger; why: overlapping minute jobs must not duplicate or re-spend a win sequence, and only confirmed broker orders belong in IQ entries.
 - Anchor reversal submission and expiry to the selected candidate's own minute and submit immediately after the fourth candle confirms, within the broker purchase window; why: adding another minute trades a different candle, while stale candidates must never roll forward.
 - Reuse broker sessions only for service-authenticated same-account reversal placement, never log/store them; why: reduce latency without leaking credentials.

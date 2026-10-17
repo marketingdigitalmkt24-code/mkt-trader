@@ -8,7 +8,7 @@ export interface ClientCopyOperation extends CopyResultRow {
 }
 
 export function clientSignalsPage<T>(operations: T[], requestedPage: number) {
-  const pageSize = 20;
+  const pageSize = 12;
   const totalPages = Math.max(1, Math.ceil(operations.length / pageSize));
   const page = Math.min(Math.max(1, requestedPage), totalPages);
   return { page, totalPages, operations: operations.slice((page - 1) * pageSize, page * pageSize) };

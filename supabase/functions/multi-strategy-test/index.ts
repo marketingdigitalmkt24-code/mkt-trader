@@ -5,6 +5,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { FOUR_WIN_STRATEGY, nextReversalMinute } from '../_shared/four-win-reversal.ts';
 import { FORCE_LOSS_WIN_STRATEGY } from '../_shared/force-loss-win.ts';
+import { THREE_FORCE_STRATEGY } from '../_shared/three-force.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 
@@ -230,13 +231,15 @@ Deno.serve(async (req) => {
     const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
     if (best && inserted) {
-      const forceClaim = await supabase.rpc('claim_force_loss_win', { p_candidate: best.signal_id });
+      const threeClaim = await supabase.rpc('claim_three_force', { p_candidate: best.signal_id });
+      if (threeClaim.error) console.error('Three force claim:', threeClaim.error.message);
+      const forceClaim = threeClaim.data ? threeClaim : await supabase.rpc('claim_force_loss_win', { p_candidate: best.signal_id });
       if (forceClaim.error) console.error('Force loss/win claim:', forceClaim.error.message);
       const { data: trade, error: claimError } = forceClaim.data
         ? forceClaim : await supabase.rpc('claim_four_win_reversal', { p_candidate: best.signal_id });
       if (claimError) console.error('Four-win claim:', claimError.message);
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
-        const claimedStrategy = trade.entryStrategy === FORCE_LOSS_WIN_STRATEGY ? FORCE_LOSS_WIN_STRATEGY : FOUR_WIN_STRATEGY;
+        const claimedStrategy = trade.entryStrategy === THREE_FORCE_STRATEGY ? THREE_FORCE_STRATEGY : trade.entryStrategy === FORCE_LOSS_WIN_STRATEGY ? FORCE_LOSS_WIN_STRATEGY : FOUR_WIN_STRATEGY;
         const entryAt = nextReversalMinute(curMin * 1000);
         const task = (async () => {
           // Reuse the session that just fetched these candles, avoiding another broker login.

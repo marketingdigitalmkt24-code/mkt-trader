@@ -1,3 +1,4 @@
+- [x] Make admin copy account/status read-only and follow client IQ connection; simplify client connection buttons and replace misleading security notice with accurate credential disclosure; six rule tests and authenticated control checks passed without forcing a trade.
 - [x] Preserve client copy state across navigation; arrange results first beside connection, settings, status and centered copy button; five rules tested and authenticated layout checked; server target stop deployed.
 - [x] Remove MT5 from the site (Admin monitor code, connections card, Auto Trading MT5 amount field); only IQ Option accounts remain.
 - [x] Remove Admin Notifications tab; tabs are now Dashboard, Auto Trading, Corretoras, Copy Trading, Usuários.

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
 import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
+import { readCopyAccount } from '../_shared/copy-account.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -481,14 +482,13 @@ serve(async (req) => {
       String(operation.signal_id).match(/^copy-([0-9a-f-]{36})-/i)?.[1]
     ).filter((id): id is string => Boolean(id)))];
     await Promise.allSettled(copyUsers.map(async userId => {
-      const [{ data: config }, { data: copy }] = await Promise.all([
-        supabase.from('iqoption_config').select('email, password').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
-        supabase.from('copy_trading_configs').select('account_type').eq('user_id', userId).maybeSingle(),
-      ]);
-      if (!config || !copy) return;
+      const { data: config } = await supabase.from('iqoption_config')
+        .select('email, password, account_type').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle();
+      const accountType = readCopyAccount(config);
+      if (!config || !accountType) return;
       const { ssid: clientSession } = await loginToIQOptionResilient(config.email, config.password);
       if (!clientSession) return;
-      const history = await getClosedPositions({ mode: 'ssid', ssid: clientSession }, copy.account_type);
+      const history = await getClosedPositions({ mode: 'ssid', ssid: clientSession }, accountType);
       if (history.authenticated) copyHistories.set(userId, history.positions);
     }));
     console.log(

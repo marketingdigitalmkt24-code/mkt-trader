@@ -9,6 +9,7 @@ import { THREE_FORCE_STRATEGY } from '../_shared/three-force.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
+import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -112,6 +113,13 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors });
   }
   const supabase = createClient(url, serviceKey);
+  const historyPromise = supabase.from('operation_results')
+    .select('asset, direction, entry_strategy, result, created_at')
+    .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
+    .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
+    .order('created_at', { ascending: false }).limit(500)
+    .abortSignal(AbortSignal.timeout(1500)).then(result => result);
+  const newlySettled: LearningOutcome[] = [];
   const [{ data: cfg }, { data: open }] = await Promise.all([
     readMasterIQConfig(supabase),
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
@@ -135,6 +143,8 @@ Deno.serve(async (req) => {
         .eq('id', o.id).eq('result', OPEN).select('id');
       if (!upd?.length) continue;
       resolved++;
+      newlySettled.push({ asset: o.asset, direction: o.direction, entry_strategy: o.entry_strategy,
+        result: outcome.result, created_at: o.created_at });
       if (o.telegram_sent) {
         const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
         const head = outcome.result === 'win' ? '✅ RESULTADO: WIN' : outcome.result === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
@@ -198,6 +208,12 @@ Deno.serve(async (req) => {
   }
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
+  const historyRead = await historyPromise;
+  if (historyRead.error) console.error('Recent learning history unavailable:', historyRead.error.message);
+  const history = [...newlySettled, ...(historyRead.data || [])]
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    .filter((row, index, all) => all.findIndex(other => other.asset === row.asset
+      && other.created_at === row.created_at && other.entry_strategy === row.entry_strategy) === index);
   const rows: any[] = [];
   for (const [asset, cs] of series) {
     const closed = cs.filter(k => k.t + 60 <= curMin);
@@ -214,7 +230,8 @@ Deno.serve(async (req) => {
         result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
         expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: true, is_ai_analyzed: false,
         timeframe: 'TEST', entry_strategy: strat,
-        _score: agree.length + Math.min(0.99, 100 * Math.abs(closed[closed.length - 1].c - closed[closed.length - 1].o) / (closed[closed.length - 1].o || 1)),
+        _score: agree.length + Math.min(0.99, 100 * Math.abs(closed[closed.length - 1].c - closed[closed.length - 1].o) / (closed[closed.length - 1].o || 1))
+          + recentLearningAdjustment(history, { asset, direction: dir, entry_strategy: strat }, curMin * 1000),
       });
     }
   }

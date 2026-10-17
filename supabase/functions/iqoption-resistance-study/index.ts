@@ -3,7 +3,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { z } from 'npm:zod@3';
 import { resistanceStudy, type Candle } from '../_shared/resistance-study.ts';
-const schema = z.object({ offset: z.number().int().min(0).max(500).default(0), count: z.number().int().min(1).max(6).default(4), end: z.number().int().positive().optional(), listOnly: z.boolean().default(false) });
+import { touchReversalStudy } from '../_shared/touch-reversal-study.ts';
+const schema = z.object({ offset: z.number().int().min(0).max(500).default(0), count: z.number().int().min(1).max(6).default(4), end: z.number().int().positive().optional(), listOnly: z.boolean().default(false), touchOnly: z.boolean().default(false) });
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: corsHeaders });
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return reply({});
@@ -74,7 +75,7 @@ Deno.serve(async req => {
     });
     return reply({ end, begin: end - 30 * 86400, split: end - 10 * 86400, totalAssets: collection.universe.length, universe: args.listOnly ? collection.universe : undefined, assets: collection.assets.map(a => {
       const cs = [...new Map(a.candles.filter(k => k.t >= end - 30 * 86400 && k.t + 60 <= end).map(k => [k.t,k])).values()].sort((a,b) => a.t-b.t);
-      return { symbol:a.symbol, candles:cs.length, responses:a.responses, first:cs[0]?.t, last:cs.at(-1)?.t, days:new Set(cs.map(k => Math.floor((k.t-10800)/86400))).size, result:resistanceStudy(cs,end) };
+      return { symbol:a.symbol, candles:cs.length, responses:a.responses, first:cs[0]?.t, last:cs.at(-1)?.t, days:new Set(cs.map(k => Math.floor((k.t-10800)/86400))).size, result:args.touchOnly ? undefined : resistanceStudy(cs,end), touchReversal:touchReversalStudy(cs,end) };
     }) });
   } catch { return reply({ error: 'Study collection failed' }, 502); }
 });

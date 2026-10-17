@@ -5,6 +5,7 @@ import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.t
 import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 import { FORCE_LOSS_WIN_STRATEGY, FORCE_LOSS_WIN_LABEL, isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
 import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
+import { readCopyAccount } from '../_shared/copy-account.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -133,7 +134,7 @@ async function mirrorCopyTrades(
     if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
     const { data: copies } = await supabase
       .from('copy_trading_configs')
-      .select('user_id, account_type')
+      .select('user_id')
       .eq('enabled', true);
     if (!copies?.length) return;
 
@@ -143,12 +144,14 @@ async function mirrorCopyTrades(
     await Promise.allSettled(copies.map(async (copy: any) => {
       try {
         const [{ data: cfg }, { data: settings }] = await Promise.all([
-          supabase.from('iqoption_config').select('email, password')
+          supabase.from('iqoption_config').select('email, password, account_type')
             .eq('user_id', copy.user_id).eq('is_active', true).limit(1).maybeSingle(),
           supabase.from('user_trading_settings').select('trade_amount, profit_target_type, profit_target_value')
             .eq('user_id', copy.user_id).maybeSingle(),
         ]);
         if (!cfg?.email || !cfg?.password) { console.log(`⏭️ Copy ${copy.user_id}: sem credenciais IQ Option`); return; }
+        const accountType = readCopyAccount(cfg);
+        if (!accountType) return;
 
         const amount = Number(settings?.trade_amount) > 0 ? Number(settings.trade_amount) : tradeRequest.amount;
 
@@ -167,7 +170,7 @@ async function mirrorCopyTrades(
         const { ssid } = await loginToIQOption(cfg.email, cfg.password);
         if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou`); return; }
 
-        const res = await placeTradeFireAndForget(ssid, copy.account_type, { ...tradeRequest, amount });
+        const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount });
         if (res.success && res.tradeId) {
           await supabase.from('operation_results').insert({
             signal_id: `copy-${copy.user_id}-${masterSignalId}`,
@@ -183,7 +186,7 @@ async function mirrorCopyTrades(
             timeframe,
             expiration_time: expirationIso,
           });
-          console.log(`📋 Copy ${copy.user_id}: ordem espelhada ${res.tradeId} ($${amount} ${copy.account_type})`);
+          console.log(`📋 Copy ${copy.user_id}: ordem espelhada ${res.tradeId} ($${amount} ${accountType})`);
         } else {
           console.log(`❌ Copy ${copy.user_id}: ${res.error || 'ordem recusada'}`);
         }

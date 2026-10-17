@@ -21,7 +21,7 @@ interface DailyStats {
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export function useIQOptionConnection() {
+export function useIQOptionConnection({ silentMissingCredentials = false }: { silentMissingCredentials?: boolean } = {}) {
   const { user } = useAuth();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [balance, setBalance] = useState<BalanceInfo | null>(null);
@@ -165,6 +165,11 @@ export function useIQOptionConnection() {
         .maybeSingle();
 
       if (error || !config) {
+        if (silentMissingCredentials) {
+          setConnectionStatus('disconnected');
+          hasConnected.current = true;
+          return;
+        }
         // Try global config
         const { data: globalConfig, error: globalError } = await supabase
           .from('iqoption_config')
@@ -227,7 +232,7 @@ export function useIQOptionConnection() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, isLoading, refreshBalanceFromAPI]);
+  }, [user, isLoading, refreshBalanceFromAPI, silentMissingCredentials]);
 
   // Disconnect from IQ Option
   const disconnect = useCallback(() => {

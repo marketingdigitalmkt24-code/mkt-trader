@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { TrendingUp, Eye, EyeOff, Save, RefreshCw, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
+import { TrendingUp, Eye, EyeOff, RefreshCw, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
@@ -74,69 +74,6 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
       }
     } catch (error) {
       console.error('Error loading config:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const saveConfig = async () => {
-    if (!user) {
-      toast({ title: 'Erro', description: 'Você precisa estar logado', variant: 'destructive' });
-      return;
-    }
-
-    if (!email.trim() || !password.trim()) {
-      toast({ title: 'Erro', description: 'Email e senha são obrigatórios', variant: 'destructive' });
-      return;
-    }
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      toast({ title: 'Erro', description: 'Email inválido', variant: 'destructive' });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      if (config) {
-        // Update existing
-        const { error } = await supabase
-          .from('iqoption_config')
-          .update({
-            email: email.trim(),
-            password: password.trim(),
-            account_type: accountType,
-          })
-          .eq('id', config.id);
-
-        if (error) throw error;
-      } else {
-        // First, deactivate any existing configs for this user
-        await supabase
-          .from('iqoption_config')
-          .update({ is_active: false })
-          .eq('user_id', user.id)
-          .eq('is_active', true);
-
-        // Insert new config with user_id
-        const { error } = await supabase
-          .from('iqoption_config')
-          .insert({
-            email: email.trim(),
-            password: password.trim(),
-            account_type: accountType,
-            user_id: user.id,
-          });
-
-        if (error) throw error;
-      }
-
-      toast({ title: 'Sucesso', description: 'Credenciais salvas!' });
-      loadConfig();
-    } catch (error) {
-      console.error('Error saving config:', error);
-      toast({ title: 'Erro', description: 'Falha ao salvar credenciais', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -290,23 +227,16 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
         {/* Warning */}
         <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
           <p className="text-xs text-yellow-600 dark:text-yellow-400">
-            ⚠️ <strong>Aviso de Segurança:</strong> Suas credenciais são armazenadas de forma criptografada no banco de dados. 
-            Recomendamos usar autenticação de 2 fatores na IQ Option.
+            <strong>Aviso de Segurança:</strong> Ao conectar, você autoriza o sistema a acessar sua IQ Option e executar o copy trading. Suas credenciais ficam armazenadas para manter o copy funcionando mesmo com esta página fechada.
           </p>
         </div>
 
         {/* Actions */}
         <div className="flex gap-2">
-          <Button onClick={saveConfig} className="flex-1 gap-2" disabled={isLoading}>
-            {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Salvar
-          </Button>
-          
           <Button 
-            variant="outline" 
             onClick={testConnection} 
-            className="gap-2"
-            disabled={isTesting}
+            className="flex-1 gap-2"
+            disabled={isTesting || isLoading}
           >
             {isTesting ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -317,7 +247,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false }: 
             ) : (
               <Wifi className="w-4 h-4" />
             )}
-            Testar
+            Conectar
           </Button>
           
           {iqOptionClient.isConnected() && (

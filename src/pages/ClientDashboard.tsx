@@ -1,6 +1,5 @@
 import { LogOut, Bot, TrendingUp, BarChart3, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { ClientCopyTradingCard } from '@/components/ClientCopyTradingCard';
 import { ClientResultsCard } from '@/components/ClientResultsCard';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
@@ -13,14 +12,10 @@ const ClientDashboard = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   
-  const { resetDailyTrades } = useAutoTrading();
-
   const {
     balance: iqBalance,
     dailyStats,
-    isLoading: isLoadingBalance,
-    connect: refresh,
-  } = useIQOptionConnection();
+  } = useIQOptionConnection({ silentMissingCredentials: true });
 
   const balance = iqBalance?.balance ?? 0;
   const dailyProfit = dailyStats?.dailyProfit ?? 0;
@@ -167,25 +162,6 @@ const ClientDashboard = () => {
           <ClientCopyTradingCard />
         </div>
 
-        {/* Action Buttons */}
-        <div className="mt-4 sm:mt-8 flex flex-col sm:flex-row gap-2 sm:gap-4">
-          <button
-            onClick={resetDailyTrades}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
-          >
-            <BarChart3 className="w-4 h-4" />
-            Resetar Trades Diários
-          </button>
-          
-          <button
-            onClick={refresh}
-            disabled={isLoadingBalance}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-call/20 hover:bg-call/30 text-call rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base"
-          >
-            <TrendingUp className="w-4 h-4" />
-            Atualizar Saldo
-          </button>
-        </div>
       </main>
     </div>
   );

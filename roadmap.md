@@ -51,4 +51,5 @@
 - [x] Verify authenticated tab/home navigation makes no settings writes, confirm existing minute cron and continued signal generation, and move expired result reconciliation into that cron.
 - [ ] Confirm the next naturally expired notified real trade reconciles with admin closed (waiting for a real eligible trade; do not force a trade).
 - [ ] Confirm automatic result delivery after the next naturally notified broker trade closes (waiting for a real delivered signal; do not force a trade).
-- [ ] Add prospective TEST-only Trend WIN → Trend LOSS → Force LOSS → next Trend observation, preserving base minute signals and real triggers.
+- [x] Add prospective TEST-only Trend WIN → Trend LOSS → Force LOSS → next Trend observation on existing TEST row; 22 tests passed, runner deployed, admin UI checked.
+- [ ] Verify first naturally matched sequence and settled result in admin UI (waiting for a new qualifying sequence; no historical backfill or forced trade).

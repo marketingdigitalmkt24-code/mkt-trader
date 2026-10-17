@@ -14,6 +14,7 @@ export function ClientCopyTradingCard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(false);
+  const [connected, setConnected] = useState(false);
   const [accountType, setAccountType] = useState<'PRACTICE' | 'REAL'>('PRACTICE');
   const [tradeAmount, setTradeAmount] = useState('1');
   const [profitTarget, setProfitTarget] = useState('0');
@@ -23,13 +24,28 @@ export function ClientCopyTradingCard() {
   const load = useCallback(async () => {
     if (!user?.id) { setIsLoading(false); return; }
     setIsLoading(true);
-    const [{ data: copyCfg }, { data: settings }] = await Promise.all([
+    const [{ data: copyCfg }, { data: settings }, { data: iqCfg }] = await Promise.all([
       supabase.from('copy_trading_configs').select('enabled, account_type').eq('user_id', user.id).maybeSingle(),
       supabase.from('user_trading_settings').select('trade_amount, profit_target_value').eq('user_id', user.id).maybeSingle(),
+      supabase.from('iqoption_config').select('is_active').eq('user_id', user.id).eq('is_active', true).limit(1).maybeSingle(),
     ]);
+    const isConnected = !!iqCfg?.is_active;
+    setConnected(isConnected);
     if (copyCfg) {
-      setEnabled(copyCfg.enabled);
       setAccountType(copyCfg.account_type as 'PRACTICE' | 'REAL');
+      // Ao entrar na dashboard o copy sempre começa desativado;
+      // o cliente só pode ativar manualmente com a IQ Option conectada.
+      if (copyCfg.enabled) {
+        setEnabled(false);
+        supabase.from('copy_trading_configs').upsert(
+          { user_id: user.id, enabled: false, account_type: copyCfg.account_type },
+          { onConflict: 'user_id' }
+        );
+      } else {
+        setEnabled(false);
+      }
+    } else {
+      setEnabled(false);
     }
     if (settings) {
       setTradeAmount(String(settings.trade_amount ?? 1));
@@ -110,10 +126,19 @@ export function ClientCopyTradingCard() {
           </div>
           <Switch
             checked={enabled}
-            disabled={isSaving}
-            onCheckedChange={(v) => save({ enabled: v })}
+            disabled={isSaving || !connected}
+            onCheckedChange={(v) => {
+              if (!connected) {
+                toast({ title: 'Conta não conectada', description: 'Conecte sua conta IQ Option acima para ativar o copy trading.', variant: 'destructive' });
+                return;
+              }
+              save({ enabled: v });
+            }}
           />
         </div>
+        {!connected && (
+          <p className="text-xs text-amber-500">🔒 Conecte sua conta IQ Option no card acima para poder ativar o copy trading.</p>
+        )}
 
         <div className="space-y-2">
           <Label className="text-sm">Conta que recebe as operações</Label>

@@ -192,7 +192,7 @@ export function AIAnalysisStatusCard() {
 
         {/* Recent signals list */}
         {recentSignals.length > 0 && (
-          <div className="space-y-1 max-h-36 overflow-y-auto">
+          <div className="space-y-1">
             {recentSignals.slice(0, 5).map(signal => (
               <div key={signal.id} className="flex items-center justify-between p-1.5 rounded bg-secondary/30 text-xs">
                 <div className="flex items-center gap-1.5">

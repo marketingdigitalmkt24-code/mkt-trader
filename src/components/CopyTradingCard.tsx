@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { readCopyAccount } from '@/lib/client-copy-state';
-import { countClientCopyResults } from '@/lib/admin-copy-results';
+import { countClientCopyResults, copyResultRates } from '@/lib/admin-copy-results';
 import { copyDayStart } from '../../supabase/functions/_shared/copy-target';
 
 interface ClientProfile {
@@ -24,7 +24,7 @@ export function CopyTradingCard() {
   const [configs, setConfigs] = useState<Record<string, CopyConfig>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [accounts, setAccounts] = useState<Record<string, 'PRACTICE' | 'REAL' | null>>({});
-  const [results, setResults] = useState<Record<string, { wins: number; losses: number }>>({});
+  const [results, setResults] = useState<Record<string, { wins: number; losses: number; profit: number }>>({});
   const [balances, setBalances] = useState<Record<string, { amount: number; currency: string; account: string } | null>>({});
   const [balancesLoading, setBalancesLoading] = useState(false);
 
@@ -47,9 +47,10 @@ export function CopyTradingCard() {
     const totals = await Promise.all((profiles || []).map(async client => {
       let wins = 0;
       let losses = 0;
+      let profit = 0;
       for (let offset = 0; ; offset += 1000) {
         const { data, error } = await supabase.from('operation_results')
-          .select('signal_id, result, iq_option_id, timeframe')
+          .select('signal_id, result, iq_option_id, timeframe, profit')
           .like('signal_id', `copy-${client.user_id}-%`)
           .gte('created_at', copyDayStart())
           .order('created_at').order('id')
@@ -58,9 +59,10 @@ export function CopyTradingCard() {
         const counts = countClientCopyResults(data || [], client.user_id);
         wins += counts.wins;
         losses += counts.losses;
+        profit += counts.profit;
         if (!data || data.length < 1000) break;
       }
-      return [client.user_id, { wins, losses }] as const;
+      return [client.user_id, { wins, losses, profit }] as const;
     }));
     setResults(Object.fromEntries(totals.filter(([, value]) => value !== null)));
   }, []);
@@ -135,8 +137,9 @@ export function CopyTradingCard() {
             const accountType = accounts[client.user_id];
             const balance = balances[client.user_id];
             const totals = results[client.user_id];
+            const rates = totals ? copyResultRates(totals.wins, totals.losses) : null;
             return (
-              <div key={client.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-secondary/20 rounded-lg">
+              <div key={client.id} className="flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-3 p-3 bg-secondary/20 rounded-lg">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
                     <UserCheck className="w-4 h-4 text-primary" />
@@ -148,7 +151,7 @@ export function CopyTradingCard() {
                     </p>
                   </div>
                 </div>
-                <dl className="grid grid-cols-3 gap-4 sm:ml-auto text-center shrink-0">
+                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 lg:ml-auto text-center">
                   <div>
                     <dt className="text-xs text-muted-foreground">Saldo</dt>
                     <dd className="text-sm font-semibold tabular-nums">
@@ -158,12 +161,20 @@ export function CopyTradingCard() {
                     </dd>
                   </div>
                   <div>
+                    <dt className="text-xs text-muted-foreground">Lucro hoje</dt>
+                    <dd className={`text-sm font-semibold tabular-nums ${totals && totals.profit < 0 ? 'text-put' : totals && totals.profit > 0 ? 'text-call' : 'text-foreground'}`}>
+                      {totals ? `${balance?.currency || 'USD'} ${totals.profit > 0 ? '+' : ''}${totals.profit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                    </dd>
+                  </div>
+                  <div>
                     <dt className="text-xs text-muted-foreground">Win hoje</dt>
                     <dd className="text-sm font-semibold tabular-nums text-call">{totals?.wins ?? '—'}</dd>
+                    <dd className="text-xs tabular-nums text-call">{rates ? `${rates.winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—'}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Loss hoje</dt>
                     <dd className="text-sm font-semibold tabular-nums text-put">{totals?.losses ?? '—'}</dd>
+                    <dd className="text-xs tabular-nums text-put">{rates ? `${rates.lossPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—'}</dd>
                   </div>
                 </dl>
                 <div className="flex items-center gap-2 shrink-0">

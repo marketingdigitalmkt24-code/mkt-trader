@@ -1,0 +1,23 @@
+import { countClientCopyResults, type CopyResultRow } from './admin-copy-results';
+
+export interface ClientCopyOperation extends CopyResultRow {
+  id: string;
+  asset: string;
+  direction: string;
+  created_at: string;
+}
+
+export function clientDayStart(now = new Date()) {
+  const brt = new Date(now.getTime() - 3 * 3600000);
+  return new Date(Date.UTC(brt.getUTCFullYear(), brt.getUTCMonth(), brt.getUTCDate(), 3)).toISOString();
+}
+
+export function clientCopyResults(rows: ClientCopyOperation[], userId: string, now = new Date()) {
+  const start = clientDayStart(now);
+  const operations = rows.filter(row => row.signal_id.startsWith(`copy-${userId}-`)
+    && Boolean(row.iq_option_id) && !['TEST', 'MT5'].includes(row.timeframe)
+    && row.created_at >= start && row.created_at <= now.toISOString());
+  const totals = countClientCopyResults(operations, userId);
+  const trades = operations.filter(row => ['win', 'loss', 'draw', 'tie'].includes(row.result)).length;
+  return { operations, ...totals, trades };
+}

@@ -1,50 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
 import { BarChart3, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-
-interface ClientOperation {
-  id: string;
-  asset: string;
-  direction: string;
-  result: string;
-  profit: number;
-  created_at: string;
-}
+import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 
 // Resultados do cliente: nunca exibe a estratégia utilizada.
 export function ClientResultsCard() {
-  const { user } = useAuth();
-  const [ops, setOps] = useState<ClientOperation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    if (!user?.id) { setIsLoading(false); return; }
-    const dayStart = new Date();
-    dayStart.setHours(0, 0, 0, 0);
-    const { data } = await supabase
-      .from('operation_results')
-      .select('id, asset, direction, result, profit, created_at')
-      .like('signal_id', `copy-${user.id}-%`)
-      .gte('created_at', dayStart.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(50);
-    setOps(data || []);
-    setIsLoading(false);
-  }, [user?.id]);
-
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 15000);
-    return () => clearInterval(interval);
-  }, [load]);
-
-  const profit = ops.reduce((s, o) => s + Number(o.profit || 0), 0);
-  const wins = ops.filter((o) => o.result === 'win').length;
-  const losses = ops.filter((o) => o.result === 'loss').length;
+  const { operations: ops, profit, wins, losses, trades, isLoading, isError } = useClientCopyResults();
 
   return (
     <Card className="border-border/50">
@@ -63,7 +25,7 @@ export function ClientResultsCard() {
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="p-2 rounded-lg bg-secondary/30 text-center">
             <p className="text-[10px] text-muted-foreground uppercase">Operações</p>
-            <p className="text-sm font-bold">{ops.length}</p>
+            <p className="text-sm font-bold">{trades}</p>
           </div>
           <div className="p-2 rounded-lg bg-call/10 text-center">
             <p className="text-[10px] text-muted-foreground uppercase">Wins</p>
@@ -79,6 +41,8 @@ export function ClientResultsCard() {
           <div className="flex items-center justify-center py-6">
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>
+        ) : isError ? (
+          <p className="text-sm text-destructive text-center py-6">Não foi possível atualizar as entradas.</p>
         ) : ops.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">
             Nenhuma operação copiada hoje.
@@ -97,7 +61,7 @@ export function ClientResultsCard() {
                   <div className="min-w-0">
                     <p className="text-xs font-medium truncate">{op.asset}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {new Date(op.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · Sinal
+                      {new Date(op.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })} · #{op.iq_option_id}
                     </p>
                   </div>
                 </div>
@@ -105,7 +69,7 @@ export function ClientResultsCard() {
                   'text-xs font-bold shrink-0',
                   op.result === 'win' ? 'text-call' : op.result === 'loss' ? 'text-put' : 'text-muted-foreground'
                 )}>
-                  {op.result === 'win' ? `+$${Number(op.profit).toFixed(2)}` : op.result === 'loss' ? `-$${Math.abs(Number(op.profit)).toFixed(2)}` : 'Empate'}
+                  {op.result === 'win' ? `+$${Number(op.profit).toFixed(2)}` : op.result === 'loss' ? `-$${Math.abs(Number(op.profit)).toFixed(2)}` : ['tie', 'draw'].includes(op.result) ? 'Empate' : 'Em aberto'}
                 </span>
               </div>
             ))}

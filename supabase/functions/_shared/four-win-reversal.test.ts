@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasFourWins, invertDirection, nextReversalMinute, canSendReversal, canReuseBrokerSession } from './four-win-reversal.ts';
+import { hasFourWins, invertDirection, nextReversalMinute, canSendReversal, canReuseBrokerSession, isBlockedByMiddleForceCandles } from './four-win-reversal.ts';
 
 test('four consecutive wins authorize the next signal, three do not', () => {
   assert.equal(hasFourWins(['win', 'win', 'win', 'win']), true);
@@ -28,4 +28,14 @@ test('reversal may be sent early in the entry minute but never after 30 seconds'
   const entryAt = Date.parse('2026-10-16T20:58:00-03:00');
   assert.equal(canSendReversal(entryAt, entryAt + 5000), true);
   assert.equal(canSendReversal(entryAt, entryAt + 30000), false);
+});
+// Example 17/10 01:04-01:07 BRT: Tendência, Tendência, Vela de Força, Vela de Força (oldest first).
+// Newest-first array: the two middle entries are both VELA_FORCA, so nothing is sent.
+test('two middle Vela de Força wins block the reversal', () => {
+  assert.equal(isBlockedByMiddleForceCandles(['VELA_FORCA', 'VELA_FORCA', 'TENDENCIA', 'TENDENCIA']), true);
+});
+test('other four-win sequences still send', () => {
+  assert.equal(isBlockedByMiddleForceCandles(['TENDENCIA', 'TENDENCIA', 'TENDENCIA', 'TENDENCIA']), false);
+  assert.equal(isBlockedByMiddleForceCandles(['VELA_FORCA', 'TENDENCIA', 'VELA_FORCA', 'TENDENCIA']), false);
+  assert.equal(isBlockedByMiddleForceCandles(['TENDENCIA', 'VELA_FORCA', 'TENDENCIA', 'VELA_FORCA']), false);
 });

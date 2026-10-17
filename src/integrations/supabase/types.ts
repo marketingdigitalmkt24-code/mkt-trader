@@ -68,6 +68,33 @@ export type Database = {
         }
         Relationships: []
       }
+      copy_trading_configs: {
+        Row: {
+          account_type: string
+          created_at: string
+          enabled: boolean
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_type?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_type?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       forex_practice_balance: {
         Row: {
           amount: number

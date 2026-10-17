@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, Zap, Clock, CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Brain, Zap, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, Target } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
@@ -12,6 +12,27 @@ interface SignalEntry {
   confluence_score: number;
   created_at: string;
 }
+
+interface StrategyStat {
+  strategy: string;
+  wins: number;
+  losses: number;
+}
+
+const strategyLabels: Record<string, string> = {
+  TENDENCIA: 'Tendência',
+  TENDENCIA_V1: 'Tendência V1',
+  FOUR_WIN_REVERSAL: 'Após 4 ganhos',
+  FORCE_LOSS_WIN: 'Força LOSS → WIN',
+  THREE_FORCE: 'Após 3 Velas de Força',
+  REVERSAO_RSI: 'Reversão RSI',
+  VELA_FORCA: 'Vela de força',
+  ROMPIMENTO: 'Rompimento',
+  RECUO_EMA21: 'Recuo na média 21',
+  KDJ: 'KDJ',
+  ICHIMOKU: 'Ichimoku',
+  AI: 'IA',
+};
 
 export function AIAnalysisStatusCard() {
   const [recentSignals, setRecentSignals] = useState<SignalEntry[]>([]);

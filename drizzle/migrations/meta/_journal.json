@@ -71,6 +71,13 @@
       "when": 1792211881809,
       "tag": "0009_create_copy_trading_configs",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792214334362,
+      "tag": "0010_allow_clients_create_own_copy_config",
+      "breakpoints": true
     }
   ]
 }

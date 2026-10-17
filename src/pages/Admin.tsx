@@ -1,15 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Settings, Bot, MessageCircle, TrendingUp, Shield, BarChart3, LogOut, Users, MonitorSmartphone, Zap, Eye, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, Settings, Bot, TrendingUp, BarChart3, LogOut, Users, Zap, LayoutDashboard, Copy } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TradingDashboard } from '@/components/TradingDashboard';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
-import { WhatsAppSettingsCard } from '@/components/WhatsAppSettingsCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { UserManagementCard } from '@/components/UserManagementCard';
+import { CopyTradingCard } from '@/components/CopyTradingCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,8 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Admin = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
-  
+  const { signOut } = useAuth();
+
   const {
     config: autoTradingConfig,
     updateConfig: updateAutoTradingConfig,
@@ -41,43 +39,6 @@ const Admin = () => {
   const losses = dailyStats?.losses ?? 0;
   const winRate = todayTrades > 0 ? Math.round((wins / todayTrades) * 100) : 0;
 
-  // MT5 Position Monitor - polls every 3 seconds
-  const [mt5OpenPositions, setMt5OpenPositions] = useState<any[]>([]);
-  const [mt5ClosedCount, setMt5ClosedCount] = useState(0);
-  const mt5MonitorRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isMonitoringRef = useRef(false);
-
-  useEffect(() => {
-    const monitorMt5 = async () => {
-      if (isMonitoringRef.current) return; // prevent concurrent calls
-      isMonitoringRef.current = true;
-      try {
-        const { data, error } = await supabase.functions.invoke('metaapi-monitor-positions');
-        if (data && !error) {
-          setMt5OpenPositions(data.openPositions || []);
-          if (data.closedCount > 0) {
-            setMt5ClosedCount(prev => prev + data.closedCount);
-            console.log(`🎯 MT5 Monitor: fechou ${data.closedCount} posição(ões) por TP`);
-          }
-          if (data.totalOpen > 0) {
-            console.log(`👁️ MT5: ${data.totalOpen} posições abertas | TP alvo: $${data.tpTarget}`);
-          }
-        }
-      } catch (e) {
-        // silent
-      } finally {
-        isMonitoringRef.current = false;
-      }
-    };
-
-    // Start polling every 3 seconds
-    // MT5 desativado
-
-    return () => {
-      if (mt5MonitorRef.current) clearInterval(mt5MonitorRef.current);
-    };
-  }, []);
-
   const handleLogout = async () => {
     await signOut();
     navigate('/admin/login');
@@ -98,7 +59,7 @@ const Admin = () => {
               </div>
               <h1 className="text-sm sm:text-base font-bold text-foreground truncate">Painel Admin</h1>
             </div>
-            
+
             <div className="flex items-center gap-2 shrink-0">
               {balance > 0 && (
                 <div className="hidden sm:flex items-center gap-2">
@@ -156,10 +117,9 @@ const Admin = () => {
               <span className="hidden sm:inline">Corretoras</span>
               <span className="sm:hidden">Broker</span>
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="text-xs sm:text-sm py-2 gap-1">
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Notificações</span>
-              <span className="sm:hidden">Notif.</span>
+            <TabsTrigger value="copy" className="text-xs sm:text-sm py-2 gap-1">
+              <Copy className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Copy</span> Trading
             </TabsTrigger>
             <TabsTrigger value="users" className="text-xs sm:text-sm py-2 gap-1">
               <Users className="w-3.5 h-3.5" />
@@ -184,7 +144,7 @@ const Admin = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <AutoTradingCard 
+                <AutoTradingCard
                   config={autoTradingConfig}
                   updateConfig={updateAutoTradingConfig}
                   isPlacingTrade={isPlacingTrade}
@@ -207,10 +167,9 @@ const Admin = () => {
             </div>
           </TabsContent>
 
-          {/* Brokers Tab - IQ Option + MT5 side by side */}
+          {/* Brokers Tab - IQ Option only */}
           <TabsContent value="brokers" className="space-y-4">
             <div className="grid gap-4">
-              {/* IQ Option */}
               <Card className="border-call/20">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -225,25 +184,12 @@ const Admin = () => {
                   <IQOptionSettingsCard defaultOpen={true} />
                 </CardContent>
               </Card>
-
             </div>
           </TabsContent>
 
-          {/* Notifications Tab */}
-          <TabsContent value="notifications">
-            <Card className="border-green-500/20">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <div className="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center">
-                    <MessageCircle className="w-4 h-4 text-green-500" />
-                  </div>
-                  WhatsApp
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <WhatsAppSettingsCard defaultOpen={true} />
-              </CardContent>
-            </Card>
+          {/* Copy Trading Tab */}
+          <TabsContent value="copy">
+            <CopyTradingCard />
           </TabsContent>
 
           {/* Users Tab */}

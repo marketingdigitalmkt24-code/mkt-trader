@@ -10,11 +10,11 @@ export function TradingDashboard() {
       <BrokerConnectionsCard />
       <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
         <BankManagementCard />
-        <AIAnalysisStatusCard />
+        <IQEntriesTodayCard />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
         <LiveOperationsCard />
-        <IQEntriesTodayCard />
+        <AIAnalysisStatusCard />
       </div>
     </div>
   );

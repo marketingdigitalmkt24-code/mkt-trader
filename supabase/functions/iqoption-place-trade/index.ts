@@ -141,7 +141,8 @@ async function mirrorCopyTrades(
     brtNow.setHours(0, 0, 0, 0);
     const dayStartIso = new Date(brtNow.getTime() - brtNow.getTimezoneOffset() * 60000).toISOString();
 
-    for (const copy of copies) {
+    // Clientes em paralelo: o login de um não atrasa a ordem do outro
+    await Promise.allSettled(copies.map(async (copy: any) => {
       try {
         const [{ data: cfg }, { data: settings }] = await Promise.all([
           supabase.from('iqoption_config').select('email, password')

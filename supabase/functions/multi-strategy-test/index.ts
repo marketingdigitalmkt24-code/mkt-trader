@@ -4,6 +4,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { FOUR_WIN_STRATEGY, nextReversalMinute } from '../_shared/four-win-reversal.ts';
+import { FORCE_LOSS_WIN_STRATEGY } from '../_shared/force-loss-win.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
@@ -109,7 +110,7 @@ Deno.serve(async (req) => {
   }
   const supabase = createClient(url, serviceKey);
   const [{ data: cfg }, { data: open }] = await Promise.all([
-    supabase.from('iqoption_config').select('id, email, password').eq('is_active', true).limit(1).maybeSingle(),
+    supabase.from('iqoption_config').select('id, email, password').eq('is_active', true).not('user_id', 'is', null).order('last_connected_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle(),
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000),
   ]);
@@ -228,9 +229,13 @@ Deno.serve(async (req) => {
     const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
     if (best && inserted) {
-      const { data: trade, error: claimError } = await supabase.rpc('claim_four_win_reversal', { p_candidate: best.signal_id });
+      const forceClaim = await supabase.rpc('claim_force_loss_win', { p_candidate: best.signal_id });
+      if (forceClaim.error) console.error('Force loss/win claim:', forceClaim.error.message);
+      const { data: trade, error: claimError } = forceClaim.data
+        ? forceClaim : await supabase.rpc('claim_four_win_reversal', { p_candidate: best.signal_id });
       if (claimError) console.error('Four-win claim:', claimError.message);
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
+        const claimedStrategy = trade.entryStrategy === FORCE_LOSS_WIN_STRATEGY ? FORCE_LOSS_WIN_STRATEGY : FOUR_WIN_STRATEGY;
         const entryAt = nextReversalMinute(curMin * 1000);
         const task = (async () => {
           // Reuse the session that just fetched these candles, avoiding another broker login.
@@ -244,7 +249,7 @@ Deno.serve(async (req) => {
             status: data?.success ? 'executed' : 'failed', iq_option_id: data?.tradeId || null,
             executed_at: data?.success ? new Date().toISOString() : null,
             error: data?.success ? null : details || data?.error || 'Placement failed',
-          }).eq('signal_id', String(trade.signalId)).eq('entry_strategy', FOUR_WIN_STRATEGY);
+          }).eq('signal_id', String(trade.signalId)).eq('entry_strategy', claimedStrategy);
         })().catch(async e => {
           console.error('Four-win placement:', String(e));
           await supabase.from('trade_queue').update({ status: 'failed', error: String(e) })
@@ -254,7 +259,7 @@ Deno.serve(async (req) => {
         // @ts-ignore Hosted background runtime
         if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(task);
         else await task;
-        return Response.json({ success: true, assets: series.size, inserted, resolved, reversal: true }, { headers: cors });
+         return Response.json({ success: true, assets: series.size, inserted, resolved, strategy: claimedStrategy }, { headers: cors });
       }
     }
     // Other entries remain TEST, but no longer generate new Telegram signals.

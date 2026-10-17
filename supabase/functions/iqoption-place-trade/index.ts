@@ -3,6 +3,7 @@ const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
+import { FORCE_LOSS_WIN_STRATEGY, FORCE_LOSS_WIN_LABEL, isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -175,9 +176,9 @@ async function placeTradeFireAndForget(
               balanceId = balance.id; break;
             }
           }
-          if (!balanceId && trade.entryStrategy === FOUR_WIN_STRATEGY) {
+          if (!balanceId && isNextMinuteStrategy(trade.entryStrategy)) {
             clearTimeout(timeout); ws.close();
-            resolve({ success: false, error: 'Conta configurada não disponível; inversão cancelada' });
+            resolve({ success: false, error: 'Conta configurada não disponível; entrada cancelada' });
             return;
           }
           if (!balanceId && balances.length > 0) balanceId = balances[0].id;
@@ -286,7 +287,7 @@ async function placeTradeFireAndForget(
           }
           
           // OTC fallback if not found and not OTC asset
-          if (!foundAsset && !isOTCAsset && trade.entryStrategy !== FOUR_WIN_STRATEGY) {
+          if (!foundAsset && !isOTCAsset && !isNextMinuteStrategy(trade.entryStrategy)) {
             const otcVariations = [
               `${cleanAsset}-OTC`, `${cleanAsset} OTC`, `${withSlash}-OTC`, `${withSlash} OTC`,
             ];
@@ -377,9 +378,9 @@ async function placeTradeFireAndForget(
           // ===== Entrada sincronizada: exatamente na ABERTURA da próxima vela (:00) =====
           // Envia ~120ms antes para compensar a latência do relay e chegar na IQ às :00.
           const nowMs0 = Date.now();
-          const candleOpenMs = trade.entryStrategy === FOUR_WIN_STRATEGY && trade.entryAt
+          const candleOpenMs = isNextMinuteStrategy(trade.entryStrategy) && trade.entryAt
             ? trade.entryAt : Math.ceil((nowMs0 + 1000) / 60000) * 60000;
-          if (trade.entryStrategy === FOUR_WIN_STRATEGY && !canSendReversal(candleOpenMs, nowMs0)) {
+          if (isNextMinuteStrategy(trade.entryStrategy) && !canSendReversal(candleOpenMs, nowMs0)) {
             clearTimeout(timeout); ws.close();
             resolve({ success: false, error: 'Entrada prevista passou; ordem não enviada atrasada' });
             return;
@@ -389,9 +390,9 @@ async function placeTradeFireAndForget(
 
           const fire = () => {
             // Recheck at actual submission: event-loop delay must never create a late order.
-            if (trade.entryStrategy === FOUR_WIN_STRATEGY && !canSendReversal(candleOpenMs, Date.now())) {
+            if (isNextMinuteStrategy(trade.entryStrategy) && !canSendReversal(candleOpenMs, Date.now())) {
               clearTimeout(timeout); ws.close();
-              resolve({ success: false, error: 'Virada do minuto perdida; inversão cancelada sem ordem atrasada' });
+              resolve({ success: false, error: 'Virada do minuto perdida; entrada cancelada sem ordem atrasada' });
               return;
             }
             const optPayout = payoutById[foundAsset!.turboId || foundAsset!.binaryId || foundAsset!.id] || 0;
@@ -415,7 +416,7 @@ async function placeTradeFireAndForget(
                 },
               },
             }));
-            if (trade.entryStrategy !== FOUR_WIN_STRATEGY) {
+            if (!isNextMinuteStrategy(trade.entryStrategy)) {
               setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 2500);
             }
           };
@@ -508,7 +509,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const tradeRequest: TradeRequest = await req.json();
-    if (tradeRequest.entryStrategy === FOUR_WIN_STRATEGY) {
+    if (isNextMinuteStrategy(tradeRequest.entryStrategy)) {
       if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`) {
         return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
       }
@@ -516,15 +517,15 @@ serve(async (req) => {
         || Number(tradeRequest.entryAt) > Date.now() + 60000
         || Number(tradeRequest.entryAt) % 60000 !== 0
         || !['call', 'put'].includes(tradeRequest.direction) || tradeRequest.expiration !== 1) {
-        return Response.json({ error: 'Invalid reversal entry' }, { status: 400, headers: corsHeaders });
+        return Response.json({ error: 'Invalid next-minute entry' }, { status: 400, headers: corsHeaders });
       }
       // Conditional lease: even a duplicate server invocation cannot place twice.
       const { data: lease } = await supabase.from('trade_queue').update({ error: 'placement_claimed' })
         .eq('signal_id', tradeRequest.signalId || '').eq('asset', tradeRequest.asset)
         .eq('direction', tradeRequest.direction.toUpperCase()).eq('amount', tradeRequest.amount)
-        .eq('entry_strategy', FOUR_WIN_STRATEGY).eq('status', 'executing').is('error', null)
+        .eq('entry_strategy', tradeRequest.entryStrategy || '').eq('status', 'executing').is('error', null)
         .select('id');
-      if (!lease?.length) return Response.json({ error: 'Reversal already claimed or unauthorized' }, { status: 409, headers: corsHeaders });
+      if (!lease?.length) return Response.json({ error: 'Next-minute entry already claimed or unauthorized' }, { status: 409, headers: corsHeaders });
     }
     const { brokerSession: privateSession, ...loggedRequest } = tradeRequest;
     console.log('📥 Trade request:', JSON.stringify(loggedRequest));
@@ -541,7 +542,7 @@ serve(async (req) => {
       .from('iqoption_config')
       .select('id, email, password, account_type')
       .eq('is_active', true);
-    const serverReversal = tradeRequest.entryStrategy === FOUR_WIN_STRATEGY
+    const serverReversal = isNextMinuteStrategy(tradeRequest.entryStrategy)
       && req.headers.get('Authorization') === `Bearer ${supabaseKey}`;
     if (serverReversal && typeof privateSession?.configId === 'string') {
       configQuery.eq('id', privateSession.configId);
@@ -570,8 +571,8 @@ serve(async (req) => {
         const signalId = tradeRequest.signalId;
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
         const reqStrategy = queued.entry_strategy;
-        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI' || reqStrategy === 'TENDENCIA_V1' || reqStrategy === FOUR_WIN_STRATEGY) entryStrategy = reqStrategy;
-        const strategy = entryStrategy === FOUR_WIN_STRATEGY ? FOUR_WIN_LABEL : entryStrategy === 'HISTORICO' ? 'Histórico bom'
+        if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI' || reqStrategy === 'TENDENCIA_V1' || isNextMinuteStrategy(reqStrategy || undefined)) entryStrategy = reqStrategy;
+        const strategy = entryStrategy === FORCE_LOSS_WIN_STRATEGY ? FORCE_LOSS_WIN_LABEL : entryStrategy === FOUR_WIN_STRATEGY ? FOUR_WIN_LABEL : entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
           : entryStrategy === 'TENDENCIA_V1' ? 'Tendência V1'
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'
@@ -583,7 +584,7 @@ serve(async (req) => {
           // recusado pela corretora); par de teste também libera o envio e recebe
           // uma mensagem própria marcada como TESTE.
           // Tendência V1 (pedido 16/10/2026): vai ao Telegram direto, sem exigir par.
-          const complementary = entryStrategy === FOUR_WIN_STRATEGY || entryStrategy === 'TENDENCIA_V1' ? 'DIRECT'
+          const complementary = isNextMinuteStrategy(entryStrategy || undefined) || entryStrategy === 'TENDENCIA_V1' ? 'DIRECT'
             : entryStrategy === 'TENDENCIA' ? 'REVERSAO_RSI'
             : entryStrategy === 'REVERSAO_RSI' ? 'TENDENCIA' : null;
           if (!complementary) {
@@ -666,7 +667,7 @@ serve(async (req) => {
     // Se a IQ Option recusar a ordem, uma resposta de CANCELADO é enviada ao sinal.
     let notification: Promise<number | undefined> | undefined;
     if (notifyEntry) {
-      const entryAt = tradeRequest.entryStrategy === FOUR_WIN_STRATEGY && tradeRequest.entryAt
+      const entryAt = isNextMinuteStrategy(tradeRequest.entryStrategy) && tradeRequest.entryAt
         ? tradeRequest.entryAt : Math.ceil((Date.now() + 1000) / 60000) * 60000;
       notification = notifyEntry(entryAt).catch(error => { console.error('❌ Telegram IQ:', String(error)); return undefined; });
       // @ts-ignore EdgeRuntime is available in the hosted runtime
@@ -716,7 +717,7 @@ serve(async (req) => {
       const timeframe = isForex ? 'FOREX' : (tradeRequest.timeframe || (tradeRequest.expiration <= 1 ? 'M1' : 'M5'));
       // Expiração = início do minuto de entrada (arredondado) + duração, para a sincronização achar a ordem logo ao vencer.
       const expirationIso = isForex ? null
-        : tradeRequest.entryStrategy === FOUR_WIN_STRATEGY && tradeRequest.entryAt
+        : isNextMinuteStrategy(tradeRequest.entryStrategy) && tradeRequest.entryAt
         ? new Date(tradeRequest.entryAt + tradeRequest.expiration * 60000).toISOString()
         : new Date((Math.round(Date.now() / 60000) + (tradeRequest.expiration || 1)) * 60000).toISOString();
       

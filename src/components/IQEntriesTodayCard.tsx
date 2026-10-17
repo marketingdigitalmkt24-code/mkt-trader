@@ -34,7 +34,7 @@ export const IQEntriesTodayCard = () => {
       const all = ((data as Op[]) || []).filter((o) => o.iq_option_id && !String(o.iq_option_id).toLowerCase().startsWith('test') && afterIQReset(o.created_at, getIQResultsReset(user?.id)));
       // Somente ordens reais aceitas pela IQ Option (com número de ordem).
       const withOrigin = all.map((r) => {
-        const base = r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
+        const base = r.entry_strategy === 'FORCE_LOSS_WIN' ? '🕯️ Força LOSS → WIN' : r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
         return { ...r, profit: Number(r.profit || 0), origin: base };
       });
       setOps(withOrigin);

@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { iqOptionClient } from '@/services/IQOptionClient';
 import { toast } from 'sonner';
+import { afterIQReset, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
 
 interface BalanceInfo {
   balance: number;
@@ -96,7 +97,7 @@ export function useIQOptionConnection() {
       const all = (allRows || []) as Array<{ id: string; asset: string; direction: string; result: string | null; profit: number | null; timeframe: string; entry_strategy: string | null; iq_option_id: string | null; created_at: string }>;
       const startIso = brasiliaMidnightUtc.toISOString();
       // Mesmo filtro do card "Entradas na IQ Option": somente ordens reais confirmadas pela corretora
-      const results = all.filter((r) => r.created_at >= startIso && r.timeframe !== 'MT5'
+      const results = all.filter((r) => r.created_at >= startIso && afterIQReset(r.created_at, getIQResultsReset(user?.id)) && r.timeframe !== 'MT5'
         && r.iq_option_id && !String(r.iq_option_id).toLowerCase().startsWith('test'));
 
       let profit = 0;
@@ -139,7 +140,13 @@ export function useIQOptionConnection() {
     } catch (error) {
       console.error('Error fetching daily stats:', error);
     }
-  }, []);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const reload = () => { void fetchDailyStats(); };
+    window.addEventListener(IQ_RESULTS_RESET_EVENT, reload);
+    return () => window.removeEventListener(IQ_RESULTS_RESET_EVENT, reload);
+  }, [fetchDailyStats]);
 
   // Connect to IQ Option
   const connect = useCallback(async () => {

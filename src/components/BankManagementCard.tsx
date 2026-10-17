@@ -1,4 +1,4 @@
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Calendar, RotateCcw } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Calendar, RotateCcw, WalletCards } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
@@ -8,9 +8,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { DailyHistory } from './DailyHistory';
+import { useAuth } from '@/contexts/AuthContext';
+import { resetIQResults } from '@/lib/iq-results-reset';
 
 export function BankManagementCard() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [isRefilling, setIsRefilling] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const {
     balance,
@@ -49,30 +53,30 @@ export function BankManagementCard() {
   };
 
   const handleReset = async () => {
+    if (!user) return;
     setIsResetting(true);
     try {
-      const now = new Date();
-      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-
-      // Delete ALL today's results (IQ Option + MT5)
-      const { data: results } = await supabase
-        .from('operation_results')
-        .select('id')
-        .gte('created_at', todayUTC.toISOString());
-
-      if (results && results.length > 0) {
-        for (const r of results) {
-          await supabase.from('operation_results').delete().eq('id', r.id);
-        }
-      }
-
-      toast({ title: 'Resultados resetados', description: 'IQ Option e MT5 zerados com sucesso.' });
+      resetIQResults(user.id);
+      toast({ title: 'Resultados zerados', description: 'Entradas na IQ Option e Resultado de Hoje zerados neste navegador. Operações em Tempo Real preservadas.' });
     } catch (error) {
       console.error('Error resetting stats:', error);
       toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });
     } finally {
       setIsResetting(false);
     }
+  };
+
+  const handleRefill = async () => {
+    if (balance?.accountType !== 'PRACTICE' || isRefilling) return;
+    setIsRefilling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('iqoption-refill-demo', { body: {} });
+      if (error || !data?.success) throw new Error(data?.error || 'A IQ Option não confirmou a recarga demo.');
+      await refreshBalance();
+      toast({ title: 'Conta demo recarregada', description: 'Saldo confirmado pela IQ Option: 10.000.' });
+    } catch (error) {
+      toast({ title: 'Recarga não confirmada', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' });
+    } finally { setIsRefilling(false); }
   };
 
   const formatCurrency = (value: number) => {
@@ -99,6 +103,7 @@ export function BankManagementCard() {
                   size="icon"
                   className="h-6 w-6"
                   onClick={handleRefresh}
+                  aria-label="Atualizar saldo"
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -113,6 +118,16 @@ export function BankManagementCard() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          {balance?.accountType === 'PRACTICE' && (
+            <TooltipProvider><Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Recarregar conta demo para 10.000" onClick={handleRefill} disabled={isRefilling}>
+                  {isRefilling ? <Loader2 className="w-4 h-4 animate-spin" /> : <WalletCards className="w-4 h-4 text-primary" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Recarregar demo para 10.000</TooltipContent>
+            </Tooltip></TooltipProvider>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -121,6 +136,7 @@ export function BankManagementCard() {
                   size="icon"
                   className="h-6 w-6"
                   onClick={handleReset}
+                  aria-label="Resetar resultados"
                   disabled={isResetting}
                 >
                   {isResetting ? (

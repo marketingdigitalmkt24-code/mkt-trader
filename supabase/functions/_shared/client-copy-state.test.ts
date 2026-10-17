@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readCopyEnabled, canEnableCopy } from '../../../src/lib/client-copy-state.ts';
+import { readCopyEnabled, canEnableCopy, readCopyAccount } from '../../../src/lib/client-copy-state.ts';
 import { copyDayStart, copyTargetReached } from './copy-target.ts';
 
 test('returning to the dashboard preserves saved enabled state without changing the configuration', () => {
@@ -11,6 +11,12 @@ test('returning to the dashboard preserves saved enabled state without changing 
 });
 test('manual disable remains off when returning', () => {
   assert.equal(readCopyEnabled({ enabled: false }), false);
+});
+test('copy uses the Demo or Real account selected in the IQ Option connection without a fallback', () => {
+  assert.equal(readCopyAccount({ account_type: 'PRACTICE' }), 'PRACTICE');
+  assert.equal(readCopyAccount({ account_type: 'REAL' }), 'REAL');
+  assert.equal(readCopyAccount(null), null);
+  assert.equal(readCopyAccount({ account_type: 'unknown' }), null);
 });
 test('activation requires a confirmed connected IQ Option account', () => {
   assert.equal(canEnableCopy({ is_active: true, last_connected_at: null }), false);

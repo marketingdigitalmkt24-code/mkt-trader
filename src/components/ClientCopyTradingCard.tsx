@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
-import { canEnableCopy, readCopyEnabled } from '@/lib/client-copy-state';
+import { canEnableCopy, readCopyAccount, readCopyEnabled } from '@/lib/client-copy-state';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,7 +16,6 @@ export function ClientCopyTradingCard() {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [accountType, setAccountType] = useState<'PRACTICE' | 'REAL'>('PRACTICE');
   const [tradeAmount, setTradeAmount] = useState('1');
   const [profitTarget, setProfitTarget] = useState('0');
   const [isLoading, setIsLoading] = useState(true);
@@ -33,9 +32,6 @@ export function ClientCopyTradingCard() {
     const isConnected = canEnableCopy(iqCfg);
     setConnected(isConnected);
     setEnabled(readCopyEnabled(copyCfg));
-    if (copyCfg) {
-      setAccountType(copyCfg.account_type as 'PRACTICE' | 'REAL');
-    }
     if (settings) {
       setTradeAmount(String(settings.trade_amount ?? 1));
       setProfitTarget(String(settings.profit_target_value ?? 0));
@@ -63,11 +59,10 @@ export function ClientCopyTradingCard() {
     return () => { clearInterval(timer); void supabase.removeChannel(channel); };
   }, [user?.id]);
 
-  const save = async (patch?: { enabled?: boolean; account_type?: 'PRACTICE' | 'REAL' }) => {
+  const save = async (patch?: { enabled?: boolean }) => {
     if (!user?.id) return;
     const nextEnabled = patch?.enabled ?? enabled;
     if (patch?.enabled === true && !connected) return;
-    const nextAccount = patch?.account_type ?? accountType;
     const amount = parseFloat(tradeAmount);
     const target = parseFloat(profitTarget);
     if (patch?.enabled !== false && (isNaN(amount) || amount <= 0 || !Number.isFinite(target) || target < 0)) {
@@ -80,6 +75,15 @@ export function ClientCopyTradingCard() {
       setIsSaving(false);
       if (error) toast({ title: 'Erro ao desligar', variant: 'destructive' });
       else setEnabled(false);
+      return;
+    }
+    const { data: iqConfig, error: iqError } = await supabase.from('iqoption_config')
+      .select('account_type, is_active, last_connected_at')
+      .eq('user_id', user.id).eq('is_active', true).limit(1).maybeSingle();
+    const nextAccount = readCopyAccount(iqConfig);
+    if (iqError || !canEnableCopy(iqConfig) || !nextAccount) {
+      setIsSaving(false);
+      toast({ title: 'Conecte sua conta IQ Option', description: 'Conecte a conta antes de salvar ou ligar o copy.', variant: 'destructive' });
       return;
     }
     const [{ error: copyError }, { error: settingsError }] = await Promise.all([
@@ -103,7 +107,6 @@ export function ClientCopyTradingCard() {
       return;
     }
     setEnabled(nextEnabled);
-    setAccountType(nextAccount);
     toast({ title: 'Salvo', description: 'Configurações de copy trading atualizadas.' });
   };
 
@@ -136,27 +139,7 @@ export function ClientCopyTradingCard() {
           <p className="text-xs text-muted-foreground">Conecte sua conta IQ Option para ligar o copy trading.</p>
         )}
 
-        <div className="space-y-2 border-t border-border pt-4">
-          <Label className="text-sm">Conta que recebe as operações</Label>
-          <div className="flex rounded-lg overflow-hidden border border-border/50 w-full">
-            <Button variant={accountType === 'PRACTICE' ? 'default' : 'secondary'}
-              disabled={isSaving || !connected}
-              onClick={() => save({ account_type: 'PRACTICE' })}
-              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${accountType === 'PRACTICE' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:bg-secondary'}`}
-            >
-              Demo (treino)
-            </Button>
-            <Button variant={accountType === 'REAL' ? 'default' : 'secondary'}
-              disabled={isSaving || !connected}
-              onClick={() => save({ account_type: 'REAL' })}
-              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${accountType === 'REAL' ? 'bg-call text-call-foreground' : 'bg-secondary/50 text-muted-foreground hover:bg-secondary'}`}
-            >
-              Real
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 border-t border-border pt-4">
           <div className="space-y-2">
             <Label htmlFor="copy-amount" className="text-sm">Valor de entrada ($)</Label>
             <Input

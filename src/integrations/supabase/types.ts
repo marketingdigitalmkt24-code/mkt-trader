@@ -152,6 +152,24 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_three_force_state: {
+        Row: {
+          activated_at: string
+          consumed_through: string
+          id: number
+        }
+        Insert: {
+          activated_at?: string
+          consumed_through?: string
+          id?: number
+        }
+        Update: {
+          activated_at?: string
+          consumed_through?: string
+          id?: number
+        }
+        Relationships: []
+      }
       iqoption_config: {
         Row: {
           account_type: string
@@ -693,6 +711,7 @@ export type Database = {
     Functions: {
       claim_force_loss_win: { Args: { p_candidate: string }; Returns: Json }
       claim_four_win_reversal: { Args: { p_candidate: string }; Returns: Json }
+      claim_three_force: { Args: { p_candidate: string }; Returns: Json }
       get_master_iq_config: {
         Args: never
         Returns: {

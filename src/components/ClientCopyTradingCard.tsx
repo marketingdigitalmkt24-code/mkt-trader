@@ -126,10 +126,19 @@ export function ClientCopyTradingCard() {
           </div>
           <Switch
             checked={enabled}
-            disabled={isSaving}
-            onCheckedChange={(v) => save({ enabled: v })}
+            disabled={isSaving || !connected}
+            onCheckedChange={(v) => {
+              if (!connected) {
+                toast({ title: 'Conta não conectada', description: 'Conecte sua conta IQ Option acima para ativar o copy trading.', variant: 'destructive' });
+                return;
+              }
+              save({ enabled: v });
+            }}
           />
         </div>
+        {!connected && (
+          <p className="text-xs text-amber-500">🔒 Conecte sua conta IQ Option no card acima para poder ativar o copy trading.</p>
+        )}
 
         <div className="space-y-2">
           <Label className="text-sm">Conta que recebe as operações</Label>

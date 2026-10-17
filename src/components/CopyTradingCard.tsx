@@ -151,7 +151,7 @@ export function CopyTradingCard() {
                     </p>
                   </div>
                 </div>
-                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 lg:ml-auto text-center">
+                <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:ml-auto text-center">
                   <div>
                     <dt className="text-xs text-muted-foreground">Saldo</dt>
                     <dd className="text-sm font-semibold tabular-nums">
@@ -175,6 +175,10 @@ export function CopyTradingCard() {
                     <dt className="text-xs text-muted-foreground">Loss hoje</dt>
                     <dd className="text-sm font-semibold tabular-nums text-put">{totals?.losses ?? '—'}</dd>
                     <dd className="text-xs tabular-nums text-put">{rates ? `${rates.lossPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Win rate</dt>
+                    <dd className="text-sm font-semibold tabular-nums text-call">{rates ? `${rates.winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—'}</dd>
                   </div>
                 </dl>
                 <div className="flex items-center gap-2 shrink-0">

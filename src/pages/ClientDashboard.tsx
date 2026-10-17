@@ -8,6 +8,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { copyResultRates } from '@/lib/admin-copy-results';
 
 const ClientDashboard = () => {
   const navigate = useNavigate();
@@ -23,6 +25,7 @@ const ClientDashboard = () => {
   const todayTrades = copyResults.trades;
   const wins = copyResults.wins;
   const losses = copyResults.losses;
+  const { winPercent } = copyResultRates(wins, losses);
 
   const handleLogout = async () => {
     await signOut();
@@ -92,16 +95,16 @@ const ClientDashboard = () => {
       <main className="container px-4 py-4 sm:py-8">
         {/* Quick Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-8">
-          <Card className="bg-gradient-to-br from-call/10 to-call/5 border-call/20">
+          <Card className={cn('border', dailyProfit < 0 ? 'bg-put/5 border-put/20' : dailyProfit > 0 ? 'bg-call/5 border-call/20' : 'bg-secondary/20 border-border')}>
             <CardContent className="p-3 sm:pt-6 sm:px-6">
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-call/20 flex items-center justify-center shrink-0">
-                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-call" />
+                <div className={cn('w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0', dailyProfit < 0 ? 'bg-put/20 text-put' : 'bg-call/20 text-call')}>
+                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Lucro Diário</p>
-                  <p className="text-lg sm:text-xl font-bold text-call truncate">
-                    ${dailyProfit?.toFixed(2) || '0.00'}
+                  <p className={cn('text-lg sm:text-xl font-bold break-words tabular-nums', dailyProfit < 0 ? 'text-put' : dailyProfit > 0 ? 'text-call' : 'text-foreground')}>
+                    {copyResults.isError ? 'Indisponível' : copyResults.isLoading ? '…' : `${dailyProfit > 0 ? '+' : dailyProfit < 0 ? '−' : ''}$${Math.abs(dailyProfit).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </p>
                 </div>
               </div>
@@ -135,6 +138,7 @@ const ClientDashboard = () => {
                   <p className="text-lg sm:text-xl font-bold text-call">
                     {wins || 0}
                   </p>
+                  <p className="text-xs text-muted-foreground">Win rate <span className="font-semibold text-call tabular-nums">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span></p>
                 </div>
               </div>
             </CardContent>

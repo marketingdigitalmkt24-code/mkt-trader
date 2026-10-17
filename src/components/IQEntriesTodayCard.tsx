@@ -4,6 +4,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey, historyStart } from './dayLabel';
+import { useAuth } from '@/contexts/AuthContext';
+import { afterIQReset, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
 
 type Op = { id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null; iq_option_id: string | null };
 type Row = Op & { origin: string };
@@ -16,6 +18,7 @@ const startOfBrtDay = () => {
 };
 
 export const IQEntriesTodayCard = () => {
+  const { user } = useAuth();
   const [ops, setOps] = useState<Row[]>([]);
   const [page, setPage] = useState(0);
 
@@ -28,7 +31,7 @@ export const IQEntriesTodayCard = () => {
         .not('iq_option_id', 'is', null)
         .gte('created_at', historyStart())
         .order('created_at', { ascending: false }).limit(1000);
-      const all = ((data as Op[]) || []).filter((o) => o.iq_option_id && !String(o.iq_option_id).toLowerCase().startsWith('test'));
+      const all = ((data as Op[]) || []).filter((o) => o.iq_option_id && !String(o.iq_option_id).toLowerCase().startsWith('test') && afterIQReset(o.created_at, getIQResultsReset(user?.id)));
       // Somente ordens reais aceitas pela IQ Option (com número de ordem).
       const withOrigin = all.map((r) => {
         const base = r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
@@ -37,9 +40,10 @@ export const IQEntriesTodayCard = () => {
       setOps(withOrigin);
     };
     load();
+    window.addEventListener(IQ_RESULTS_RESET_EVENT, load);
     const id = setInterval(load, 10000);
-    return () => clearInterval(id);
-  }, []);
+    return () => { clearInterval(id); window.removeEventListener(IQ_RESULTS_RESET_EVENT, load); };
+  }, [user?.id]);
 
   const todayStart = startOfBrtDay();
   const todayOps = ops.filter((o) => o.created_at >= todayStart);

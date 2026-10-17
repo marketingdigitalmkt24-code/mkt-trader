@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { afterIQReset, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 
 interface DayResult {
   date: string;
@@ -38,16 +39,32 @@ export function DailyHistory({
   perPage = 3,
 }: DailyHistoryProps) {
   const { user } = useAuth();
+  const { operations: masterOperations } = useMasterIQResults();
   const [days, setDays] = useState<DayResult[]>([]);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
+    if (!timeframeFilter) return;
     fetchHistory();
     const reload = () => { void fetchHistory(); };
     window.addEventListener(IQ_RESULTS_RESET_EVENT, reload);
     const interval = setInterval(fetchHistory, 60000);
     return () => { clearInterval(interval); window.removeEventListener(IQ_RESULTS_RESET_EVENT, reload); };
-  }, [user?.id]);
+  }, [user?.id, timeframeFilter]);
+
+  useEffect(() => {
+    if (timeframeFilter) return;
+    const grouped: Record<string, DayResult> = {};
+    for (const row of masterOperations) {
+      if (!["win", "loss", "tie", "draw", "equal", "loose"].includes(row.result)) continue;
+      const date = getBrasiliaDateKey(new Date(row.created_at));
+      const day = grouped[date] || (grouped[date] = { date, profit: 0, wins: 0, losses: 0, trades: 0 });
+      day.profit += Number(row.profit || 0); day.trades++;
+      if (row.result === "win") day.wins++;
+      else if (["loss", "loose"].includes(row.result)) day.losses++;
+    }
+    setDays(Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date)));
+  }, [masterOperations, timeframeFilter]);
 
   const fetchHistory = async () => {
     const startDate = new Date();

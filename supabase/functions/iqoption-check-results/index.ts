@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
+import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -474,6 +475,22 @@ serve(async (req) => {
 
     // Get closed positions from IQ Option history
     const closedPositions = wsResult.positions;
+    // Copied orders belong to the client's broker history, never the master's.
+    const copyHistories = new Map<string, PositionResult[]>();
+    const copyUsers = [...new Set((pendingOperations || []).map(operation =>
+      String(operation.signal_id).match(/^copy-([0-9a-f-]{36})-/i)?.[1]
+    ).filter((id): id is string => Boolean(id)))];
+    await Promise.allSettled(copyUsers.map(async userId => {
+      const [{ data: config }, { data: copy }] = await Promise.all([
+        supabase.from('iqoption_config').select('email, password').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
+        supabase.from('copy_trading_configs').select('account_type').eq('user_id', userId).maybeSingle(),
+      ]);
+      if (!config || !copy) return;
+      const { ssid: clientSession } = await loginToIQOptionResilient(config.email, config.password);
+      if (!clientSession) return;
+      const history = await getClosedPositions({ mode: 'ssid', ssid: clientSession }, copy.account_type);
+      if (history.authenticated) copyHistories.set(userId, history.positions);
+    }));
     console.log(
       `Found ${closedPositions.length} closed positions from IQ Option history (ws=${wsResult.usedWsUrl || 'n/a'})`
     );
@@ -496,17 +513,19 @@ serve(async (req) => {
     // Update pending operations with REAL results from IQ Option history
     let updatedCount = 0;
     let freshWin: { signal_id: string; asset: string; direction: string; timeframe: string } | null = null;
-    if (pendingOperations && pendingOperations.length > 0 && closedPositions.length > 0) {
+    if (pendingOperations && pendingOperations.length > 0) {
       for (const pending of pendingOperations) {
         const iqId = pending.iq_option_id ? String(pending.iq_option_id) : '';
+        const copyUser = String(pending.signal_id).match(/^copy-([0-9a-f-]{36})-/i)?.[1];
+        const matchingHistory = copyUser ? (copyHistories.get(copyUser) || []) : closedPositions;
 
         // Search for matching closed position in IQ Option history
         // IMPORTANT: use strict ID matching to avoid false positives
         // Digital: o id retornado na abertura é o order_id, que aparece dentro do raw_event (order_ids)
         const idRe = iqId ? new RegExp(`[^0-9]${iqId}[^0-9]`) : null;
-        const closed = closedPositions.find((p) =>
+        const closed = matchingHistory.find((p) =>
           iqId ? p.matchIds.includes(iqId) : p.matchIds.includes(String(pending.signal_id))
-        ) || (idRe ? closedPositions.find((p) => idRe.test(p.rawJson)) : undefined);
+        ) || (idRe ? matchingHistory.find((p) => idRe.test(p.rawJson)) : undefined);
 
         if (closed && closed.win !== 'pending') {
           const result = closed.win === 'win' ? 'win' :
@@ -525,6 +544,16 @@ serve(async (req) => {
 
           if (!updateError) {
             updatedCount++;
+            if (copyUser) {
+              const [{ data: settings }, { data: results, error: resultsError }] = await Promise.all([
+                supabase.from('user_trading_settings').select('profit_target_type, profit_target_value').eq('user_id', copyUser).maybeSingle(),
+                supabase.from('operation_results').select('profit').like('signal_id', `copy-${copyUser}-%`).gte('created_at', copyDayStart()),
+              ]);
+              const dailyProfit = (results || []).reduce((sum, row) => sum + Number(row.profit || 0), 0);
+              if (!resultsError && settings?.profit_target_type === 'value' && copyTargetReached(dailyProfit, Number(settings.profit_target_value))) {
+                await supabase.from('copy_trading_configs').update({ enabled: false }).eq('user_id', copyUser);
+              }
+            }
             // Track the most recent fresh WIN for immediate continuation
             if (
               result === 'win' &&

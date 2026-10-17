@@ -3,6 +3,12 @@ export interface CopyResultRow {
   result: string;
   iq_option_id: string | null;
   timeframe: string;
+  profit?: number;
+}
+
+export function copyResultRates(wins: number, losses: number) {
+  const total = wins + losses;
+  return { winPercent: total ? wins / total * 100 : 0, lossPercent: total ? losses / total * 100 : 0 };
 }
 
 export function countClientCopyResults(rows: CopyResultRow[], userId: string) {
@@ -11,5 +17,7 @@ export function countClientCopyResults(rows: CopyResultRow[], userId: string) {
   return {
     wins: own.filter(row => row.result === 'win').length,
     losses: own.filter(row => row.result === 'loss').length,
+    profit: own.filter(row => ['win', 'loss', 'draw', 'tie'].includes(row.result))
+      .reduce((sum, row) => sum + (Number.isFinite(row.profit) ? Number(row.profit) : 0), 0),
   };
 }

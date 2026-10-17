@@ -1,3 +1,4 @@
+- [ ] Show daily copied profit and win/loss percentages in admin Copy Trading; verify calculations and authenticated display.
 - [x] Stop client copy on Demo/Real changes or disconnect; require reconnection and show explicit connection buttons; eight tests passed, installed trigger verified, authenticated controls checked without changing a live broker account.
 - [x] Show client broker balance and today's copied wins/losses in admin Copy Trading; authenticated display read back USD 10,029.70 and 0 wins/0 losses; isolation test passed.
 - [x] Make admin copy account/status read-only and follow client IQ connection; simplify client connection buttons and replace misleading security notice with accurate credential disclosure; six rule tests and authenticated control checks passed without forcing a trade.

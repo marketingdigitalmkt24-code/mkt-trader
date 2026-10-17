@@ -59,7 +59,7 @@ export function ClientResultsCard() {
             Nenhuma operação copiada hoje.
           </p>
         ) : (
-          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+          <div className="space-y-1.5">
             {visibleOps.map((op) => (
               <div key={op.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/20">
                 <div className="flex items-center gap-2 min-w-0">

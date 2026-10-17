@@ -1,3 +1,7 @@
+- [x] Remove MT5 from the site (Admin monitor code, connections card, Auto Trading MT5 amount field); only IQ Option accounts remain.
+- [x] Remove Admin Notifications tab; tabs are now Dashboard, Auto Trading, Corretoras, Copy Trading, Usuários.
+- [x] Add Copy Trading: admin tab per client (enable + Demo/Real), client card (robot toggle, account, entry amount, profit target), server mirrors confirmed master orders to enabled clients' IQ Option accounts; client results card hides strategy names.
+- [ ] Confirm first natural copied order on a client account (needs a client with saved IQ Option credentials and copy enabled; do not force a trade).
 - [x] Disable Histórico bom strategy and remove its dedicated card; verify requested Dashboard card pairs.
 - [x] Add Vela de Força LOSS→WIN next-minute broker entry, Telegram and order labels; 13 rule/regression tests passed, service-only permissions verified and both functions deployed; configured account remains PRACTICE.
 - [ ] Confirm natural Vela de Força LOSS→WIN entry, broker order and Telegram result (waiting for a new consecutive-minute pair after activation; no forced or retrospective trade).

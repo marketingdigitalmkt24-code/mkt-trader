@@ -271,6 +271,7 @@ export type Database = {
           result: string
           signal_id: string
           telegram_sent: boolean
+          test_sequence_strategy: string | null
           timeframe: string
         }
         Insert: {
@@ -289,6 +290,7 @@ export type Database = {
           result: string
           signal_id: string
           telegram_sent?: boolean
+          test_sequence_strategy?: string | null
           timeframe?: string
         }
         Update: {
@@ -307,6 +309,7 @@ export type Database = {
           result?: string
           signal_id?: string
           telegram_sent?: boolean
+          test_sequence_strategy?: string | null
           timeframe?: string
         }
         Relationships: []

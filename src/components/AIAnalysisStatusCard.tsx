@@ -21,6 +21,7 @@ interface StrategyStat {
 
 const strategyLabels: Record<string, string> = {
   TENDENCIA: 'Tendência',
+  TREND_WIN_LOSS_FORCE_LOSS: 'Tendência após WIN → LOSS → LOSS (TESTE)',
   TENDENCIA_V1: 'Tendência V1',
   FOUR_WIN_REVERSAL: 'Após 4 ganhos',
   FORCE_LOSS_WIN: 'Força LOSS → WIN',
@@ -49,7 +50,7 @@ export function AIAnalysisStatusCard() {
     try {
       const { data } = await supabase
         .from('operation_results')
-        .select('entry_strategy, result')
+        .select('entry_strategy, result, timeframe, test_sequence_strategy')
         .gte('created_at', brtDayStartIso())
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
@@ -63,6 +64,12 @@ export function AIAnalysisStatusCard() {
         if (row.result === 'win') stat.wins += 1;
         else if (row.result === 'loss') stat.losses += 1;
         byStrategy.set(strategy, stat);
+        if (row.timeframe === 'TEST' && row.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') {
+          const sequence = byStrategy.get(row.test_sequence_strategy) ?? { strategy: row.test_sequence_strategy, wins: 0, losses: 0 };
+          if (row.result === 'win') sequence.wins += 1;
+          else if (row.result === 'loss') sequence.losses += 1;
+          byStrategy.set(sequence.strategy, sequence);
+        }
       }
       setStrategyStats([...byStrategy.values()].sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses)));
     } catch {

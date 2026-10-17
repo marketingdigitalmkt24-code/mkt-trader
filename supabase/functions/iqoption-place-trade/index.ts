@@ -119,6 +119,83 @@ async function loginToIQOption(email: string, password: string): Promise<{ ssid:
   return { ssid: null, error: 'Não foi possível conectar à IQ Option' };
 }
 
+// Copy trading: espelha uma ordem confirmada da conta principal para os clientes
+// com copy ativo. Falhas de um cliente nunca afetam os demais nem a conta principal.
+async function mirrorCopyTrades(
+  supabase: any,
+  tradeRequest: TradeRequest,
+  masterSignalId: string,
+  timeframe: string,
+  expirationIso: string | null,
+) {
+  try {
+    if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
+    const { data: copies } = await supabase
+      .from('copy_trading_configs')
+      .select('user_id, account_type')
+      .eq('enabled', true);
+    if (!copies?.length) return;
+
+    const dayStart = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' });
+    const brtNow = new Date(dayStart);
+    brtNow.setHours(0, 0, 0, 0);
+    const dayStartIso = new Date(brtNow.getTime() - brtNow.getTimezoneOffset() * 60000).toISOString();
+
+    for (const copy of copies) {
+      try {
+        const [{ data: cfg }, { data: settings }] = await Promise.all([
+          supabase.from('iqoption_config').select('email, password')
+            .eq('user_id', copy.user_id).eq('is_active', true).limit(1).maybeSingle(),
+          supabase.from('user_trading_settings').select('trade_amount, profit_target_type, profit_target_value')
+            .eq('user_id', copy.user_id).maybeSingle(),
+        ]);
+        if (!cfg?.email || !cfg?.password) { console.log(`⏭️ Copy ${copy.user_id}: sem credenciais IQ Option`); continue; }
+
+        const amount = Number(settings?.trade_amount) > 0 ? Number(settings.trade_amount) : tradeRequest.amount;
+
+        // Respeita a meta de lucro do cliente
+        if (settings?.profit_target_type === 'value' && Number(settings.profit_target_value) > 0) {
+          const { data: todayOps } = await supabase.from('operation_results').select('profit')
+            .like('signal_id', `copy-${copy.user_id}-%`).gte('created_at', dayStartIso);
+          const dailyProfit = (todayOps || []).reduce((s: number, o: any) => s + Number(o.profit || 0), 0);
+          if (dailyProfit >= Number(settings.profit_target_value)) {
+            console.log(`🎯 Copy ${copy.user_id}: meta de lucro atingida, pulando`);
+            continue;
+          }
+        }
+
+        const { ssid } = await loginToIQOption(cfg.email, cfg.password);
+        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou`); continue; }
+
+        const res = await placeTradeFireAndForget(ssid, copy.account_type, { ...tradeRequest, amount });
+        if (res.success && res.tradeId) {
+          await supabase.from('operation_results').insert({
+            signal_id: `copy-${copy.user_id}-${masterSignalId}`,
+            asset: tradeRequest.asset,
+            direction: tradeRequest.direction.toUpperCase(),
+            entry_price: amount,
+            result: 'pending',
+            profit: 0,
+            iq_option_id: res.tradeId,
+            is_auto_trade: true,
+            is_ai_analyzed: false,
+            entry_strategy: 'COPY_TRADE',
+            timeframe,
+            expiration_time: expirationIso,
+          });
+          console.log(`📋 Copy ${copy.user_id}: ordem espelhada ${res.tradeId} ($${amount} ${copy.account_type})`);
+        } else {
+          console.log(`❌ Copy ${copy.user_id}: ${res.error || 'ordem recusada'}`);
+        }
+      } catch (e) {
+        console.error(`❌ Copy ${copy.user_id} erro:`, String(e));
+      }
+    }
+  } catch (e) {
+    console.error('❌ Copy mirror fatal:', String(e));
+  }
+}
+
 // Track asset type (binary vs turbo) for correct option_type_id
 interface AssetInfo {
   id: number;
@@ -737,6 +814,12 @@ serve(async (req) => {
       });
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
+
+      // Copy trading: espelha a ordem confirmada para os clientes com copy ativo
+      const masterSignalId = tradeRequest.signalId || `auto_${Date.now()}`;
+      const copyTask = mirrorCopyTrades(supabase, tradeRequest, masterSignalId, timeframe, expirationIso);
+      // @ts-ignore EdgeRuntime exists in Supabase runtime
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
 
       // Schedule result checks right at expiry (fast win/loss → instant post-win continuation)
       if (!isForex) {

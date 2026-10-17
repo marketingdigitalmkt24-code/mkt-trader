@@ -379,7 +379,7 @@ async function placeTradeFireAndForget(
           const nowMs0 = Date.now();
           const candleOpenMs = trade.entryStrategy === FOUR_WIN_STRATEGY && trade.entryAt
             ? trade.entryAt : Math.ceil((nowMs0 + 1000) / 60000) * 60000;
-          if (trade.entryStrategy === FOUR_WIN_STRATEGY && nowMs0 >= candleOpenMs - ENTRY_LATENCY_LEAD_MS) {
+          if (trade.entryStrategy === FOUR_WIN_STRATEGY && !canSendReversal(candleOpenMs, nowMs0)) {
             clearTimeout(timeout); ws.close();
             resolve({ success: false, error: 'Entrada prevista passou; ordem não enviada atrasada' });
             return;
@@ -512,7 +512,7 @@ serve(async (req) => {
       if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`) {
         return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
       }
-      if (!Number.isFinite(tradeRequest.entryAt) || Number(tradeRequest.entryAt) <= Date.now()
+      if (!canSendReversal(Number(tradeRequest.entryAt), Date.now())
         || Number(tradeRequest.entryAt) > Date.now() + 60000
         || Number(tradeRequest.entryAt) % 60000 !== 0
         || !['call', 'put'].includes(tradeRequest.direction) || tradeRequest.expiration !== 1) {

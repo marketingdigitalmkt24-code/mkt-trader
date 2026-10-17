@@ -4,6 +4,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { FOUR_WIN_STRATEGY, nextReversalMinute } from '../_shared/four-win-reversal.ts';
+import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -107,12 +108,42 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors });
   }
   const supabase = createClient(url, serviceKey);
-  const { data: cfg } = await supabase.from('iqoption_config').select('id, email, password').eq('is_active', true).limit(1).maybeSingle();
+  const [{ data: cfg }, { data: open }] = await Promise.all([
+    supabase.from('iqoption_config').select('id, email, password').eq('is_active', true).limit(1).maybeSingle(),
+    supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
+      .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000),
+  ]);
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
   const ssid = await login(cfg.email, cfg.password);
   if (!ssid) return Response.json({ success: false, error: 'login failed' }, { headers: cors });
   const nowSec = Math.floor(Date.now() / 1000);
   const curMin = Math.floor(nowSec / 60) * 60;
+
+  // Confirm each expired TEST as soon as its broker candle arrives, not after all assets.
+  let resolved = 0;
+  const confirmations: Promise<void>[] = [];
+  const confirmAsset = async (asset: string, candles: K[]) => {
+    for (const o of (open || []).filter(row => row.asset === asset)) {
+      const entrySec = Math.floor(new Date(o.created_at).getTime() / 1000);
+      const outcome = closedTestResult(candles, entrySec, o.direction, Math.floor(Date.now() / 1000));
+      if (!outcome) continue;
+      const { data: upd } = await supabase.from('operation_results').update(outcome)
+        .eq('id', o.id).eq('result', OPEN).select('id');
+      if (!upd?.length) continue;
+      resolved++;
+      if (o.telegram_sent) {
+        const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+        const head = outcome.result === 'win' ? '✅ RESULTADO: WIN' : outcome.result === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
+        const delivery = sendTelegram([head + ' — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, `🎯 Estratégia: ${LABELS[o.entry_strategy] || o.entry_strategy}`,
+          `Direção: ${o.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
+          '🧪 Operação TESTE (sem ordem real).'].join('\n')).catch(e => console.error('Telegram:', String(e)));
+        // Historic TEST notifications must not hold up the current entry preparation.
+        // @ts-ignore Hosted background runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(delivery);
+        else await delivery;
+      }
+    }
+  };
 
   const series = new Map<string, K[]>();
   await new Promise<void>((resolve) => {
@@ -135,7 +166,7 @@ Deno.serve(async (req) => {
         }
         pending = cand.size;
         if (!pending) { clearTimeout(timer); finish(); return; }
-        for (const [s, id] of cand) {
+        for (const [s, id] of prioritizeResultAssets(cand, (open || []).map(o => o.asset))) {
           const rid = `m${id}`; byReq.set(rid, s);
           ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to: nowSec, count: 130 } } }));
           await new Promise(r => setTimeout(r, 40));
@@ -146,34 +177,19 @@ Deno.serve(async (req) => {
         if (!s) return;
         series.set(s, (d.msg?.candles || []).map((c: any) => ({ t: c.from, o: c.open, c: c.close, h: c.max, l: c.min }))
           .filter((k: K) => typeof k.c === 'number').sort((a: K, b: K) => a.t - b.t));
+        confirmations.push(confirmAsset(s, series.get(s) || []));
         if (--pending <= 0) { clearTimeout(timer); finish(); }
       }
     };
   });
 
-  // 1) Resolver entradas TESTE vencidas com a vela real da IQ Option.
-  let resolved = 0;
-    const { data: open } = await supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
-    .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000);
+  // Await database confirmation, not Telegram, before the atomic four-win claim.
+  await Promise.all(confirmations);
   for (const o of open || []) {
     const entrySec = Math.floor(new Date(o.created_at).getTime() / 1000);
     const k = series.get(o.asset)?.find(x => x.t === entrySec);
-    if (!k || k.t + 60 > nowSec) {
-      if (nowSec - entrySec > 600) await supabase.from('operation_results').update({ result: 'expired' }).eq('id', o.id).eq('result', OPEN);
-      continue;
-    }
-    const res = k.c === k.o ? 'tie' : (k.c > k.o) === (o.direction === 'CALL') ? 'win' : 'loss';
-    const profit = res === 'win' ? 8.5 : res === 'loss' ? -10 : 0;
-    const { data: upd } = await supabase.from('operation_results').update({ result: res, profit, entry_price: k.o, exit_price: k.c })
-      .eq('id', o.id).eq('result', OPEN).select('id');
-    if (!upd?.length) continue;
-    resolved++;
-    if (o.telegram_sent) {
-      const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-      const head = res === 'win' ? '✅ RESULTADO: WIN' : res === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
-      await sendTelegram([head + ' — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, `🎯 Estratégia: ${LABELS[o.entry_strategy] || o.entry_strategy}`,
-        `Direção: ${o.direction === 'CALL' ? '🟢 COMPRA (CALL)' : '🔴 VENDA (PUT)'}`, `⏰ Entrada: ${hh} (Brasília) · 1 minuto`,
-        '🧪 Operação TESTE (sem ordem real).'].join('\n')).catch(e => console.error('Telegram:', String(e)));
+    if ((!k || k.t + 60 > nowSec) && nowSec - entrySec > 600) {
+      await supabase.from('operation_results').update({ result: 'expired' }).eq('id', o.id).eq('result', OPEN);
     }
   }
 

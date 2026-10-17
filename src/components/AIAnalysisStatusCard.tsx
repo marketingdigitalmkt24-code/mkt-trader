@@ -96,7 +96,11 @@ export function AIAnalysisStatusCard() {
 
   useEffect(() => {
     fetchSignals();
-    const interval = setInterval(fetchSignals, 10000);
+    fetchStrategyStats();
+    const interval = setInterval(() => {
+      fetchSignals();
+      fetchStrategyStats();
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 

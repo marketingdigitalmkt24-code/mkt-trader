@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { readCopyAccount } from '@/lib/client-copy-state';
+import { countClientCopyResults } from '@/lib/admin-copy-results';
+import { copyDayStart } from '../../supabase/functions/_shared/copy-target';
 
 interface ClientProfile {
   id: string;
@@ -22,9 +24,11 @@ export function CopyTradingCard() {
   const [configs, setConfigs] = useState<Record<string, CopyConfig>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [accounts, setAccounts] = useState<Record<string, 'PRACTICE' | 'REAL' | null>>({});
+  const [results, setResults] = useState<Record<string, { wins: number; losses: number }>>({});
+  const [balances, setBalances] = useState<Record<string, { amount: number; currency: string; account: string } | null>>({});
+  const [balancesLoading, setBalancesLoading] = useState(false);
 
   const load = useCallback(async () => {
-    setIsLoading(true);
     const [{ data: profiles }, { data: copyConfigs }, { data: iqConfigs }] = await Promise.all([
       supabase.from('client_profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('copy_trading_configs').select('user_id, enabled'),
@@ -40,13 +44,65 @@ export function CopyTradingCard() {
     (iqConfigs || []).forEach(c => { accountMap[c.user_id] = readCopyAccount(c); });
     setAccounts(accountMap);
     setIsLoading(false);
+    const totals = await Promise.all((profiles || []).map(async client => {
+      let wins = 0;
+      let losses = 0;
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await supabase.from('operation_results')
+          .select('signal_id, result, iq_option_id, timeframe')
+          .like('signal_id', `copy-${client.user_id}-%`)
+          .gte('created_at', copyDayStart())
+          .order('created_at').order('id')
+          .range(offset, offset + 999);
+        if (error) return [client.user_id, null] as const;
+        const counts = countClientCopyResults(data || [], client.user_id);
+        wins += counts.wins;
+        losses += counts.losses;
+        if (!data || data.length < 1000) break;
+      }
+      return [client.user_id, { wins, losses }] as const;
+    }));
+    setResults(Object.fromEntries(totals.filter(([, value]) => value !== null)));
   }, []);
+
+  const connectedAccounts = JSON.stringify(Object.entries(accounts).filter(([, account]) => account).sort());
+  useEffect(() => {
+    let disposed = false;
+    let running = false;
+    const refresh = async () => {
+      if (running) return;
+      running = true;
+      setBalancesLoading(true);
+      const entries: [string, string][] = JSON.parse(connectedAccounts);
+      const values = await Promise.all(entries.map(async ([userId, account]) => {
+        try {
+          const { data, error } = await supabase.functions.invoke('iqoption-get-balance', {
+            body: { userId, timezoneOffset: 180 },
+          });
+          return [userId, !error && data?.success && Number.isFinite(data.balance) && data.accountType === account
+            ? { amount: data.balance as number, currency: (data.currency || 'USD') as string, account }
+            : null] as const;
+        } catch {
+          return [userId, null] as const;
+        }
+      }));
+      if (!disposed) {
+        setBalances(Object.fromEntries(values));
+        setBalancesLoading(false);
+      }
+      running = false;
+    };
+    void refresh();
+    const interval = setInterval(refresh, 60000);
+    return () => { disposed = true; clearInterval(interval); };
+  }, [connectedAccounts]);
 
   useEffect(() => {
     void load();
     const channel = supabase.channel('admin-copy-readonly')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'iqoption_config' }, () => { void load(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'copy_trading_configs' }, () => { void load(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, () => { void load(); })
       .subscribe();
     const interval = setInterval(load, 10000);
     return () => { clearInterval(interval); void supabase.removeChannel(channel); };
@@ -60,7 +116,7 @@ export function CopyTradingCard() {
           <CardTitle>Copy Trading</CardTitle>
         </div>
         <CardDescription>
-          Contas e status do copy configurados pelos clientes.
+          Contas, saldo e resultados de hoje dos clientes.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -77,6 +133,8 @@ export function CopyTradingCard() {
             const cfg = configs[client.user_id];
             const enabled = cfg?.enabled ?? false;
             const accountType = accounts[client.user_id];
+            const balance = balances[client.user_id];
+            const totals = results[client.user_id];
             return (
               <div key={client.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-secondary/20 rounded-lg">
                 <div className="flex items-center gap-3 min-w-0">
@@ -90,6 +148,24 @@ export function CopyTradingCard() {
                     </p>
                   </div>
                 </div>
+                <dl className="grid grid-cols-3 gap-4 sm:ml-auto text-center shrink-0">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Saldo</dt>
+                    <dd className="text-sm font-semibold tabular-nums">
+                      {balance && balance.account === accountType
+                        ? `${balance.currency} ${balance.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : balancesLoading && accountType ? 'Consultando…' : 'Indisponível'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Win hoje</dt>
+                    <dd className="text-sm font-semibold tabular-nums text-call">{totals?.wins ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Loss hoje</dt>
+                    <dd className="text-sm font-semibold tabular-nums text-put">{totals?.losses ?? '—'}</dd>
+                  </div>
+                </dl>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge variant={enabled ? 'default' : 'secondary'}>
                     {enabled ? 'Copy Ativo' : 'Inativo'}

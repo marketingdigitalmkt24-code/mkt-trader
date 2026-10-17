@@ -1,3 +1,4 @@
+- Admin copy metrics use each client's confirmed copy-prefixed orders for BRT daily counts and the existing user-targeted broker balance reader; why: master and TEST results must not inflate client totals.
 - Client copy controls read persisted enabled state without navigation writes and embed IQ connection before copy settings; why: leaving the page must not stop server-side copying.
 - Client copy saves, broker placement and read-only admin account labels use the active IQ connection account type via the shared copy-account resolver; why: only the client's connection choice determines the copied order account.
 - Reconcile copied broker IDs against each client's own IQ Option history and persist target autostop during server result sync; why: master history cannot settle client orders and closing a browser must not bypass daily limits.

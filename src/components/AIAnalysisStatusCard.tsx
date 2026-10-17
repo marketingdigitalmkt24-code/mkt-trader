@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Brain, Zap, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, Target } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { allStrategyRows, strategyStats as summarizeStrategyStats, type StrategyStat } from '@/lib/strategy-stats';
 
 interface SignalEntry {
   id: string;
@@ -13,15 +14,9 @@ interface SignalEntry {
   created_at: string;
 }
 
-interface StrategyStat {
-  strategy: string;
-  wins: number;
-  losses: number;
-}
-
 const strategyLabels: Record<string, string> = {
   TENDENCIA: 'Tendência',
-  TREND_WIN_LOSS_FORCE_LOSS: 'Tendência após WIN → LOSS → LOSS (TESTE)',
+  TREND_WIN_LOSS_FORCE_LOSS: 'Retomada (TESTE)',
   TENDENCIA_V1: 'Tendência V1',
   FOUR_WIN_REVERSAL: 'Após 4 ganhos',
   FORCE_LOSS_WIN: 'Força LOSS → WIN',
@@ -40,6 +35,9 @@ export function AIAnalysisStatusCard() {
   const [strategyStats, setStrategyStats] = useState<StrategyStat[]>([]);
   const [lastSignalTime, setLastSignalTime] = useState<Date | null>(null);
   const [isActive, setIsActive] = useState(false);
+  const statsBusy = useRef(false);
+  const statsQueued = useRef(false);
+  const mounted = useRef(true);
 
   const brtDayStartIso = () => {
     const brNow = new Date(Date.now() - 3 * 3600 * 1000);
@@ -47,33 +45,32 @@ export function AIAnalysisStatusCard() {
   };
 
   const fetchStrategyStats = async () => {
+    if (statsBusy.current) { statsQueued.current = true; return; }
+    statsBusy.current = true;
     try {
-      const { data } = await supabase
-        .from('operation_results')
-        .select('entry_strategy, result, timeframe, test_sequence_strategy')
-        .gte('created_at', brtDayStartIso())
-        .or('timeframe.is.null,timeframe.neq.MT5')
-        .not('signal_id', 'like', 'mt5-%')
-        .not('signal_id', 'like', 'copy-%')
-        .not('entry_strategy', 'is', null);
-      if (!data) return;
-      const byStrategy = new Map<string, StrategyStat>();
-      for (const row of data) {
-        const strategy = String(row.entry_strategy);
-        const stat = byStrategy.get(strategy) ?? { strategy, wins: 0, losses: 0 };
-        if (row.result === 'win') stat.wins += 1;
-        else if (row.result === 'loss') stat.losses += 1;
-        byStrategy.set(strategy, stat);
-        if (row.timeframe === 'TEST' && row.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') {
-          const sequence = byStrategy.get(row.test_sequence_strategy) ?? { strategy: row.test_sequence_strategy, wins: 0, losses: 0 };
-          if (row.result === 'win') sequence.wins += 1;
-          else if (row.result === 'loss') sequence.losses += 1;
-          byStrategy.set(sequence.strategy, sequence);
-        }
-      }
-      setStrategyStats([...byStrategy.values()].sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses)));
+      const start = brtDayStartIso();
+      const end = new Date(Date.parse(start) + 86400000).toISOString();
+      const rows = await allStrategyRows(async (from, to) => {
+        const { data, error } = await supabase.from('operation_results')
+          .select('entry_strategy, result, timeframe, test_sequence_strategy')
+          .gte('created_at', start).lt('created_at', end)
+          .or('timeframe.is.null,timeframe.neq.MT5')
+          .not('signal_id', 'like', 'mt5-%').not('signal_id', 'like', 'copy-%')
+          .not('entry_strategy', 'is', null)
+          .order('created_at', { ascending: true }).order('id', { ascending: true })
+          .range(from, to);
+        if (error) throw error;
+        return data ?? [];
+      });
+      if (mounted.current) setStrategyStats(summarizeStrategyStats(rows));
     } catch {
       // silent
+    } finally {
+      statsBusy.current = false;
+      if (statsQueued.current && mounted.current) {
+        statsQueued.current = false;
+        void fetchStrategyStats();
+      }
     }
   };
 
@@ -102,13 +99,23 @@ export function AIAnalysisStatusCard() {
   };
 
   useEffect(() => {
+    mounted.current = true;
     fetchSignals();
     fetchStrategyStats();
     const interval = setInterval(() => {
       fetchSignals();
       fetchStrategyStats();
     }, 10000);
-    return () => clearInterval(interval);
+    const refresh = () => { fetchSignals(); void fetchStrategyStats(); };
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      mounted.current = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   // Realtime subscription
@@ -118,7 +125,10 @@ export function AIAnalysisStatusCard() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trading_signals' }, () => {
         fetchSignals();
       })
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, () => {
+        void fetchStrategyStats();
+      })
+      .subscribe(status => { if (status === 'SUBSCRIBED') void fetchStrategyStats(); });
     return () => { supabase.removeChannel(channel); };
   }, []);
 

@@ -394,7 +394,7 @@ export function LiveOperationsCard() {
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">TESTE</Badge>
                     )}
                     {trade.timeframe === 'TEST' && trade.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS' && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal border-primary/50 text-primary">📐 TENDÊNCIA APÓS WIN → LOSS → LOSS</Badge>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal border-primary/50 text-primary">📐 RETOMADA</Badge>
                     )}
                     {trade.entry_strategy === 'TENDENCIA' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📐 TENDÊNCIA</Badge>

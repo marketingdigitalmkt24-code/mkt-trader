@@ -86,7 +86,7 @@ export function ClientResultsCard() {
             ))}
           </div>
         )}
-        {!isLoading && !isError && ops.length > 20 && (
+        {!isLoading && !isError && ops.length > 12 && (
           <nav aria-label="Histórico de sinais" className="flex items-center justify-between gap-2 mt-3">
             <Button variant="outline" size="icon" aria-label="Página anterior" title="Página anterior" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>
               <ChevronLeft />

@@ -38,6 +38,7 @@ const strategyLabels: Record<string, string> = {
   TENDENCIA_V1: 'Tendência V1',
   FOUR_WIN_REVERSAL: 'Após 4 ganhos',
   FORCE_LOSS_WIN: 'Vela de Força LOSS → WIN',
+  THREE_FORCE: 'Após 3 Velas de Força',
   HISTORICO: 'Histórico bom',
   EMPATE: 'Empate',
   REVERSAO_RSI: 'Reversão RSI',
@@ -402,6 +403,9 @@ export function LiveOperationsCard() {
                     )}
                     {trade.entry_strategy === 'FORCE_LOSS_WIN' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🕯️ FORÇA LOSS → WIN</Badge>
+                    )}
+                    {trade.entry_strategy === 'THREE_FORCE' && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🕯️ APÓS 3 VELAS DE FORÇA</Badge>
                     )}
                     {trade.entry_strategy === 'HISTORICO' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📜 HISTÓRICO BOM</Badge>

@@ -92,6 +92,13 @@
       "when": 1792219928108,
       "tag": "0012_master_iq_admin_only",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792221176315,
+      "tag": "0013_three_force_claim",
+      "breakpoints": true
     }
   ]
 }

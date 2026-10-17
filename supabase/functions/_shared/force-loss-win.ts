@@ -16,5 +16,5 @@ export function forceEntryDirection(direction: 'CALL' | 'PUT'): 'CALL' | 'PUT' {
 }
 
 export function isNextMinuteStrategy(strategy: string | undefined): boolean {
-  return strategy === 'FOUR_WIN_REVERSAL' || strategy === FORCE_LOSS_WIN_STRATEGY;
+  return strategy === 'FOUR_WIN_REVERSAL' || strategy === FORCE_LOSS_WIN_STRATEGY || strategy === 'THREE_FORCE';
 }

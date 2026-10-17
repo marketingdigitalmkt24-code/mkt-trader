@@ -26,3 +26,13 @@ export function invertDirection(direction: 'CALL' | 'PUT'): 'CALL' | 'PUT' {
 export function hasFourWins(results: string[]): boolean {
   return results.length >= 4 && results.slice(0, 4).every(result => result === 'win');
 }
+
+// Newest-first strategies of the 4 wins: two ADJACENT VELA_FORCA wins anywhere in the
+// sequence block the reversal — no IQ Option order and no Telegram. Other sequences send.
+export function isBlockedByMiddleForceCandles(strategies: string[]): boolean {
+  if (strategies.length < 4) return false;
+  for (let i = 0; i < 3; i++) {
+    if (strategies[i] === 'VELA_FORCA' && strategies[i + 1] === 'VELA_FORCA') return true;
+  }
+  return false;
+}

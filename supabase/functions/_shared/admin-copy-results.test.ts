@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { countClientCopyResults } from './admin-copy-results';
+import { countClientCopyResults } from '../../../src/lib/admin-copy-results';
 
 describe('admin copy results', () => {
   it('counts only this client’s confirmed copied wins and losses', () => {

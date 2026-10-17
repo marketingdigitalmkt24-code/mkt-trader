@@ -43,6 +43,13 @@
       "when": 1792192227252,
       "tag": "0005_four_win_safety_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792197952034,
+      "tag": "0006_force_loss_win_claim",
+      "breakpoints": true
     }
   ]
 }

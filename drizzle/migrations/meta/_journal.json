@@ -141,6 +141,13 @@
       "when": 1792332021366,
       "tag": "0019_remove_asset_loss_pause",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792340215034,
+      "tag": "0020_allow_simultaneous_real_entries",
+      "breakpoints": true
     }
   ]
 }

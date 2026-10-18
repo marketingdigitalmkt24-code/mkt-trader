@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.89.0';
-import { corsHeaders } from 'npm:@supabase/supabase-js@2.89.0/cors';
+import { corsHeaders } from 'https://esm.sh/@supabase/supabase-js@2.89.0/cors';
 import { dispatchDailyReport } from '../_shared/telegram-daily-dispatch.ts';
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });

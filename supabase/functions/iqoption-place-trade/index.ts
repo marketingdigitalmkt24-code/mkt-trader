@@ -168,8 +168,19 @@ async function mirrorCopyTrades(
           }
         }
 
-        const { ssid } = await loginToIQOption(cfg.email, cfg.password);
-        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou`); return; }
+        // Retentativa de login: instabilidade/bloqueio temporário da corretora
+        // não pode derrubar o copy do cliente. A ordem só dispara após a
+        // confirmação da principal, então as tentativas correm em paralelo à espera.
+        let ssid: string | null = null;
+        for (let attempt = 1; attempt <= 3 && !ssid; attempt++) {
+          const login = await loginToIQOption(cfg.email, cfg.password);
+          ssid = login.ssid;
+          if (!ssid && attempt < 3) {
+            console.log(`🔁 Copy ${copy.user_id}: login falhou (tentativa ${attempt}/3), tentando novamente`);
+            await new Promise(r => setTimeout(r, 800));
+          }
+        }
+        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou após 3 tentativas`); return; }
 
         // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.
         const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount }, master.then(m => m.ok));

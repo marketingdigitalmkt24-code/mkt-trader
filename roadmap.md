@@ -60,6 +60,6 @@
 - [x] Configure daily Telegram report at 23:59 BRT using existing minute runner; principal daily results and cumulative top three strategies, no client copies; 11 tests passed, deployed function starts and rejects non-service requests.
 - [ ] Verify first scheduled daily Telegram delivery and saved message ID (waiting for 23:59 BRT; no premature report sent).
 - [x] Add prospective Força Invertida TEST observations on unchanged base rows, separate cumulative ranking and opposite-direction outcome badges; 14 rule/regression tests passed, runner and daily report deployed; original signals and real authorizations unchanged.
-- [ ] Verify first naturally selected Force signal with inverted outcome in admin UI (waiting for a new VELA_FORCA signal after deployment; no backfill or forced order).
+- [x] Verify natural inverted Force outcomes in authenticated admin UI: TRUMP 23:37 inverted WIN and COKE 23:40 inverted LOSS; cumulative 1W/1L confirmed, no backfill or forced order.
 - [x] Change Telegram report to top five daily strategies with daily wins/losses; 10 tests passed, report function deployed; authenticated admin accuracy shows Retomada and Força Invertida without TESTE suffixes, execution unchanged. Scheduled delivery awaits 23:59 BRT.
 - [x] Separate Force and inverted Force TEST display rows; 13 tests passed, authenticated UI confirms TRUMPUSD-OTC 23:37 CALL LOSS -10 / inverted PUT WIN +8.50. Inverted accuracy 1W/1L matches TRUMP win and COKE 23:40 inverted loss; original accounting and authorization preserved.

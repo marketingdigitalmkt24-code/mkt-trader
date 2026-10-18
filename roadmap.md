@@ -8,6 +8,7 @@
 - [x] 6. 81 testes OK, funções republicadas, build OK
 
 # Horário de entrada e Força Invertida
-- [ ] Reduzir esperas na análise e preparação de ordens sem antecipar velas fechadas.
-- [ ] Comparar perdas reais da Força Invertida com abertura :00, sem alterar histórico.
-- [ ] Executar testes e publicar funções alteradas; verificar novos horários sem gerar ordens manuais.
+- [x] Reduzir esperas na análise e preparação de ordens sem antecipar velas fechadas.
+- [x] Comparar 29 perdas reais com abertura :00: 2 ganhos simulados, 27 perdas; histórico preservado.
+- [x] 27 testes aprovados; duas funções publicadas; acesso manual não autorizado recusado.
+- [ ] Confirmar horário real após ajuste — aguarda próximo sinal Força Invertida autorizado; nenhuma ordem nova no ciclo observado.

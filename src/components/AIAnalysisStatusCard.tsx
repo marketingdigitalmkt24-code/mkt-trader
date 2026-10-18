@@ -16,13 +16,13 @@ interface SignalEntry {
 
 const strategyLabels: Record<string, string> = {
   TENDENCIA: 'Tendência',
-  TREND_WIN_LOSS_FORCE_LOSS: 'Retomada (TESTE)',
+  TREND_WIN_LOSS_FORCE_LOSS: 'Retomada',
   TENDENCIA_V1: 'Tendência V1',
   FOUR_WIN_REVERSAL: 'Após 4 ganhos',
   THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
-  FORCA_INVERTIDA: 'Força Invertida (TESTE)',
+  FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
   KDJ: 'KDJ',

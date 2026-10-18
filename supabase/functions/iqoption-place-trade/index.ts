@@ -659,7 +659,8 @@ serve(async (req) => {
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
         const reqStrategy = queued.entry_strategy;
         if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI' || reqStrategy === 'TENDENCIA_V1' || isNextMinuteStrategy(reqStrategy || undefined)) entryStrategy = reqStrategy;
-        const strategy = entryStrategy === THREE_FORCE_STRATEGY ? THREE_FORCE_LABEL : entryStrategy === FOUR_WIN_STRATEGY ? FOUR_WIN_LABEL : entryStrategy === 'HISTORICO' ? 'Histórico bom'
+        const strategy = entryStrategy === 'RETOMADA' ? 'Retomada' : entryStrategy === 'FORCA_INVERTIDA' ? 'Força Invertida'
+          : entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
           : entryStrategy === 'TENDENCIA_V1' ? 'Tendência V1'
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'

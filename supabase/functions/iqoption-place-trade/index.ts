@@ -2,9 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
-import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
+import { canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 import { isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
-import { THREE_FORCE_STRATEGY, THREE_FORCE_LABEL } from '../_shared/three-force.ts';
 import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
@@ -659,7 +658,8 @@ serve(async (req) => {
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
         const reqStrategy = queued.entry_strategy;
         if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI' || reqStrategy === 'TENDENCIA_V1' || isNextMinuteStrategy(reqStrategy || undefined)) entryStrategy = reqStrategy;
-        const strategy = entryStrategy === THREE_FORCE_STRATEGY ? THREE_FORCE_LABEL : entryStrategy === FOUR_WIN_STRATEGY ? FOUR_WIN_LABEL : entryStrategy === 'HISTORICO' ? 'Histórico bom'
+        const strategy = entryStrategy === 'RETOMADA' ? 'Retomada' : entryStrategy === 'FORCA_INVERTIDA' ? 'Força Invertida'
+          : entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
           : entryStrategy === 'TENDENCIA_V1' ? 'Tendência V1'
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'

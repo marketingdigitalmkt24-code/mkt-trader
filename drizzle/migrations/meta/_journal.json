@@ -127,6 +127,13 @@
       "when": 1792289940324,
       "tag": "0017_retire_force_loss_win",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792303450649,
+      "tag": "0018_swap_real_strategies",
+      "breakpoints": true
     }
   ]
 }

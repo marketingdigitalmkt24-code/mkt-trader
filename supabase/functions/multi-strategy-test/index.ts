@@ -3,8 +3,7 @@
 // e resolvida pelas velas reais da IQ Option. Telegram: só o resultado WIN da Tendência (mesmo em teste).
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
-import { FOUR_WIN_STRATEGY, nextReversalMinute } from '../_shared/four-win-reversal.ts';
-import { THREE_FORCE_STRATEGY } from '../_shared/three-force.ts';
+import { nextReversalMinute } from '../_shared/four-win-reversal.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
@@ -263,21 +262,13 @@ Deno.serve(async (req) => {
     }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
     if (best && inserted) {
-      const threeClaim = await supabase.rpc('claim_three_force', { p_candidate: best.signal_id });
-      if (threeClaim.error) console.error('Three force claim:', threeClaim.error.message);
-      const { data: trade, error: claimError } = threeClaim.data
-        ? threeClaim : await supabase.rpc('claim_four_win_reversal', { p_candidate: best.signal_id });
-      if (claimError) console.error('Four-win claim:', claimError.message);
+      // Estratégias reais ativas (18/10/2026): Reversão RSI, Retomada e Força Invertida.
+      // O claim decide a direção final (Força Invertida já sai invertida do banco).
+      const { data: trade, error: claimError } = await supabase.rpc('claim_test_strategy_entry', { p_candidate: best.signal_id });
+      if (claimError) console.error('Strategy claim:', claimError.message);
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
-        const claimedStrategy = trade.entryStrategy === THREE_FORCE_STRATEGY ? THREE_FORCE_STRATEGY : FOUR_WIN_STRATEGY;
+        const claimedStrategy = String(trade.entryStrategy);
         const entryAt = nextReversalMinute(curMin * 1000);
-        // User rule (17/10 19:xx UTC): real IQ/Telegram entries are inverted, EXCEPT Após 4 ganhos —
-        // it enters in the signal's normal direction (the claim no longer inverts).
-        if (claimedStrategy !== FOUR_WIN_STRATEGY) {
-          trade.direction = String(trade.direction).toLowerCase() === 'call' ? 'put' : 'call';
-          await supabase.from('trade_queue').update({ direction: trade.direction.toUpperCase() })
-            .eq('signal_id', String(trade.signalId)).eq('entry_strategy', claimedStrategy);
-        }
         const task = (async () => {
           // Reuse the session that just fetched these candles, avoiding another broker login.
           // This secret travels server-to-server only, never to browser, storage or logs.

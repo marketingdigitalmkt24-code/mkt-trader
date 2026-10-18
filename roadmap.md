@@ -6,3 +6,8 @@
 - [x] 4. Histórico real das removidas apagado (admin + cliente); TESTE preservado
 - [x] 5. Rótulos admin/cliente atualizados (Retomada, Força Invertida)
 - [x] 6. 81 testes OK, funções republicadas, build OK
+
+# Horário de entrada e Força Invertida
+- [ ] Reduzir esperas na análise e preparação de ordens sem antecipar velas fechadas.
+- [ ] Comparar perdas reais da Força Invertida com abertura :00, sem alterar histórico.
+- [ ] Executar testes e publicar funções alteradas; verificar novos horários sem gerar ordens manuais.

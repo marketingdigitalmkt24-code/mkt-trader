@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { invertedTestOutcome, FORCE_INVERTED_TEST } from '../../supabase/functions/_shared/force-inverted-test';
+import { expandTestObservations } from '@/lib/live-test-observations';
 
 interface OpenPosition {
   id: string;
@@ -45,6 +45,7 @@ const strategyLabels: Record<string, string> = {
   EMPATE: 'Empate',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
+  FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
   KDJ: 'KDJ',
@@ -380,7 +381,7 @@ export function LiveOperationsCard() {
 
           {iqTrades.length > 0 ? (
             <div className="space-y-1">
-              {iqTrades.map(trade => (
+              {iqTrades.flatMap(expandTestObservations).map(trade => (
                 <div key={trade.id} className={cn(
                   "flex flex-wrap items-center justify-between gap-x-2 gap-y-1 p-2 rounded-lg text-xs",
                   getResultBg(trade.result)
@@ -401,14 +402,12 @@ export function LiveOperationsCard() {
                     {trade.timeframe === 'TEST' && trade.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal border-primary/50 text-primary">📐 RETOMADA</Badge>
                     )}
-                    {trade.timeframe === 'TEST' && trade.test_inverted_strategy === FORCE_INVERTED_TEST && (() => {
-                      const inverted = invertedTestOutcome(trade.direction, trade.result);
-                      if (!inverted) return null;
-                      const settled = ['win', 'loss', 'tie'].includes(inverted.result);
-                      return <Badge variant="outline" className={cn('text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal', inverted.result === 'win' ? 'border-call/50 text-call' : inverted.result === 'loss' ? 'border-put/50 text-put' : 'text-muted-foreground')}>
-                        🔄 FORÇA INVERTIDA · TESTE · {inverted.direction} · {inverted.result === 'win' ? 'WIN' : inverted.result === 'loss' ? 'LOSS' : inverted.result === 'tie' ? 'EMPATE' : 'PENDENTE'}{settled ? ` · ${inverted.profit >= 0 ? '+' : '-'}US$ ${Math.abs(inverted.profit).toFixed(2)}` : ''}
-                      </Badge>;
-                    })()}
+                    {trade.entry_strategy === 'FORCA_INVERTIDA' && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal border-primary/50 text-primary">🔄 FORÇA INVERTIDA</Badge>
+                    )}
+                    {trade.timeframe === 'TEST' && ['VELA_FORCA', 'FORCA_INVERTIDA'].includes(trade.entry_strategy ?? '') && (
+                      <Badge variant="outline" className={cn('text-[9px] px-1 py-0 h-4', trade.direction === 'CALL' ? 'text-call border-call/50' : 'text-put border-put/50')}>{trade.direction}</Badge>
+                    )}
                     {trade.entry_strategy === 'TENDENCIA' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📐 TENDÊNCIA</Badge>
                     )}

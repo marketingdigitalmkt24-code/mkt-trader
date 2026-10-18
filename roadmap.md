@@ -62,3 +62,4 @@
 - [x] Add prospective Força Invertida TEST observations on unchanged base rows, separate cumulative ranking and opposite-direction outcome badges; 14 rule/regression tests passed, runner and daily report deployed; original signals and real authorizations unchanged.
 - [ ] Verify first naturally selected Force signal with inverted outcome in admin UI (waiting for a new VELA_FORCA signal after deployment; no backfill or forced order).
 - [x] Change Telegram report to top five daily strategies with daily wins/losses; 10 tests passed, report function deployed; authenticated admin accuracy shows Retomada and Força Invertida without TESTE suffixes, execution unchanged. Scheduled delivery awaits 23:59 BRT.
+- [ ] Separate Force and inverted Force TEST display rows and verify TRUMPUSD-OTC 23:37 original LOSS / inverted WIN with independent accuracy; preserve original accounting and authorization.

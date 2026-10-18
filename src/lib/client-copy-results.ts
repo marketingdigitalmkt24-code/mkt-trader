@@ -23,9 +23,10 @@ export function clientDayStart(now = new Date()) {
 export function clientCopyResults(rows: ClientCopyOperation[], userId: string, now = new Date()) {
   const start = clientDayStart(now);
   const operations = rows.filter(row => row.signal_id.startsWith(`copy-${userId}-`)
+    && row.entry_strategy !== 'FORCE_LOSS_WIN' && !row.signal_id.includes('-force-lw-')
     && Boolean(row.iq_option_id) && !['TEST', 'MT5'].includes(row.timeframe)
     && row.created_at >= start && row.created_at <= now.toISOString());
   const totals = countClientCopyResults(operations, userId);
   const trades = operations.filter(row => ['win', 'loss', 'draw', 'tie'].includes(row.result)).length;
-  return { operations: operations.filter(row => row.entry_strategy !== 'FORCE_LOSS_WIN' && !row.signal_id.includes('-force-lw-')), ...totals, trades };
+  return { operations, ...totals, trades };
 }

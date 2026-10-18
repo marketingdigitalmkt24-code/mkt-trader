@@ -4,6 +4,7 @@ export interface CopyResultRow {
   iq_option_id: string | null;
   timeframe: string;
   profit?: number;
+  entry_strategy?: string | null;
 }
 
 export function copyResultRates(wins: number, losses: number) {
@@ -13,6 +14,7 @@ export function copyResultRates(wins: number, losses: number) {
 
 export function countClientCopyResults(rows: CopyResultRow[], userId: string) {
   const own = rows.filter(row => row.signal_id.startsWith(`copy-${userId}-`)
+    && row.entry_strategy !== 'FORCE_LOSS_WIN' && !row.signal_id.includes('-force-lw-')
     && Boolean(row.iq_option_id) && !['TEST', 'MT5'].includes(row.timeframe));
   return {
     wins: own.filter(row => row.result === 'win').length,

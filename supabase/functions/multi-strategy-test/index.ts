@@ -120,13 +120,16 @@ Deno.serve(async (req) => {
     .order('created_at', { ascending: false }).limit(500)
     .abortSignal(AbortSignal.timeout(1500)).then(result => result);
   const newlySettled: LearningOutcome[] = [];
-  const [{ data: cfg }, { data: open }] = await Promise.all([
-    readMasterIQConfig(supabase),
+  // Start login as soon as the master read finishes, while expired rows are still loading.
+  const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => ({
+    cfg, ssid: cfg ? await login(cfg.email, cfg.password) : null,
+  }));
+  const [{ cfg, ssid }, { data: open }] = await Promise.all([
+    masterLogin,
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000),
   ]);
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
-  const ssid = await login(cfg.email, cfg.password);
   if (!ssid) return Response.json({ success: false, error: 'login failed' }, { headers: cors });
   const nowSec = Math.floor(Date.now() / 1000);
   const curMin = Math.floor(nowSec / 60) * 60;
@@ -237,23 +240,25 @@ Deno.serve(async (req) => {
   }
   let inserted = 0;
   if (rows.length) {
-    const { data: exist } = await supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id));
+    // Independent reads run together after closed-candle confirmation.
+    const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
+      supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id)),
+      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').limit(1),
+      supabase.from('operation_results').select('entry_strategy, result, created_at')
+        .eq('timeframe', 'TEST').like('signal_id', 't7-%')
+        .lt('created_at', new Date(curMin * 1000).toISOString())
+        .gte('created_at', new Date((curMin - 180) * 1000).toISOString())
+        .order('created_at', { ascending: false }).order('signal_id', { ascending: false }).limit(4),
+    ]);
     const seen = new Set((exist || []).map((e: any) => e.signal_id));
     // Melhor par do minuto: só UMA entrada (mais estratégias concordando, depois vela mais forte).
     const top = rows.filter(r => !seen.has(r.signal_id)).sort((x, y) => y._score - x._score)[0];
-    const { data: minuteTaken } = await supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').limit(1);
     const fresh = top && !minuteTaken?.length ? [top] : [];
     // One best candidate; Telegram is reserved for the four-win reversal.
     const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
     // Persist the selected TEST first: the atomic claim checks its four predecessors.
     // Observe the same base TEST signal; never duplicate/relabel it or authorize an order.
-    const { data: sequenceHistory, error: sequenceError } = fresh.length
-      ? await supabase.from('operation_results').select('entry_strategy, result, created_at')
-        .eq('timeframe', 'TEST').like('signal_id', 't7-%')
-        .lt('created_at', new Date(curMin * 1000).toISOString())
-        .gte('created_at', new Date((curMin - 180) * 1000).toISOString())
-        .order('created_at', { ascending: false }).order('signal_id', { ascending: false }).limit(4)
-      : { data: [], error: null };
+    const { data: sequenceHistory, error: sequenceError } = sequenceRead;
     if (sequenceError) console.error('TEST sequence read:', sequenceError.message);
     const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false,
       test_inverted_strategy: forceInvertedTag(r.timeframe, r.entry_strategy),

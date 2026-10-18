@@ -55,3 +55,4 @@
 - [ ] Verify first naturally matched sequence and settled result in admin UI (waiting for a new qualifying sequence; no historical backfill or forced trade).
 
 - [x] Rename TEST sequence to Retomada and keep daily strategy accuracy current via full-day pagination, realtime, 10-second polling and focus refresh; six tests passed, authenticated admin reads verified.
+- [ ] Add and verify daily Telegram report at 23:59 BRT: principal daily results and cumulative top three strategies, no client copy results.

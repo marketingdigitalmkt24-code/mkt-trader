@@ -20,7 +20,7 @@
 - [x] Disable Histórico bom strategy and remove its dedicated card; verify requested Dashboard card pairs.
 - [x] Add Vela de Força LOSS→WIN next-minute broker entry, Telegram and order labels; 13 rule/regression tests passed, service-only permissions verified and both functions deployed; configured account remains PRACTICE.
 - [x] Cancel natural Força LOSS→WIN validation: user removed this strategy.
-- [ ] Disable Força LOSS→WIN authorization and remove historical strategy displays/ranking, including client copies; preserve financial records.
+- [x] Disable Força LOSS→WIN claims and placement; remove history displays and strategy rankings including client copies, preserving financial accounting; 20 tests passed, three functions deployed and authenticated admin verified without its labels.
 - [x] Reduce reversal preparation latency by reusing the server-authenticated same-account broker session while Telegram sends in parallel; six tests passed and both functions deployed.
 - [x] Reinforce next-minute reversal deadline, confirm broker enabled/not-suspended asset selection and prevent account fallback; five tests pass, functions deployed without forcing broker orders.
 - [x] Add next-signal reversal after four consecutive test wins, service-only one-shot queue claim, Telegram and broker-order card; unit tests pass and authenticated cards checked.

@@ -2,7 +2,6 @@ import { LogOut, Bot, TrendingUp, BarChart3, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ClientCopyTradingCard } from '@/components/ClientCopyTradingCard';
 import { ClientResultsCard } from '@/components/ClientResultsCard';
-import { ClientHistoryCard } from '@/components/ClientHistoryCard';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { useAuth } from '@/contexts/AuthContext';
@@ -166,11 +165,6 @@ const ClientDashboard = () => {
         <div className="grid items-start gap-4 sm:gap-8 lg:grid-cols-2">
           <ClientResultsCard />
           <ClientCopyTradingCard />
-        </div>
-
-        {/* Histórico por data */}
-        <div className="mt-4 sm:mt-8">
-          <ClientHistoryCard />
         </div>
 
       </main>

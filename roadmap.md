@@ -61,3 +61,4 @@
 - [ ] Verify first scheduled daily Telegram delivery and saved message ID (waiting for 23:59 BRT; no premature report sent).
 - [x] Add prospective Força Invertida TEST observations on unchanged base rows, separate cumulative ranking and opposite-direction outcome badges; 14 rule/regression tests passed, runner and daily report deployed; original signals and real authorizations unchanged.
 - [ ] Verify first naturally selected Force signal with inverted outcome in admin UI (waiting for a new VELA_FORCA signal after deployment; no backfill or forced order).
+- [ ] Change Telegram report to top five daily strategies with daily wins/losses; remove TESTE suffixes only in the admin accuracy comparison.

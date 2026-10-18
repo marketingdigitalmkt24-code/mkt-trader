@@ -4,6 +4,12 @@ import { clientCopyResults, clientDayStart, clientSignalsPage } from '../../../s
 const now = new Date('2026-10-17T21:54:00Z');
 const row = { id: 'copy', signal_id: 'copy-client-a-master', asset: 'JUP/USD-OTC', direction: 'CALL', result: 'win', profit: 82, iq_option_id: '14364506418', timeframe: 'M1', created_at: '2026-10-17T15:14:05Z' };
 describe('client dashboard isolation', () => {
+  it('hides removed force-lw copies while retaining their actual financial results', () => {
+    const result = clientCopyResults([{ ...row, signal_id: 'copy-client-a-force-lw-old', result: 'loss', profit: -10 }, row], 'client-a', now);
+    expect(result.operations.map(op => op.signal_id)).toEqual([row.signal_id]);
+    expect(result.profit).toBe(72);
+    expect(result.losses).toBe(1);
+  });
   it('shows 12 signals per page and retains the remaining history without duplicates', () => {
     const signals = Array.from({ length: 45 }, (_, id) => id);
     expect(clientSignalsPage(signals, 1).operations).toEqual(signals.slice(0, 12));

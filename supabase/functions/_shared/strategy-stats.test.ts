@@ -2,6 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { allStrategyRows, strategyStats, type StrategyRow } from '../../../src/lib/strategy-stats.ts';
 const row: StrategyRow = { entry_strategy: 'TENDENCIA', result: 'win', timeframe: 'TEST', test_sequence_strategy: null };
+test('removed Force LOSS WIN is excluded without removing other force strategies', () => {
+  assert.deepEqual(strategyStats([{ ...row, entry_strategy: 'FORCE_LOSS_WIN' }, { ...row, entry_strategy: 'VELA_FORCA' }]),
+    [{ strategy: 'VELA_FORCA', wins: 1, losses: 0 }]);
+});
 test('cumulative accuracy includes results beyond the first 1000 operations', async () => {
   const calls: number[][] = [];
   const rows = await allStrategyRows(async (from, to) => {

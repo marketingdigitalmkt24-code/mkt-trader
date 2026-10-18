@@ -11,6 +11,7 @@ import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
+import { forceInvertedTag } from '../_shared/force-inverted-test.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -257,6 +258,7 @@ Deno.serve(async (req) => {
       : { data: [], error: null };
     if (sequenceError) console.error('TEST sequence read:', sequenceError.message);
     const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false,
+      test_inverted_strategy: forceInvertedTag(r.timeframe, r.entry_strategy),
       test_sequence_strategy: !sequenceError && matchesTrendSequence(sequenceHistory || [], r.entry_strategy, curMin * 1000)
         ? TREND_SEQUENCE_TEST : null,
     }));

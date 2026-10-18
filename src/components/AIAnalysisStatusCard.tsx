@@ -23,6 +23,7 @@ const strategyLabels: Record<string, string> = {
   THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
+  FORCA_INVERTIDA: 'Força Invertida (TESTE)',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
   KDJ: 'KDJ',
@@ -45,7 +46,7 @@ export function AIAnalysisStatusCard() {
     try {
       const rows = await allStrategyRows(async (from, to) => {
         const { data, error } = await supabase.from('operation_results')
-          .select('entry_strategy, result, timeframe, test_sequence_strategy')
+          .select('entry_strategy, result, timeframe, test_sequence_strategy, test_inverted_strategy')
           .or('timeframe.is.null,timeframe.neq.MT5')
           .not('signal_id', 'like', 'mt5-%').not('signal_id', 'like', 'copy-%')
           .not('entry_strategy', 'is', null)
@@ -54,7 +55,13 @@ export function AIAnalysisStatusCard() {
         if (error) throw error;
         return data ?? [];
       });
-      if (mounted.current) setStrategyStats(summarizeStrategyStats(rows));
+      if (mounted.current) {
+        const stats = summarizeStrategyStats(rows);
+        if (!stats.some(stat => stat.strategy === 'FORCA_INVERTIDA')) {
+          stats.push({ strategy: 'FORCA_INVERTIDA', wins: 0, losses: 0 });
+        }
+        setStrategyStats(stats);
+      }
     } catch {
       // silent
     } finally {

@@ -2,9 +2,11 @@ export interface ReportRow {
   signal_id: string; timeframe: string | null; iq_option_id: string | null;
   result: string; profit: number; created_at: string; entry_strategy: string | null;
   test_sequence_strategy: string | null;
+  test_inverted_strategy?: string | null;
 }
 const labels: Record<string, string> = {
   TENDENCIA: 'Tendência', TREND_WIN_LOSS_FORCE_LOSS: 'Retomada (TESTE)',
+  FORCA_INVERTIDA: 'Força Invertida (TESTE)',
   TENDENCIA_V1: 'Tendência V1', FOUR_WIN_REVERSAL: 'Após 4 ganhos',
   FORCE_LOSS_WIN: 'Força LOSS → WIN', THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI', VELA_FORCA: 'Vela de força', ROMPIMENTO: 'Rompimento',
@@ -41,6 +43,9 @@ export function bestReportStrategies(rows: ReportRow[]) {
     if (r.timeframe === 'MT5' || /^(copy-|mt5-)/.test(r.signal_id)) continue;
     if (r.entry_strategy) add(r.entry_strategy, r.result);
     if (r.timeframe === 'TEST' && r.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') add(r.test_sequence_strategy, r.result);
+    if (r.timeframe === 'TEST' && r.entry_strategy === 'VELA_FORCA' && r.test_inverted_strategy === 'FORCA_INVERTIDA') {
+      add(r.test_inverted_strategy, r.result === 'win' ? 'loss' : r.result === 'loss' ? 'win' : r.result);
+    }
   }
   return [...stats.values()].filter(s => s.wins + s.losses > 0).sort((a, b) =>
     b.wins / (b.wins + b.losses) - a.wins / (a.wins + a.losses)

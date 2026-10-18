@@ -15,7 +15,7 @@ export async function dispatchDailyReport(db: SupabaseClient, now = new Date(), 
     const rows: ReportRow[] = [];
     for (let from = 0; ; from += 1000) {
       const { data, error } = await db.from('operation_results')
-        .select('signal_id, timeframe, iq_option_id, result, profit, created_at, entry_strategy, test_sequence_strategy')
+        .select('signal_id, timeframe, iq_option_id, result, profit, created_at, entry_strategy, test_sequence_strategy, test_inverted_strategy')
         .not('signal_id', 'like', 'copy-%').not('signal_id', 'like', 'mt5-%')
         .or('timeframe.is.null,timeframe.neq.MT5').lte('created_at', clock.end)
         .order('created_at').order('id').range(from, from + 999);

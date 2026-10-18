@@ -3,6 +3,7 @@ export interface StrategyRow {
   result: string;
   timeframe: string | null;
   test_sequence_strategy: string | null;
+  test_inverted_strategy?: string | null;
 }
 export interface StrategyStat { strategy: string; wins: number; losses: number }
 
@@ -27,6 +28,9 @@ export function strategyStats(rows: StrategyRow[]): StrategyStat[] {
     if (row.entry_strategy) add(row.entry_strategy, row.result);
     if (row.timeframe === 'TEST' && row.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') {
       add(row.test_sequence_strategy, row.result);
+    }
+    if (row.timeframe === 'TEST' && row.entry_strategy === 'VELA_FORCA' && row.test_inverted_strategy === 'FORCA_INVERTIDA') {
+      add(row.test_inverted_strategy, row.result === 'win' ? 'loss' : row.result === 'loss' ? 'win' : row.result);
     }
   }
   return [...byStrategy.values()].sort((a, b) => {

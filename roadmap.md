@@ -57,4 +57,5 @@
 - [x] Rename TEST sequence to Retomada and keep daily strategy accuracy current via full-day pagination, realtime, 10-second polling and focus refresh; six tests passed, authenticated admin reads verified.
 - [x] Configure daily Telegram report at 23:59 BRT using existing minute runner; principal daily results and cumulative top three strategies, no client copies; 11 tests passed, deployed function starts and rejects non-service requests.
 - [ ] Verify first scheduled daily Telegram delivery and saved message ID (waiting for 23:59 BRT; no premature report sent).
-- [ ] Add prospective Força Invertida TEST observations, separate cumulative results and visible outcomes; preserve original signals and all real authorizations.
+- [x] Add prospective Força Invertida TEST observations on unchanged base rows, separate cumulative ranking and opposite-direction outcome badges; 14 rule/regression tests passed, runner and daily report deployed; original signals and real authorizations unchanged.
+- [ ] Verify first naturally selected Force signal with inverted outcome in admin UI (waiting for a new VELA_FORCA signal after deployment; no backfill or forced order).

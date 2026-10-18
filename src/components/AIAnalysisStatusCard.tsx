@@ -55,7 +55,13 @@ export function AIAnalysisStatusCard() {
         if (error) throw error;
         return data ?? [];
       });
-      if (mounted.current) setStrategyStats(summarizeStrategyStats(rows));
+      if (mounted.current) {
+        const stats = summarizeStrategyStats(rows);
+        if (!stats.some(stat => stat.strategy === 'FORCA_INVERTIDA')) {
+          stats.push({ strategy: 'FORCA_INVERTIDA', wins: 0, losses: 0 });
+        }
+        setStrategyStats(stats);
+      }
     } catch {
       // silent
     } finally {

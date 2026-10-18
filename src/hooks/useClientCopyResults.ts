@@ -18,7 +18,7 @@ export function useClientCopyResults() {
       const start = clientDayStart();
       for (let offset = 0; ; offset += 1000) {
         const { data, error } = await supabase.from('operation_results')
-          .select('id, signal_id, asset, direction, result, profit, created_at, iq_option_id, timeframe')
+          .select('id, signal_id, asset, direction, result, profit, created_at, iq_option_id, timeframe, entry_strategy')
           .like('signal_id', `copy-${userId}-%`)
           .not('iq_option_id', 'is', null)
           .not('timeframe', 'in', '(TEST,MT5)')

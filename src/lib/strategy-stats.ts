@@ -25,6 +25,7 @@ export function strategyStats(rows: StrategyRow[]): StrategyStat[] {
     byStrategy.set(strategy, stat);
   };
   for (const row of rows) {
+    if (row.entry_strategy === 'FORCE_LOSS_WIN') continue;
     if (row.entry_strategy) add(row.entry_strategy, row.result);
     if (row.timeframe === 'TEST' && row.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') {
       add(row.test_sequence_strategy, row.result);

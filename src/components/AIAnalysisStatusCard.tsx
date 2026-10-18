@@ -19,7 +19,6 @@ const strategyLabels: Record<string, string> = {
   TREND_WIN_LOSS_FORCE_LOSS: 'Retomada (TESTE)',
   TENDENCIA_V1: 'Tendência V1',
   FOUR_WIN_REVERSAL: 'Após 4 ganhos',
-  FORCE_LOSS_WIN: 'Força LOSS → WIN',
   THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',

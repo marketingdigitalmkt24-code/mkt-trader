@@ -2,6 +2,11 @@ import { expect, test } from 'bun:test';
 import { bestReportStrategies, dailyReportStats, reportClock, type ReportRow } from './telegram-daily-report';
 const now = new Date('2026-10-18T02:59:00.000Z');
 const row = (extra: Partial<ReportRow> = {}): ReportRow => ({ signal_id: 'fourwin-1', timeframe: 'M1', iq_option_id: '123', result: 'loss', profit: -10, created_at: '2026-10-17T15:00:00.000Z', entry_strategy: 'FOUR_WIN_REVERSAL', test_sequence_strategy: null, ...extra });
+test('retired strategy is absent from ranking but executed losses remain in daily accounting', () => {
+  const removed = row({ entry_strategy: 'FORCE_LOSS_WIN' });
+  expect(bestReportStrategies([removed])).toEqual([]);
+  expect(dailyReportStats([removed], now).profit).toBe(-10);
+});
 test('due only at 23:59 BRT across UTC midnight', () => {
   expect(reportClock(now)).toMatchObject({ due: true, date: '2026-10-17', start: '2026-10-17T03:00:00.000Z' });
   expect(reportClock(new Date('2026-10-18T02:58:59Z')).due).toBe(false);

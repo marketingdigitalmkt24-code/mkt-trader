@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
+import { reportClock } from '../_shared/telegram-daily-report.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1069,6 +1070,12 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+    if (reportClock().due) {
+      const report = supabase.functions.invoke('telegram-daily-report', { body: {} })
+        .then(({ error }) => { if (error) console.error('Telegram relatório diário:', error); });
+      // @ts-ignore Hosted background task; never delay orders or analysis.
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(report);
+    }
     // Teste das 7 estratégias em todos os ativos abertos, disparado pelo mesmo job de 1 minuto.
     const multiTest = supabase.functions.invoke('multi-strategy-test', { body: {} }).catch((e) => console.log('⚠️ multi-strategy-test:', e));
     // @ts-ignore EdgeRuntime is available in the hosted runtime

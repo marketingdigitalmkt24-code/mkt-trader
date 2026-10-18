@@ -271,6 +271,7 @@ export type Database = {
           result: string
           signal_id: string
           telegram_sent: boolean
+          test_inverted_strategy: string | null
           test_sequence_strategy: string | null
           timeframe: string
         }
@@ -290,6 +291,7 @@ export type Database = {
           result: string
           signal_id: string
           telegram_sent?: boolean
+          test_inverted_strategy?: string | null
           test_sequence_strategy?: string | null
           timeframe?: string
         }
@@ -309,6 +311,7 @@ export type Database = {
           result?: string
           signal_id?: string
           telegram_sent?: boolean
+          test_inverted_strategy?: string | null
           test_sequence_strategy?: string | null
           timeframe?: string
         }

@@ -170,6 +170,7 @@ export function LiveOperationsCard() {
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
         .not('signal_id', 'like', 'copy-%')
+        .not('signal_id', 'like', 'sim-%')
         .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
         .not('signal_id', 'like', '%force-lw-%')
         .order('created_at', { ascending: false })
@@ -200,6 +201,7 @@ export function LiveOperationsCard() {
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
         .not('signal_id', 'like', 'copy-%')
+        .not('signal_id', 'like', 'sim-%')
         .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
         .not('signal_id', 'like', '%force-lw-%');
       const brNow = new Date(Date.now() - 3 * 3600 * 1000);

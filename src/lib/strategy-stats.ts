@@ -29,5 +29,10 @@ export function strategyStats(rows: StrategyRow[]): StrategyStat[] {
       add(row.test_sequence_strategy, row.result);
     }
   }
-  return [...byStrategy.values()].sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses));
+  return [...byStrategy.values()].sort((a, b) => {
+    const aSettled = a.wins + a.losses;
+    const bSettled = b.wins + b.losses;
+    const rateDifference = (bSettled ? b.wins / bSettled : 0) - (aSettled ? a.wins / aSettled : 0);
+    return rateDifference || bSettled - aSettled || a.strategy.localeCompare(b.strategy);
+  });
 }

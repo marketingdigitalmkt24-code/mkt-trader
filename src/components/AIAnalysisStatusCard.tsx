@@ -39,21 +39,13 @@ export function AIAnalysisStatusCard() {
   const statsQueued = useRef(false);
   const mounted = useRef(true);
 
-  const brtDayStartIso = () => {
-    const brNow = new Date(Date.now() - 3 * 3600 * 1000);
-    return new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()) + 3 * 3600 * 1000).toISOString();
-  };
-
   const fetchStrategyStats = async () => {
     if (statsBusy.current) { statsQueued.current = true; return; }
     statsBusy.current = true;
     try {
-      const start = brtDayStartIso();
-      const end = new Date(Date.parse(start) + 86400000).toISOString();
       const rows = await allStrategyRows(async (from, to) => {
         const { data, error } = await supabase.from('operation_results')
           .select('entry_strategy, result, timeframe, test_sequence_strategy')
-          .gte('created_at', start).lt('created_at', end)
           .or('timeframe.is.null,timeframe.neq.MT5')
           .not('signal_id', 'like', 'mt5-%').not('signal_id', 'like', 'copy-%')
           .not('entry_strategy', 'is', null)
@@ -236,12 +228,12 @@ export function AIAnalysisStatusCard() {
           </div>
         )}
 
-        {/* Assertividade do dia por estratégia */}
+        {/* Assertividade acumulada por estratégia */}
         {strategyStats.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border/40">
             <div className="flex items-center gap-1.5 mb-2">
               <Target className="w-3.5 h-3.5 text-gold" />
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Assertividade do dia por estratégia</span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Assertividade por estratégia · Todo o histórico</span>
             </div>
             <div className="space-y-1">
               {strategyStats.map(stat => {
@@ -251,7 +243,7 @@ export function AIAnalysisStatusCard() {
                   <div key={stat.strategy} className="flex items-center justify-between text-xs p-1.5 rounded bg-secondary/20">
                     <span className="truncate">{strategyLabels[stat.strategy] ?? stat.strategy}</span>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-muted-foreground tabular-nums">{settled} ent.</span>
+                      <span className="text-[10px] text-muted-foreground tabular-nums">{stat.wins}W / {stat.losses}L</span>
                       <span className={cn(
                         'font-bold tabular-nums',
                         percent >= 52 ? 'text-call' : percent >= 45 ? 'text-gold' : 'text-put'

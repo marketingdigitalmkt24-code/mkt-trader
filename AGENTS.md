@@ -10,7 +10,7 @@
 - Track successful Telegram signal message IDs in a service-only delivery ledger; dispatch only linked final broker results with conditional leases from result sync and signal cron so TEST results and unnotified history never reach Telegram.
 - Use the verified numeric Telegram channel ID and bounded retries for explicit temporary gateway failures before estimated entry; never delay trades or resend expired entry alerts.
 - Reconcile expired real IQ results from the existing signal cron before checking pending locks; browser polling is supplementary so navigation cannot strand trades or Telegram results.
-- TEST tags never authorize trades; strategy-stats paginates all history and ranks win rates with counts to prevent truncation.
+- TEST tags never authorize trades; paginate cumulative strategy accuracy with counts.
 - Resistance/support research compares fixed past-only levels and closed-candle rejection with separated events and an untouched final validation period in an admin-only read-only function; why: future data, repeated touches and outcome-based selection must not inflate measured accuracy.
 - Run multi-strategy-test only from auto-generate-signals, with bounded settled TEST feedback fetched during login; why: avoid duplicates and ranking delays.
 - Claim next-signal reversals through the service-only transactional streak state and queue lease, then use the existing broker placement and Telegram ledger; why: overlapping minute jobs must not duplicate or re-spend a win sequence, and only confirmed broker orders belong in IQ entries.
@@ -20,4 +20,6 @@
 - Request candles in paced bursts, expired TEST assets first, and await closed-result writes before claims; why: reduce per-asset waits for all strategies without changing full-market ranking or confirmation.
 - IQ result reset uses a per-user browser cutoff shared by IQ entry and profit views, never deletes broker or TEST records; why: display resets must not corrupt trading history or four-win authorization.
 - Demo refill uses a dedicated user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker can confirm replenishment and REAL balances must remain untouched.
-- Claim force loss/win and three-force entries with service-only streak state under the shared reversal lock, reusing next-minute placement and Telegram ledger; why: one-shot, non-retrospective authorization prevents duplicate orders and preserves candidate direction.
+- Force loss/win and three-force claims share the service-only lock, placement and ledger; why: prevent duplicate orders.
+
+- Daily Telegram reports reuse the minute runner with a service-only function and unique date ledger; isolate principal totals and list pending orders; never retry ambiguous sends to avoid duplicates.

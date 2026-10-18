@@ -410,6 +410,36 @@ export type Database = {
         }
         Relationships: []
       }
+      telegram_daily_reports: {
+        Row: {
+          claimed_at: string
+          error: string | null
+          message_id: number | null
+          message_text: string | null
+          report_date: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          claimed_at?: string
+          error?: string | null
+          message_id?: number | null
+          message_text?: string | null
+          report_date: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          claimed_at?: string
+          error?: string | null
+          message_id?: number | null
+          message_text?: string | null
+          report_date?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       telegram_iq_deliveries: {
         Row: {
           chat_id: string

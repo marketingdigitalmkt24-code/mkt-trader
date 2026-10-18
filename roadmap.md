@@ -55,3 +55,5 @@
 - [ ] Verify first naturally matched sequence and settled result in admin UI (waiting for a new qualifying sequence; no historical backfill or forced trade).
 
 - [x] Rename TEST sequence to Retomada and keep daily strategy accuracy current via full-day pagination, realtime, 10-second polling and focus refresh; six tests passed, authenticated admin reads verified.
+- [x] Configure daily Telegram report at 23:59 BRT using existing minute runner; principal daily results and cumulative top three strategies, no client copies; 11 tests passed, deployed function starts and rejects non-service requests.
+- [ ] Verify first scheduled daily Telegram delivery and saved message ID (waiting for 23:59 BRT; no premature report sent).

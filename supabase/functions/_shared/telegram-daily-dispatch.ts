@@ -1,4 +1,4 @@
-import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4';
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.89.0';
 import { IQ_TELEGRAM_CHANNEL } from './telegram-iq-alert.ts';
 import { formatDailyReport, reportClock, type ReportRow } from './telegram-daily-report.ts';
 export async function dispatchDailyReport(db: SupabaseClient, now = new Date(), request: typeof fetch = fetch) {

@@ -134,6 +134,13 @@
       "when": 1792303450649,
       "tag": "0018_swap_real_strategies",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792332021366,
+      "tag": "0019_remove_asset_loss_pause",
+      "breakpoints": true
     }
   ]
 }

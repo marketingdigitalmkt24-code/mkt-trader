@@ -4,6 +4,12 @@ import { isMasterIQOrder, masterIQDailyStats, type MasterIQOperation } from '../
 const row = (extra: Partial<MasterIQOperation> = {}): MasterIQOperation => ({ id: '1', signal_id: 'fourwin-1', asset: 'JUP/USD-OTC', direction: 'CALL', result: 'loss', profit: -10, created_at: '2026-10-17T15:14:00.000Z', timeframe: 'M1', entry_strategy: 'FOUR_WIN_REVERSAL', iq_option_id: '14364506363', ...extra });
 const now = new Date('2026-10-17T21:59:00.000Z');
 describe('Principal IQ results', () => {
+  test('removed Force LOSS WIN contributes neither trades nor displayed profit', () => {
+    const removed = row({ entry_strategy: 'FORCE_LOSS_WIN', profit: 8.5, result: 'win' });
+    expect(isMasterIQOrder(removed)).toBe(false);
+    expect(isMasterIQOrder(row({ signal_id: 'force-lw-old', entry_strategy: null }))).toBe(false);
+    expect(masterIQDailyStats([removed, row()], '', now)).toMatchObject({ wins: 0, losses: 1, dailyProfit: -10, todayTrades: 1 });
+  });
   test('copy win of 82 never offsets principal loss of 10', () => {
     const stats = masterIQDailyStats([row(), row({ signal_id: 'copy-client-fourwin-1', profit: 82, result: 'win', iq_option_id: '14364506418' })], '', now);
     expect(stats).toMatchObject({ wins: 0, losses: 1, dailyProfit: -10, todayTrades: 1 });

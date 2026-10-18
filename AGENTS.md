@@ -17,7 +17,7 @@
 - Anchor reversal submission and expiry to the selected candidate's own minute and submit immediately after the fourth candle confirms, within the broker purchase window; why: adding another minute trades a different candle, while stale candidates must never roll forward.
 - Reuse broker sessions only for service-authenticated same-account reversals; never log/store them to prevent credential leaks.
 - Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy retains explicit client IDs; why: client connection updates must not redirect master entries.
-- Request candles in paced bursts, expired TEST assets first, and await closed-result writes before claims; why: reduce per-asset waits for all strategies without changing full-market ranking or confirmation.
+- Pace candle bursts, expired TEST first; await closed writes, parallelize reads, reuse exact service leases and submit ready current-candle orders immediately; why: cut waits, preserve full ranking and authorization.
 - IQ result reset uses a per-user browser cutoff shared by IQ entry and profit views, never deletes broker or TEST records; why: display resets must not corrupt trading history or four-win authorization.
 - Demo refill uses a dedicated user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker can confirm replenishment and REAL balances must remain untouched.
 - Removed claims return null; placement rejects them. Exclude retired orders/copies from displayed totals, preserve stored accounting; three-force keeps its lock.

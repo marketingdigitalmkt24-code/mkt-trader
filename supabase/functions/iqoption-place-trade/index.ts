@@ -7,6 +7,7 @@ import { isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
 import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
+import { entrySubmissionDelay } from '../_shared/entry-schedule.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -468,7 +469,7 @@ async function placeTradeFireAndForget(
             resolve({ success: false, error: 'Entrada prevista passou; ordem não enviada atrasada' });
             return;
           }
-          const entryDelay = Math.max(0, candleOpenMs - ENTRY_LATENCY_LEAD_MS - nowMs0);
+          const entryDelay = entrySubmissionDelay(candleOpenMs, nowMs0, ENTRY_LATENCY_LEAD_MS);
           console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar na abertura da vela ${new Date(candleOpenMs).toISOString()}`);
 
           const fire = async () => {
@@ -508,7 +509,8 @@ async function placeTradeFireAndForget(
               setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 2500);
             }
           };
-          setTimeout(fire, entryDelay);
+          if (entryDelay === 0) void fire();
+          else setTimeout(fire, entryDelay);
         }
 
         if (data.request_id === 'fx1') console.log('📨 FOREX resposta:', JSON.stringify(data).slice(0, 400));
@@ -597,6 +599,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const tradeRequest: TradeRequest = await req.json();
+    let authorizedQueue: { id: string; created_at: string; entry_strategy: string | null } | undefined;
     if (tradeRequest.entryStrategy === 'FORCE_LOSS_WIN' || tradeRequest.signalId?.startsWith('force-lw-') || /-force-lw-/.test(tradeRequest.signalId || '')) {
       return Response.json({ success: false, error: 'Strategy removed' }, { status: 410, headers: corsHeaders });
     }
@@ -615,8 +618,9 @@ serve(async (req) => {
         .eq('signal_id', tradeRequest.signalId || '').eq('asset', tradeRequest.asset)
         .eq('direction', tradeRequest.direction.toUpperCase()).eq('amount', tradeRequest.amount)
         .eq('entry_strategy', tradeRequest.entryStrategy || '').eq('status', 'executing').is('error', null)
-        .select('id');
+        .select('id, created_at, entry_strategy');
       if (!lease?.length) return Response.json({ error: 'Next-minute entry already claimed or unauthorized' }, { status: 409, headers: corsHeaders });
+      authorizedQueue = lease[0];
     }
     const { brokerSession: privateSession, ...loggedRequest } = tradeRequest;
     console.log('📥 Trade request:', JSON.stringify(loggedRequest));
@@ -649,7 +653,8 @@ serve(async (req) => {
     let entryStrategy: string | null = null;
     if (tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
       && tradeRequest.timeframe !== 'TEST' && tradeRequest.timeframe !== 'MT5') {
-      const { data: queued } = await supabase.from('trade_queue').select('id, created_at, entry_strategy')
+      // Reuse the exact service-only lease instead of another serial authorization read.
+      const { data: queued } = authorizedQueue ? { data: authorizedQueue } : await supabase.from('trade_queue').select('id, created_at, entry_strategy')
         .eq('signal_id', tradeRequest.signalId).eq('asset', tradeRequest.asset)
         .eq('direction', tradeRequest.direction.toUpperCase()).eq('status', 'executing')
         .gte('created_at', new Date(Date.now() - 90000).toISOString()).limit(1).maybeSingle();

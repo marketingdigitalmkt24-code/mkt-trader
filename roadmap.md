@@ -21,7 +21,7 @@
 - [x] Add Vela de Força LOSS→WIN next-minute broker entry, Telegram and order labels; 13 rule/regression tests passed, service-only permissions verified and both functions deployed; configured account remains PRACTICE.
 - [x] Cancel natural Força LOSS→WIN validation: user removed this strategy.
 - [x] Disable Força LOSS→WIN claims and placement; remove history displays and strategy rankings including client copies, preserving financial accounting; 20 tests passed, three functions deployed and authenticated admin verified without its labels.
-- [ ] Align removed Força LOSS→WIN exclusion across admin/client displayed totals and history; keep broker balances and stored records unchanged.
+- [x] Align retired Força LOSS→WIN exclusion across displayed admin/client totals and history, including admin header; 16 tests passed; populated principal and admin copy totals match stored retained orders. Client calculations tested; actual client-session UI readback remains unavailable in current admin session. Broker balances and stored records unchanged.
 - [x] Reduce reversal preparation latency by reusing the server-authenticated same-account broker session while Telegram sends in parallel; six tests passed and both functions deployed.
 - [x] Reinforce next-minute reversal deadline, confirm broker enabled/not-suspended asset selection and prevent account fallback; five tests pass, functions deployed without forcing broker orders.
 - [x] Add next-signal reversal after four consecutive test wins, service-only one-shot queue claim, Telegram and broker-order card; unit tests pass and authenticated cards checked.

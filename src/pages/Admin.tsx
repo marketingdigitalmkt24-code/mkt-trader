@@ -7,6 +7,7 @@ import { UserManagementCard } from '@/components/UserManagementCard';
 import { CopyTradingCard } from '@/components/CopyTradingCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
+import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,10 +28,10 @@ const Admin = () => {
 
   const {
     balance: iqBalance,
-    dailyStats,
     isLoading: isLoadingBalance,
     connect: refresh,
   } = useIQOptionConnection();
+  const { dailyStats } = useMasterIQResults();
 
   const balance = iqBalance?.balance ?? 0;
   const dailyProfit = dailyStats?.dailyProfit ?? 0;

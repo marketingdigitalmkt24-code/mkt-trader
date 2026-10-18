@@ -5,6 +5,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { invertedTestOutcome, FORCE_INVERTED_TEST } from '../../supabase/functions/_shared/force-inverted-test';
 
 interface OpenPosition {
   id: string;
@@ -32,6 +33,7 @@ interface RecentTrade {
   strategy?: string;
   telegram_sent?: boolean;
   test_sequence_strategy?: string | null;
+  test_inverted_strategy?: string | null;
 }
 
 const strategyLabels: Record<string, string> = {
@@ -164,7 +166,7 @@ export function LiveOperationsCard() {
       const from = (pageRef.current - 1) * PAGE_SIZE;
       const { data, count, error } = await supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy', { count: 'exact' })
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', { count: 'exact' })
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
         .order('created_at', { ascending: false })
@@ -396,6 +398,14 @@ export function LiveOperationsCard() {
                     {trade.timeframe === 'TEST' && trade.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal border-primary/50 text-primary">📐 RETOMADA</Badge>
                     )}
+                    {trade.timeframe === 'TEST' && trade.test_inverted_strategy === FORCE_INVERTED_TEST && (() => {
+                      const inverted = invertedTestOutcome(trade.direction, trade.result);
+                      if (!inverted) return null;
+                      const settled = ['win', 'loss', 'tie'].includes(inverted.result);
+                      return <Badge variant="outline" className={cn('text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal', inverted.result === 'win' ? 'border-call/50 text-call' : inverted.result === 'loss' ? 'border-put/50 text-put' : 'text-muted-foreground')}>
+                        🔄 FORÇA INVERTIDA · TESTE · {inverted.direction} · {inverted.result === 'win' ? 'WIN' : inverted.result === 'loss' ? 'LOSS' : inverted.result === 'tie' ? 'EMPATE' : 'PENDENTE'}{settled ? ` · ${inverted.profit >= 0 ? '+' : '-'}US$ ${Math.abs(inverted.profit).toFixed(2)}` : ''}
+                      </Badge>;
+                    })()}
                     {trade.entry_strategy === 'TENDENCIA' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📐 TENDÊNCIA</Badge>
                     )}

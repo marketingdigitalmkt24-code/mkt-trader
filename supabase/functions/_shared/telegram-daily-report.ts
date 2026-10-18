@@ -8,7 +8,7 @@ const labels: Record<string, string> = {
   TENDENCIA: 'Tendência', TREND_WIN_LOSS_FORCE_LOSS: 'Retomada (TESTE)',
   FORCA_INVERTIDA: 'Força Invertida (TESTE)',
   TENDENCIA_V1: 'Tendência V1', FOUR_WIN_REVERSAL: 'Após 4 ganhos',
-  FORCE_LOSS_WIN: 'Força LOSS → WIN', THREE_FORCE: 'Após 3 Velas de Força',
+  THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI', VELA_FORCA: 'Vela de força', ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21', KDJ: 'KDJ', ICHIMOKU: 'Ichimoku', AI: 'IA',
 };
@@ -40,6 +40,7 @@ export function bestReportStrategies(rows: ReportRow[]) {
     stats.set(strategy, stat);
   };
   for (const r of rows) {
+    if (r.entry_strategy === 'FORCE_LOSS_WIN') continue;
     if (r.timeframe === 'MT5' || /^(copy-|mt5-)/.test(r.signal_id)) continue;
     if (r.entry_strategy) add(r.entry_strategy, r.result);
     if (r.timeframe === 'TEST' && r.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') add(r.test_sequence_strategy, r.result);

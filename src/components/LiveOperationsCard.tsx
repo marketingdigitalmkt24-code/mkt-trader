@@ -40,7 +40,6 @@ const strategyLabels: Record<string, string> = {
   TENDENCIA: 'Tendência',
   TENDENCIA_V1: 'Tendência V1',
   FOUR_WIN_REVERSAL: 'Após 4 ganhos',
-  FORCE_LOSS_WIN: 'Vela de Força LOSS → WIN',
   THREE_FORCE: 'Após 3 Velas de Força',
   HISTORICO: 'Histórico bom',
   EMPATE: 'Empate',
@@ -169,6 +168,8 @@ export function LiveOperationsCard() {
         .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', { count: 'exact' })
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
+        .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
+        .not('signal_id', 'like', '%force-lw-%')
         .order('created_at', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
       if (error || !data) return;
@@ -195,7 +196,9 @@ export function LiveOperationsCard() {
     try {
       const base = () => supabase.from('operation_results').select('*', { count: 'exact', head: true })
         .or('timeframe.is.null,timeframe.neq.MT5')
-        .not('signal_id', 'like', 'mt5-%');
+        .not('signal_id', 'like', 'mt5-%')
+        .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
+        .not('signal_id', 'like', '%force-lw-%');
       const brNow = new Date(Date.now() - 3 * 3600 * 1000);
       const dayStartIso = new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()) + 3 * 3600 * 1000).toISOString();
       const [w, l, tw, tl] = await Promise.all([
@@ -414,9 +417,6 @@ export function LiveOperationsCard() {
                     )}
                     {trade.entry_strategy === 'FOUR_WIN_REVERSAL' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 APÓS 4 GANHOS</Badge>
-                    )}
-                    {trade.entry_strategy === 'FORCE_LOSS_WIN' && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🕯️ FORÇA LOSS → WIN</Badge>
                     )}
                     {trade.entry_strategy === 'THREE_FORCE' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🕯️ APÓS 3 VELAS DE FORÇA</Badge>

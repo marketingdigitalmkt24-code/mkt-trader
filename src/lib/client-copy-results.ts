@@ -5,6 +5,7 @@ export interface ClientCopyOperation extends CopyResultRow {
   asset: string;
   direction: string;
   created_at: string;
+  entry_strategy?: string | null;
 }
 
 export function clientSignalsPage<T>(operations: T[], requestedPage: number) {
@@ -26,5 +27,5 @@ export function clientCopyResults(rows: ClientCopyOperation[], userId: string, n
     && row.created_at >= start && row.created_at <= now.toISOString());
   const totals = countClientCopyResults(operations, userId);
   const trades = operations.filter(row => ['win', 'loss', 'draw', 'tie'].includes(row.result)).length;
-  return { operations, ...totals, trades };
+  return { operations: operations.filter(row => row.entry_strategy !== 'FORCE_LOSS_WIN' && !row.signal_id.includes('-force-lw-')), ...totals, trades };
 }

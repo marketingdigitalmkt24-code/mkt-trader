@@ -20,6 +20,6 @@
 - Request candles in paced bursts, expired TEST assets first, and await closed-result writes before claims; why: reduce per-asset waits for all strategies without changing full-market ranking or confirmation.
 - IQ result reset uses a per-user browser cutoff shared by IQ entry and profit views, never deletes broker or TEST records; why: display resets must not corrupt trading history or four-win authorization.
 - Demo refill uses a dedicated user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker can confirm replenishment and REAL balances must remain untouched.
-- Force loss/win and three-force claims share the service-only lock, placement and ledger; why: prevent duplicate orders.
+- Removed strategy claims return null and placement rejects them; hide history rows without erasing accounting. Three-force retains the service-only lock.
 
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.

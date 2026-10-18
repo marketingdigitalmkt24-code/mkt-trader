@@ -169,6 +169,7 @@ export function LiveOperationsCard() {
         .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', { count: 'exact' })
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
+        .not('signal_id', 'like', 'copy-%')
         .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
         .not('signal_id', 'like', '%force-lw-%')
         .order('created_at', { ascending: false })
@@ -198,6 +199,7 @@ export function LiveOperationsCard() {
       const base = () => supabase.from('operation_results').select('*', { count: 'exact', head: true })
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
+        .not('signal_id', 'like', 'copy-%')
         .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
         .not('signal_id', 'like', '%force-lw-%');
       const brNow = new Date(Date.now() - 3 * 3600 * 1000);

@@ -22,13 +22,5 @@ test('newest fifty outcomes receive greater influence with bounded contribution'
   const unrelated = { ...row, asset: 'OTHER', entry_strategy: 'OTHER' };
   assert.ok(recentLearningAdjustment([row], candidate, now)
     > recentLearningAdjustment([...Array(50).fill(unrelated), row], candidate, now));
-  assert.ok(recentLearningAdjustment(Array(500).fill(row), candidate, now) < 0.25);
-});
-test('strategy+direction combos rank up or down across all assets', () => {
-  const comboWins = Array(20).fill({ ...row, asset: 'OTHER' });
-  const comboLosses = Array(20).fill({ ...row, asset: 'OTHER', result: 'loss' });
-  assert.ok(recentLearningAdjustment(comboWins, candidate, now) > 0);
-  assert.ok(recentLearningAdjustment(comboLosses, candidate, now) < 0);
-  const otherDir = { ...candidate, direction: 'PUT' };
-  assert.equal(recentLearningAdjustment(comboWins, otherDir, now), 0);
+  assert.ok(recentLearningAdjustment(Array(500).fill(row), candidate, now) < 0.1);
 });

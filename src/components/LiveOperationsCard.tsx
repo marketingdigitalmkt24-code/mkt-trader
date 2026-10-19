@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { expandTestObservations } from '@/lib/live-test-observations';
+import { linkedForceBrokerResult, type TestBrokerResult } from '@/lib/test-broker-result';
 
 interface OpenPosition {
   id: string;
@@ -60,6 +61,7 @@ const strategyLabels: Record<string, string> = {
 export function LiveOperationsCard() {
   const PAGE_SIZE = 10;
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
+  const [linkedOrders, setLinkedOrders] = useState<TestBrokerResult[]>([]);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState({ wins: 0, losses: 0, testWinsToday: 0, testLossesToday: 0 });
@@ -178,6 +180,11 @@ export function LiveOperationsCard() {
         .order('created_at', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
       if (error || !data) return;
+      const forceIds = data.filter(trade => trade.timeframe === 'TEST' && trade.test_inverted_strategy === 'FORCA_INVERTIDA')
+        .map(trade => `forca_invertida-${trade.id}`);
+      const { data: brokerOrders, error: brokerError } = forceIds.length
+        ? await supabase.from('operation_results').select('signal_id, iq_option_id, timeframe, result, profit').in('signal_id', forceIds)
+        : { data: [], error: null };
       const ids = [...new Set(data.map(trade => trade.signal_id).filter(Boolean))];
       const { data: signals } = ids.length
         ? await supabase.from('trading_signals').select('signal_id, indicators').in('signal_id', ids)
@@ -189,6 +196,7 @@ export function LiveOperationsCard() {
           : '',
       ]));
       if (request !== recentRequestRef.current) return;
+      setLinkedOrders(brokerError ? [] : (brokerOrders || []));
       setRecentTrades(data.map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[]);
       if (typeof count === 'number') setTotalCount(count);
     } catch {
@@ -389,7 +397,9 @@ export function LiveOperationsCard() {
 
           {iqTrades.length > 0 ? (
             <div className="space-y-1">
-              {iqTrades.flatMap(expandTestObservations).map(trade => (
+              {iqTrades.flatMap(expandTestObservations).map(trade => {
+                const broker = linkedForceBrokerResult(trade, linkedOrders);
+                return (
                 <div key={trade.id} className={cn(
                   "flex flex-wrap items-center justify-between gap-x-2 gap-y-1 p-2 rounded-lg text-xs",
                   getResultBg(trade.result)
@@ -455,6 +465,9 @@ export function LiveOperationsCard() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-auto">
+                    {trade.timeframe === 'TEST' && trade.entry_strategy === 'FORCA_INVERTIDA' && (
+                      <span className="text-[10px] text-muted-foreground">Simulado :00</span>
+                    )}
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
                       {trade.result === 'pending' || trade.result === 'open' || trade.result === 'test_open' || trade.result === 'test7_open' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
                     </span>
@@ -462,8 +475,21 @@ export function LiveOperationsCard() {
                       {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result === 'open' ? 'ABERTA' : trade.result === 'test_open' || trade.result === 'test7_open' ? 'TESTE' : trade.result.toUpperCase()}
                     </Badge>
                   </div>
+                  {trade.timeframe === 'TEST' && trade.entry_strategy === 'FORCA_INVERTIDA' && (
+                    <div className="basis-full flex flex-wrap items-center gap-2 border-t border-border/50 pt-1 text-[10px]">
+                      <span className="text-muted-foreground">IQ Option{broker ? ` · #${broker.iq_option_id}` : ''}</span>
+                      {broker ? (
+                        <span className={cn('font-mono font-semibold', getResultColor(broker.result))}>
+                          {broker.result === 'win' || broker.result === 'loss' || broker.result === 'tie'
+                            ? `${broker.result === 'tie' ? 'EMPATE' : broker.result.toUpperCase()} · ${broker.profit >= 0 ? '+' : '-'}US$ ${Math.abs(broker.profit).toFixed(2)}`
+                            : 'Aguardando resultado real'}
+                        </span>
+                      ) : <span className="text-muted-foreground">Sem ordem real vinculada</span>}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
                 <span className="text-xs text-muted-foreground">Total desta página</span>
                 <span className={cn("text-xs font-mono font-bold", totalIqProfit >= 0 ? "text-call" : "text-put")}>

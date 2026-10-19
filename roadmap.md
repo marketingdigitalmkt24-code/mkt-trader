@@ -11,4 +11,8 @@
 - [x] Reduzir esperas na análise e preparação de ordens sem antecipar velas fechadas.
 - [x] Comparar 29 perdas reais com abertura :00: 2 ganhos simulados, 27 perdas; histórico preservado.
 - [x] 27 testes aprovados; duas funções publicadas; acesso manual não autorizado recusado.
-- [ ] Confirmar horário real após ajuste — aguarda próximo sinal Força Invertida autorizado; nenhuma ordem nova no ciclo observado.
+- [x] Confirmar horário real após ajuste — SEI #14369555193 abriu às 02:26:03,603 BRT; :00 ainda não garantido.
+
+# Informação de teste e ordem real
+- [x] Separar resultado simulado :00 e resultado IQ vinculado na Força Invertida sem alterar estatísticas.
+- [ ] Validar vínculo SEI e apresentação na área administrativa.

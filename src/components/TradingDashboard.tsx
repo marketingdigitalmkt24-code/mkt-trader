@@ -3,6 +3,7 @@ import { IQEntriesTodayCard } from '@/components/IQEntriesTodayCard';
 import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
 import { LiveOperationsCard } from '@/components/LiveOperationsCard';
 import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
+import { MinuteDirectionCard } from '@/components/MinuteDirectionCard';
 
 export function TradingDashboard() {
   return (

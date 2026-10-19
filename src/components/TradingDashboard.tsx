@@ -17,6 +17,7 @@ export function TradingDashboard() {
         <LiveOperationsCard />
         <AIAnalysisStatusCard />
       </div>
+      <MinuteDirectionCard />
     </div>
   );
 }

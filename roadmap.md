@@ -15,4 +15,4 @@
 
 # Informação de teste e ordem real
 - [x] Separar resultado simulado :00 e resultado IQ vinculado na Força Invertida sem alterar estatísticas.
-- [ ] Validar vínculo SEI e apresentação na área administrativa.
+- [x] Validar vínculo SEI na área administrativa: simulado WIN +8,50 e ordem #14369555193 LOSS -10 separados; 6 testes aprovados.

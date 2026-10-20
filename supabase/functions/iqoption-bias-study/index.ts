@@ -6,7 +6,8 @@ import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { marketBias, exactAssetKey, RULE, type Candle } from './bias.ts';
 import { previousCandles, PREVIOUS_RULE } from './previous-candles.ts';
 import { evaluateAnticipation, ANTICIPATE_RULE } from './anticipate.ts';
-const schema = z.object({ start: z.string().datetime(), end: z.string().datetime(), split: z.string().datetime(), offset: z.number().int().min(0).max(1000).default(0), count: z.number().int().min(1).max(10).default(8), listOnly: z.boolean().default(false), mode: z.enum(['M15', 'TENDENCIA_M1', 'ANTECIPA_M1']).default('M15') });
+import { evaluateMidCandle, MID_RULE } from './midcandle.ts';
+const schema = z.object({ start: z.string().datetime(), end: z.string().datetime(), split: z.string().datetime(), offset: z.number().int().min(0).max(1000).default(0), count: z.number().int().min(1).max(10).default(8), listOnly: z.boolean().default(false), mode: z.enum(['M15', 'TENDENCIA_M1', 'ANTECIPA_M1', 'MEIO_VELA']).default('M15') });
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: corsHeaders });
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return reply({});
@@ -23,10 +24,11 @@ Deno.serve(async req => {
     const parsed = schema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return reply({ error: 'Invalid parameters' }, 400);
     const args = parsed.data;
-    const ant = args.mode === 'ANTECIPA_M1';
+    const mid = args.mode === 'MEIO_VELA';
+    const ant = args.mode === 'ANTECIPA_M1' || mid;
     const m1 = args.mode === 'TENDENCIA_M1' || ant;
-    const seconds = m1 ? 60 : 900;
-    const studyRule = ant ? ANTICIPATE_RULE : m1 ? PREVIOUS_RULE : RULE;
+    const seconds = mid ? 30 : m1 ? 60 : 900;
+    const studyRule = mid ? MID_RULE : ant ? ANTICIPATE_RULE : m1 ? PREVIOUS_RULE : RULE;
     const start = Date.parse(args.start) / 1000, end = Date.parse(args.end) / 1000, split = Date.parse(args.split) / 1000;
     if (!(start < split && split < end) || end > Date.now() / 1000 || end - start > 7 * 86400) return reply({ error: 'Historical range must be at most 7 days with an internal split' }, 400);
     type Op = { signal_id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null; iq_option_id: string | null };
@@ -107,7 +109,7 @@ Deno.serve(async req => {
       const results = symbols.filter(s => candles.has(s)).map(symbol => {
         const force = new Map<number, string>();
         for (const o of ops) if (o.asset === symbol) force.set(Math.floor(Date.parse(o.created_at) / 60000) * 60 - 60, o.direction);
-        return { symbol, ...evaluateAnticipation(candles.get(symbol)!, start, end, split, exactAssetKey(symbol).includes('OTC'), force) };
+        return mid ? { symbol, market: exactAssetKey(symbol).includes('OTC') ? 'OTC' : 'Regular', ...evaluateMidCandle(candles.get(symbol)!, start, end, split, force) } : { symbol, ...evaluateAnticipation(candles.get(symbol)!, start, end, split, exactAssetKey(symbol).includes('OTC'), force) };
       });
       return reply({ start, end, split, rule: studyRule, totalAssets: universe.length, initialized, results });
     }

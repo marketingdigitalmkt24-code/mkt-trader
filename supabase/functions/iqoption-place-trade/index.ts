@@ -212,6 +212,10 @@ async function mirrorCopyTrades(
           if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
           console.log(`📋 Copy ${copy.user_id}: ordem espelhada ${res.tradeId} ($${amount} ${accountType})`);
         } else {
+          // Recusa definitiva (ou principal não confirmada): nenhuma ordem saiu, libera a trava do cliente.
+          if (/invalid instrument|not available|não disponível|não enviada|não enviado|não confirmada|entrada cancelada|insufficient|not enough/i.test(res.error || '')) {
+            await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
+          }
           console.log(`❌ Copy ${copy.user_id}: ${res.error || 'ordem recusada'}`);
         }
       } catch (e) {

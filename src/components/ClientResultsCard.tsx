@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BarChart3, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart3, Loader2, ChevronLeft, ChevronRight, Activity, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DailyHistory } from '@/components/DailyHistory';
 import { Card } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
 import { copyResultRates } from '@/lib/admin-copy-results';
 import { clientDayStart } from '@/lib/client-copy-results';
+import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { brtDayKey, dayLabel } from '@/components/dayLabel';
 
 const PAGE_SIZE = 12;
@@ -16,6 +17,10 @@ const SETTLED = ['win', 'loss', 'draw', 'tie'];
 export function ClientResultsCard() {
   const { operations, isLoading, isError } = useClientCopyHistory();
   const [page, setPage] = useState(0);
+  const [showOpen, setShowOpen] = useState(true);
+  const liveResults = useClientCopyResults();
+  const openOperations = liveResults.operations.filter(op => ['pending', 'open'].includes(op.result));
+  const settledOperations = operations.filter(op => SETTLED.includes(op.result));
 
   const todayStart = clientDayStart();
   const todayOps = operations.filter(op => op.created_at >= todayStart);
@@ -24,9 +29,9 @@ export function ClientResultsCard() {
   const total = todayOps.filter(op => SETTLED.includes(op.result)).reduce((s, op) => s + Number(op.profit || 0), 0);
   const { winPercent } = copyResultRates(wins, losses);
 
-  const pageCount = Math.max(1, Math.ceil(operations.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(settledOperations.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
-  const pageOps = operations.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageOps = settledOperations.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   const scoreFor = (iso: string) => {
     const key = brtDayKey(iso);
@@ -39,7 +44,7 @@ export function ClientResultsCard() {
 
   return (
     <Card className="p-3 sm:p-4 border-border/50">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 flex-wrap mb-2">
         <BarChart3 className="w-4 h-4 text-primary" />
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
         <span className="font-mono text-xs ml-auto mr-2">
@@ -51,11 +56,29 @@ export function ClientResultsCard() {
         </span>
       </div>
 
+      <div className="border-y border-border/50 my-3 py-2">
+        <Button variant="ghost" className="w-full justify-between px-0 h-8" onClick={() => setShowOpen(!showOpen)} aria-expanded={showOpen} aria-controls="client-open-operations">
+          <span className="flex items-center gap-2 text-xs"><Activity className="w-4 h-4 text-primary" />Operações Abertas <span className="font-mono">({openOperations.length})</span></span>
+          {showOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+        {showOpen && <div id="client-open-operations" className="space-y-2 py-2">
+          {liveResults.isLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+            : liveResults.isError ? <p className="text-xs text-destructive text-center">Não foi possível atualizar as operações abertas.</p>
+            : openOperations.length === 0 ? <p className="text-xs text-muted-foreground text-center">Nenhuma operação aberta.</p>
+            : openOperations.map(op => <div key={op.id} className="flex items-center gap-2 text-xs border-b border-border/50 pb-2">
+              <span className="text-muted-foreground font-mono">{new Date(op.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}</span>
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{op.asset}</span><span className="block truncate text-[9px] text-muted-foreground font-mono">#{op.iq_option_id}</span></span>
+              <span className={op.direction === 'CALL' ? 'text-call' : 'text-put'}>{op.direction}</span>
+              <span className="text-gold">Aberta</span>
+            </div>)}
+        </div>}
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
       ) : isError ? (
         <p className="text-xs text-destructive py-4 text-center">Não foi possível atualizar as entradas.</p>
-      ) : operations.length === 0 ? (
+      ) : settledOperations.length === 0 ? (
         <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma operação copiada ainda.</p>
       ) : (
         <>

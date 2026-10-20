@@ -1,6 +1,6 @@
 - IQ account-type changes and persisted disconnections invalidate connection confirmation and stop copy atomically through an application trigger; why: browser navigation must not leave copying enabled on an unconfirmed account.
 - Admin IQ list and bank totals share paginated master-only confirmed orders, excluding copy/TEST/MT5; client metrics share user-prefixed orders; BRT days and browser reset apply, broker balance stays separate; why: shared IQ accounts must not mix stakes or results.
-- Client copy controls read persisted enabled state without navigation writes and embed IQ connection before copy settings; why: leaving the page must not stop server-side copying.
+- Client bank/entries use client-only hooks; connection card is reused across tabs without navigation writes; why: preserve isolation and persistent copying.
 - Client copy saves, broker placement and read-only admin account labels use the active IQ connection account type via the shared copy-account resolver; why: only the client's connection choice determines the copied order account.
 - Reconcile copied broker IDs against each client's own IQ Option history and persist target autostop during server result sync; why: master history cannot settle client orders and closing a browser must not bypass daily limits.
 - Match IQ operations to `trading_signals` by `signal_id` (no foreign key); unmatched history stays unidentified, never guessed as IA.

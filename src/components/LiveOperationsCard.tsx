@@ -64,6 +64,8 @@ export function LiveOperationsCard() {
   const PAGE_SIZE = 10;
   const queryClient = useQueryClient();
   const [recentLoading, setRecentLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
+  const hasLoadedRef = useRef(false);
   const [recentError, setRecentError] = useState(false);
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
   const [linkedOrders, setLinkedOrders] = useState<TestBrokerResult[]>([]);
@@ -241,10 +243,13 @@ export function LiveOperationsCard() {
       };
   };
 
+  // Navegar de página nunca recarrega o card inteiro: mantém a lista atual visível
+  // e troca o conteúdo quando a nova página chega (do cache ou da rede).
   const fetchRecentTrades = async (navigation = false) => {
     const requestedPage = pageRef.current;
     const request = ++recentRequestRef.current;
-    if (navigation) setRecentLoading(true);
+    if (navigation && !hasLoadedRef.current) setRecentLoading(true);
+    else if (navigation) setPageLoading(true);
     try {
       const result = await queryClient.fetchQuery({
         queryKey: ['live-operations-page', requestedPage],
@@ -252,6 +257,7 @@ export function LiveOperationsCard() {
         staleTime: 15000,
       });
       if (request !== recentRequestRef.current || requestedPage !== pageRef.current) return;
+      hasLoadedRef.current = true;
       setLinkedOrders(result.linkedOrders);
       setRecentTrades(result.trades);
       setRecentError(false);
@@ -266,7 +272,10 @@ export function LiveOperationsCard() {
     } catch {
       if (request === recentRequestRef.current) setRecentError(true);
     } finally {
-      if (request === recentRequestRef.current) setRecentLoading(false);
+      if (request === recentRequestRef.current) {
+        setRecentLoading(false);
+        setPageLoading(false);
+      }
     }
   };
 
@@ -468,7 +477,7 @@ export function LiveOperationsCard() {
           ) : recentError ? (
             <div role="alert" className="text-xs text-destructive text-center py-3">Não foi possível carregar esta página.</div>
           ) : iqTrades.length > 0 ? (
-            <div className="space-y-1">
+            <div className={cn("space-y-1 transition-opacity", pageLoading && "opacity-50 pointer-events-none")}>
               {iqTrades.flatMap(expandTestObservations).map(trade => {
                 const broker = linkedForceBrokerResult(trade, linkedOrders);
                 return (
@@ -574,17 +583,18 @@ export function LiveOperationsCard() {
               <div className="flex items-center justify-between pt-2">
                 <Button
                   size="sm" variant="secondary" className="h-7 px-2 text-xs"
-                  disabled={page <= 1}
+                  disabled={page <= 1 || pageLoading}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                 >
                   ← Anterior
                 </Button>
-                <span className="text-[10px] text-muted-foreground font-mono">
+                <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
+                  {pageLoading && <Loader2 className="w-3 h-3 animate-spin" />}
                   Página {page} de {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
                 </span>
                 <Button
                   size="sm" variant="secondary" className="h-7 px-2 text-xs"
-                  disabled={page >= Math.ceil(totalCount / PAGE_SIZE)}
+                  disabled={page >= Math.ceil(totalCount / PAGE_SIZE) || pageLoading}
                   onClick={() => setPage(p => p + 1)}
                 >
                   Próxima →

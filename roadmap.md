@@ -28,3 +28,7 @@
 - [x] Dez testes aprovados, admin autorizado e acesso anônimo recusado; relatório e CSVs preparados sem alterar entradas.
 - [x] Regra de antecipação da vela forte (somente estudo) testada 17–19/10: ~49,8% acerto, sem vantagem
 - [x] Teste entrada no meio da vela (30s, histórico 17–19/10): ~50% acerto, retorno negativo
+
+# Painel do cliente
+- [ ] Organizar banca, entradas e conexão com abas Dashboard e Corretoras, preservando copy.
+- [ ] Mostrar operações abertas próprias acima das entradas e validar isolamento e navegação.

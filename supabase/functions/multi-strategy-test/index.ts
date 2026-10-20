@@ -9,7 +9,6 @@ import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
-import { forceInvertedTag } from '../_shared/force-inverted-test.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -261,14 +260,13 @@ Deno.serve(async (req) => {
     const { data: sequenceHistory, error: sequenceError } = sequenceRead;
     if (sequenceError) console.error('TEST sequence read:', sequenceError.message);
     const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false,
-      test_inverted_strategy: forceInvertedTag(r.timeframe, r.entry_strategy),
+      test_inverted_strategy: null, // Força Invertida removida (20/10/2026)
       test_sequence_strategy: !sequenceError && matchesTrendSequence(sequenceHistory || [], r.entry_strategy, curMin * 1000)
         ? TREND_SEQUENCE_TEST : null,
     }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
     if (best && inserted) {
-      // Estratégias reais ativas (18/10/2026): Reversão RSI, Retomada e Força Invertida.
-      // O claim decide a direção final (Força Invertida já sai invertida do banco).
+      // Estratégias reais ativas (20/10/2026): Reversão RSI e Retomada; Força Invertida removida.
       const { data: trade, error: claimError } = await supabase.rpc('claim_test_strategy_entry', { p_candidate: best.signal_id });
       if (claimError) console.error('Strategy claim:', claimError.message);
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {

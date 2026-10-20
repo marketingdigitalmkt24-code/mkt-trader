@@ -10,6 +10,7 @@ export interface MasterIQOperation {
 export function isMasterIQOrder(row: Pick<MasterIQOperation, 'signal_id' | 'timeframe' | 'iq_option_id' | 'created_at'> & { entry_strategy?: string | null }, cutoff = '') {
   return !row.signal_id.startsWith('copy-') && !row.signal_id.startsWith('mt5-')
     && row.entry_strategy !== 'FORCE_LOSS_WIN' && !row.signal_id.startsWith('force-lw-')
+    && row.entry_strategy !== 'FORCA_INVERTIDA' && !row.signal_id.startsWith('forca_invertida-')
     && !['TEST', 'MT5'].includes(row.timeframe) && Boolean(row.iq_option_id)
     && !row.iq_option_id?.toLowerCase().startsWith('test') && afterIQReset(row.created_at, cutoff);
 }

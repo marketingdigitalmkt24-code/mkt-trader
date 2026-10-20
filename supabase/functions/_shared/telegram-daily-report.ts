@@ -42,13 +42,10 @@ export function bestReportStrategies(rows: ReportRow[], now: Date) {
   };
   for (const r of rows) {
     if (r.created_at < clock.start || r.created_at > clock.end) continue;
-    if (r.entry_strategy === 'FORCE_LOSS_WIN') continue;
+    if (r.entry_strategy === 'FORCE_LOSS_WIN' || r.entry_strategy === 'FORCA_INVERTIDA') continue;
     if (r.timeframe === 'MT5' || /^(copy-|mt5-)/.test(r.signal_id)) continue;
     if (r.entry_strategy) add(r.entry_strategy, r.result);
     if (r.timeframe === 'TEST' && r.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') add(r.test_sequence_strategy, r.result);
-    if (r.timeframe === 'TEST' && r.entry_strategy === 'VELA_FORCA' && r.test_inverted_strategy === 'FORCA_INVERTIDA') {
-      add(r.test_inverted_strategy, r.result === 'win' ? 'loss' : r.result === 'loss' ? 'win' : r.result);
-    }
   }
   return [...stats.values()].filter(s => s.wins + s.losses > 0).sort((a, b) =>
     b.wins / (b.wins + b.losses) - a.wins / (a.wins + a.losses)

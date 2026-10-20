@@ -173,7 +173,7 @@ export function LiveOperationsCard() {
         .not('signal_id', 'like', 'mt5-%')
         .not('signal_id', 'like', 'copy-%')
         .not('signal_id', 'like', 'sim-%')
-        .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
+        .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)')
         .not('signal_id', 'like', '%force-lw-%')
         // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
         .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA)')
@@ -212,7 +212,7 @@ export function LiveOperationsCard() {
         .not('signal_id', 'like', 'mt5-%')
         .not('signal_id', 'like', 'copy-%')
         .not('signal_id', 'like', 'sim-%')
-        .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
+        .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)')
         .not('signal_id', 'like', '%force-lw-%')
         // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
         .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA)');

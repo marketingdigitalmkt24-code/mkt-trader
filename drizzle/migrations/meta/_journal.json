@@ -148,6 +148,13 @@
       "when": 1792340215034,
       "tag": "0020_allow_simultaneous_real_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792465441067,
+      "tag": "0021_remove_forca_invertida_claim",
+      "breakpoints": true
     }
   ]
 }

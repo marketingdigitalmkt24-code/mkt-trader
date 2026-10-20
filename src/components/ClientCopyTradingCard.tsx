@@ -7,6 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
+import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
+import { DailyHistory } from '@/components/DailyHistory';
+import { clientDayStart } from '@/lib/client-copy-results';
 import { copyResultRates } from '@/lib/admin-copy-results';
 import { cn } from '@/lib/utils';
 import { canEnableCopy, readCopyAccount, readCopyEnabled } from '@/lib/client-copy-state';
@@ -19,6 +22,7 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
   const { toast } = useToast();
   const { balance } = useIQOptionConnection({ silentMissingCredentials: true, fetchStatistics: false, balanceOnly: true });
   const results = useClientCopyResults();
+  const history = useClientCopyHistory();
   const { winPercent } = copyResultRates(results.wins, results.losses);
   const money = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const [enabled, setEnabled] = useState(false);
@@ -162,6 +166,12 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
           </div>
         </div>
         </>}
+        {!settingsOnly && (history.operations.some(op => op.created_at < clientDayStart() && ['win', 'loss', 'draw', 'tie'].includes(op.result))
+          ? <DailyHistory title="Histórico Diário IQ Option" operations={history.operations} perPage={5} />
+          : <div className="border-t border-border pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Histórico Diário IQ Option</p>
+              <p className="text-xs text-muted-foreground mt-2">{history.isLoading ? 'Carregando histórico…' : history.isError ? 'Não foi possível atualizar o histórico.' : 'Nenhuma operação copiada em dias anteriores.'}</p>
+            </div>)}
         {settingsOnly && <>
         {!connected && (
           <p className="text-xs text-muted-foreground">Conecte sua conta IQ Option para ligar o copy trading.</p>

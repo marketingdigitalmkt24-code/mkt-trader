@@ -7,5 +7,5 @@ test('only the active real strategies qualify for next-minute execution', () => 
   assert.equal(isNextMinuteStrategy('FOUR_WIN_REVERSAL'), false);
   assert.equal(isNextMinuteStrategy('REVERSAO_RSI'), true);
   assert.equal(isNextMinuteStrategy('RETOMADA'), true);
-  assert.equal(isNextMinuteStrategy('FORCA_INVERTIDA'), true);
+  assert.equal(isNextMinuteStrategy('FORCA_INVERTIDA'), false);
 });

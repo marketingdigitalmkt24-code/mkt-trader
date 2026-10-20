@@ -47,3 +47,7 @@
 - [x] HYPE 02:13: uma principal e duas cópias na mesma conta; rejeitar self/shared-principal copies na reserva e placement. Salvar 10 e conferir após reload; 9 testes e build OK. Vela forte sem rompimento20; nenhuma nova ordem autorizada ocorreu durante a verificação, execução futura ainda não observada.
 - [x] Limitar a principal e cada cliente a uma operação por vez, com reservas atômicas e bloqueio conservador de confirmação ambígua.
 - [x] Validar valores exatos do admin Auto Trading e cliente Corretoras, sem fallback nem escala: 20 testes; ordem EOS com entrada/configuração 100 conferida. Copy real não exercitado sem cliente ativo.
+
+# Conferência PENGU e paginação
+- [ ] Conferir rompimento da máxima anterior na operação PENGUUSD-OTC #14372665294, sem alterar regras de entrada.
+- [ ] Corrigir a demora ao navegar pelas últimas operações e verificar a navegação autenticada.

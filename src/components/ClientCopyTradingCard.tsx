@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export function ClientCopyTradingCard() {
+export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?: boolean }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const { balance } = useIQOptionConnection({ silentMissingCredentials: true, fetchStatistics: false, balanceOnly: true });
@@ -134,13 +134,14 @@ export function ClientCopyTradingCard() {
           <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
             <Wallet className="w-4 h-4 text-primary" />
           </div>
-          Gestão de Banca IQ Option
+          {settingsOnly ? 'Configurações de Copy Trading' : 'Gestão de Banca IQ Option'}
           <Badge variant={enabled ? 'default' : 'secondary'} className="ml-auto text-xs">
             {enabled ? 'Ligado' : 'Desligado'}
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {!settingsOnly && <>
         <div className="border-b border-border pb-4">
           <div className="flex items-center justify-between gap-2 mb-1">
             <span className="text-sm text-muted-foreground">Saldo Atual</span>
@@ -160,6 +161,8 @@ export function ClientCopyTradingCard() {
             <div><p className="font-mono font-bold text-gold">{winPercent.toFixed(1)}%</p><p className="text-[10px] text-muted-foreground">Win Rate</p></div>
           </div>
         </div>
+        </>}
+        {settingsOnly && <>
         {!connected && (
           <p className="text-xs text-muted-foreground">Conecte sua conta IQ Option para ligar o copy trading.</p>
         )}
@@ -204,6 +207,7 @@ export function ClientCopyTradingCard() {
             {enabled ? 'Desligar copy' : 'Ligar copy'}
           </Button>
         </div>
+        </>}
       </CardContent>
     </Card>
   );

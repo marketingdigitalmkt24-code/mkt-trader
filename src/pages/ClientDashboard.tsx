@@ -41,13 +41,13 @@ const ClientDashboard = () => {
             <TabsTrigger value="brokers" className="text-xs sm:text-sm py-2 gap-2"><Wifi className="w-4 h-4" />Corretoras</TabsTrigger>
           </TabsList>
           <TabsContent value="dashboard" className="space-y-4">
+            <ClientBrokerConnectionCard onConfigure={() => setTab('brokers')} />
             <div className="grid items-start gap-4 lg:grid-cols-2">
               <ClientCopyTradingCard />
               <ClientResultsCard />
             </div>
-            <ClientBrokerConnectionCard onConfigure={() => setTab('brokers')} />
           </TabsContent>
-          <TabsContent value="brokers"><section className="glass-card p-3 sm:p-4"><h2 className="font-semibold">Configurar conta IQ Option</h2><IQOptionSettingsCard defaultOpen embedded /></section></TabsContent>
+          <TabsContent value="brokers" className="space-y-4"><section className="glass-card p-3 sm:p-4"><h2 className="font-semibold">Configurar conta IQ Option</h2><IQOptionSettingsCard defaultOpen embedded /></section><ClientCopyTradingCard settingsOnly /></TabsContent>
         </Tabs>
       </main>
     </div>

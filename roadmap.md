@@ -21,3 +21,8 @@
 - [x] Consultar 253 ativos e recuperar 126.380 candles M15; 5.028/5.348 entradas analisáveis, 320 excluídas por lacunas regulares.
 - [x] Cruzar candles fechados antes do minuto de entrada; separar TESTE/corretora e OTC/regular. Corretora usa minuto de registro aproximado, não fill exato.
 - [x] Cinco testes aprovados; chamada admin e rejeição sem autorização verificadas; relatório e CSVs com validação temporal de 19/10 entregues, sem alterar operações.
+
+# Estudo Tendência e velas anteriores
+- [ ] Recuperar M1 e medir cobertura exata das entradas Tendência TESTE.
+- [ ] Comparar extensão, sequência e pavio com validação cronológica.
+- [ ] Validar cálculos e entregar resultados sem alterar entradas.

@@ -107,6 +107,17 @@ const ClientDashboard = () => {
                   <p className={cn('text-lg sm:text-xl font-bold break-words tabular-nums', dailyProfit < 0 ? 'text-put' : dailyProfit > 0 ? 'text-call' : 'text-foreground')}>
                     {copyResults.isError ? 'Indisponível' : copyResults.isLoading ? '…' : `${dailyProfit > 0 ? '+' : dailyProfit < 0 ? '−' : ''}$${Math.abs(dailyProfit).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
+                    Saldo:{' '}
+                    <span className="font-mono font-semibold text-foreground tabular-nums">
+                      {iqBalance ? `$${balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                    </span>
+                    {iqBalance && (
+                      <Badge variant={iqBalance.accountType === 'REAL' ? 'default' : 'secondary'} className="text-[9px] px-1 py-0 h-4">
+                        {iqBalance.accountType === 'REAL' ? 'REAL' : 'DEMO'}
+                      </Badge>
+                    )}
+                  </p>
                 </div>
               </div>
             </CardContent>

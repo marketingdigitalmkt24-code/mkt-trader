@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { serialSettingsWriter } from './serial-settings-writer';
+import { serialSettingsWriter } from './src/lib/serial-settings-writer';
 test('saving 10 while 100 is saving never drops the requested admin stake', async () => {
   const saved: number[] = [];
   const write = serialSettingsWriter(async (value: number) => {

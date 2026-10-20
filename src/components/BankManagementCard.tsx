@@ -1,3 +1,4 @@
+import { DailyHistory } from './DailyHistory';
 import { Wallet, TrendingUp, TrendingDown, AlertTriangle, Target, Activity, RefreshCw, Loader2, Calendar, RotateCcw, WalletCards } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
@@ -282,6 +283,7 @@ export function BankManagementCard() {
       )}
 
       {/* Daily History */}
+      <DailyHistory title="Histórico Diário IQ Option" excludeTimeframe="MT5" perPage={5} />
     </section>
   );
 }

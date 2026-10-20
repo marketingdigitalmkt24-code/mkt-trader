@@ -244,10 +244,13 @@ export function LiveOperationsCard() {
       };
   };
 
+  // Navegar de página nunca recarrega o card inteiro: mantém a lista atual visível
+  // e troca o conteúdo quando a nova página chega (do cache ou da rede).
   const fetchRecentTrades = async (navigation = false) => {
     const requestedPage = pageRef.current;
     const request = ++recentRequestRef.current;
-    if (navigation) setRecentLoading(true);
+    if (navigation && !hasLoadedRef.current) setRecentLoading(true);
+    else if (navigation) setPageLoading(true);
     try {
       const result = await queryClient.fetchQuery({
         queryKey: ['live-operations-page', requestedPage],
@@ -255,6 +258,7 @@ export function LiveOperationsCard() {
         staleTime: 15000,
       });
       if (request !== recentRequestRef.current || requestedPage !== pageRef.current) return;
+      hasLoadedRef.current = true;
       setLinkedOrders(result.linkedOrders);
       setRecentTrades(result.trades);
       setRecentError(false);
@@ -269,7 +273,10 @@ export function LiveOperationsCard() {
     } catch {
       if (request === recentRequestRef.current) setRecentError(true);
     } finally {
-      if (request === recentRequestRef.current) setRecentLoading(false);
+      if (request === recentRequestRef.current) {
+        setRecentLoading(false);
+        setPageLoading(false);
+      }
     }
   };
 

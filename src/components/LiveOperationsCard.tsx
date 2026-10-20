@@ -478,7 +478,7 @@ export function LiveOperationsCard() {
           ) : recentError ? (
             <div role="alert" className="text-xs text-destructive text-center py-3">Não foi possível carregar esta página.</div>
           ) : iqTrades.length > 0 ? (
-            <div className="space-y-1">
+            <div className={cn("space-y-1 transition-opacity", pageLoading && "opacity-50 pointer-events-none")}>
               {iqTrades.flatMap(expandTestObservations).map(trade => {
                 const broker = linkedForceBrokerResult(trade, linkedOrders);
                 return (

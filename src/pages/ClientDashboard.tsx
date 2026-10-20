@@ -1,4 +1,6 @@
 import { LogOut, Bot, LayoutDashboard, Wifi } from 'lucide-react';
+import { useState } from 'react';
+import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { useNavigate } from 'react-router-dom';
 import { ClientCopyTradingCard } from '@/components/ClientCopyTradingCard';
 import { ClientResultsCard } from '@/components/ClientResultsCard';
@@ -8,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const ClientDashboard = () => {
+  const [tab, setTab] = useState('dashboard');
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const handleLogout = async () => {
@@ -32,7 +35,7 @@ const ClientDashboard = () => {
         </div>
       </header>
       <main className="container px-4 py-4 sm:py-6 max-w-7xl">
-        <Tabs defaultValue="dashboard" className="space-y-4">
+        <Tabs value={tab} onValueChange={setTab} className="space-y-4">
           <TabsList className="grid w-full grid-cols-2 h-auto gap-1">
             <TabsTrigger value="dashboard" className="text-xs sm:text-sm py-2 gap-2"><LayoutDashboard className="w-4 h-4" />Dashboard</TabsTrigger>
             <TabsTrigger value="brokers" className="text-xs sm:text-sm py-2 gap-2"><Wifi className="w-4 h-4" />Corretoras</TabsTrigger>
@@ -42,9 +45,9 @@ const ClientDashboard = () => {
               <ClientCopyTradingCard />
               <ClientResultsCard />
             </div>
-            <ClientBrokerConnectionCard />
+            <ClientBrokerConnectionCard onConfigure={() => setTab('brokers')} />
           </TabsContent>
-          <TabsContent value="brokers"><ClientBrokerConnectionCard /></TabsContent>
+          <TabsContent value="brokers"><section className="glass-card p-3 sm:p-4"><h2 className="font-semibold">Configurar conta IQ Option</h2><IQOptionSettingsCard defaultOpen embedded /></section></TabsContent>
         </Tabs>
       </main>
     </div>

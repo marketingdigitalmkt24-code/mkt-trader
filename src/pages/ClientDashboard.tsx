@@ -176,7 +176,6 @@ const ClientDashboard = () => {
         {/* Copy Trading + Resultados */}
         <div className="grid items-start gap-4 sm:gap-8 lg:grid-cols-2">
           <ClientResultsCard />
-          <ClientDailyHistory />
           <ClientCopyTradingCard />
         </div>
 

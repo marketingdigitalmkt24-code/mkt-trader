@@ -176,6 +176,13 @@
       "when": 1792473512103,
       "tag": "0024_prevent_principal_self_copy",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792473702501,
+      "tag": "0025_independent_shared_broker_client_reservations",
+      "breakpoints": true
     }
   ]
 }

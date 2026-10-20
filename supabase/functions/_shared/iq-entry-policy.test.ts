@@ -19,9 +19,9 @@ const master = { user_id: 'admin', email: 'master@example.test', account_type: '
 test('principal never copies its own entry', () => {
   expect(canMirrorToBroker(master, master)).toBe(false);
 });
-test('shared principal broker account cannot open a second or third copy', () => {
-  expect(canMirrorToBroker(master, { ...master, user_id: 'client', email: ' MASTER@example.test ' })).toBe(false);
-  expect(canMirrorToBroker(master, { ...master, user_id: 'client2' })).toBe(false);
+test('different clients can copy independently on the same principal broker account', () => {
+  expect(canMirrorToBroker(master, { ...master, user_id: 'client', email: ' MASTER@example.test ' })).toBe(true);
+  expect(canMirrorToBroker(master, { ...master, user_id: 'client2' })).toBe(true);
 });
 test('independent client broker account retains its own copy', () => {
   expect(canMirrorToBroker(master, { ...master, user_id: 'client', email: 'client@example.test' })).toBe(true);

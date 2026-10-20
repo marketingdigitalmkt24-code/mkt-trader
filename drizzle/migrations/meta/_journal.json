@@ -169,6 +169,13 @@
       "when": 1792472995200,
       "tag": "0023_iq_single_order_and_exact_stakes",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792473512103,
+      "tag": "0024_prevent_principal_self_copy",
+      "breakpoints": true
     }
   ]
 }

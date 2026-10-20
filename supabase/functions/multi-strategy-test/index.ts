@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
-    .neq('entry_strategy', FORCE_FIRST_TEST)
+    .neq('entry_strategy', FORCE_FIRST_TEST).not('signal_id', 'like', 'study-%')
     .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
     .order('created_at', { ascending: false }).limit(500)
     .abortSignal(AbortSignal.timeout(1500)).then(result => result);
@@ -220,11 +220,26 @@ Deno.serve(async (req) => {
     .filter((row, index, all) => all.findIndex(other => other.asset === row.asset
       && other.created_at === row.created_at && other.entry_strategy === row.entry_strategy) === index);
   const rows: any[] = [];
+  // Observação de TODAS as estratégias (sombra TESTE): a mais forte por estratégia no minuto,
+  // sem exigir concordância; fora de ranking, claims, locks e aprendizado (prefixo study-all-).
+  const allStudy = new Map<string, any>();
   for (const [asset, cs] of series) {
     const closed = cs.filter(k => k.t + 60 <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
     // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
     const fired = detect(closed);
+    const last = closed[closed.length - 1];
+    const strength = Math.abs(last.c - last.o) / (last.o || 1);
+    for (const [strat, dir] of fired) {
+      const prev = allStudy.get(strat);
+      if (prev && prev._s >= strength) continue;
+      allStudy.set(strat, {
+        signal_id: `study-all-${strat}-${asset}-${curMin}`, asset, direction: dir, entry_price: last.c,
+        result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
+        expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: false, is_ai_analyzed: false,
+        timeframe: 'TEST', entry_strategy: strat, telegram_sent: false, _s: strength,
+      });
+    }
     // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
     const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
     const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];
@@ -240,12 +255,19 @@ Deno.serve(async (req) => {
       });
     }
   }
+  if (allStudy.size) {
+    const study = [...allStudy.values()].map(({ _s, ...r }) => r);
+    const persistAll = supabase.from('operation_results').upsert(study, { onConflict: 'signal_id', ignoreDuplicates: true })
+      .then(({ error }) => { if (error) console.error('All-strategy TEST:', error.message); });
+    // @ts-ignore Hosted background runtime
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(persistAll); else await persistAll;
+  }
   let inserted = 0;
   if (rows.length) {
     // Independent reads run together after closed-candle confirmation.
     const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
       supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id)),
-      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').neq('entry_strategy', FORCE_FIRST_TEST).limit(1),
+      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').like('signal_id', 't7-%').limit(1),
       supabase.from('operation_results').select('entry_strategy, result, created_at')
         .eq('timeframe', 'TEST').like('signal_id', 't7-%')
         .lt('created_at', new Date(curMin * 1000).toISOString())

@@ -220,11 +220,26 @@ Deno.serve(async (req) => {
     .filter((row, index, all) => all.findIndex(other => other.asset === row.asset
       && other.created_at === row.created_at && other.entry_strategy === row.entry_strategy) === index);
   const rows: any[] = [];
+  // Observação de TODAS as estratégias (sombra TESTE): a mais forte por estratégia no minuto,
+  // sem exigir concordância; fora de ranking, claims, locks e aprendizado (prefixo study-all-).
+  const allStudy = new Map<string, any>();
   for (const [asset, cs] of series) {
     const closed = cs.filter(k => k.t + 60 <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
     // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
     const fired = detect(closed);
+    const last = closed[closed.length - 1];
+    const strength = Math.abs(last.c - last.o) / (last.o || 1);
+    for (const [strat, dir] of fired) {
+      const prev = allStudy.get(strat);
+      if (prev && prev._s >= strength) continue;
+      allStudy.set(strat, {
+        signal_id: `study-all-${strat}-${asset}-${curMin}`, asset, direction: dir, entry_price: last.c,
+        result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
+        expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: false, is_ai_analyzed: false,
+        timeframe: 'TEST', entry_strategy: strat, telegram_sent: false, _s: strength,
+      });
+    }
     // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
     const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
     const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];

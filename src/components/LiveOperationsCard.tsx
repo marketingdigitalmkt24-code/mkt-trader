@@ -584,17 +584,18 @@ export function LiveOperationsCard() {
               <div className="flex items-center justify-between pt-2">
                 <Button
                   size="sm" variant="secondary" className="h-7 px-2 text-xs"
-                  disabled={page <= 1}
+                  disabled={page <= 1 || pageLoading}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                 >
                   ← Anterior
                 </Button>
-                <span className="text-[10px] text-muted-foreground font-mono">
+                <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
+                  {pageLoading && <Loader2 className="w-3 h-3 animate-spin" />}
                   Página {page} de {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
                 </span>
                 <Button
                   size="sm" variant="secondary" className="h-7 px-2 text-xs"
-                  disabled={page >= Math.ceil(totalCount / PAGE_SIZE)}
+                  disabled={page >= Math.ceil(totalCount / PAGE_SIZE) || pageLoading}
                   onClick={() => setPage(p => p + 1)}
                 >
                   Próxima →

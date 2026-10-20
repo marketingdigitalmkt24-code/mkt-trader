@@ -26,8 +26,7 @@ test('top five use daily acerto then sample size excluding copies and other BRT 
 test('Retomada counts once alongside base strategy', () => {
   expect(bestReportStrategies([row({ timeframe: 'TEST', entry_strategy: 'TENDENCIA', result: 'win', test_sequence_strategy: 'TREND_WIN_LOSS_FORCE_LOSS' })], now)).toEqual([{ strategy: 'TENDENCIA', wins: 1, losses: 0 }, { strategy: 'TREND_WIN_LOSS_FORCE_LOSS', wins: 1, losses: 0 }]);
 });
-test('daily inverted Force counts opposite wins and losses only on marked TEST rows', () => {
-  const rows = ['loss', 'loss', 'win'].map(result => row({ timeframe: 'TEST', entry_strategy: 'VELA_FORCA', test_inverted_strategy: 'FORCA_INVERTIDA', result }));
-  rows.push(row({ timeframe: 'TEST', entry_strategy: 'VELA_FORCA', test_inverted_strategy: 'FORCA_INVERTIDA', result: 'loss', created_at: '2026-10-17T02:59:59Z' }));
-  expect(bestReportStrategies(rows, now).find(s => s.strategy === 'FORCA_INVERTIDA')).toEqual({ strategy: 'FORCA_INVERTIDA', wins: 2, losses: 1 });
+test('daily report ranks no Força Invertida, tagged or real', () => {
+  const rows = [row({ timeframe: 'TEST', entry_strategy: 'VELA_FORCA', test_inverted_strategy: 'FORCA_INVERTIDA', result: 'loss' }), row({ entry_strategy: 'FORCA_INVERTIDA', result: 'win' })];
+  expect(bestReportStrategies(rows, now).some(s => s.strategy === 'FORCA_INVERTIDA')).toBe(false);
 });

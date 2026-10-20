@@ -47,7 +47,7 @@ const strategyLabels: Record<string, string> = {
   EMPATE: 'Empate',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
-  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'Força sem rompimento · primeira vela',
+  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'forca sem',
   FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
@@ -529,7 +529,7 @@ export function LiveOperationsCard() {
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 REVERSÃO RSI</Badge>
                     )}
                     {trade.entry_strategy === 'FORCA_SEM_ROMPIMENTO_PRIMEIRA' && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal border-primary/50 text-primary">FORÇA SEM ROMPIMENTO · PRIMEIRA VELA</Badge>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal border-primary/50 text-primary">forca sem</Badge>
                     )}
                     {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy] && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">

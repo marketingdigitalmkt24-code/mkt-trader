@@ -22,7 +22,7 @@ const strategyLabels: Record<string, string> = {
   THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
-  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'Força sem rompimento · primeira vela (TESTE)',
+  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'forca sem',
   FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',

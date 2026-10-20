@@ -274,12 +274,14 @@ export function LiveOperationsCard() {
     fetchRecentTrades();
     fetchStats();
     fetchOpen();
+    fetchRecordedOpen();
+    const recordedPoll = setInterval(fetchRecordedOpen, 3000);
     pollRef.current = setInterval(() => {
       fetchRecentTrades();
       fetchStats();
       fetchOpen();
     }, 15000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    return () => { clearInterval(recordedPoll); if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
   // Poll de sinais novos para a buzina (a cada 10s)

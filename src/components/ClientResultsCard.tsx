@@ -105,7 +105,7 @@ export function ClientResultsCard() {
         </>
       )}
       {!isLoading && !isError && operations.some(op => op.created_at < todayStart) && (
-        <div className="mt-3">
+        <div className="mt-3 [&>div]:mt-0">
           <DailyHistory title="Histórico Diário IQ Option" operations={operations} perPage={5} />
         </div>
       )}

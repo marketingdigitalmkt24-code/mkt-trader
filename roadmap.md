@@ -30,6 +30,8 @@
 - [x] Teste entrada no meio da vela (30s, histórico 17–19/10): ~50% acerto, retorno negativo
 
 # Painel do cliente
+- [ ] Bloquear ativação sem conexão confirmada e mostrar orientação para Corretoras.
+- [ ] Ajustar e conferir principal, admin e cliente em celular, iPad e computador.
 - [x] Colocar conexão primeiro e mover entrada/meta para Corretoras; navegação autenticada conferida.
 - [x] Verificar entradas e histórico: WLD e dias 16–19/10 visíveis no admin; cliente aberto sem cópias. 15 testes aprovados, build OK.
 - [x] Resumir conexão com corretora/email, ativação segura e acesso à aba Corretoras; 15 testes aprovados e navegação autenticada conferida. Conta aberta é admin, copy desligado, sem cópias; histórico agora preserva estratégias nulas e atualiza em 10s.

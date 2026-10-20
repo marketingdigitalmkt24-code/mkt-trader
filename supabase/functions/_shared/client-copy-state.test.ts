@@ -34,6 +34,11 @@ test('changing Demo to Real requires fresh confirmation before copy can activate
 test('disconnecting the selected account prevents copy activation', () => {
   assert.equal(canEnableCopy({ is_active: false, last_connected_at: null }), false);
 });
+test('configured credentials alone never authorize dashboard copy activation', () => {
+  const configured = { email: 'client@example.test', account_type: 'PRACTICE', is_active: true, last_connected_at: null };
+  assert.equal(readCopyAccount(configured), 'PRACTICE');
+  assert.equal(canEnableCopy(configured), false);
+});
 test('daily target stops copying at the target, never below it or with no target', () => {
   assert.equal(copyTargetReached(9.99, 10), false);
   assert.equal(copyTargetReached(10, 10), true);

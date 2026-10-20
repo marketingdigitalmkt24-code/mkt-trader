@@ -193,10 +193,10 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
   }
 
   return (
-    <Card className={embedded ? 'border-0 rounded-none shadow-none bg-transparent' : 'border-orange-500/20'}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+    <Card className={embedded ? 'min-w-0 border-0 rounded-none shadow-none bg-transparent' : 'min-w-0 border-orange-500/20'}>
+      <CardHeader className="px-3 sm:px-6 pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-wrap min-w-0 items-center gap-2">
             <TrendingUp className="w-5 h-5 text-orange-500" />
             <CardTitle className="text-lg">IQ Option</CardTitle>
             {connected && (
@@ -215,7 +215,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
         </CardDescription>
       </CardHeader>
       
-      <CardContent className="space-y-4">
+      <CardContent className="px-3 sm:px-6 space-y-4 min-w-0">
         {/* Email */}
         <div>
           <Label className="text-xs text-muted-foreground">Email da conta IQ Option</Label>
@@ -282,7 +282,7 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Button 
             onClick={testConnection} 
             className="flex-1 gap-2"

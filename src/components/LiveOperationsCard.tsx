@@ -66,7 +66,10 @@ export function LiveOperationsCard() {
   const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState({ wins: 0, losses: 0, testWinsToday: 0, testLossesToday: 0 });
   const pageRef = useRef(1);
-  const [openPositions, setOpenPositions] = useState<OpenPosition[]>([]);
+  const [brokerOpen, setBrokerOpen] = useState<OpenPosition[]>([]);
+  const [recordedOpen, setRecordedOpen] = useState<OpenPosition[]>([]);
+  // Corretora (com lucro ao vivo) tem prioridade; ordens registradas cobrem o intervalo entre consultas.
+  const openPositions = [...brokerOpen, ...recordedOpen.filter(r => !brokerOpen.some(b => b.id === r.id))];
   const [openLoading, setOpenLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isFetchingRef = useRef(false);
@@ -147,12 +150,39 @@ export function LiveOperationsCard() {
   };
 
   // Posições abertas na IQ Option (binária, digital e forex)
+  // Ordens principais confirmadas pela corretora e ainda sem resultado (atualiza a cada 3s).
+  const fetchRecordedOpen = async () => {
+    try {
+      const { data } = await supabase.from('operation_results')
+        .select('signal_id, asset, direction, iq_option_id, timeframe')
+        .in('result', ['pending', 'open'])
+        .neq('timeframe', 'TEST').neq('timeframe', 'MT5')
+        .not('iq_option_id', 'is', null)
+        .not('signal_id', 'like', 'copy-%').not('signal_id', 'like', 'sim-%').not('signal_id', 'like', 'mt5-%')
+        .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+        .limit(20);
+      const rows = data || [];
+      const { data: queue } = rows.length
+        ? await supabase.from('trade_queue').select('signal_id, amount').in('signal_id', rows.map(r => r.signal_id))
+        : { data: [] };
+      const amounts = new Map((queue || []).map(q => [q.signal_id, Number(q.amount || 0)]));
+      setRecordedOpen(rows.map(r => ({
+        id: String(r.iq_option_id), type: r.timeframe === 'FOREX' ? 'forex' : 'binary-option',
+        asset: r.asset, direction: r.direction, invest: amounts.get(r.signal_id) || 0, pnl: 0,
+      })));
+    } catch {
+      // silent
+    } finally {
+      setOpenLoading(false);
+    }
+  };
+
   const fetchOpen = async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
       const { data } = await supabase.functions.invoke('iqoption-open-positions');
-      if (data?.success) setOpenPositions(data.positions || []);
+      if (data?.success) setBrokerOpen(data.positions || []);
     } catch {
       // silent
     } finally {

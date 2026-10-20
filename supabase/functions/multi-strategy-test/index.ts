@@ -266,8 +266,7 @@ Deno.serve(async (req) => {
     }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
     if (best && inserted) {
-      // Estratégias reais ativas (18/10/2026): Reversão RSI, Retomada e Força Invertida.
-      // O claim decide a direção final (Força Invertida já sai invertida do banco).
+      // Estratégias reais ativas (20/10/2026): Reversão RSI e Retomada; Força Invertida removida.
       const { data: trade, error: claimError } = await supabase.rpc('claim_test_strategy_entry', { p_candidate: best.signal_id });
       if (claimError) console.error('Strategy claim:', claimError.message);
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {

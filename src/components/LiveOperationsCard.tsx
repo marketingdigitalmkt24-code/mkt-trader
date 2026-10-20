@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Activity, TrendingUp, TrendingDown, Target, Clock, MonitorSmartphone, Loader2, Volume2, VolumeX } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -60,6 +61,9 @@ const strategyLabels: Record<string, string> = {
 
 export function LiveOperationsCard() {
   const PAGE_SIZE = 10;
+  const queryClient = useQueryClient();
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [recentError, setRecentError] = useState(false);
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
   const [linkedOrders, setLinkedOrders] = useState<TestBrokerResult[]>([]);
   const [page, setPage] = useState(1);
@@ -191,14 +195,12 @@ export function LiveOperationsCard() {
     }
   };
 
-  // Fetch IQ Option trades (paginated, 10 per page, all time)
-  const fetchRecentTrades = async () => {
-    const request = ++recentRequestRef.current;
-    try {
-      const from = (pageRef.current - 1) * PAGE_SIZE;
+  // Count only the first page; prefetch and cache each page independently.
+  const loadRecentPage = async (requestedPage: number) => {
+      const from = (requestedPage - 1) * PAGE_SIZE;
       const { data, count, error } = await supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', { count: 'exact' })
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', requestedPage === 1 ? { count: 'exact' } : {})
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
         .not('signal_id', 'like', 'copy-%')
@@ -208,29 +210,62 @@ export function LiveOperationsCard() {
         // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
         .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA,VELA_FORCA)')
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
-      if (error || !data) return;
+      if (error) throw error;
+      if (!data) throw new Error('Missing operations');
       const forceIds = data.filter(trade => trade.timeframe === 'TEST' && trade.test_inverted_strategy === 'FORCA_INVERTIDA')
         .map(trade => `forca_invertida-${trade.id}`);
-      const { data: brokerOrders, error: brokerError } = forceIds.length
-        ? await supabase.from('operation_results').select('signal_id, iq_option_id, timeframe, result, profit').in('signal_id', forceIds)
-        : { data: [], error: null };
-      const ids = [...new Set(data.map(trade => trade.signal_id).filter(Boolean))];
-      const { data: signals } = ids.length
-        ? await supabase.from('trading_signals').select('signal_id, indicators').in('signal_id', ids)
-        : { data: [] };
+      const ids = [...new Set(data.filter(trade => !trade.entry_strategy).map(trade => trade.signal_id).filter(Boolean))];
+      const [{ data: brokerOrders, error: brokerError }, { data: signals, error: signalsError }] = await Promise.all([
+        forceIds.length
+          ? supabase.from('operation_results').select('signal_id, iq_option_id, timeframe, result, profit').in('signal_id', forceIds)
+          : Promise.resolve({ data: [], error: null }),
+        ids.length
+          ? supabase.from('trading_signals').select('signal_id, indicators').in('signal_id', ids)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (brokerError) throw brokerError;
+      if (signalsError) throw signalsError;
       const strategies = new Map((signals || []).map(signal => [
         signal.signal_id,
         typeof signal.indicators === 'object' && signal.indicators !== null && !Array.isArray(signal.indicators) && 'strategy' in signal.indicators
           ? String(signal.indicators.strategy)
           : '',
       ]));
-      if (request !== recentRequestRef.current) return;
-      setLinkedOrders(brokerError ? [] : (brokerOrders || []));
-      setRecentTrades(data.map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[]);
-      if (typeof count === 'number') setTotalCount(count);
+      return {
+        linkedOrders: brokerOrders || [],
+        trades: data.map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[],
+        count,
+      };
+  };
+
+  const fetchRecentTrades = async (navigation = false) => {
+    const requestedPage = pageRef.current;
+    const request = ++recentRequestRef.current;
+    if (navigation) setRecentLoading(true);
+    try {
+      const result = await queryClient.fetchQuery({
+        queryKey: ['live-operations-page', requestedPage],
+        queryFn: () => loadRecentPage(requestedPage),
+        staleTime: 15000,
+      });
+      if (request !== recentRequestRef.current || requestedPage !== pageRef.current) return;
+      setLinkedOrders(result.linkedOrders);
+      setRecentTrades(result.trades);
+      setRecentError(false);
+      if (typeof result.count === 'number') setTotalCount(result.count);
+      if (result.trades.length === PAGE_SIZE) {
+        void queryClient.prefetchQuery({
+          queryKey: ['live-operations-page', requestedPage + 1],
+          queryFn: () => loadRecentPage(requestedPage + 1),
+          staleTime: 15000,
+        });
+      }
     } catch {
-      // silent
+      if (request === recentRequestRef.current) setRecentError(true);
+    } finally {
+      if (request === recentRequestRef.current) setRecentLoading(false);
     }
   };
 
@@ -267,11 +302,10 @@ export function LiveOperationsCard() {
 
   useEffect(() => {
     pageRef.current = page;
-    fetchRecentTrades();
+    void fetchRecentTrades(true);
   }, [page]);
 
   useEffect(() => {
-    fetchRecentTrades();
     fetchStats();
     fetchOpen();
     fetchRecordedOpen();
@@ -295,7 +329,8 @@ export function LiveOperationsCard() {
     const channel = supabase
       .channel('live-ops')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, () => {
-        fetchRecentTrades();
+        void queryClient.invalidateQueries({ queryKey: ['live-operations-page'], refetchType: 'none' });
+        void fetchRecentTrades();
         fetchStats();
       })
       .subscribe();
@@ -427,7 +462,11 @@ export function LiveOperationsCard() {
             </div>
           )}
 
-          {iqTrades.length > 0 ? (
+          {recentLoading ? (
+            <div role="status" aria-label="Carregando operações" className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+          ) : recentError ? (
+            <div role="alert" className="text-xs text-destructive text-center py-3">Não foi possível carregar esta página.</div>
+          ) : iqTrades.length > 0 ? (
             <div className="space-y-1">
               {iqTrades.flatMap(expandTestObservations).map(trade => {
                 const broker = linkedForceBrokerResult(trade, linkedOrders);

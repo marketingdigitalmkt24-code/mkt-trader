@@ -43,5 +43,5 @@
 - [x] Comparar 804 TESTE anteriores (758 cobertos): corpo≥90% retém 6/8 ganhos mas fica em 46,63% e 51,81% nos períodos anteriores, retorno negativo. Relatório entregue; 7 testes, estudo autorizado e acesso anônimo 401.
 
 # Entrada única e valores independentes
-- [ ] Limitar a principal e cada cliente a uma operação por vez, com reservas atômicas.
-- [ ] Validar valores exatos do admin Auto Trading e cliente Corretoras, sem fallback nem escala.
+- [x] Limitar a principal e cada cliente a uma operação por vez, com reservas atômicas e bloqueio conservador de confirmação ambígua.
+- [x] Validar valores exatos do admin Auto Trading e cliente Corretoras, sem fallback nem escala: 20 testes; ordem EOS com entrada/configuração 100 conferida. Copy real não exercitado sem cliente ativo.

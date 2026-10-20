@@ -188,6 +188,8 @@ async function mirrorCopyTrades(
         if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou após 3 tentativas`); return; }
 
         // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.
+        // Unknown broker outcomes fail closed; never expire a possibly submitted order.
+        await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
         const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount }, master.then(m => m.ok));
         const { timeframe, expirationIso } = await master;
         if (res.success && res.tradeId) {
@@ -838,7 +840,10 @@ serve(async (req) => {
     const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome);
     // @ts-ignore EdgeRuntime exists in Supabase runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
+    await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', 'master').eq('signal_id', reservationSignal);
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
+    const definiteRefusal = result.error && /invalid instrument|not available|não disponível|não enviada|não enviado|entrada cancelada|insufficient|not enough/i.test(result.error);
+    if (!result.success && definiteRefusal) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', 'master').eq('signal_id', reservationSignal);
     if (!(result.success && result.tradeId)) settleMaster({ ok: false, timeframe: '', expirationIso: null });
     if (!(result.success && result.tradeId)) await cancelAlert();
     console.log('📊 Trade result:', JSON.stringify(result));

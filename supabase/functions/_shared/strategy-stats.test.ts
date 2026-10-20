@@ -33,3 +33,11 @@ test('settlement updates Retomada counts without counting pending as a loss', ()
   assert.deepEqual(strategyStats([{ ...tagged, result: 'loss' }]).find(s => s.strategy === tagged.test_sequence_strategy),
     { strategy: 'TREND_WIN_LOSS_FORCE_LOSS', wins: 0, losses: 1 });
 });
+test('Force first TEST counts separately from original Force', () => {
+  const stats = strategyStats([
+    { ...row, entry_strategy: 'VELA_FORCA', result: 'win' },
+    { ...row, entry_strategy: 'FORCA_SEM_ROMPIMENTO_PRIMEIRA', result: 'loss' },
+  ]);
+  assert.deepEqual(stats.find(s => s.strategy === 'VELA_FORCA'), { strategy: 'VELA_FORCA', wins: 1, losses: 0 });
+  assert.deepEqual(stats.find(s => s.strategy === 'FORCA_SEM_ROMPIMENTO_PRIMEIRA'), { strategy: 'FORCA_SEM_ROMPIMENTO_PRIMEIRA', wins: 0, losses: 1 });
+});

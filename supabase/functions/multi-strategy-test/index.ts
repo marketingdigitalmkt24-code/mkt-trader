@@ -275,8 +275,12 @@ Deno.serve(async (req) => {
         return observation ? [observation] : [];
       });
       if (observations.length) {
-        const { error } = await supabase.from('operation_results').upsert(observations, { onConflict: 'signal_id', ignoreDuplicates: true });
-        if (error) console.error('Force first TEST:', error.message);
+        const persist = supabase.from('operation_results').upsert(observations, { onConflict: 'signal_id', ignoreDuplicates: true })
+          .then(({ error }) => { if (error) console.error('Force first TEST:', error.message); });
+        // Never delay the original real entry for study persistence.
+        // @ts-ignore Hosted background runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(persist);
+        else await persist;
       }
     }
     if (best && inserted) {

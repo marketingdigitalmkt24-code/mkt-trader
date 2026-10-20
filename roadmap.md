@@ -16,3 +16,8 @@
 # Informação de teste e ordem real
 - [x] Separar resultado simulado :00 e resultado IQ vinculado na Força Invertida sem alterar estatísticas.
 - [x] Validar vínculo SEI na área administrativa: simulado WIN +8,50 e ordem #14369555193 LOSS -10 separados; 6 testes aprovados.
+
+# Estudo de viés M15
+- [ ] Recuperar candles M15 históricos dos ativos com entradas, sem alterar operações.
+- [ ] Cruzar apenas candles fechados antes de cada entrada; separar TESTE, corretora, OTC e regular.
+- [ ] Validar ausência de informação futura e apresentar cobertura e resultados fora da amostra.

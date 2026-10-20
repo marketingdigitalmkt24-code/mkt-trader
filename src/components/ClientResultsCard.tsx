@@ -1,181 +1,108 @@
 import { useState } from 'react';
-import { BarChart3, Loader2, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart3, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
 import { copyResultRates } from '@/lib/admin-copy-results';
-import { clientSignalsPage, clientDayStart } from '@/lib/client-copy-results';
+import { clientDayStart } from '@/lib/client-copy-results';
 import { brtDayKey, dayLabel } from '@/components/dayLabel';
-import type { ClientCopyOperation } from '@/lib/client-copy-results';
 
-function OperationRow({ op }: { op: ClientCopyOperation }) {
-  return (
-    <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/20">
-      <div className="flex items-center gap-2 min-w-0">
-        <div className={cn(
-          'w-6 h-6 rounded flex items-center justify-center shrink-0',
-          op.direction === 'CALL' ? 'bg-call/20 text-call' : 'bg-put/20 text-put'
-        )}>
-          {op.direction === 'CALL' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs font-medium truncate">{op.asset}</p>
-          <p className="text-[10px] text-muted-foreground">
-            {new Date(op.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })} · #{op.iq_option_id}
-          </p>
-        </div>
-      </div>
-      <span className={cn(
-        'text-xs font-bold shrink-0',
-        op.result === 'win' ? 'text-call' : op.result === 'loss' ? 'text-put' : 'text-muted-foreground'
-      )}>
-        {op.result === 'win' ? `+$${Number(op.profit).toFixed(2)}` : op.result === 'loss' ? `-$${Math.abs(Number(op.profit)).toFixed(2)}` : ['tie', 'draw'].includes(op.result) ? 'Empate' : 'Em aberto'}
-      </span>
-    </div>
-  );
-}
+const PAGE_SIZE = 12;
+const SETTLED = ['win', 'loss', 'draw', 'tie'];
 
-// Resultados do cliente: hoje em destaque + histórico por data; nunca exibe a estratégia utilizada.
+// Histórico do cliente no mesmo formato do card "Entradas na IQ Option" do admin; nunca exibe a estratégia.
 export function ClientResultsCard() {
   const { operations, isLoading, isError } = useClientCopyHistory();
-  const [requestedPage, setRequestedPage] = useState(1);
-  const [requestedDay, setRequestedDay] = useState(1);
+  const [page, setPage] = useState(0);
 
   const todayStart = clientDayStart();
   const todayOps = operations.filter(op => op.created_at >= todayStart);
   const wins = todayOps.filter(op => op.result === 'win').length;
   const losses = todayOps.filter(op => op.result === 'loss').length;
-  const trades = todayOps.filter(op => ['win', 'loss', 'draw', 'tie'].includes(op.result)).length;
-  const profit = todayOps.filter(op => ['win', 'loss', 'draw', 'tie'].includes(op.result))
-    .reduce((sum, op) => sum + Number(op.profit || 0), 0);
+  const total = todayOps.filter(op => SETTLED.includes(op.result)).reduce((s, op) => s + Number(op.profit || 0), 0);
   const { winPercent } = copyResultRates(wins, losses);
-  const { page, totalPages, operations: visibleOps } = clientSignalsPage(todayOps, requestedPage);
 
-  // Histórico agrupado por data (BRT), sem o dia de hoje.
-  const historyDays = new Map<string, { label: string; operations: ClientCopyOperation[]; wins: number; losses: number; profit: number }>();
-  for (const op of operations.filter(op => op.created_at < todayStart)) {
-    const key = brtDayKey(op.created_at);
-    const group = historyDays.get(key) ?? { label: dayLabel(op.created_at), operations: [], wins: 0, losses: 0, profit: 0 };
-    group.operations.push(op);
-    if (op.result === 'win') group.wins++;
-    if (op.result === 'loss') group.losses++;
-    if (['win', 'loss', 'tie', 'draw'].includes(op.result)) group.profit += Number(op.profit || 0);
-    historyDays.set(key, group);
-  }
-  const days = [...historyDays.values()].sort((a, b) => b.operations[0].created_at.localeCompare(a.operations[0].created_at));
-  const totalDays = Math.max(1, days.length);
-  const dayPage = Math.min(Math.max(1, requestedDay), totalDays);
-  const day = days[dayPage - 1];
-  const daySettled = day ? day.wins + day.losses : 0;
-  const dayWinRate = daySettled ? (day!.wins / daySettled) * 100 : 0;
+  const pageCount = Math.max(1, Math.ceil(operations.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageOps = operations.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  const scoreFor = (iso: string) => {
+    const key = brtDayKey(iso);
+    const dayOps = operations.filter(o => brtDayKey(o.created_at) === key);
+    const w = dayOps.filter(o => o.result === 'win').length;
+    const l = dayOps.filter(o => o.result === 'loss').length;
+    const p = dayOps.filter(o => SETTLED.includes(o.result)).reduce((s, o) => s + Number(o.profit || 0), 0);
+    return { w, l, pct: w + l ? Math.round((w / (w + l)) * 100) : 0, p };
+  };
 
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
-            <BarChart3 className="w-4 h-4 text-primary" />
-          </div>
-          Resultados e Sinais de Hoje
-          <Badge variant={profit >= 0 ? 'default' : 'destructive'} className="ml-auto text-xs">
-            {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-          <div className="p-2 rounded-lg bg-secondary/30 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase">Operações</p>
-            <p className="text-sm font-bold">{trades}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-call/10 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase">Wins</p>
-            <p className="text-sm font-bold text-call">{wins}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-put/10 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase">Losses</p>
-            <p className="text-sm font-bold text-put">{losses}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-secondary/30 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase">Win rate</p>
-            <p className="text-sm font-bold text-call tabular-nums">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</p>
-          </div>
-        </div>
+    <Card className="p-3 sm:p-4 border-border/50">
+      <div className="flex items-center gap-2 mb-2">
+        <BarChart3 className="w-4 h-4 text-primary" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
+        <span className="font-mono text-xs ml-auto mr-2">
+          <span className="text-call">✓{wins}</span> <span className="text-put">✗{losses}</span>{' '}
+          <span className="text-gold">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span>
+        </span>
+        <span className={cn('font-mono text-sm font-bold', total >= 0 ? 'text-call' : 'text-put')}>
+          {total >= 0 ? '+' : '−'}US$ {Math.abs(total).toFixed(2)}
+        </span>
+      </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      {isLoading ? (
+        <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+      ) : isError ? (
+        <p className="text-xs text-destructive py-4 text-center">Não foi possível atualizar as entradas.</p>
+      ) : operations.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma operação copiada ainda.</p>
+      ) : (
+        <>
+          <div className="space-y-1">
+            {pageOps.map((o, i) => (
+              <div key={o.id}>
+                {(i === 0 || brtDayKey(pageOps[i - 1].created_at) !== brtDayKey(o.created_at)) && (() => {
+                  const s = scoreFor(o.created_at);
+                  return (
+                    <div className="flex items-center justify-between pt-2 pb-0.5">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gold">{dayLabel(o.created_at)}</div>
+                      <div className="font-mono text-[10px]">
+                        <span className="text-call">✓{s.w}</span> <span className="text-put">✗{s.l}</span> <span className="text-gold">{s.pct}%</span>{' '}
+                        <span className={s.p >= 0 ? 'text-call' : 'text-put'}>{s.p >= 0 ? '+' : '−'}{Math.abs(s.p).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
+                  <span className="font-mono text-muted-foreground">
+                    {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="flex-1 ml-1 min-w-0 flex flex-col leading-tight">
+                    <span className="font-medium truncate">{o.asset}</span>
+                    <span className="font-mono text-[9px] text-muted-foreground truncate">#{o.iq_option_id}</span>
+                  </span>
+                  <span className={o.direction === 'CALL' ? 'text-call' : 'text-put'}>{o.direction}</span>
+                  <span className="ml-1 w-16 text-right font-mono">
+                    {o.result === 'win' ? <span className="text-call">+{Number(o.profit).toFixed(2)}</span>
+                      : o.result === 'loss' ? <span className="text-put">{Number(o.profit).toFixed(2)}</span>
+                      : ['tie', 'draw'].includes(o.result) ? <span className="text-muted-foreground">empate</span>
+                      : <span className="text-muted-foreground">aberta</span>}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
-        ) : isError ? (
-          <p className="text-sm text-destructive text-center py-6">Não foi possível atualizar as entradas.</p>
-        ) : operations.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            Nenhuma operação copiada ainda.
-          </p>
-        ) : (
-          <>
-            {todayOps.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma operação copiada hoje.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {visibleOps.map((op) => <OperationRow key={op.id} op={op} />)}
-              </div>
-            )}
-            {todayOps.length > 12 && (
-              <nav aria-label="Sinais de hoje" className="flex items-center justify-between gap-2 mt-3">
-                <Button variant="outline" size="icon" aria-label="Página anterior" title="Página anterior" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>
-                  <ChevronLeft />
-                </Button>
-                <span className="text-xs text-muted-foreground tabular-nums">Página {page} de {totalPages}</span>
-                <Button variant="outline" size="icon" aria-label="Próxima página" title="Próxima página" disabled={page === totalPages} onClick={() => setRequestedPage(page + 1)}>
-                  <ChevronRight />
-                </Button>
-              </nav>
-            )}
-
-            {day && (
-              <div className="mt-4 pt-4 border-t border-border/50">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <p className="text-sm font-semibold">{day.label}</p>
-                  <p className={cn('text-sm font-bold tabular-nums', day.profit < 0 ? 'text-put' : day.profit > 0 ? 'text-call' : 'text-muted-foreground')}>
-                    {day.profit >= 0 ? '+' : '−'}${Math.abs(day.profit).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className="p-2 rounded-lg bg-call/10 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase">Wins</p>
-                    <p className="text-sm font-bold text-call">{day.wins}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-put/10 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase">Losses</p>
-                    <p className="text-sm font-bold text-put">{day.losses}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-secondary/30 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase">Acerto</p>
-                    <p className="text-sm font-bold text-call tabular-nums">{dayWinRate.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</p>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  {day.operations.map((op) => <OperationRow key={op.id} op={op} />)}
-                </div>
-                {days.length > 1 && (
-                  <nav aria-label="Histórico por data" className="flex items-center justify-between gap-2 mt-3">
-                    <Button variant="outline" size="icon" aria-label="Dia mais recente" title="Dia mais recente" disabled={dayPage === 1} onClick={() => setRequestedDay(dayPage - 1)}>
-                      <ChevronLeft />
-                    </Button>
-                    <span className="text-xs text-muted-foreground tabular-nums">{dayPage} de {totalDays} dias</span>
-                    <Button variant="outline" size="icon" aria-label="Dia anterior" title="Dia anterior" disabled={dayPage === totalDays} onClick={() => setRequestedDay(dayPage + 1)}>
-                      <ChevronRight />
-                    </Button>
-                  </nav>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </CardContent>
+          <div className="flex items-center justify-between mt-2">
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
+              <ChevronLeft className="h-3 w-3 mr-1" /> Anterior
+            </Button>
+            <span className="text-[10px] text-muted-foreground font-mono">{safePage + 1}/{pageCount}</span>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>
+              Próxima <ChevronRight className="h-3 w-3 ml-1" />
+            </Button>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

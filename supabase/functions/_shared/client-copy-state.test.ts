@@ -19,6 +19,8 @@ test('copy uses the Demo or Real account selected in the IQ Option connection wi
   assert.equal(readCopyAccount({ account_type: 'unknown' }), null);
 });
 test('activation requires a confirmed connected IQ Option account', () => {
+  assert.equal(canEnableCopy(null), false);
+  assert.equal(canEnableCopy(undefined), false);
   assert.equal(canEnableCopy({ is_active: true, last_connected_at: null }), false);
   assert.equal(canEnableCopy({ is_active: false, last_connected_at: '2026-10-17T05:02:00Z' }), false);
   assert.equal(canEnableCopy({ is_active: true, last_connected_at: '2026-10-17T05:02:00Z' }), true);

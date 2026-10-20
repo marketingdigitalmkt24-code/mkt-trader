@@ -11,7 +11,7 @@ export function useClientCopyHistory() {
   const query = useQuery({
     queryKey: ['client-copy-history', userId],
     enabled: Boolean(userId),
-    refetchInterval: 30000,
+    refetchInterval: 10000,
     queryFn: async () => {
       if (!userId) return [] as ClientCopyOperation[];
       const rows: ClientCopyOperation[] = [];
@@ -21,7 +21,7 @@ export function useClientCopyHistory() {
           .like('signal_id', `copy-${userId}-%`)
           .not('iq_option_id', 'is', null)
           .not('timeframe', 'in', '(TEST,MT5)')
-          .not('entry_strategy', 'eq', 'FORCE_LOSS_WIN')
+          .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
           .not('signal_id', 'like', '%force-lw-%')
           .not('signal_id', 'like', '%forca_invertida-%')
           .gte('created_at', historyStart())

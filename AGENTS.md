@@ -12,10 +12,10 @@
 - Reconcile expired real IQ results from the existing signal cron before checking pending locks; browser polling is supplementary so navigation cannot strand trades or Telegram results.
 - Preserve TEST rows, streaks and accounting; paginate accuracy. Show broker outcomes separately by exact candidate signal and numeric IQ ID, never asset/time guesses; prices differ.
 - Research is admin-only/read-only: M15/M1 and Force-pattern studies require 100 contiguous closed bars, exact OTC mapping and separate TEST/broker outcomes (broker minutes are proxies); why: prevent leakage and winner-selected filters changing live trades.
-- Run multi-strategy-test only from auto-generate-signals, with bounded settled TEST feedback fetched during login; why: avoid duplicates and ranking delays.
+- Run multi-strategy-test only from auto-generate-signals; bound feedback during login. Force-pattern shadows use non-t7 TEST IDs and stay outside ranking, claims and minute locks; why: independent measurement must not alter live selection.
 - IQ reservations and stakes are scoped to application owners, not shared broker logins; reject principal self-copy, serialize and acknowledge settings saves after persistence; why: preserve independent client limits and amounts.
 - Anchor reversal submission and expiry to the selected candidate's own minute and submit immediately after the fourth candle confirms, within the broker purchase window; why: adding another minute trades a different candle, while stale candidates must never roll forward.
-- Reuse broker sessions only for service-authenticated same-account reversals; never log/store them to prevent credential leaks.
+- Reuse broker sessions only for service-authenticated same-account reversals; never log/store secrets.
 - Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy retains explicit client IDs; why: client connection updates must not redirect master entries.
 - Pace candle bursts, expired TEST first; await closed writes, parallelize reads, reuse exact service leases and submit ready current-candle orders immediately; why: cut waits, preserve full ranking and authorization.
 - IQ result reset uses a per-user browser cutoff shared by IQ entry and profit views, never deletes broker or TEST records; why: display resets must not corrupt trading history or four-win authorization.

@@ -9,6 +9,7 @@ import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
+import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -19,6 +20,7 @@ type K = { t: number; o: number; c: number; h: number; l: number };
 export const LABELS: Record<string, string> = {
   TENDENCIA: 'Tendência', REVERSAO_RSI: 'Reversão RSI', VELA_FORCA: 'Vela de força', ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21', KDJ: 'KDJ', ICHIMOKU: 'Ichimoku',
+  [FORCE_FIRST_TEST]: 'Força sem rompimento · primeira vela (TESTE)',
 };
 
 async function login(email: string, password: string): Promise<string | null> {
@@ -115,6 +117,7 @@ Deno.serve(async (req) => {
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
+    .neq('entry_strategy', FORCE_FIRST_TEST)
     .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
     .order('created_at', { ascending: false }).limit(500)
     .abortSignal(AbortSignal.timeout(1500)).then(result => result);
@@ -145,9 +148,9 @@ Deno.serve(async (req) => {
         .eq('id', o.id).eq('result', OPEN).select('id');
       if (!upd?.length) continue;
       resolved++;
-      newlySettled.push({ asset: o.asset, direction: o.direction, entry_strategy: o.entry_strategy,
+      if (o.entry_strategy !== FORCE_FIRST_TEST) newlySettled.push({ asset: o.asset, direction: o.direction, entry_strategy: o.entry_strategy,
         result: outcome.result, created_at: o.created_at });
-      if (o.telegram_sent) {
+      if (o.telegram_sent && o.entry_strategy !== FORCE_FIRST_TEST) {
         const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
         const head = outcome.result === 'win' ? '✅ RESULTADO: WIN' : outcome.result === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
         const delivery = sendTelegram([head + ' — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, `🎯 Estratégia: ${LABELS[o.entry_strategy] || o.entry_strategy}`,
@@ -242,7 +245,7 @@ Deno.serve(async (req) => {
     // Independent reads run together after closed-candle confirmation.
     const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
       supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id)),
-      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').limit(1),
+      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').neq('entry_strategy', FORCE_FIRST_TEST).limit(1),
       supabase.from('operation_results').select('entry_strategy, result, created_at')
         .eq('timeframe', 'TEST').like('signal_id', 't7-%')
         .lt('created_at', new Date(curMin * 1000).toISOString())
@@ -265,6 +268,17 @@ Deno.serve(async (req) => {
         ? TREND_SEQUENCE_TEST : null,
     }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
+    // Separate shadow: never rank or claim it, and never relabel the original Force.
+    if (inserted) {
+      const observations = clean.flatMap(base => {
+        const observation = forceFirstObservation(base, series.get(base.asset) || []);
+        return observation ? [observation] : [];
+      });
+      if (observations.length) {
+        const { error } = await supabase.from('operation_results').upsert(observations, { onConflict: 'signal_id', ignoreDuplicates: true });
+        if (error) console.error('Force first TEST:', error.message);
+      }
+    }
     if (best && inserted) {
       // Estratégias reais ativas (20/10/2026): Reversão RSI e Retomada; Força Invertida removida.
       const { data: trade, error: claimError } = await supabase.rpc('claim_test_strategy_entry', { p_candidate: best.signal_id });

@@ -39,5 +39,5 @@
 - [x] Mostrar operações abertas próprias acima das entradas; isolamento testado e abas verificadas com sessão autenticada. Nenhuma operação aberta disponível durante a conferência.
 
 # Estudo Vela de Força — oito ordens
-- [ ] Recuperar velas anteriores das oito ordens e das perdas, sem alterar entradas reais.
-- [ ] Comparar padrões e verificar hipóteses em histórico separado, mantendo TESTE e corretora distintos.
+- [x] Recuperar velas anteriores: oito ordens e duas perdas com cobertura, sem alterar entradas reais.
+- [x] Comparar 804 TESTE anteriores (758 cobertos): corpo≥90% retém 6/8 ganhos mas fica em 46,63% e 51,81% nos períodos anteriores, retorno negativo. Relatório entregue; 7 testes, estudo autorizado e acesso anônimo 401.

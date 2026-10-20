@@ -5,7 +5,8 @@ import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { marketBias, exactAssetKey, RULE, type Candle } from './bias.ts';
 import { previousCandles, PREVIOUS_RULE } from './previous-candles.ts';
-const schema = z.object({ start: z.string().datetime(), end: z.string().datetime(), split: z.string().datetime(), offset: z.number().int().min(0).max(1000).default(0), count: z.number().int().min(1).max(10).default(8), listOnly: z.boolean().default(false), mode: z.enum(['M15', 'TENDENCIA_M1']).default('M15') });
+import { evaluateAnticipation, ANTICIPATE_RULE } from './anticipate.ts';
+const schema = z.object({ start: z.string().datetime(), end: z.string().datetime(), split: z.string().datetime(), offset: z.number().int().min(0).max(1000).default(0), count: z.number().int().min(1).max(10).default(8), listOnly: z.boolean().default(false), mode: z.enum(['M15', 'TENDENCIA_M1', 'ANTECIPA_M1']).default('M15') });
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: corsHeaders });
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return reply({});
@@ -22,9 +23,10 @@ Deno.serve(async req => {
     const parsed = schema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return reply({ error: 'Invalid parameters' }, 400);
     const args = parsed.data;
-    const m1 = args.mode === 'TENDENCIA_M1';
+    const ant = args.mode === 'ANTECIPA_M1';
+    const m1 = args.mode === 'TENDENCIA_M1' || ant;
     const seconds = m1 ? 60 : 900;
-    const studyRule = m1 ? PREVIOUS_RULE : RULE;
+    const studyRule = ant ? ANTICIPATE_RULE : m1 ? PREVIOUS_RULE : RULE;
     const start = Date.parse(args.start) / 1000, end = Date.parse(args.end) / 1000, split = Date.parse(args.split) / 1000;
     if (!(start < split && split < end) || end > Date.now() / 1000 || end - start > 7 * 86400) return reply({ error: 'Historical range must be at most 7 days with an internal split' }, 400);
     type Op = { signal_id: string; asset: string; direction: string; result: string; profit: number; created_at: string; timeframe: string; entry_strategy: string | null; iq_option_id: string | null };
@@ -33,7 +35,7 @@ Deno.serve(async req => {
       const { data, error: readError } = await db.from('operation_results').select('signal_id,asset,direction,result,profit,created_at,timeframe,entry_strategy,iq_option_id').gte('created_at', args.start).lt('created_at', args.end).in('result', ['win', 'loss', 'tie']).order('created_at').order('id').range(offset, offset + 999);
       if (readError) return reply({ error: 'History read failed' }, 502);
       ops.push(...(data || []).filter(o => m1
-        ? o.timeframe === 'TEST' && o.signal_id.startsWith('t7-') && o.entry_strategy === 'TENDENCIA'
+        ? o.timeframe === 'TEST' && o.signal_id.startsWith('t7-') && o.entry_strategy === (ant ? 'VELA_FORCA' : 'TENDENCIA')
         : o.timeframe === 'TEST' && o.signal_id.startsWith('t7-')
           || o.timeframe === 'M1' && /^\d+$/.test(o.iq_option_id || '') && ['FORCA_INVERTIDA', 'RETOMADA', 'REVERSAO_RSI'].includes(o.entry_strategy || '')));
       if (!data || data.length < 1000) break;
@@ -100,6 +102,15 @@ Deno.serve(async req => {
         }
       };
     });
+    if (ant) {
+      // Vela de Força TEST at minute T was triggered by the force candle at T-60; predict that candle.
+      const results = symbols.filter(s => candles.has(s)).map(symbol => {
+        const force = new Map<number, string>();
+        for (const o of ops) if (o.asset === symbol) force.set(Math.floor(Date.parse(o.created_at) / 60000) * 60 - 60, o.direction);
+        return { symbol, ...evaluateAnticipation(candles.get(symbol)!, start, end, split, exactAssetKey(symbol).includes('OTC'), force) };
+      });
+      return reply({ start, end, split, rule: studyRule, totalAssets: universe.length, initialized, results });
+    }
     const rows = ops.filter(o => symbols.includes(o.asset)).map(o => {
       // Conservative minute proxy; broker recording time is not a fill timestamp.
       const recorded = Date.parse(o.created_at) / 1000, entry = Math.floor(recorded / 60) * 60;

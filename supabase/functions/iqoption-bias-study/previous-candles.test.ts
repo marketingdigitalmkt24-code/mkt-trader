@@ -14,7 +14,7 @@ test('100 consecutive M1 candles required with no gap filling',()=>{
  assert.equal(previousCandles(series().slice(1),6000,'CALL').coverage,'MISSING');
 });
 test('four preceding directional candles fail streak rule',()=>{
- const cs=series();for(let i=96;i<100;i++)cs[i].c=100.1;
+ const cs=series();cs[95].c=99.9;for(let i=96;i<100;i++)cs[i].c=100.1;
  assert.equal(previousCandles(cs,6000,'CALL').streak,4);
  assert.equal(previousCandles(cs,6000,'CALL').noLongStreak,false);
  assert.equal(previousCandles(cs,6000,'PUT').streak,0);

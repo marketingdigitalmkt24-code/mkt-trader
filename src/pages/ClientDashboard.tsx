@@ -104,11 +104,8 @@ const ClientDashboard = () => {
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Lucro Diário</p>
-                  <p className={cn('text-lg sm:text-xl font-bold break-words tabular-nums', dailyProfit < 0 ? 'text-put' : dailyProfit > 0 ? 'text-call' : 'text-foreground')}>
-                    {copyResults.isError ? 'Indisponível' : copyResults.isLoading ? '…' : `${dailyProfit > 0 ? '+' : dailyProfit < 0 ? '−' : ''}$${Math.abs(dailyProfit).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
-                    Saldo:{' '}
+                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                    <span className="text-[11px] text-muted-foreground">Saldo:</span>
                     <span className="font-mono font-semibold text-foreground tabular-nums">
                       {iqBalance ? `$${balance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                     </span>
@@ -117,7 +114,10 @@ const ClientDashboard = () => {
                         {iqBalance.accountType === 'REAL' ? 'REAL' : 'DEMO'}
                       </Badge>
                     )}
-                  </p>
+                    <span className={cn('text-lg sm:text-xl font-bold tabular-nums', dailyProfit < 0 ? 'text-put' : dailyProfit > 0 ? 'text-call' : 'text-foreground')}>
+                      {copyResults.isError ? 'Indisponível' : copyResults.isLoading ? '…' : `${dailyProfit > 0 ? '+' : dailyProfit < 0 ? '−' : ''}$${Math.abs(dailyProfit).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    </span>
+                  </div>
                 </div>
               </div>
             </CardContent>

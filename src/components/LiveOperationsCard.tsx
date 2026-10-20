@@ -176,7 +176,7 @@ export function LiveOperationsCard() {
         .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)')
         .not('signal_id', 'like', '%force-lw-%')
         // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
-        .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA)')
+        .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA,VELA_FORCA)')
         .order('created_at', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
       if (error || !data) return;
@@ -215,7 +215,7 @@ export function LiveOperationsCard() {
         .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)')
         .not('signal_id', 'like', '%force-lw-%')
         // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
-        .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA)');
+        .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA,VELA_FORCA)');
       const brNow = new Date(Date.now() - 3 * 3600 * 1000);
       const dayStartIso = new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()) + 3 * 3600 * 1000).toISOString();
       const [w, l, tw, tl] = await Promise.all([

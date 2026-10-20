@@ -22,7 +22,7 @@ interface DailyHistoryProps {
   daysToFetch?: number;
   perPage?: number;
   /** Operações já filtradas (ex.: cópias do cliente); substitui a fonte da conta principal. */
-  operations?: Array<{ created_at: string; profit: number | string | null; result: string }>;
+  operations?: Array<{ created_at: string; profit?: number | string | null; result: string }>;
 }
 
 const getBrasiliaDateKey = (date: Date) =>

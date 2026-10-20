@@ -43,6 +43,7 @@
 - [x] Comparar 804 TESTE anteriores (758 cobertos): corpo≥90% retém 6/8 ganhos mas fica em 46,63% e 51,81% nos períodos anteriores, retorno negativo. Relatório entregue; 7 testes, estudo autorizado e acesso anônimo 401.
 
 # Entrada única e valores independentes
+- [x] Prevenir reservas presas no copy: proteger só no envio, liberar falhas locais/recusas e repetir gravação confirmada com leitura pelo ID exato; 33 testes, build OK e função publicada. Clientes ativos sem travas; nova cópia automática ainda não observada.
 - [x] Diagnosticar copy ligado sem novas ordens: reserva infinita da principal recusada às 03:36; liberar reserva específica e corrigir liberação em recusas definitivas, preservando desfechos ambíguos.
 - [x] Permitir clientes distintos na mesma conta IQ do admin, preservando valores e limite por usuário; reserva e placement atualizados, 21 testes e build OK. Nenhuma nova ordem no intervalo; cópia futura ainda não observada.
 - [x] HYPE 02:13: uma principal e duas cópias na mesma conta; rejeitar self/shared-principal copies na reserva e placement. Salvar 10 e conferir após reload; 9 testes e build OK. Vela forte sem rompimento20; nenhuma nova ordem autorizada ocorreu durante a verificação, execução futura ainda não observada.

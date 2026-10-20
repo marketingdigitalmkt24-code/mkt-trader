@@ -13,7 +13,7 @@
 - Preserve TEST rows, streaks and accounting; paginate accuracy. Show broker outcomes separately by exact candidate signal and numeric IQ ID, never asset/time guesses; prices differ.
 - Research is admin-only/read-only: M15/M1 and Force-pattern studies require 100 contiguous closed bars, exact OTC mapping and separate TEST/broker outcomes (broker minutes are proxies); why: prevent leakage and winner-selected filters changing live trades.
 - Run multi-strategy-test only from auto-generate-signals; bound feedback during login. Force-pattern shadows use non-t7 TEST IDs and stay outside ranking, claims and minute locks; why: independent measurement must not alter live selection.
-- IQ locks/stakes belong to users, not broker logins; reject self-copy and serialize saved settings. Release refused/unsent copies, retain ambiguous locks; why: independent limits without stranded or duplicate orders.
+- IQ locks/stakes belong to users, not broker logins; reject self-copy, serialize settings. Copy locks only on submission; clean unsent/refused attempts, retry confirmed saves, retain uncertainty; why: no stranded/duplicate orders.
 - Anchor reversal submission and expiry to the selected candidate's own minute and submit immediately after the fourth candle confirms, within the broker purchase window; why: adding another minute trades a different candle, while stale candidates must never roll forward.
 - Reuse broker sessions only for service-authenticated same-account reversals; never log/store secrets.
 - Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy retains explicit client IDs; why: client connection updates must not redirect master entries.

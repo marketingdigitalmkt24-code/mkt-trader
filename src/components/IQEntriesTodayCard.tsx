@@ -3,7 +3,6 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey } from './dayLabel';
-import { DailyHistory } from './DailyHistory';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 import { clientDayStart } from '@/lib/client-copy-results';
 import type { MasterIQOperation as Op } from '@/lib/master-iq-results';
@@ -103,7 +102,6 @@ export const IQEntriesTodayCard = () => {
           )}
         </>
       )}
-      <DailyHistory title="Histórico Diário IQ Option" perPage={5} />
     </Card>
   );
 };

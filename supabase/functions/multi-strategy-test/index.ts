@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
-    .neq('entry_strategy', FORCE_FIRST_TEST)
+    .neq('entry_strategy', FORCE_FIRST_TEST).not('signal_id', 'like', 'study-%')
     .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
     .order('created_at', { ascending: false }).limit(500)
     .abortSignal(AbortSignal.timeout(1500)).then(result => result);
@@ -255,12 +255,19 @@ Deno.serve(async (req) => {
       });
     }
   }
+  if (allStudy.size) {
+    const study = [...allStudy.values()].map(({ _s, ...r }) => r);
+    const persistAll = supabase.from('operation_results').upsert(study, { onConflict: 'signal_id', ignoreDuplicates: true })
+      .then(({ error }) => { if (error) console.error('All-strategy TEST:', error.message); });
+    // @ts-ignore Hosted background runtime
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(persistAll); else await persistAll;
+  }
   let inserted = 0;
   if (rows.length) {
     // Independent reads run together after closed-candle confirmation.
     const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
       supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id)),
-      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').neq('entry_strategy', FORCE_FIRST_TEST).limit(1),
+      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').like('signal_id', 't7-%').limit(1),
       supabase.from('operation_results').select('entry_strategy, result, created_at')
         .eq('timeframe', 'TEST').like('signal_id', 't7-%')
         .lt('created_at', new Date(curMin * 1000).toISOString())

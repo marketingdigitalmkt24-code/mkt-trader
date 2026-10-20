@@ -29,7 +29,8 @@ export function evaluateMidCandle(half30: Candle[], start: number, end: number, 
     const p = m < split ? out.discovery : out.validation;
     const body = first.c - first.o, dir = Math.sign(body);
     const known = force.get(m);
-    if (known) add(p.nextOpen, known === 'CALL' ? 1 : -1, after.o, (h.get(m + 90) ?? after).c); // current entry: next :00, 60s
+    const close2 = h.get(m + 90);
+    if (known && close2) add(p.nextOpen, known === 'CALL' ? 1 : -1, after.o, close2.c); // current entry: next :00, 60s
     if (!dir || Math.abs(body) < MID_RULE.minHalfBodyAtr * atr) continue;
     // Entry at m+30 (first-half close), exit at m+90 (close of first half of next minute).
     add(p.all, dir, first.c, after.c);

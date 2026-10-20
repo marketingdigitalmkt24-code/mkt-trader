@@ -30,5 +30,6 @@
 - [x] Teste entrada no meio da vela (30s, histórico 17–19/10): ~50% acerto, retorno negativo
 
 # Painel do cliente
+- [ ] Resumir conexão com corretora/email, ativação segura e acesso à aba Corretoras; verificar ausência de entradas.
 - [x] Organizar banca, entradas e conexão com abas Dashboard e Corretoras, preservando copy.
 - [x] Mostrar operações abertas próprias acima das entradas; isolamento testado e abas verificadas com sessão autenticada. Nenhuma operação aberta disponível durante a conferência.

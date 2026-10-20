@@ -23,3 +23,4 @@
 - Removed claims return null; placement rejects them. Exclude retired orders/copies from displayed totals, preserve stored accounting; three-force keeps its lock.
 
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
+- Strong-candle anticipation (RSI, EMA9/21, band squeeze, range edge) lives only in the admin read-only bias study; why: research must never place trades or alter real entries.

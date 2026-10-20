@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { BarChart3, Loader2, ChevronLeft, ChevronRight, Activity, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { DailyHistory } from '@/components/DailyHistory';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
@@ -126,11 +125,6 @@ export function ClientResultsCard() {
             </Button>
           </div>
         </>
-      )}
-      {!isLoading && !isError && operations.some(op => op.created_at < todayStart) && (
-        <div className="mt-3 [&>div]:mt-0">
-          <DailyHistory title="Histórico Diário IQ Option" operations={operations} perPage={5} />
-        </div>
       )}
     </Card>
   );

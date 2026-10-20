@@ -1,5 +1,16 @@
 import { test, expect } from 'bun:test';
-import { configuredEntryAmount, hasOpenIQOrder, canMirrorToBroker } from './iq-entry-policy';
+import { configuredEntryAmount, hasOpenIQOrder, canMirrorToBroker, canReleaseRefusedIQLease } from './iq-entry-policy';
+test('cancelled principal releases the client reservation because no copy was submitted', () => {
+  expect(canReleaseRefusedIQLease('Ordem principal não confirmada; copy não enviado')).toBe(true);
+});
+test('definitive broker refusal releases the reservation', () => {
+  expect(canReleaseRefusedIQLease('invalid instrument')).toBe(true);
+});
+test('uncertain broker outcome keeps the single-operation reservation', () => {
+  expect(canReleaseRefusedIQLease('WebSocket connection error')).toBe(false);
+  expect(canReleaseRefusedIQLease('timeout')).toBe(false);
+  expect(canReleaseRefusedIQLease(undefined)).toBe(false);
+});
 test('admin sends the exact configured IQ amount without scaling', () => {
   expect(configuredEntryAmount(10)).toBe(10);
 });

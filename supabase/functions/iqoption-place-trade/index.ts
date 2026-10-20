@@ -8,7 +8,7 @@ import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { entrySubmissionDelay } from '../_shared/entry-schedule.ts';
-import { configuredEntryAmount, canMirrorToBroker } from '../_shared/iq-entry-policy.ts';
+import { configuredEntryAmount, canMirrorToBroker, canReleaseRefusedIQLease } from '../_shared/iq-entry-policy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -213,7 +213,7 @@ async function mirrorCopyTrades(
           console.log(`📋 Copy ${copy.user_id}: ordem espelhada ${res.tradeId} ($${amount} ${accountType})`);
         } else {
           // Recusa definitiva (ou principal não confirmada): nenhuma ordem saiu, libera a trava do cliente.
-          if (/invalid instrument|not available|não disponível|não enviada|não enviado|não confirmada|entrada cancelada|insufficient|not enough/i.test(res.error || '')) {
+          if (canReleaseRefusedIQLease(res.error)) {
             await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
           }
           console.log(`❌ Copy ${copy.user_id}: ${res.error || 'ordem recusada'}`);
@@ -848,7 +848,7 @@ serve(async (req) => {
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
     await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', 'master').eq('signal_id', reservationSignal);
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
-    const definiteRefusal = result.error && /invalid instrument|not available|não disponível|não enviada|não enviado|entrada cancelada|insufficient|not enough/i.test(result.error);
+    const definiteRefusal = canReleaseRefusedIQLease(result.error);
     if (!result.success && definiteRefusal) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', 'master').eq('signal_id', reservationSignal);
     if (!(result.success && result.tradeId)) settleMaster({ ok: false, timeframe: '', expirationIso: null });
     if (!(result.success && result.tradeId)) await cancelAlert();

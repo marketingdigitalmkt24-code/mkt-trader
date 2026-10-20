@@ -64,6 +64,7 @@ export function LiveOperationsCard() {
   const PAGE_SIZE = 10;
   const queryClient = useQueryClient();
   const [recentLoading, setRecentLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [recentError, setRecentError] = useState(false);
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
   const [linkedOrders, setLinkedOrders] = useState<TestBrokerResult[]>([]);

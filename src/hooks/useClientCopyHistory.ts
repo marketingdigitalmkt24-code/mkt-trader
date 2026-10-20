@@ -23,6 +23,7 @@ export function useClientCopyHistory() {
           .not('timeframe', 'in', '(TEST,MT5)')
           .not('entry_strategy', 'eq', 'FORCE_LOSS_WIN')
           .not('signal_id', 'like', '%force-lw-%')
+          .not('signal_id', 'like', '%forca_invertida-%')
           .gte('created_at', historyStart())
           .order('created_at', { ascending: false }).order('id', { ascending: false })
           .range(offset, offset + 999);

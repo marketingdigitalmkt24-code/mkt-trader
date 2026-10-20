@@ -261,7 +261,7 @@ Deno.serve(async (req) => {
     const { data: sequenceHistory, error: sequenceError } = sequenceRead;
     if (sequenceError) console.error('TEST sequence read:', sequenceError.message);
     const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false,
-      test_inverted_strategy: forceInvertedTag(r.timeframe, r.entry_strategy),
+      test_inverted_strategy: null, // Força Invertida removida (20/10/2026)
       test_sequence_strategy: !sequenceError && matchesTrendSequence(sequenceHistory || [], r.entry_strategy, curMin * 1000)
         ? TREND_SEQUENCE_TEST : null,
     }));

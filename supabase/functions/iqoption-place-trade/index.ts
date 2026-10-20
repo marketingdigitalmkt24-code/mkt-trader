@@ -611,7 +611,7 @@ serve(async (req) => {
 
     const tradeRequest: TradeRequest = await req.json();
     let authorizedQueue: { id: string; created_at: string; entry_strategy: string | null } | undefined;
-    if (tradeRequest.entryStrategy === 'FORCE_LOSS_WIN' || tradeRequest.signalId?.startsWith('force-lw-') || /-force-lw-/.test(tradeRequest.signalId || '')) {
+    if (tradeRequest.entryStrategy === 'FORCE_LOSS_WIN' || tradeRequest.entryStrategy === 'FORCA_INVERTIDA' || /forca_invertida-/.test(tradeRequest.signalId || '') || tradeRequest.signalId?.startsWith('force-lw-') || /-force-lw-/.test(tradeRequest.signalId || '')) {
       return Response.json({ success: false, error: 'Strategy removed' }, { status: 410, headers: corsHeaders });
     }
     if (isNextMinuteStrategy(tradeRequest.entryStrategy)) {

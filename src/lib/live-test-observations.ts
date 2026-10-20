@@ -13,6 +13,12 @@ interface TestDisplayRow {
 
 // Display-only projection: never create a second stored signal or authorize an order.
 export function expandTestObservations<T extends TestDisplayRow>(trade: T): T[] {
+  // Força Invertida removida (20/10/2026): nenhuma projeção é exibida.
+  if (trade.entry_strategy === FORCE_INVERTED_TEST) return [];
+  return [trade];
+}
+
+export function legacyExpandTestObservations<T extends TestDisplayRow>(trade: T): T[] {
   if (trade.timeframe !== 'TEST' || trade.entry_strategy !== 'VELA_FORCA'
     || trade.test_inverted_strategy !== FORCE_INVERTED_TEST) return [trade];
   const inverted = invertedTestOutcome(trade.direction, trade.result);

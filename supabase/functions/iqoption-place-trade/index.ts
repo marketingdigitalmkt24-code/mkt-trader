@@ -8,7 +8,7 @@ import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { entrySubmissionDelay } from '../_shared/entry-schedule.ts';
-import { configuredEntryAmount } from '../_shared/iq-entry-policy.ts';
+import { configuredEntryAmount, canMirrorToBroker } from '../_shared/iq-entry-policy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -131,6 +131,7 @@ async function mirrorCopyTrades(
   tradeRequest: TradeRequest,
   masterSignalId: string,
   master: Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>,
+  principal: { user_id: string; email: string; account_type: string },
 ) {
   try {
     if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
@@ -152,6 +153,7 @@ async function mirrorCopyTrades(
             .eq('user_id', copy.user_id).maybeSingle(),
         ]);
         if (!cfg?.email || !cfg?.password) { console.log(`⏭️ Copy ${copy.user_id}: sem credenciais IQ Option`); return; }
+        if (!canMirrorToBroker(principal, { ...cfg, user_id: copy.user_id })) return;
         const accountType = readCopyAccount(cfg);
         if (!accountType) return;
 
@@ -837,7 +839,7 @@ serve(async (req) => {
     // Copy: prepara login/gráfico dos clientes em paralelo e envia assim que a principal confirmar.
     let settleMaster!: (m: { ok: boolean; timeframe: string; expirationIso: string | null }) => void;
     const masterOutcome = new Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>(res => { settleMaster = res; });
-    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome);
+    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
     // @ts-ignore EdgeRuntime exists in Supabase runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
     await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', 'master').eq('signal_id', reservationSignal);

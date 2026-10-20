@@ -13,7 +13,7 @@
 - Preserve TEST rows, streaks and accounting; paginate accuracy. Show broker outcomes separately by exact candidate signal and numeric IQ ID, never asset/time guesses; prices differ.
 - Research is admin-only/read-only: M15/M1 and Force-pattern studies require 100 contiguous closed bars, exact OTC mapping and separate TEST/broker outcomes (broker minutes are proxies); why: prevent leakage and winner-selected filters changing live trades.
 - Run multi-strategy-test only from auto-generate-signals, with bounded settled TEST feedback fetched during login; why: avoid duplicates and ranking delays.
-- Claims and placements use service-only atomic per-owner IQ reservations and exact saved stakes; why: prevent overlapping principal orders or client copies and cross-account stake fallback.
+- IQ reservations use exact saved stakes and reject principal/self-login copies; serialize and acknowledge settings saves after persistence; why: prevent duplicate exposure and silently dropped stakes.
 - Anchor reversal submission and expiry to the selected candidate's own minute and submit immediately after the fourth candle confirms, within the broker purchase window; why: adding another minute trades a different candle, while stale candidates must never roll forward.
 - Reuse broker sessions only for service-authenticated same-account reversals; never log/store them to prevent credential leaks.
 - Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy retains explicit client IDs; why: client connection updates must not redirect master entries.

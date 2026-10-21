@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { allStrategyRows, strategyStats as summarizeStrategyStats, type StrategyStat } from '@/lib/strategy-stats';
+import { allStrategyRows, strategyStats as summarizeStrategyStats, strategyAccuracyDisplay, type StrategyStat } from '@/lib/strategy-stats';
 
 interface SignalEntry {
   id: string;
@@ -28,6 +28,9 @@ const strategyLabels: Record<string, string> = {
   RECUO_EMA21: 'Recuo na média 21',
   KDJ: 'KDJ',
   ICHIMOKU: 'Ichimoku',
+  ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
+  KDJ_RSI: 'KDJ + Reversão RSI',
+  TESTES_HISTORICO: 'Testes (histórico)',
   AI: 'IA',
 };
 
@@ -57,7 +60,7 @@ export function AIAnalysisStatusCard() {
       });
       if (mounted.current) {
         const stats = summarizeStrategyStats(rows);
-        setStrategyStats(stats);
+        setStrategyStats(strategyAccuracyDisplay(stats));
       }
     } catch {
       // silent

@@ -7,7 +7,6 @@ import { UserManagementCard } from '@/components/UserManagementCard';
 import { CopyTradingCard } from '@/components/CopyTradingCard';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
-import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,10 +27,10 @@ const Admin = () => {
 
   const {
     balance: iqBalance,
+    dailyStats,
     isLoading: isLoadingBalance,
     connect: refresh,
   } = useIQOptionConnection();
-  const { dailyStats } = useMasterIQResults();
 
   const balance = iqBalance?.balance ?? 0;
   const dailyProfit = dailyStats?.dailyProfit ?? 0;
@@ -82,7 +81,7 @@ const Admin = () => {
 
       <main className="container px-4 py-4 sm:py-6 max-w-7xl">
         {/* Quick Stats - Compact */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 sm:mb-6">
+        <div className="grid grid-cols-4 gap-2 mb-4 sm:mb-6">
           <div className="p-2.5 rounded-lg bg-gradient-to-br from-call/10 to-call/5 border border-call/20 text-center">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Lucro</p>
             <p className="text-sm sm:text-lg font-bold text-call">${dailyProfit?.toFixed(0) || '0'}</p>
@@ -111,15 +110,16 @@ const Admin = () => {
             <TabsTrigger value="dashboard" className="text-xs sm:text-sm py-2 gap-1"><LayoutDashboard className="w-3.5 h-3.5" />Dashboard</TabsTrigger>
             <TabsTrigger value="trading" className="text-xs sm:text-sm py-2 gap-1">
               <Bot className="w-3.5 h-3.5" />
-              <span>Auto Trading</span>
+              <span className="hidden sm:inline">Auto</span> Trading
             </TabsTrigger>
             <TabsTrigger value="brokers" className="text-xs sm:text-sm py-2 gap-1">
               <Zap className="w-3.5 h-3.5" />
-              <span>Corretoras</span>
+              <span className="hidden sm:inline">Corretoras</span>
+              <span className="sm:hidden">Broker</span>
             </TabsTrigger>
             <TabsTrigger value="copy" className="text-xs sm:text-sm py-2 gap-1">
               <Copy className="w-3.5 h-3.5" />
-              <span>Copy Trading</span>
+              <span className="hidden sm:inline">Copy</span> Trading
             </TabsTrigger>
             <TabsTrigger value="users" className="text-xs sm:text-sm py-2 gap-1">
               <Users className="w-3.5 h-3.5" />
@@ -155,7 +155,7 @@ const Admin = () => {
             </Card>
 
             {/* Action Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="flex gap-2">
               <Button variant="outline" onClick={resetDailyTrades} className="flex-1 gap-2">
                 <BarChart3 className="w-4 h-4" />
                 Resetar Trades
@@ -180,7 +180,7 @@ const Admin = () => {
                     <Badge className="ml-auto text-xs bg-call/20 text-call border-call/30">Binário</Badge>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="px-3 sm:px-6">
+                <CardContent>
                   <IQOptionSettingsCard defaultOpen={true} />
                 </CardContent>
               </Card>

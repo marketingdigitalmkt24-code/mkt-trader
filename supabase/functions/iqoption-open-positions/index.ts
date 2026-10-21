@@ -36,8 +36,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   try {
-    // Conta principal (admin) — nunca a conexão de um cliente.
-    const { data: cfg } = await supabase.rpc('get_master_iq_config').maybeSingle<{ email: string; password: string; account_type: string }>();
+    const { data: cfg } = await supabase.from('iqoption_config').select('email,password,account_type').eq('is_active', true).limit(1).maybeSingle();
     if (!cfg) return json({ success: false, error: 'IQ Option não configurada', positions: [] });
     const ssid = await login(cfg.email, cfg.password);
     if (!ssid) return json({ success: false, error: 'Falha no login', positions: [] });

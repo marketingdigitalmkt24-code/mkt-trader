@@ -5,7 +5,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useAISignalAnalyzer } from '@/hooks/useAISignalAnalyzer';
 import { getCachedAssets } from '@/hooks/useAvailableAssets';
 import { useAuth } from '@/contexts/AuthContext';
-import { serialSettingsWriter } from '@/lib/serial-settings-writer';
 
 const STORAGE_KEY = 'autotrading_config';
 const IQ_CONNECTION_CHECK_INTERVAL = 60000; // Check IQ Option connection every 60s
@@ -72,7 +71,7 @@ export function useAutoTrading() {
   const tradingInProgress = useRef<Set<string>>(new Set());
   const activeAssetTrades = useRef<Set<string>>(new Set());
   const settingsLoaded = useRef(false);
-  const settingsWriter = useRef(serialSettingsWriter(async (write: () => Promise<void>) => write()));
+  const isSavingToDb = useRef(false);
   const iqOptionConnected = useRef(false);
   const lastIQCheckTime = useRef<number>(0);
   const isCheckingAutoTrade = useRef(false); // MUTEX para evitar execuções concorrentes
@@ -153,7 +152,7 @@ export function useAutoTrading() {
 
   // Load settings from database - works without auth (public RLS policy)
   useEffect(() => {
-    if (!user?.id || settingsLoaded.current) return;
+    if (settingsLoaded.current) return;
 
     const loadFromDatabase = async () => {
       try {
@@ -213,8 +212,10 @@ export function useAutoTrading() {
 
   // Save settings to database when config changes
   const saveToDatabase = useCallback(async (newConfig: AutoTradingConfig) => {
-    if (!user?.id) throw new Error('Faça login para salvar.');
-    return settingsWriter.current(async () => {
+    if (!user?.id || isSavingToDb.current) return;
+
+    isSavingToDb.current = true;
+    try {
       const dbData: Record<string, any> = {
         user_id: user.id,
         auto_trading_enabled: newConfig.enabled,
@@ -237,11 +238,15 @@ export function useAutoTrading() {
         .upsert(dbData as any, { onConflict: 'user_id' });
 
       if (error) {
-        throw error;
+        console.error('Error saving settings to DB:', error);
       } else {
         console.log('✅ Settings saved to database');
       }
-    });
+    } catch (err) {
+      console.error('Failed to save settings to database:', err);
+    } finally {
+      isSavingToDb.current = false;
+    }
   }, [user?.id]);
 
   // Persist config to localStorage
@@ -356,17 +361,16 @@ export function useAutoTrading() {
     return () => clearInterval(interval);
   }, [refreshActiveAssetTrades]);
 
-  const updateConfig = useCallback(async (updates: Partial<AutoTradingConfig>) => {
-    const newConfig = { ...config, ...updates };
-    try {
-      await saveToDatabase(newConfig);
-      setConfig(prev => ({ ...prev, ...updates }));
-      toast({ title: 'Configuração salva', description: `Entrada IQ Option: $${newConfig.amount.toFixed(2)}` });
-    } catch (error) {
-      toast({ title: 'Não foi possível salvar', description: 'A configuração anterior continua ativa. Tente novamente.', variant: 'destructive' });
-      throw error;
-    }
-  }, [config, saveToDatabase, toast]);
+  const updateConfig = useCallback((updates: Partial<AutoTradingConfig>) => {
+    setConfig(prev => {
+      const newConfig = { ...prev, ...updates };
+      // Save to database in background (don't block UI)
+      if (user?.id) {
+        saveToDatabase(newConfig);
+      }
+      return newConfig;
+    });
+  }, [user?.id, saveToDatabase]);
 
   // Map timeframe to expiration in minutes
   const getExpirationFromTimeframe = (timeframe: string): number => {

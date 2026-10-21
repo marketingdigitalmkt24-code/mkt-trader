@@ -1,13 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Activity, TrendingUp, TrendingDown, Target, Clock, MonitorSmartphone, Loader2, Volume2, VolumeX } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { expandTestObservations } from '@/lib/live-test-observations';
-import { linkedForceBrokerResult, type TestBrokerResult } from '@/lib/test-broker-result';
+import { invertedTestOutcome, FORCE_INVERTED_TEST } from '../../supabase/functions/_shared/force-inverted-test';
 
 interface OpenPosition {
   id: string;
@@ -47,8 +45,6 @@ const strategyLabels: Record<string, string> = {
   EMPATE: 'Empate',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
-  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'forca sem',
-  FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
   KDJ: 'KDJ',
@@ -62,21 +58,12 @@ const strategyLabels: Record<string, string> = {
 
 export function LiveOperationsCard() {
   const PAGE_SIZE = 10;
-  const queryClient = useQueryClient();
-  const [recentLoading, setRecentLoading] = useState(true);
-  const [pageLoading, setPageLoading] = useState(false);
-  const hasLoadedRef = useRef(false);
-  const [recentError, setRecentError] = useState(false);
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([]);
-  const [linkedOrders, setLinkedOrders] = useState<TestBrokerResult[]>([]);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState({ wins: 0, losses: 0, testWinsToday: 0, testLossesToday: 0 });
   const pageRef = useRef(1);
-  const [brokerOpen, setBrokerOpen] = useState<OpenPosition[]>([]);
-  const [recordedOpen, setRecordedOpen] = useState<OpenPosition[]>([]);
-  // Corretora (com lucro ao vivo) tem prioridade; ordens registradas cobrem o intervalo entre consultas.
-  const openPositions = [...brokerOpen, ...recordedOpen.filter(r => !brokerOpen.some(b => b.id === r.id))];
+  const [openPositions, setOpenPositions] = useState<OpenPosition[]>([]);
   const [openLoading, setOpenLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isFetchingRef = useRef(false);
@@ -157,39 +144,12 @@ export function LiveOperationsCard() {
   };
 
   // Posições abertas na IQ Option (binária, digital e forex)
-  // Ordens principais confirmadas pela corretora e ainda sem resultado (atualiza a cada 3s).
-  const fetchRecordedOpen = async () => {
-    try {
-      const { data } = await supabase.from('operation_results')
-        .select('signal_id, asset, direction, iq_option_id, timeframe')
-        .in('result', ['pending', 'open'])
-        .neq('timeframe', 'TEST').neq('timeframe', 'MT5')
-        .not('iq_option_id', 'is', null)
-        .not('signal_id', 'like', 'copy-%').not('signal_id', 'like', 'sim-%').not('signal_id', 'like', 'mt5-%')
-        .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
-        .limit(20);
-      const rows = data || [];
-      const { data: queue } = rows.length
-        ? await supabase.from('trade_queue').select('signal_id, amount').in('signal_id', rows.map(r => r.signal_id))
-        : { data: [] };
-      const amounts = new Map((queue || []).map(q => [q.signal_id, Number(q.amount || 0)]));
-      setRecordedOpen(rows.map(r => ({
-        id: String(r.iq_option_id), type: r.timeframe === 'FOREX' ? 'forex' : 'binary-option',
-        asset: r.asset, direction: r.direction, invest: amounts.get(r.signal_id) || 0, pnl: 0,
-      })));
-    } catch {
-      // silent
-    } finally {
-      setOpenLoading(false);
-    }
-  };
-
   const fetchOpen = async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
       const { data } = await supabase.functions.invoke('iqoption-open-positions');
-      if (data?.success) setBrokerOpen(data.positions || []);
+      if (data?.success) setOpenPositions(data.positions || []);
     } catch {
       // silent
     } finally {
@@ -198,84 +158,36 @@ export function LiveOperationsCard() {
     }
   };
 
-  // Count only the first page; prefetch and cache each page independently.
-  const loadRecentPage = async (requestedPage: number) => {
-      const from = (requestedPage - 1) * PAGE_SIZE;
+  // Fetch IQ Option trades (paginated, 10 per page, all time)
+  const fetchRecentTrades = async () => {
+    const request = ++recentRequestRef.current;
+    try {
+      const from = (pageRef.current - 1) * PAGE_SIZE;
       const { data, count, error } = await supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', requestedPage === 1 ? { count: 'exact' } : {})
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', { count: 'exact' })
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
-        .not('signal_id', 'like', 'copy-%')
-        .not('signal_id', 'like', 'sim-%')
-        .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)')
+        .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
         .not('signal_id', 'like', '%force-lw-%')
-        // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
-        .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA,VELA_FORCA)')
         .order('created_at', { ascending: false })
-        .order('id', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
-      if (error) throw error;
-      if (!data) throw new Error('Missing operations');
-      const forceIds = data.filter(trade => trade.timeframe === 'TEST' && trade.test_inverted_strategy === 'FORCA_INVERTIDA')
-        .map(trade => `forca_invertida-${trade.id}`);
-      const ids = [...new Set(data.filter(trade => !trade.entry_strategy).map(trade => trade.signal_id).filter(Boolean))];
-      const [{ data: brokerOrders, error: brokerError }, { data: signals, error: signalsError }] = await Promise.all([
-        forceIds.length
-          ? supabase.from('operation_results').select('signal_id, iq_option_id, timeframe, result, profit').in('signal_id', forceIds)
-          : Promise.resolve({ data: [], error: null }),
-        ids.length
-          ? supabase.from('trading_signals').select('signal_id, indicators').in('signal_id', ids)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
-      if (brokerError) throw brokerError;
-      if (signalsError) throw signalsError;
+      if (error || !data) return;
+      const ids = [...new Set(data.map(trade => trade.signal_id).filter(Boolean))];
+      const { data: signals } = ids.length
+        ? await supabase.from('trading_signals').select('signal_id, indicators').in('signal_id', ids)
+        : { data: [] };
       const strategies = new Map((signals || []).map(signal => [
         signal.signal_id,
         typeof signal.indicators === 'object' && signal.indicators !== null && !Array.isArray(signal.indicators) && 'strategy' in signal.indicators
           ? String(signal.indicators.strategy)
           : '',
       ]));
-      return {
-        linkedOrders: brokerOrders || [],
-        trades: data.map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[],
-        count,
-      };
-  };
-
-  // Navegar de página nunca recarrega o card inteiro: mantém a lista atual visível
-  // e troca o conteúdo quando a nova página chega (do cache ou da rede).
-  const fetchRecentTrades = async (navigation = false) => {
-    const requestedPage = pageRef.current;
-    const request = ++recentRequestRef.current;
-    if (navigation && !hasLoadedRef.current) setRecentLoading(true);
-    else if (navigation) setPageLoading(true);
-    try {
-      const result = await queryClient.fetchQuery({
-        queryKey: ['live-operations-page', requestedPage],
-        queryFn: () => loadRecentPage(requestedPage),
-        staleTime: 15000,
-      });
-      if (request !== recentRequestRef.current || requestedPage !== pageRef.current) return;
-      hasLoadedRef.current = true;
-      setLinkedOrders(result.linkedOrders);
-      setRecentTrades(result.trades);
-      setRecentError(false);
-      if (typeof result.count === 'number') setTotalCount(result.count);
-      if (result.trades.length === PAGE_SIZE) {
-        void queryClient.prefetchQuery({
-          queryKey: ['live-operations-page', requestedPage + 1],
-          queryFn: () => loadRecentPage(requestedPage + 1),
-          staleTime: 15000,
-        });
-      }
+      if (request !== recentRequestRef.current) return;
+      setRecentTrades(data.map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[]);
+      if (typeof count === 'number') setTotalCount(count);
     } catch {
-      if (request === recentRequestRef.current) setRecentError(true);
-    } finally {
-      if (request === recentRequestRef.current) {
-        setRecentLoading(false);
-        setPageLoading(false);
-      }
+      // silent
     }
   };
 
@@ -285,12 +197,8 @@ export function LiveOperationsCard() {
       const base = () => supabase.from('operation_results').select('*', { count: 'exact', head: true })
         .or('timeframe.is.null,timeframe.neq.MT5')
         .not('signal_id', 'like', 'mt5-%')
-        .not('signal_id', 'like', 'copy-%')
-        .not('signal_id', 'like', 'sim-%')
-        .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)')
-        .not('signal_id', 'like', '%force-lw-%')
-        // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
-        .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA,VELA_FORCA)');
+        .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
+        .not('signal_id', 'like', '%force-lw-%');
       const brNow = new Date(Date.now() - 3 * 3600 * 1000);
       const dayStartIso = new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()) + 3 * 3600 * 1000).toISOString();
       const [w, l, tw, tl] = await Promise.all([
@@ -312,20 +220,19 @@ export function LiveOperationsCard() {
 
   useEffect(() => {
     pageRef.current = page;
-    void fetchRecentTrades(true);
+    fetchRecentTrades();
   }, [page]);
 
   useEffect(() => {
+    fetchRecentTrades();
     fetchStats();
     fetchOpen();
-    fetchRecordedOpen();
-    const recordedPoll = setInterval(fetchRecordedOpen, 3000);
     pollRef.current = setInterval(() => {
       fetchRecentTrades();
       fetchStats();
       fetchOpen();
     }, 15000);
-    return () => { clearInterval(recordedPoll); if (pollRef.current) clearInterval(pollRef.current); };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
   // Poll de sinais novos para a buzina (a cada 10s)
@@ -339,8 +246,7 @@ export function LiveOperationsCard() {
     const channel = supabase
       .channel('live-ops')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['live-operations-page'], refetchType: 'none' });
-        void fetchRecentTrades();
+        fetchRecentTrades();
         fetchStats();
       })
       .subscribe();
@@ -472,15 +378,9 @@ export function LiveOperationsCard() {
             </div>
           )}
 
-          {recentLoading ? (
-            <div role="status" aria-label="Carregando operações" className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
-          ) : recentError ? (
-            <div role="alert" className="text-xs text-destructive text-center py-3">Não foi possível carregar esta página.</div>
-          ) : iqTrades.length > 0 ? (
-            <div className={cn("space-y-1 transition-opacity", pageLoading && "opacity-50 pointer-events-none")}>
-              {iqTrades.flatMap(expandTestObservations).map(trade => {
-                const broker = linkedForceBrokerResult(trade, linkedOrders);
-                return (
+          {iqTrades.length > 0 ? (
+            <div className="space-y-1">
+              {iqTrades.map(trade => (
                 <div key={trade.id} className={cn(
                   "flex flex-wrap items-center justify-between gap-x-2 gap-y-1 p-2 rounded-lg text-xs",
                   getResultBg(trade.result)
@@ -501,12 +401,14 @@ export function LiveOperationsCard() {
                     {trade.timeframe === 'TEST' && trade.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal border-primary/50 text-primary">📐 RETOMADA</Badge>
                     )}
-                    {trade.entry_strategy === 'FORCA_INVERTIDA' && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal border-primary/50 text-primary">🔄 FORÇA INVERTIDA</Badge>
-                    )}
-                    {trade.timeframe === 'TEST' && ['VELA_FORCA', 'FORCA_INVERTIDA'].includes(trade.entry_strategy ?? '') && (
-                      <Badge variant="outline" className={cn('text-[9px] px-1 py-0 h-4', trade.direction === 'CALL' ? 'text-call border-call/50' : 'text-put border-put/50')}>{trade.direction}</Badge>
-                    )}
+                    {trade.timeframe === 'TEST' && trade.test_inverted_strategy === FORCE_INVERTED_TEST && (() => {
+                      const inverted = invertedTestOutcome(trade.direction, trade.result);
+                      if (!inverted) return null;
+                      const settled = ['win', 'loss', 'tie'].includes(inverted.result);
+                      return <Badge variant="outline" className={cn('text-[9px] px-1 py-0 h-auto min-h-4 whitespace-normal', inverted.result === 'win' ? 'border-call/50 text-call' : inverted.result === 'loss' ? 'border-put/50 text-put' : 'text-muted-foreground')}>
+                        🔄 FORÇA INVERTIDA · TESTE · {inverted.direction} · {inverted.result === 'win' ? 'WIN' : inverted.result === 'loss' ? 'LOSS' : inverted.result === 'tie' ? 'EMPATE' : 'PENDENTE'}{settled ? ` · ${inverted.profit >= 0 ? '+' : '-'}US$ ${Math.abs(inverted.profit).toFixed(2)}` : ''}
+                      </Badge>;
+                    })()}
                     {trade.entry_strategy === 'TENDENCIA' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/50 text-amber-500">📐 TENDÊNCIA</Badge>
                     )}
@@ -528,9 +430,6 @@ export function LiveOperationsCard() {
                     {trade.entry_strategy === 'REVERSAO_RSI' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 REVERSÃO RSI</Badge>
                     )}
-                    {trade.entry_strategy === 'FORCA_SEM_ROMPIMENTO_PRIMEIRA' && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal border-primary/50 text-primary">forca sem</Badge>
-                    )}
                     {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy] && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">
                         {({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy]}
@@ -549,9 +448,6 @@ export function LiveOperationsCard() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-auto">
-                    {trade.timeframe === 'TEST' && trade.entry_strategy === 'FORCA_INVERTIDA' && (
-                      <span className="text-[10px] text-muted-foreground">Simulado :00</span>
-                    )}
                     <span className={cn("font-mono font-bold", getResultColor(trade.result))}>
                       {trade.result === 'pending' || trade.result === 'open' || trade.result === 'test_open' || trade.result === 'test7_open' ? '⏳' : trade.profit >= 0 ? `+$${trade.profit.toFixed(2)}` : `-$${Math.abs(trade.profit).toFixed(2)}`}
                     </span>
@@ -559,21 +455,8 @@ export function LiveOperationsCard() {
                       {trade.result === 'win' ? 'WIN' : trade.result === 'loss' ? 'LOSS' : trade.result === 'pending' ? 'PENDENTE' : trade.result === 'open' ? 'ABERTA' : trade.result === 'test_open' || trade.result === 'test7_open' ? 'TESTE' : trade.result.toUpperCase()}
                     </Badge>
                   </div>
-                  {trade.timeframe === 'TEST' && trade.entry_strategy === 'FORCA_INVERTIDA' && (
-                    <div className="basis-full flex flex-wrap items-center gap-2 border-t border-border/50 pt-1 text-[10px]">
-                      <span className="text-muted-foreground">IQ Option{broker ? ` · #${broker.iq_option_id}` : ''}</span>
-                      {broker ? (
-                        <span className={cn('font-mono font-semibold', getResultColor(broker.result))}>
-                          {broker.result === 'win' || broker.result === 'loss' || broker.result === 'tie'
-                            ? `${broker.result === 'tie' ? 'EMPATE' : broker.result.toUpperCase()} · ${broker.profit >= 0 ? '+' : '-'}US$ ${Math.abs(broker.profit).toFixed(2)}`
-                            : 'Aguardando resultado real'}
-                        </span>
-                      ) : <span className="text-muted-foreground">Sem ordem real vinculada</span>}
-                    </div>
-                  )}
                 </div>
-                );
-              })}
+              ))}
               <div className="flex items-center justify-between pt-1.5 border-t border-border/50">
                 <span className="text-xs text-muted-foreground">Total desta página</span>
                 <span className={cn("text-xs font-mono font-bold", totalIqProfit >= 0 ? "text-call" : "text-put")}>
@@ -583,18 +466,17 @@ export function LiveOperationsCard() {
               <div className="flex items-center justify-between pt-2">
                 <Button
                   size="sm" variant="secondary" className="h-7 px-2 text-xs"
-                  disabled={page <= 1 || pageLoading}
+                  disabled={page <= 1}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                 >
                   ← Anterior
                 </Button>
-                <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
-                  {pageLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                <span className="text-[10px] text-muted-foreground font-mono">
                   Página {page} de {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
                 </span>
                 <Button
                   size="sm" variant="secondary" className="h-7 px-2 text-xs"
-                  disabled={page >= Math.ceil(totalCount / PAGE_SIZE) || pageLoading}
+                  disabled={page >= Math.ceil(totalCount / PAGE_SIZE)}
                   onClick={() => setPage(p => p + 1)}
                 >
                   Próxima →

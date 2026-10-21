@@ -4,23 +4,11 @@ import { clientCopyResults, clientDayStart, clientSignalsPage } from '../../../s
 const now = new Date('2026-10-17T21:54:00Z');
 const row = { id: 'copy', signal_id: 'copy-client-a-master', asset: 'JUP/USD-OTC', direction: 'CALL', result: 'win', profit: 82, iq_option_id: '14364506418', timeframe: 'M1', created_at: '2026-10-17T15:14:05Z' };
 describe('client dashboard isolation', () => {
-  it('shows only the client’s confirmed open copies without adding them to profit', () => {
-    const pending = { ...row, id: 'pending', result: 'pending', profit: 0 };
-    const result = clientCopyResults([pending, row,
-      { ...pending, id: 'other', signal_id: 'copy-client-b-master' },
-      { ...pending, id: 'master', signal_id: 'vela_forca-master' },
-      { ...pending, id: 'unconfirmed', iq_option_id: null },
-    ], 'client-a', now);
-    expect(result.operations.filter(op => ['pending', 'open'].includes(op.result)).map(op => op.id)).toEqual(['pending']);
-    expect(result.profit).toBe(82);
-    expect(result.trades).toBe(1);
-  });
-  it('excludes removed force-lw copies from history and displayed results', () => {
+  it('hides removed force-lw copies while retaining their actual financial results', () => {
     const result = clientCopyResults([{ ...row, signal_id: 'copy-client-a-force-lw-old', result: 'loss', profit: -10 }, row], 'client-a', now);
     expect(result.operations.map(op => op.signal_id)).toEqual([row.signal_id]);
-    expect(result.profit).toBe(82);
-    expect(result.losses).toBe(0);
-    expect(result.trades).toBe(1);
+    expect(result.profit).toBe(72);
+    expect(result.losses).toBe(1);
   });
   it('shows 12 signals per page and retains the remaining history without duplicates', () => {
     const signals = Array.from({ length: 45 }, (_, id) => id);

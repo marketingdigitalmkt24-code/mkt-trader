@@ -35,7 +35,7 @@ interface AutoTradingConfig {
 
 interface AutoTradingCardProps {
   config: AutoTradingConfig;
-  updateConfig: (updates: Partial<AutoTradingConfig>) => Promise<void>;
+  updateConfig: (updates: Partial<AutoTradingConfig>) => void;
   isPlacingTrade: boolean;
   isAnalyzingAI?: boolean;
   lastTradeResult: { success: boolean; message: string } | null;
@@ -48,7 +48,6 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [localConfig, setLocalConfig] = useState(config);
   const [hasChanges, setHasChanges] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
   // Calculate if profit target is reached
   const isProfitTargetReached = () => {
@@ -78,7 +77,7 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
   // Auto-disable when profit target is reached
   useEffect(() => {
     if (profitTargetReached && config.enabled) {
-      void updateConfig({ enabled: false }).catch(() => undefined);
+      updateConfig({ enabled: false });
     }
   }, [profitTargetReached, config.enabled, updateConfig]);
 
@@ -87,16 +86,9 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
     setHasChanges(true);
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await updateConfig(localConfig);
-      setHasChanges(false);
-    } catch {
-      // Keep edits available for retry.
-    } finally {
-      setIsSaving(false);
-    }
+  const handleSave = () => {
+    updateConfig(localConfig);
+    setHasChanges(false);
   };
 
   const handleCancel = () => {
@@ -396,11 +388,11 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
         {/* Save/Cancel Buttons */}
         {hasChanges && (
           <div className="flex gap-2 pt-2">
-            <Button onClick={handleSave} disabled={isSaving} className="flex-1 gap-2">
+            <Button onClick={handleSave} className="flex-1 gap-2">
               <Save className="w-4 h-4" />
-              {isSaving ? 'Salvando...' : 'Salvar'}
+              Salvar
             </Button>
-            <Button variant="outline" onClick={handleCancel} disabled={isSaving} className="gap-2">
+            <Button variant="outline" onClick={handleCancel} className="gap-2">
               <X className="w-4 h-4" />
               Cancelar
             </Button>

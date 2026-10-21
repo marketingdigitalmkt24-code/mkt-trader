@@ -16,7 +16,11 @@ test('ties remain ties and open signals stay pending', () => {
   expect(invertedTestOutcome('CALL', 'tie')).toEqual({ direction: 'PUT', result: 'tie', profit: 0 });
   expect(invertedTestOutcome('PUT', 'test7_open')?.result).toBe('test7_open');
 });
-test('Força Invertida never appears in accuracy after removal', () => {
-  const row = { entry_strategy: 'VELA_FORCA', result: 'loss', timeframe: 'TEST', test_sequence_strategy: null, test_inverted_strategy: FORCE_INVERTED_TEST };
+test('untagged history and non TEST results never count as inverted', () => {
+  const row = { entry_strategy: 'VELA_FORCA', result: 'loss', timeframe: 'TEST', test_sequence_strategy: null };
   expect(strategyStats([row]).some(s => s.strategy === FORCE_INVERTED_TEST)).toBe(false);
+  const tagged = { ...row, test_inverted_strategy: FORCE_INVERTED_TEST };
+  expect(strategyStats([tagged]).find(s => s.strategy === FORCE_INVERTED_TEST)).toEqual({ strategy: FORCE_INVERTED_TEST, wins: 1, losses: 0 });
+  expect(strategyStats([{ ...tagged, timeframe: 'M1' }]).some(s => s.strategy === FORCE_INVERTED_TEST)).toBe(false);
+  expect(strategyStats([{ ...tagged, result: 'test7_open' }]).find(s => s.strategy === FORCE_INVERTED_TEST)).toEqual({ strategy: FORCE_INVERTED_TEST, wins: 0, losses: 0 });
 });

@@ -1,30 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Wallet, Loader2, Power } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Copy, Loader2, Power } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
-import { useClientCopyResults } from '@/hooks/useClientCopyResults';
-import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
-import { DailyHistory } from '@/components/DailyHistory';
-import { clientDayStart } from '@/lib/client-copy-results';
-import { copyResultRates } from '@/lib/admin-copy-results';
-import { cn } from '@/lib/utils';
+import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { canEnableCopy, readCopyAccount, readCopyEnabled } from '@/lib/client-copy-state';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?: boolean }) {
+export function ClientCopyTradingCard() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { balance } = useIQOptionConnection({ silentMissingCredentials: true, fetchStatistics: false, balanceOnly: true });
-  const results = useClientCopyResults();
-  const history = useClientCopyHistory();
-  const { winPercent } = copyResultRates(results.wins, results.losses);
-  const money = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const [enabled, setEnabled] = useState(false);
   const [connected, setConnected] = useState(false);
   const [tradeAmount, setTradeAmount] = useState('1');
@@ -136,43 +125,16 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Wallet className="w-4 h-4 text-primary" />
+            <Copy className="w-4 h-4 text-primary" />
           </div>
-          {settingsOnly ? 'Configurações de Copy Trading' : 'Gestão de Banca IQ Option'}
+          Copy Trading
           <Badge variant={enabled ? 'default' : 'secondary'} className="ml-auto text-xs">
             {enabled ? 'Ligado' : 'Desligado'}
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!settingsOnly && <>
-        <div className="border-b border-border pb-4">
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <span className="text-sm text-muted-foreground">Saldo Atual</span>
-            {balance && <Badge variant={balance.accountType === 'REAL' ? 'default' : 'secondary'}>{balance.accountType === 'REAL' ? 'REAL' : 'DEMO'}</Badge>}
-          </div>
-          <p className="text-2xl font-bold font-mono">{balance ? `${balance.currency === 'BRL' ? 'R$' : 'US$'} ${money(balance.balance)}` : '—'}</p>
-        </div>
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">Resultado de Hoje</p>
-          <p className={cn('text-3xl font-bold font-mono text-center', results.profit < 0 ? 'text-put' : 'text-call')}>
-            {results.isError ? 'Indisponível' : results.isLoading ? '…' : `${results.profit < 0 ? '−' : '+'}US$ ${money(Math.abs(results.profit))}`}
-          </p>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <div><p className="font-mono font-bold text-call">{results.wins}</p><p className="text-[10px] text-muted-foreground">Wins</p></div>
-            <div><p className="font-mono font-bold text-put">{results.losses}</p><p className="text-[10px] text-muted-foreground">Losses</p></div>
-            <div><p className="font-mono font-bold">{results.trades}</p><p className="text-[10px] text-muted-foreground">Trades</p></div>
-            <div><p className="font-mono font-bold text-gold">{winPercent.toFixed(1)}%</p><p className="text-[10px] text-muted-foreground">Win Rate</p></div>
-          </div>
-        </div>
-        </>}
-        {!settingsOnly && (history.operations.some(op => op.created_at < clientDayStart() && ['win', 'loss', 'draw', 'tie'].includes(op.result))
-          ? <DailyHistory title="Histórico Diário IQ Option" operations={history.operations} perPage={5} />
-          : <div className="border-t border-border pt-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Histórico Diário IQ Option</p>
-              <p className="text-xs text-muted-foreground mt-2">{history.isLoading ? 'Carregando histórico…' : history.isError ? 'Não foi possível atualizar o histórico.' : 'Nenhuma operação copiada em dias anteriores.'}</p>
-            </div>)}
-        {settingsOnly && <>
+        <IQOptionSettingsCard defaultOpen embedded onConnectionChange={() => { void load(); }} />
         {!connected && (
           <p className="text-xs text-muted-foreground">Conecte sua conta IQ Option para ligar o copy trading.</p>
         )}
@@ -217,7 +179,6 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
             {enabled ? 'Desligar copy' : 'Ligar copy'}
           </Button>
         </div>
-        </>}
       </CardContent>
     </Card>
   );

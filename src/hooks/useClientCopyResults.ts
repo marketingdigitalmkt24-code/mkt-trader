@@ -39,7 +39,6 @@ export function useClientCopyResults() {
         const row = payload.new as { signal_id?: string };
         if (row.signal_id?.startsWith(`copy-${userId}-`)) {
           void queryClient.invalidateQueries({ queryKey: ['client-copy-results', userId] });
-          void queryClient.invalidateQueries({ queryKey: ['client-copy-history', userId] });
         }
       }).subscribe();
     return () => { void supabase.removeChannel(channel); };

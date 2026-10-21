@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -14,10 +14,10 @@ const PAGE_SIZE = 12;
 export const IQEntriesTodayCard = () => {
   const { operations, isError } = useMasterIQResults();
   const [page, setPage] = useState(0);
-  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA').map((r) => {
-        const base = r.entry_strategy === 'RETOMADA' ? '📐 Retomada' : r.entry_strategy === 'VELA_FORCA' ? '🕯️ Vela de Força' : r.entry_strategy === 'FORCA_INVERTIDA' ? '🔄 Força Invertida' : r.entry_strategy === 'THREE_FORCE' ? '🕯️ Após 3 Velas de Força' : r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
+  const ops: Row[] = operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN').map((r) => {
+        const base = r.entry_strategy === 'THREE_FORCE' ? '🕯️ Após 3 Velas de Força' : r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
         return { ...r, profit: Number(r.profit || 0), origin: base };
-      }), [operations]);
+      });
   const todayStart = clientDayStart();
   const todayOps = operations.filter((o) => o.created_at >= todayStart);
   const total = todayOps.reduce((s, o) => s + Number(o.profit || 0), 0);
@@ -28,19 +28,14 @@ export const IQEntriesTodayCard = () => {
   const safePage = Math.min(page, pageCount - 1);
   const pageOps = ops.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
-  const dayScores = useMemo(() => {
-    const scores = new Map<string, { w: number; l: number; p: number }>();
-    for (const op of ops) {
-      const key = brtDayKey(op.created_at);
-      const score = scores.get(key) || { w: 0, l: 0, p: 0 };
-      if (op.result === 'win') score.w++;
-      if (op.result === 'loss') score.l++;
-      scores.set(key, score);
-    }
-    for (const score of scores.values()) score.p = score.w + score.l ? Math.round(score.w / (score.w + score.l) * 100) : 0;
-    return scores;
-  }, [ops]);
-  const scoreFor = (iso: string) => dayScores.get(brtDayKey(iso)) || { w: 0, l: 0, p: 0 };
+  const scoreFor = (iso: string) => {
+    const key = brtDayKey(iso);
+    const dayOps = ops.filter((o) => brtDayKey(o.created_at) === key);
+    const w = dayOps.filter((o) => o.result === 'win').length;
+    const l = dayOps.filter((o) => o.result === 'loss').length;
+    const p = w + l ? Math.round((w / (w + l)) * 100) : 0;
+    return { w, l, p };
+  };
 
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">

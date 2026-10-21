@@ -183,6 +183,13 @@
       "when": 1792473702501,
       "tag": "0025_independent_shared_broker_client_reservations",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792548234356,
+      "tag": "0026_recuo_retomada_only_simultaneous",
+      "breakpoints": true
     }
   ]
 }

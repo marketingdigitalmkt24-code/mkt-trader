@@ -2,27 +2,24 @@
 - Admin IQ list and bank totals share paginated master-only confirmed orders, excluding copy/TEST/MT5; client metrics share user-prefixed orders; BRT days and browser reset apply, broker balance stays separate; why: shared IQ accounts must not mix stakes or results.
 - Client bank/entries use client-only hooks; settings-only bank mode lives in broker tab; connection leads dashboard without navigation writes; why: isolation and persistent copy.
 - Client copy saves, broker placement and read-only admin account labels use the active IQ connection account type via the shared copy-account resolver; why: only the client's connection choice determines the copied order account.
-- Reconcile copied broker IDs against each client's own IQ Option history and persist target autostop during server result sync; why: master history cannot settle client orders and closing a browser must not bypass daily limits.
+- Reconcile copied broker IDs against each client's own IQ history and persist target autostop during server result sync; why: master history cannot settle client orders and browser closing must not bypass daily limits.
 - Match IQ operations to `trading_signals` by `signal_id` (no foreign key); unmatched history stays unidentified, never guessed as IA.
-- Public simulated charts never use broker hooks; real cards live in authenticated admin TradingDashboard to prevent demo trades.
-- Send Telegram immediately inside IQ Option placement for fresh authorized executing queue signals, the same event polled by the horn; do not wait for browser audio or delay broker execution, and label the entry time as estimated.
+- Public simulated charts never use broker hooks; real cards stay in the authenticated admin TradingDashboard to prevent demo trades.
+- Send Telegram immediately inside IQ Option placement for fresh authorized executing queue signals (the horn polls the same event); never wait for browser audio or delay broker execution; label entry time as estimated.
 - Persist real-entry origin in operation_results.entry_strategy from the loss authorizing its queue row; Telegram and card visibility use this origin, with legacy inference only when the recorded origin is absent.
 - Track successful Telegram signal message IDs in a service-only delivery ledger; dispatch only linked final broker results with conditional leases from result sync and signal cron so TEST results and unnotified history never reach Telegram.
-- Use the verified numeric Telegram channel ID and bounded retries for explicit temporary gateway failures before estimated entry; never delay trades or resend expired entry alerts.
+- Telegram uses the verified numeric channel ID with bounded retries only for explicit temporary gateway failures before estimated entry; never delay trades or resend expired entry alerts.
 - Reconcile expired real IQ results from the existing signal cron before checking pending locks; browser polling is supplementary so navigation cannot strand trades or Telegram results.
 - Preserve TEST rows, streaks and accounting; paginate accuracy. Show broker outcomes separately by exact candidate signal and numeric IQ ID, never asset/time guesses; prices differ.
-- Research is admin-only/read-only: M15/M1 and Force-pattern studies require 100 contiguous closed bars, exact OTC mapping and separate TEST/broker outcomes (broker minutes are proxies); why: prevent leakage and winner-selected filters changing live trades.
+- Research is admin-only/read-only: studies require 100 contiguous closed bars, exact OTC mapping and separate TEST/broker outcomes (broker minutes are proxies); why: prevent leakage and winner-selected filters changing live trades.
 - Run multi-strategy-test only from auto-generate-signals; bound feedback during login. Force-pattern shadows use non-t7 TEST IDs and stay outside ranking, claims and minute locks; why: independent measurement must not alter live selection.
 - IQ locks/stakes belong to users, not broker logins; reject self-copy, serialize settings. Copy locks only on submission; clean unsent/refused attempts, retry confirmed saves, retain uncertainty; why: no stranded/duplicate orders.
-- Anchor reversal submission and expiry to the selected candidate's own minute and submit immediately after the fourth candle confirms, within the broker purchase window; why: adding another minute trades a different candle, while stale candidates must never roll forward.
-- Reuse broker sessions only for service-authenticated same-account reversals; never log/store secrets.
-- Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy retains explicit client IDs; why: client connection updates must not redirect master entries.
-- Pace candle bursts, expired TEST first; await closed writes, parallelize reads, reuse exact service leases and submit ready current-candle orders immediately; why: cut waits, preserve full ranking and authorization.
-- IQ result reset uses a per-user browser cutoff shared by IQ entry and profit views, never deletes broker or TEST records; why: display resets must not corrupt trading history or four-win authorization.
-- Demo refill uses a dedicated user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker can confirm replenishment and REAL balances must remain untouched.
-- Removed claims return null; placement rejects them. Exclude retired orders/copies from displayed totals, preserve stored accounting; three-force keeps its lock.
-
+- Anchor reversal submission and expiry to the candidate's own minute, submitted right after the fourth candle confirms within the broker purchase window; why: another minute trades a different candle and stale candidates must never roll forward.
+- Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy retains explicit client IDs; broker sessions are reused only for service-authenticated same-account reversals and secrets are never logged or stored; why: client connection updates must not redirect master entries.
+- Pace candle bursts, expired TEST first; await closed writes, parallelize reads, reuse exact service leases, submit ready current-candle orders immediately; why: cut waits while preserving ranking and authorization.
+- IQ result reset uses a per-user browser cutoff shared by entry and profit views, never deleting broker or TEST records; why: display resets must not corrupt trading history or authorizations.
+- Demo refill uses a dedicated user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker confirms replenishment and REAL balances stay untouched.
+- Removed claims return null and placement rejects them; exclude retired orders/copies from displayed totals, preserve stored accounting; three-force keeps its lock.
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
-
 - Recent operations cache/prefetch pages and count only page one, invalidating on results; why: avoid recounting history on navigation.
 - Active real strategies (21/10/2026): REVERSAO_RSI, RETOMADA, RECUO_EMA21 only — claim_test_strategy_entry authorizes them; Recuo enters every generated signal even without agreement; VELA_FORCA is TEST-only; why: user removed Force from real IQ/Telegram entries.

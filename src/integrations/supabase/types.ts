@@ -844,6 +844,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_force_anticipation_entry: {
+        Args: { p_signal: string }
+        Returns: Json
+      }
       claim_force_loss_win: { Args: { p_candidate: string }; Returns: Json }
       claim_four_win_reversal: { Args: { p_candidate: string }; Returns: Json }
       claim_test_strategy_entry: {

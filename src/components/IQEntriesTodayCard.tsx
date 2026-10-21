@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey } from './dayLabel';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
+import { entryOriginLabel } from '@/lib/entry-origin-labels';
 import type { MasterIQOperation as Op } from '@/lib/master-iq-results';
 
 type Row = Op & { origin: string };

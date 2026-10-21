@@ -28,6 +28,9 @@ const strategyLabels: Record<string, string> = {
   RECUO_EMA21: 'Recuo na média 21',
   KDJ: 'KDJ',
   ICHIMOKU: 'Ichimoku',
+  ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
+  KDJ_RSI: 'KDJ + Reversão RSI',
+  TESTES_HISTORICO: 'Testes (histórico)',
   AI: 'IA',
 };
 
@@ -57,7 +60,7 @@ export function AIAnalysisStatusCard() {
       });
       if (mounted.current) {
         const stats = summarizeStrategyStats(rows);
-        setStrategyStats(stats);
+        setStrategyStats(strategyAccuracyDisplay(stats));
       }
     } catch {
       // silent

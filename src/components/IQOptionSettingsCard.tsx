@@ -10,7 +10,6 @@ import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { iqOptionClient } from '@/services/IQOptionClient';
-import { saveConfirmedIQConnection } from '@/lib/iq-connection-save';
 
 interface IQOptionConfig {
   id: string;
@@ -104,17 +103,19 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
       });
       
       if (result.success) {
-        let savedId = config?.id;
-        await saveConfirmedIQConnection(async state => {
-          const values = { email: email.trim(), password: password.trim(), ...state };
-          const { data: saved, error: saveError } = savedId
-            ? await supabase.from('iqoption_config').update(values).eq('id', savedId).eq('user_id', user.id).select('id, is_active, last_connected_at').single()
-            : await supabase.from('iqoption_config').insert({ ...values, user_id: user.id }).select('id, is_active, last_connected_at').single();
-          if (saveError || !saved || (state.is_active && (!saved.is_active || !saved.last_connected_at))) {
-            throw new Error('A confirmação da conta não foi salva. Conecte novamente.');
-          }
-          savedId = saved.id;
-        }, accountType, new Date().toISOString());
+        const values = {
+          email: email.trim(), password: password.trim(), account_type: accountType,
+          is_active: true,
+          last_connected_at: new Date().toISOString(),
+        };
+        const { error: saveError } = config
+          ? await supabase.from('iqoption_config').update(values).eq('id', config.id).eq('user_id', user.id)
+          : await supabase.from('iqoption_config').insert({ ...values, user_id: user.id });
+        if (saveError) {
+          setTestResult('error');
+          toast({ title: 'Não foi possível configurar o copy', description: 'A conta conectou, mas não foi possível salvar a configuração. Tente conectar novamente.', variant: 'destructive' });
+          return;
+        }
         setTestResult('success');
         setNeedsReconnect(false);
         await loadConfig();
@@ -254,7 +255,8 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
           <Label className="text-xs text-muted-foreground">Tipo de conta</Label>
           <Select value={accountType} disabled={isLoading || isTesting} onValueChange={(value) => {
             if (value === accountType) return;
-            void invalidateConnection(value);
+            if (embedded) void invalidateConnection(value);
+            else setAccountType(value);
           }}>
             <SelectTrigger>
               <SelectValue />

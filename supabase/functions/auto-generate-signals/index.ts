@@ -764,7 +764,7 @@ async function getAssetHistory(supabase: any): Promise<Map<string, AssetHistory>
     const { data: results } = await supabase
       .from('operation_results')
       .select('asset, result, profit')
-      .not('signal_id', 'like', 'study-%')
+      .not('signal_id', 'like', 'study-force-first-%')
       .gte('created_at', sevenDaysAgo.toISOString())
       .order('created_at', { ascending: false })
       .limit(500);
@@ -1330,7 +1330,7 @@ serve(async (req) => {
       const { data: results } = await supabase
         .from('operation_results')
         .select('asset, result, direction, entry_strategy, created_at')
-        .not('signal_id', 'like', 'study-%')
+        .not('signal_id', 'like', 'study-force-first-%')
         .neq('timeframe', 'MT5')
         .order('created_at', { ascending: false })
         .limit(300);
@@ -1466,7 +1466,7 @@ serve(async (req) => {
       const { data: hist } = await supabase
         .from('operation_results')
         .select('asset, direction, result, created_at, entry_strategy, timeframe')
-        .not('signal_id', 'like', 'study-%')
+        .not('signal_id', 'like', 'study-force-first-%')
         .neq('timeframe', 'MT5')
         .in('result', ['win', 'loss'])
         .gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString())
@@ -1660,7 +1660,7 @@ serve(async (req) => {
           // O empate é consumido por QUALQUER operação criada depois dele (teste ou real),
           // para não disparar de novo horas depois (pedido 15/10/2026 19h).
           const { data: used } = await supabase.from('operation_results').select('id')
-            .not('signal_id', 'like', 'study-%')
+            .not('signal_id', 'like', 'study-force-first-%')
             .neq('timeframe', 'MT5').gt('created_at', lastTie.created_at).limit(1);
           if (!used || used.length === 0) {
             // Sem bloqueio de 7 dias: ativo recusado só fica fora naquele momento.

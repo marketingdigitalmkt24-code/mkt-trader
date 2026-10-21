@@ -66,13 +66,9 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
         // to ensure proper MT5 filtering. Do NOT overwrite them here.
       } else {
         console.error('❌ Failed to fetch balance:', error || data?.error);
-        setBalance(null);
-        setConnectionStatus('error');
       }
     } catch (error) {
       console.error('❌ Error fetching balance:', error);
-      setBalance(null);
-      setConnectionStatus('error');
     }
   }, [user]);
 

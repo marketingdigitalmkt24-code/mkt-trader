@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { dayLabel, brtDayKey } from './dayLabel';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
-import { entryOriginLabel } from '@/lib/entry-origin-labels';
+import { clientDayStart } from '@/lib/client-copy-results';
 import type { MasterIQOperation as Op } from '@/lib/master-iq-results';
 
 type Row = Op & { origin: string };
@@ -14,13 +14,15 @@ const PAGE_SIZE = 12;
 export const IQEntriesTodayCard = () => {
   const { operations, isError } = useMasterIQResults();
   const [page, setPage] = useState(0);
-  // 21/10/2026: Vela de Força saiu das entradas reais e não aparece mais neste card.
-  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.entry_strategy !== 'VELA_FORCA' && r.entry_strategy !== 'RECUO_EMA21').map((r) => {
-        return { ...r, profit: Number(r.profit || 0), origin: entryOriginLabel(r.entry_strategy) };
+  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA').map((r) => {
+        const base = r.entry_strategy === 'RETOMADA' ? '📐 Retomada' : r.entry_strategy === 'VELA_FORCA' ? '🕯️ Vela de Força' : r.entry_strategy === 'FORCA_INVERTIDA' ? '🔄 Força Invertida' : r.entry_strategy === 'THREE_FORCE' ? '🕯️ Após 3 Velas de Força' : r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
+        return { ...r, profit: Number(r.profit || 0), origin: base };
       }), [operations]);
-  const total = ops.reduce((s, o) => s + Number(o.profit || 0), 0);
-  const wins = ops.filter((o) => o.result === 'win').length;
-  const losses = ops.filter((o) => o.result === 'loss').length;
+  const todayStart = clientDayStart();
+  const todayOps = operations.filter((o) => o.created_at >= todayStart);
+  const total = todayOps.reduce((s, o) => s + Number(o.profit || 0), 0);
+  const wins = todayOps.filter((o) => o.result === 'win').length;
+  const losses = todayOps.filter((o) => o.result === 'loss').length;
   const pct = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
   const pageCount = Math.max(1, Math.ceil(ops.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -43,7 +45,7 @@ export const IQEntriesTodayCard = () => {
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
         <span className="font-mono text-xs ml-auto mr-2">
           <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
         </span>
@@ -54,7 +56,7 @@ export const IQEntriesTodayCard = () => {
       {isError ? (
         <p className="text-xs text-destructive py-4 text-center">Não foi possível atualizar as entradas.</p>
       ) : ops.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real em dias anteriores</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real nos últimos 30 dias</p>
       ) : (
         <>
           <div className="space-y-1 flex-1">

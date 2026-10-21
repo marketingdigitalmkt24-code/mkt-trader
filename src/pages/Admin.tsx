@@ -29,8 +29,8 @@ const Admin = () => {
   const {
     balance: iqBalance,
     isLoading: isLoadingBalance,
-    refreshBalance: refresh,
-  } = useIQOptionConnection({ balanceOnly: true, fetchStatistics: false });
+    connect: refresh,
+  } = useIQOptionConnection();
   const { dailyStats } = useMasterIQResults();
 
   const balance = iqBalance?.balance ?? 0;

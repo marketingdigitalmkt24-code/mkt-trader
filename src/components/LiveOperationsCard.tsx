@@ -51,8 +51,6 @@ const strategyLabels: Record<string, string> = {
   FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
-  ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
-  KDJ_RSI: 'KDJ + Reversão RSI',
   KDJ: 'KDJ',
   ICHIMOKU: 'Ichimoku',
   PULLBACK: 'Pullback + Pavio',
@@ -533,9 +531,9 @@ export function LiveOperationsCard() {
                     {trade.entry_strategy === 'FORCA_SEM_ROMPIMENTO_PRIMEIRA' && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal border-primary/50 text-primary">forca sem</Badge>
                     )}
-                    {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU', ICHIMOKU_FORCA: '☁️ ICHIMOKU + FORÇA', KDJ_RSI: '📊 KDJ + RSI' } as Record<string, string>)[trade.entry_strategy] && (
+                    {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy] && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">
-                        {({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU', ICHIMOKU_FORCA: '☁️ ICHIMOKU + FORÇA', KDJ_RSI: '📊 KDJ + RSI' } as Record<string, string>)[trade.entry_strategy]}
+                        {({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy]}
                       </Badge>
                     )}
                     {trade.telegram_sent && (

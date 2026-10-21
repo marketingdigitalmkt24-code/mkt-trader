@@ -43,8 +43,6 @@
 - [x] Comparar 804 TESTE anteriores (758 cobertos): corpo≥90% retém 6/8 ganhos mas fica em 46,63% e 51,81% nos períodos anteriores, retorno negativo. Relatório entregue; 7 testes, estudo autorizado e acesso anônimo 401.
 
 # Entrada única e valores independentes
-- [x] Prevenir reservas presas no copy: proteger só no envio, liberar falhas locais/recusas e repetir gravação confirmada com leitura pelo ID exato; 33 testes, build OK e função publicada. Clientes ativos sem travas; nova cópia automática ainda não observada.
-- [x] Diagnosticar copy ligado sem novas ordens: reserva infinita da principal recusada às 03:36; liberar reserva específica e corrigir liberação em recusas definitivas, preservando desfechos ambíguos.
 - [x] Permitir clientes distintos na mesma conta IQ do admin, preservando valores e limite por usuário; reserva e placement atualizados, 21 testes e build OK. Nenhuma nova ordem no intervalo; cópia futura ainda não observada.
 - [x] HYPE 02:13: uma principal e duas cópias na mesma conta; rejeitar self/shared-principal copies na reserva e placement. Salvar 10 e conferir após reload; 9 testes e build OK. Vela forte sem rompimento20; nenhuma nova ordem autorizada ocorreu durante a verificação, execução futura ainda não observada.
 - [x] Limitar a principal e cada cliente a uma operação por vez, com reservas atômicas e bloqueio conservador de confirmação ambígua.
@@ -56,13 +54,3 @@
 - [x] Criar estratégia separada TESTE sem rompimento + primeira vela; 17 testes passaram, funções publicadas e admin conferido sem erros. Ainda sem ocorrência prospectiva; acerto e retorno aguardam novos sinais elegíveis.
 - [x] PENGU #14372665294: vela 02:23 fechou 8,457475 acima da máxima20 8,422765; corpo 72,3%, ordem LOSS -10. Estudo somente leitura, minuto registrado como aproximação da entrada.
 - [x] Cache/prefetch de páginas, contagem só na primeira, enriquecimento paralelo e placares diários memoizados; navegação autenticada 1→2→3→2→1 em 0,057–0,097s, sem erros; 10 testes e build OK.
-
-# Troca de estratégias reais (21/10/2026)
-- [x] Vela de Força fora das entradas reais/Telegram (segue em TESTE)
-- [x] Recuo na média 21 entra em todos os sinais gerados (claim + Telegram)
-- [x] Conferir primeira entrada de Recuo na média 21 na corretora — EUR/NZD #14375735930, valor 10, antes da troca para REAL.
-
-# Conexão REAL e saldo (21/10/2026)
-- [x] Resolver bloqueio após troca: histórico das duas carteiras do mesmo usuário conciliou EUR/NZD #14375735930 como LOSS -10; sem principal pendente, saldo REAL R$55 conferido no painel, 13 testes e função publicada. Nenhuma nova ordem REAL observada no intervalo; execução futura não verificada.
-- [x] Corrigir confirmação ao trocar Demo/Real sem reativar copy automaticamente; 24 testes aprovados.
-- [x] Conferir saldo REAL autenticado: R$55,00, conexão confirmada. Sem nova ordem REAL no intervalo observado; não criar ordem manual de teste.

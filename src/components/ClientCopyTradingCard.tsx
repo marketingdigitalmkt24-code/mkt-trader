@@ -9,7 +9,6 @@ import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
 import { DailyHistory } from '@/components/DailyHistory';
-import { clientDayStart } from '@/lib/client-copy-results';
 import { copyResultRates } from '@/lib/admin-copy-results';
 import { cn } from '@/lib/utils';
 import { canEnableCopy, readCopyAccount, readCopyEnabled } from '@/lib/client-copy-state';

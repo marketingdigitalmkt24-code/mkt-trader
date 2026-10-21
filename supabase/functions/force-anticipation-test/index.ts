@@ -44,7 +44,7 @@ Deno.serve(async req => {
       } catch { /* bounded alternate endpoint */ }
     }
     if (!ssid) return reply({ error: 'Broker connection failed' }, 502);
-    const { data: open, error: openError } = await db.from('force_anticipation_tests').select('signal_id,asset,entry_minute,entry_price,expiration_time')
+    const { data: open, error: openError } = await db.from('force_anticipation_tests').select('signal_id,asset,direction,entry_minute,entry_price,expiration_time')
       .eq('result', 'open').order('created_at').limit(1000);
     if (openError) return reply({ error: 'Test history unavailable' }, 502);
     let scanned = 0, withVolume = 0, inserted = 0, resolved = 0;

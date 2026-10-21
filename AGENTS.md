@@ -25,3 +25,4 @@
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
 
 - Recent operations cache/prefetch pages and count only page one, invalidating on results; why: avoid recounting history on navigation.
+- Active real strategies (21/10/2026): REVERSAO_RSI, RETOMADA, RECUO_EMA21 only — claim_test_strategy_entry authorizes them; Recuo enters every generated signal even without agreement; VELA_FORCA is TEST-only; why: user removed Force from real IQ/Telegram entries.

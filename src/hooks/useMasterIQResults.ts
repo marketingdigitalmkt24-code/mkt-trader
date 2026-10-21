@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { historyStart } from '@/components/dayLabel';
-import { getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { combineCutoffs, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
 import { isMasterIQOrder, masterIQDailyStats, type MasterIQOperation } from '@/lib/master-iq-results';
 
 export function useMasterIQResults() {

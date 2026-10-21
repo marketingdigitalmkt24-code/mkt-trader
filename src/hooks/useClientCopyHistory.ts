@@ -6,7 +6,7 @@ import type { ClientCopyOperation } from '@/lib/client-copy-results';
 import { historyStart } from '@/components/dayLabel';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 
-const EXCLUDED_STRATEGIES = new Set(['FORCE_LOSS_WIN', 'FORCA_INVERTIDA', 'VELA_FORCA']);
+const EXCLUDED_STRATEGIES = new Set(['FORCE_LOSS_WIN', 'FORCA_INVERTIDA', 'VELA_FORCA', 'RECUO_EMA21']);
 
 // Histórico diário do cliente: mesmas entradas reais do principal (como no card "Entradas na IQ Option"),
 // mas quando o cliente copiou a entrada, o resultado exibido é o da cópia dele, com o valor de entrada do cliente.
@@ -27,7 +27,7 @@ export function useClientCopyHistory() {
           .like('signal_id', `copy-${userId}-%`)
           .not('iq_option_id', 'is', null)
           .not('timeframe', 'in', '(TEST,MT5)')
-          .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,VELA_FORCA)')
+          .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,VELA_FORCA,RECUO_EMA21)')
           .not('signal_id', 'like', '%force-lw-%')
           .not('signal_id', 'like', '%forca_invertida-%')
           .not('signal_id', 'like', '%vela_forca-%')

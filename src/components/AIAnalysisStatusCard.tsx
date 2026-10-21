@@ -26,6 +26,8 @@ const strategyLabels: Record<string, string> = {
   FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
+  ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
+  KDJ_RSI: 'KDJ + Reversão RSI',
   KDJ: 'KDJ',
   ICHIMOKU: 'Ichimoku',
   AI: 'IA',

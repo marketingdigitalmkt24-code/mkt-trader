@@ -44,7 +44,7 @@ export function ClientResultsCard() {
 
   // 21/10/2026: Vela de Força saiu das entradas reais e não aparece mais neste card.
   const ops: Row[] = useMemo(() => operations
-    .filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.entry_strategy !== 'VELA_FORCA')
+    .filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.entry_strategy !== 'VELA_FORCA' && r.entry_strategy !== 'RECUO_EMA21')
     .map((r) => ({ ...r, profit: Number(r.profit || 0), origin: entryOriginLabel(r.entry_strategy) })), [operations]);
 
   // Valores exibidos: cópia do cliente quando existir; senão o valor do principal.

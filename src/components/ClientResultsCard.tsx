@@ -1,43 +1,52 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { BarChart3, Loader2, ChevronLeft, ChevronRight, Activity, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
-import { copyResultRates } from '@/lib/admin-copy-results';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { brtDayKey, dayLabel } from '@/components/dayLabel';
+import { useMasterIQResults } from '@/hooks/useMasterIQResults';
+import { entryOriginLabel } from '@/lib/entry-origin-labels';
+import type { MasterIQOperation as Op } from '@/lib/master-iq-results';
+
+// Mesmo formato e mesmas entradas do card "Entradas na IQ Option" do admin (entradas reais do principal).
+// O campo "Operações Abertas" continua mostrando as cópias abertas da própria conta do cliente.
+type Row = Op & { origin: string };
 
 const PAGE_SIZE = 12;
-const SETTLED = ['win', 'loss', 'draw', 'tie'];
 
-// Histórico do cliente no mesmo formato do card "Entradas na IQ Option" do admin; nunca exibe a estratégia.
 export function ClientResultsCard() {
-  const { operations, isLoading, isError } = useClientCopyHistory();
+  const { operations, isError } = useMasterIQResults();
   const [page, setPage] = useState(0);
   const [showOpen, setShowOpen] = useState(true);
   const liveResults = useClientCopyResults();
   const openOperations = liveResults.operations.filter(op => ['pending', 'open'].includes(op.result));
   // 21/10/2026: Vela de Força saiu das entradas reais e não aparece mais neste card.
-  const settledOperations = operations.filter(op => SETTLED.includes(op.result) && op.entry_strategy !== 'VELA_FORCA');
+  const ops: Row[] = useMemo(() => operations
+    .filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.entry_strategy !== 'VELA_FORCA')
+    .map((r) => ({ ...r, profit: Number(r.profit || 0), origin: entryOriginLabel(r.entry_strategy) })), [operations]);
 
-  const wins = settledOperations.filter(op => op.result === 'win').length;
-  const losses = settledOperations.filter(op => op.result === 'loss').length;
-  const total = settledOperations.reduce((s, op) => s + Number(op.profit || 0), 0);
-  const { winPercent } = copyResultRates(wins, losses);
-
-  const pageCount = Math.max(1, Math.ceil(settledOperations.length / PAGE_SIZE));
+  const total = ops.reduce((s, o) => s + Number(o.profit || 0), 0);
+  const wins = ops.filter((o) => o.result === 'win').length;
+  const losses = ops.filter((o) => o.result === 'loss').length;
+  const pct = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
+  const pageCount = Math.max(1, Math.ceil(ops.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
-  const pageOps = settledOperations.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageOps = ops.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
-  const scoreFor = (iso: string) => {
-    const key = brtDayKey(iso);
-    const dayOps = operations.filter(o => brtDayKey(o.created_at) === key);
-    const w = dayOps.filter(o => o.result === 'win').length;
-    const l = dayOps.filter(o => o.result === 'loss').length;
-    const p = dayOps.filter(o => SETTLED.includes(o.result)).reduce((s, o) => s + Number(o.profit || 0), 0);
-    return { w, l, pct: w + l ? Math.round((w / (w + l)) * 100) : 0, p };
-  };
+  const dayScores = useMemo(() => {
+    const scores = new Map<string, { w: number; l: number; p: number }>();
+    for (const op of ops) {
+      const key = brtDayKey(op.created_at);
+      const score = scores.get(key) || { w: 0, l: 0, p: 0 };
+      if (op.result === 'win') score.w++;
+      if (op.result === 'loss') score.l++;
+      scores.set(key, score);
+    }
+    for (const score of scores.values()) score.p = score.w + score.l ? Math.round(score.w / (score.w + score.l) * 100) : 0;
+    return scores;
+  }, [ops]);
+  const scoreFor = (iso: string) => dayScores.get(brtDayKey(iso)) || { w: 0, l: 0, p: 0 };
 
   return (
     <Card className="p-3 sm:p-4 border-border/50">
@@ -46,7 +55,7 @@ export function ClientResultsCard() {
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option</span>
         <span className="font-mono text-xs ml-auto mr-2">
           <span className="text-call">✓{wins}</span> <span className="text-put">✗{losses}</span>{' '}
-          <span className="text-gold">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span>
+          <span className="text-gold">{pct}%</span>
         </span>
         <span className={cn('font-mono text-sm font-bold', total >= 0 ? 'text-call' : 'text-put')}>
           {total >= 0 ? '+' : '−'}US$ {Math.abs(total).toFixed(2)}
@@ -71,12 +80,10 @@ export function ClientResultsCard() {
         </div>}
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-      ) : isError ? (
+      {isError ? (
         <p className="text-xs text-destructive py-4 text-center">Não foi possível atualizar as entradas.</p>
-      ) : settledOperations.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma operação copiada em dias anteriores.</p>
+      ) : ops.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real em dias anteriores</p>
       ) : (
         <>
           <div className="space-y-1">
@@ -88,8 +95,7 @@ export function ClientResultsCard() {
                     <div className="flex items-center justify-between pt-2 pb-0.5">
                       <div className="text-[10px] font-semibold uppercase tracking-wider text-gold">{dayLabel(o.created_at)}</div>
                       <div className="font-mono text-[10px]">
-                        <span className="text-call">✓{s.w}</span> <span className="text-put">✗{s.l}</span> <span className="text-gold">{s.pct}%</span>{' '}
-                        <span className={s.p >= 0 ? 'text-call' : 'text-put'}>{s.p >= 0 ? '+' : '−'}{Math.abs(s.p).toFixed(2)}</span>
+                        <span className="text-call">✓{s.w}</span> <span className="text-put">✗{s.l}</span> <span className="text-gold">{s.p}%</span>
                       </div>
                     </div>
                   );
@@ -102,11 +108,13 @@ export function ClientResultsCard() {
                     <span className="font-medium truncate">{o.asset}</span>
                     <span className="font-mono text-[9px] text-muted-foreground truncate">#{o.iq_option_id}</span>
                   </span>
+                  <span className="px-1.5 rounded text-[10px] border border-border text-muted-foreground">
+                    {o.origin}
+                  </span>
                   <span className={o.direction === 'CALL' ? 'text-call' : 'text-put'}>{o.direction}</span>
                   <span className="ml-1 w-16 text-right font-mono">
                     {o.result === 'win' ? <span className="text-call">+{Number(o.profit).toFixed(2)}</span>
                       : o.result === 'loss' ? <span className="text-put">{Number(o.profit).toFixed(2)}</span>
-                      : ['tie', 'draw'].includes(o.result) ? <span className="text-muted-foreground">empate</span>
                       : <span className="text-muted-foreground">aberta</span>}
                   </span>
                 </div>

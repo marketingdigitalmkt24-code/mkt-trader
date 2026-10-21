@@ -240,12 +240,12 @@ Deno.serve(async (req) => {
         timeframe: 'TEST', entry_strategy: strat, telegram_sent: false, _s: strength,
       });
     }
-    // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
-    // Exceção (21/10/2026): Recuo na média 21 entra em TODOS os sinais gerados, mesmo sozinho.
+    // Recuo na média 21 entra em TODOS os sinais gerados (21/10/2026): tem prioridade sobre
+    // qualquer outro candidato do minuto. Os demais exigem 2 estratégias concordando na direção.
     const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
     const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];
     const recuo = fired.find(([st]) => st === 'RECUO_EMA21');
-    const pick = agree.find(([st]) => st === 'TENDENCIA') || agree[0] || recuo;
+    const pick = recuo || agree.find(([st]) => st === 'TENDENCIA') || agree[0];
     for (const [strat, dir] of pick ? [pick] : []) {
       rows.push({
         signal_id: `t7-${asset}-${strat}-${curMin}`, asset, direction: dir, entry_price: closed[closed.length - 1].c,

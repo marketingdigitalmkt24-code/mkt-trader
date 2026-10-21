@@ -14,15 +14,15 @@ const PAGE_SIZE = 12;
 export const IQEntriesTodayCard = () => {
   const { operations, isError } = useMasterIQResults();
   const [page, setPage] = useState(0);
-  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA').map((r) => {
-        const base = r.entry_strategy === 'RETOMADA' ? '📐 Retomada' : r.entry_strategy === 'VELA_FORCA' ? '🕯️ Vela de Força' : r.entry_strategy === 'FORCA_INVERTIDA' ? '🔄 Força Invertida' : r.entry_strategy === 'THREE_FORCE' ? '🕯️ Após 3 Velas de Força' : r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
-        return { ...r, profit: Number(r.profit || 0), origin: base };
-      }), [operations]);
   const todayStart = clientDayStart();
-  const todayOps = operations.filter((o) => o.created_at >= todayStart);
-  const total = todayOps.reduce((s, o) => s + Number(o.profit || 0), 0);
-  const wins = todayOps.filter((o) => o.result === 'win').length;
-  const losses = todayOps.filter((o) => o.result === 'loss').length;
+  // 21/10/2026: o card não mostra as operações de hoje, apenas dias anteriores.
+  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.created_at < todayStart).map((r) => {
+        const base = r.entry_strategy === 'RETOMADA' ? '📐 Retomada' : r.entry_strategy === 'VELA_FORCA' ? '🕯️ Vela de Força' : r.entry_strategy === 'RECUO_EMA21' ? '📉 Recuo na média 21' : r.entry_strategy === 'FORCA_INVERTIDA' ? '🔄 Força Invertida' : r.entry_strategy === 'THREE_FORCE' ? '🕯️ Após 3 Velas de Força' : r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
+        return { ...r, profit: Number(r.profit || 0), origin: base };
+      }), [operations, todayStart]);
+  const total = ops.reduce((s, o) => s + Number(o.profit || 0), 0);
+  const wins = ops.filter((o) => o.result === 'win').length;
+  const losses = ops.filter((o) => o.result === 'loss').length;
   const pct = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
   const pageCount = Math.max(1, Math.ceil(ops.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);

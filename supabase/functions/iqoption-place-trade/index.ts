@@ -9,6 +9,8 @@ import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { entrySubmissionDelay } from '../_shared/entry-schedule.ts';
 import { configuredEntryAmount, canMirrorToBroker } from '../_shared/iq-entry-policy.ts';
+import { isAnticipation, freshAnticipationEntry } from '../_shared/anticipation-execution.ts';
+import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -303,6 +305,8 @@ async function placeTradeFireAndForget(
             for (const [id, info] of Object.entries(actives)) {
               const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
               if (!assetInfo.enabled || assetInfo.is_suspended) continue;
+              if (isAnticipation(trade.entryStrategy) && (!trade.entryAt || optionType !== 3
+                || !iqMarketOpen(info, Math.floor(Date.now() / 1000), trade.entryAt / 1000 + 60))) continue;
               
               const name = (assetInfo.name || '').toUpperCase();
               const numId = parseInt(id);
@@ -485,7 +489,8 @@ async function placeTradeFireAndForget(
           const nowMs0 = Date.now();
           const candleOpenMs = isNextMinuteStrategy(trade.entryStrategy) && trade.entryAt
             ? trade.entryAt : Math.ceil((nowMs0 + 1000) / 60000) * 60000;
-          if (isNextMinuteStrategy(trade.entryStrategy) && !canSendReversal(candleOpenMs, nowMs0)) {
+          if (isNextMinuteStrategy(trade.entryStrategy) && (!canSendReversal(candleOpenMs, nowMs0)
+            || (isAnticipation(trade.entryStrategy) && !freshAnticipationEntry(candleOpenMs, nowMs0)))) {
             clearTimeout(timeout); ws.close();
             resolve({ success: false, error: 'Entrada prevista passou; ordem não enviada atrasada' });
             return;
@@ -500,13 +505,19 @@ async function placeTradeFireAndForget(
               return;
             }
             // Recheck at actual submission: event-loop delay must never create a late order.
-            if (isNextMinuteStrategy(trade.entryStrategy) && !canSendReversal(candleOpenMs, Date.now())) {
+            if (isNextMinuteStrategy(trade.entryStrategy) && (!canSendReversal(candleOpenMs, Date.now())
+              || (isAnticipation(trade.entryStrategy) && !freshAnticipationEntry(candleOpenMs, Date.now())))) {
               clearTimeout(timeout); ws.close();
               resolve({ success: false, error: 'Virada do minuto perdida; entrada cancelada sem ordem atrasada' });
               return;
             }
             const optPayout = payoutById[foundAsset!.turboId || foundAsset!.binaryId || foundAsset!.id] || 0;
-            if (!hasTurbo || (optPayout > 0 && optPayout < 80)) {
+            if (isAnticipation(trade.entryStrategy) && !hasTurbo) {
+              clearTimeout(timeout); ws.close();
+              resolve({ success: false, error: 'Ativo M1 não disponível; entrada cancelada' });
+              return;
+            }
+            if (!isAnticipation(trade.entryStrategy) && (!hasTurbo || (optPayout > 0 && optPayout < 80))) {
               sendDigital(!hasTurbo ? 'sem turbo' : `payout ${optPayout}%`);
               return;
             }
@@ -620,6 +631,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const tradeRequest: TradeRequest = await req.json();
+    if ((tradeRequest.signalId || '').startsWith('forca_antecipada-') && !isAnticipation(tradeRequest.entryStrategy)) {
+      return Response.json({ error: 'Invalid anticipation strategy' }, { status: 400, headers: corsHeaders });
+    }
     // Never allow an unauthenticated request to reserve or place a principal order.
     if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`) {
       const token = req.headers.get('Authorization')?.replace(/^Bearer /, '');
@@ -637,6 +651,8 @@ serve(async (req) => {
         return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
       }
       if (!canSendReversal(Number(tradeRequest.entryAt), Date.now())
+        || (isAnticipation(tradeRequest.entryStrategy) && (!freshAnticipationEntry(Number(tradeRequest.entryAt), Date.now())
+          || tradeRequest.mode === 'forex' || tradeRequest.timeframe !== 'M1'))
         || Number(tradeRequest.entryAt) > Date.now() + 60000
         || Number(tradeRequest.entryAt) % 60000 !== 0
         || !['call', 'put'].includes(tradeRequest.direction) || tradeRequest.expiration !== 1) {
@@ -686,8 +702,8 @@ serve(async (req) => {
     // A notificação exige um sinal já autorizado pelo gerador na fila real.
     // Nenhum parâmetro enviado pelo navegador habilita alertas por si só.
     let notifyEntry: ((entryAt: number) => Promise<number | undefined>) | undefined;
-    let entryStrategy: string | null = null;
-    if (tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
+    let entryStrategy: string | null = isAnticipation(tradeRequest.entryStrategy) && authorizedQueue ? 'FORCA_ANTECIPADA' : null;
+    if (!isAnticipation(tradeRequest.entryStrategy) && tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
       && tradeRequest.timeframe !== 'TEST' && tradeRequest.timeframe !== 'MT5') {
       // Reuse the exact service-only lease instead of another serial authorization read.
       const { data: queued } = authorizedQueue ? { data: authorizedQueue } : await supabase.from('trade_queue').select('id, created_at, entry_strategy')
@@ -839,13 +855,15 @@ serve(async (req) => {
     // Copy: prepara login/gráfico dos clientes em paralelo e envia assim que a principal confirmar.
     let settleMaster!: (m: { ok: boolean; timeframe: string; expirationIso: string | null }) => void;
     const masterOutcome = new Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>(res => { settleMaster = res; });
-    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
+    const copyTask = isAnticipation(tradeRequest.entryStrategy) ? Promise.resolve()
+      : mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
     // @ts-ignore EdgeRuntime exists in Supabase runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
-    await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', 'master').eq('signal_id', reservationSignal);
+    const masterLeaseScope = isAnticipation(tradeRequest.entryStrategy) ? 'master:forca_antecipada' : 'master';
+    await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', masterLeaseScope).eq('signal_id', reservationSignal);
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
     const definiteRefusal = result.error && /invalid instrument|not available|não disponível|não enviada|não enviado|entrada cancelada|insufficient|not enough/i.test(result.error);
-    if (!result.success && definiteRefusal) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', 'master').eq('signal_id', reservationSignal);
+    if (!result.success && definiteRefusal) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', masterLeaseScope).eq('signal_id', reservationSignal);
     if (!(result.success && result.tradeId)) settleMaster({ ok: false, timeframe: '', expirationIso: null });
     if (!(result.success && result.tradeId)) await cancelAlert();
     console.log('📊 Trade result:', JSON.stringify(result));
@@ -875,7 +893,7 @@ serve(async (req) => {
         timeframe,
         expiration_time: expirationIso,
       });
-      if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', 'master').eq('signal_id', reservationSignal);
+      if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', masterLeaseScope).eq('signal_id', reservationSignal);
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
 

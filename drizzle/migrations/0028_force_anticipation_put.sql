@@ -1,0 +1,2 @@
+ALTER TABLE public.force_anticipation_tests DROP CONSTRAINT force_anticipation_tests_direction_check;
+ALTER TABLE public.force_anticipation_tests ADD CONSTRAINT force_anticipation_tests_direction_check CHECK (direction IN ('CALL','PUT'));

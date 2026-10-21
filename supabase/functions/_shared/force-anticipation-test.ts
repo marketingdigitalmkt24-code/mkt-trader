@@ -17,10 +17,12 @@ export function anticipationSetup(raw: AnticipationCandle[], minute: number) {
     cs.push(k);
   }
   const last = cs[99], prev = cs[98], prior = cs.slice(79, 99);
-  const body = last.o - last.c, range = last.h - last.l;
+  const direction = last.c < last.o && prev.c > prev.o ? 'CALL'
+    : last.c > last.o && prev.c < prev.o ? 'PUT' : null;
+  const body = Math.abs(last.o - last.c), range = last.h - last.l;
   const meanBody = prior.reduce((s, k) => s + Math.abs(k.c - k.o), 0) / 20;
-  // First red candle, not an existing red streak; only completed candles decide.
-  if (!(body > 0 && prev.c > prev.o && range > 0 && meanBody > 0)
+  // First small countertrend candle; only completed candles decide.
+  if (!(direction && body > 0 && range > 0 && meanBody > 0)
     || body / range > ANTICIPATION_RULE.bodyShareMax
     || body / meanBody > ANTICIPATION_RULE.bodyMeanMax) return null;
   // Missing/zero volume is not replaced by body size, ticks guessed from prices, or future volume.
@@ -38,10 +40,13 @@ export function anticipationSetup(raw: AnticipationCandle[], minute: number) {
   }
   const sma50 = cs.slice(50).reduce((s, k) => s + k.c, 0) / 50;
   const rsi = loss === 0 ? (gain === 0 ? 50 : 100) : 100 - 100 / (1 + gain / loss);
-  if (!(ema9 > ema21 && ema21 > sma50 && last.c > ema21)
-    || rsi < ANTICIPATION_RULE.rsiMin || rsi > ANTICIPATION_RULE.rsiMax) return null;
-  return { ema9, ema21, sma50, rsi, volumeRatio, bodyShare: body / range, bodyMeanRatio: body / meanBody,
-    ruleVersion: 1, volumeSource: 'broker_reported', simulatedStake: 10, simulatedPayout: 0.85 };
+  const aligned = direction === 'CALL' ? ema9 > ema21 && ema21 > sma50 && last.c > ema21
+    : ema9 < ema21 && ema21 < sma50 && last.c < ema21;
+  const rsiMin = direction === 'CALL' ? ANTICIPATION_RULE.rsiMin : 100 - ANTICIPATION_RULE.rsiMax;
+  const rsiMax = direction === 'CALL' ? ANTICIPATION_RULE.rsiMax : 100 - ANTICIPATION_RULE.rsiMin;
+  if (!aligned || rsi < rsiMin || rsi > rsiMax) return null;
+  return { direction, ema9, ema21, sma50, rsi, volumeRatio, bodyShare: body / range, bodyMeanRatio: body / meanBody,
+    ruleVersion: 2, volumeSource: 'broker_reported', simulatedStake: 10, simulatedPayout: 0.85 };
 }
 
 export function anticipationObservation(asset: string, raw: AnticipationCandle[], now: number) {
@@ -52,18 +57,19 @@ export function anticipationObservation(asset: string, raw: AnticipationCandle[]
   const current = raw.find(k => k.t === minute);
   // Actual observed intraminute quote, NOT the candle opening retroactively.
   if (!indicators || !current || !Number.isFinite(current.c) || current.c <= 0) return null;
-  return { signal_id: `anticipation-v1-${asset}-${minute}`, asset, direction: 'CALL',
+  return { signal_id: `anticipation-v1-${asset}-${minute}`, asset, direction: indicators.direction,
     entry_minute: new Date(minute * 1000).toISOString(), created_at: new Date(now * 1000).toISOString(),
     expiration_time: new Date((minute + 60) * 1000).toISOString(), entry_price: current.c,
     result: 'open', profit: 0, indicators };
 }
 
-export function anticipationResult(entry: { entry_minute: string; entry_price: number }, raw: AnticipationCandle[], now: number) {
+export function anticipationResult(entry: { entry_minute: string; entry_price: number; direction?: string }, raw: AnticipationCandle[], now: number) {
+  if (entry.direction !== undefined && entry.direction !== 'CALL' && entry.direction !== 'PUT') return null;
   const minute = Date.parse(entry.entry_minute) / 1000;
   if (!Number.isFinite(minute) || !Number.isFinite(entry.entry_price) || now < minute + 60) return null;
   const k = raw.find(c => c.t === minute);
   if (!k || !Number.isFinite(k.c)) return null;
-  const delta = k.c - entry.entry_price;
+  const delta = (k.c - entry.entry_price) * (entry.direction === 'PUT' ? -1 : 1);
   return { exit_price: k.c, result: delta > 0 ? 'win' : delta < 0 ? 'loss' : 'tie',
     profit: delta > 0 ? ANTICIPATION_RULE.stake * ANTICIPATION_RULE.payout : delta < 0 ? -ANTICIPATION_RULE.stake : 0,
     settled_at: new Date(now * 1000).toISOString() };

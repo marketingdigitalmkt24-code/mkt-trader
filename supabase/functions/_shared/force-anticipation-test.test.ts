@@ -18,6 +18,47 @@ test('CALL after first small red candle with averages RSI and reported volume', 
   assert.ok(out); assert.ok(out.ema9 > out.ema21 && out.ema21 > out.sma50);
   assert.ok(out.rsi >= 45 && out.rsi <= 65); assert.equal(out.volumeRatio, 1.2);
 });
+function putFixture() {
+  return fixture().map(k => ({ ...k, o: 300 - k.o, c: 300 - k.c, h: 300 - k.l, l: 300 - k.h }));
+}
+test('PUT mirrors CALL after first small green candle with descending averages RSI 35 to 55 and volume', () => {
+  const out = anticipationSetup(putFixture(), minute);
+  assert.ok(out); assert.equal(out.direction, 'PUT');
+  assert.ok(out.ema9 < out.ema21 && out.ema21 < out.sma50);
+  assert.ok(out.rsi >= 35 && out.rsi <= 55); assert.equal(out.volumeRatio, 1.2);
+  const call = anticipationSetup(fixture(), minute);
+  assert.ok(call); assert.equal(call.direction, 'CALL');
+  assert.ok(Math.abs(out.rsi + call.rsi - 100) < 1e-8);
+});
+test('PUT rejects second green candle and large countertrend body', () => {
+  const cs = putFixture(); cs[98].o = cs[98].c - 0.01;
+  assert.equal(anticipationSetup(cs, minute), null);
+  const large = putFixture(); large[99].o = large[99].c - 0.15; large[99].l = large[99].o - 0.1;
+  assert.equal(anticipationSetup(large, minute), null);
+});
+test('PUT requires reported volume and closed contiguous candles', () => {
+  for (const v of [undefined, 0, 90]) {
+    const cs = putFixture(); cs[99].v = v;
+    assert.equal(anticipationSetup(cs, minute), null);
+  }
+  assert.equal(anticipationSetup(putFixture().slice(1), minute), null);
+  const cs = putFixture();
+  assert.deepEqual(anticipationSetup([...cs, { t: minute, o: 100, c: 1, h: 100, l: 1, v: 1e9 }], minute), anticipationSetup(cs, minute));
+});
+test('PUT observation uses observed quote and same minute expiration', () => {
+  const out = anticipationObservation('TRON-OTC', [...putFixture(), { t: minute, o: 201, c: 200, h: 201, l: 200, v: 2 }], minute + 12);
+  assert.ok(out); assert.equal(out.direction, 'PUT'); assert.equal(out.entry_price, 200);
+  assert.equal(out.expiration_time, new Date((minute + 60) * 1000).toISOString());
+});
+test('PUT settlement inverts outcome with 10 stake and 85 percent payout', () => {
+  const entry = { entry_minute: new Date(minute * 1000).toISOString(), entry_price: 101, direction: 'PUT' };
+  const candle = { t: minute, o: 101, c: 100, h: 102, l: 100 };
+  assert.equal(anticipationResult(entry, [candle], minute + 59), null);
+  assert.equal(anticipationResult(entry, [candle], minute + 60)?.profit, 8.5);
+  assert.equal(anticipationResult(entry, [{ ...candle, c: 102 }], minute + 60)?.profit, -10);
+  assert.equal(anticipationResult(entry, [{ ...candle, c: 101 }], minute + 60)?.profit, 0);
+  assert.equal(anticipationResult({ ...entry, direction: 'INVALID' }, [candle], minute + 60), null);
+});
 test('second red candle does not trigger', () => {
   const cs = fixture(); cs[98].o = cs[98].c + 0.01;
   assert.equal(anticipationSetup(cs, minute), null);

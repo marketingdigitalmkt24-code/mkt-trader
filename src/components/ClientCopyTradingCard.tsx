@@ -166,7 +166,7 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
         </div>
         </>}
         {!settingsOnly && (history.operations.some(op => ['win', 'loss', 'draw', 'tie'].includes(op.result))
-          ? <DailyHistory title="Histórico Diário IQ Option" operations={history.operations} perPage={5} />
+          ? <DailyHistory title="Histórico Diário IQ Option" operations={history.operations} perPage={5} includeToday />
           : <div className="border-t border-border pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Histórico Diário IQ Option</p>
               <p className="text-xs text-muted-foreground mt-2">{history.isLoading ? 'Carregando histórico…' : history.isError ? 'Não foi possível atualizar o histórico.' : 'Nenhuma operação copiada em dias anteriores.'}</p>

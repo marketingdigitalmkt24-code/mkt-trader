@@ -11,6 +11,7 @@ import { entrySubmissionDelay } from '../_shared/entry-schedule.ts';
 import { configuredEntryAmount, canMirrorToBroker } from '../_shared/iq-entry-policy.ts';
 import { isAnticipation, freshAnticipationEntry } from '../_shared/anticipation-execution.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
+import { canNotifyAnticipation } from '../_shared/anticipation-telegram.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -896,6 +897,29 @@ serve(async (req) => {
       if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', masterLeaseScope).eq('signal_id', reservationSignal);
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
+
+      // Anticipation is sent only after IQ confirmation, without delaying placement.
+      if (canNotifyAnticipation({ strategy: tradeRequest.entryStrategy, authorized: !!authorizedQueue,
+        timeframe, entryAt: tradeRequest.entryAt, success: result.success, tradeId: result.tradeId }, Date.now())) {
+        const confirmedAlert = async () => {
+          const signalId = tradeRequest.signalId;
+          const entryAt = tradeRequest.entryAt;
+          if (!signalId || typeof entryAt !== 'number') return;
+          const messageId = await sendIQAlert({ asset: tradeRequest.asset, direction: tradeRequest.direction,
+            expiration: tradeRequest.expiration, entryAt, signalId, timeframe,
+            strategy: 'Antecipação de Força', brokerOrderId: result.tradeId, accountType: configData.account_type,
+          }, { lovableKey: Deno.env.get('LOVABLE_API_KEY') || '', telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '' });
+          if (messageId === undefined) return;
+          const { error } = await supabase.from('telegram_iq_deliveries').upsert({ signal_id: signalId,
+            chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy: 'Antecipação de Força',
+          }, { onConflict: 'signal_id', ignoreDuplicates: true });
+          if (error) throw error;
+          await supabase.from('operation_results').update({ telegram_sent: true }).eq('signal_id', signalId);
+        };
+        const alertTask = confirmedAlert().catch(error => console.error('❌ Telegram antecipação:', String(error)));
+        // @ts-ignore EdgeRuntime exists in the hosted runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(alertTask);
+      }
 
       // Copy trading: espelha a ordem confirmada para os clientes com copy ativo
 

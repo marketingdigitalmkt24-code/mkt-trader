@@ -1,4 +1,5 @@
 # Antecipação de Força — execução IQ autorizada
+- [ ] Enviar antecipação confirmada e fresca ao Telegram existente e vincular resultado IQ, sem TESTE/copy; conferir testes e envio prospectivo.
 - [x] Habilitar execução principal na conta configurada, sinal fresco, ativo aberto, reserva, valor/limites atuais e confirmação IQ; TESTES separados, sem copy/Telegram. Atual conta PRACTICE, valor 10; metas percentuais bloqueiam sem saldo verificado.
 - [x] 36 testes, build OK, painel autenticado conferido; rotina 16:07 solicitou velas em :00.082, 122 ativos, nenhum sinal elegível.
 - [ ] Confirmar primeira ordem da Antecipação e resultado no painel — depende de novo sinal elegível em mercado aberto; nenhum sinal forçado ou histórico reexecutado.

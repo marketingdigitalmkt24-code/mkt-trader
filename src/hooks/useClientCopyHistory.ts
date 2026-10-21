@@ -1,13 +1,19 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ClientCopyOperation } from '@/lib/client-copy-results';
 import { historyStart } from '@/components/dayLabel';
+import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 
-// Histórico de entradas copiadas do cliente (últimos 30 dias), sem estratégia.
+const EXCLUDED_STRATEGIES = new Set(['FORCE_LOSS_WIN', 'FORCA_INVERTIDA', 'VELA_FORCA']);
+
+// Histórico diário do cliente: mesmas entradas reais do principal (como no card "Entradas na IQ Option"),
+// mas quando o cliente copiou a entrada, o resultado exibido é o da cópia dele, com o valor de entrada do cliente.
 export function useClientCopyHistory() {
   const { user } = useAuth();
   const userId = user?.id;
+  const master = useMasterIQResults();
   const query = useQuery({
     queryKey: ['client-copy-history', userId],
     enabled: Boolean(userId),
@@ -34,5 +40,28 @@ export function useClientCopyHistory() {
       }
     },
   });
-  return { operations: query.data || [], isLoading: query.isLoading, isError: query.isError };
+
+  const operations = useMemo(() => {
+    const prefix = `copy-${userId}-`;
+    const copies = (query.data || []).filter(op => op.signal_id.startsWith(prefix));
+    const copiedSignals = new Set(copies.map(op => op.signal_id.slice(prefix.length)));
+    const masterRows: ClientCopyOperation[] = master.operations
+      .filter(op => !copiedSignals.has(op.signal_id))
+      .filter(op => !op.entry_strategy || !EXCLUDED_STRATEGIES.has(op.entry_strategy))
+      .map(op => ({
+        id: op.id,
+        signal_id: op.signal_id,
+        asset: op.asset,
+        direction: op.direction,
+        result: op.result,
+        profit: op.profit,
+        created_at: op.created_at,
+        iq_option_id: op.iq_option_id,
+        timeframe: op.timeframe,
+        entry_strategy: op.entry_strategy,
+      }));
+    return [...copies, ...masterRows];
+  }, [query.data, master.operations, userId]);
+
+  return { operations, isLoading: query.isLoading, isError: query.isError || master.isError };
 }

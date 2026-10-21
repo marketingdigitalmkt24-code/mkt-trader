@@ -21,9 +21,10 @@ export function useClientCopyHistory() {
           .like('signal_id', `copy-${userId}-%`)
           .not('iq_option_id', 'is', null)
           .not('timeframe', 'in', '(TEST,MT5)')
-          .or('entry_strategy.is.null,entry_strategy.neq.FORCE_LOSS_WIN')
+          .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,VELA_FORCA)')
           .not('signal_id', 'like', '%force-lw-%')
           .not('signal_id', 'like', '%forca_invertida-%')
+          .not('signal_id', 'like', '%vela_forca-%')
           .gte('created_at', historyStart())
           .order('created_at', { ascending: false }).order('id', { ascending: false })
           .range(offset, offset + 999);

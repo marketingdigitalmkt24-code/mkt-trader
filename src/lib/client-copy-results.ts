@@ -25,6 +25,7 @@ export function clientCopyResults(rows: ClientCopyOperation[], userId: string, n
   const operations = rows.filter(row => row.signal_id.startsWith(`copy-${userId}-`)
     && row.entry_strategy !== 'FORCE_LOSS_WIN' && !row.signal_id.includes('-force-lw-')
     && row.entry_strategy !== 'FORCA_INVERTIDA' && !row.signal_id.includes('-forca_invertida-')
+    && row.entry_strategy !== 'VELA_FORCA' && !row.signal_id.includes('vela_forca-')
     && Boolean(row.iq_option_id) && !['TEST', 'MT5'].includes(row.timeframe)
     && row.created_at >= start && row.created_at <= now.toISOString());
   const totals = countClientCopyResults(operations, userId);

@@ -9,13 +9,19 @@ export function ForceAnticipationTestCard() {
     queryKey: ['force-anticipation-tests'], refetchInterval: 15000,
     queryFn: async () => {
       const [recent, wins, losses, ties] = await Promise.all([
-        supabase.from('force_anticipation_tests').select('id,asset,direction,created_at,result,profit').order('created_at', { ascending: false }).limit(10),
+        supabase.from('force_anticipation_tests').select('id,signal_id,asset,direction,created_at,result,profit').order('created_at', { ascending: false }).limit(10),
         supabase.from('force_anticipation_tests').select('id', { count: 'exact', head: true }).eq('result', 'win'),
         supabase.from('force_anticipation_tests').select('id', { count: 'exact', head: true }).eq('result', 'loss'),
         supabase.from('force_anticipation_tests').select('id', { count: 'exact', head: true }).eq('result', 'tie'),
       ]);
       for (const result of [recent, wins, losses, ties]) if (result.error) throw result.error;
-      return { rows: recent.data || [], wins: wins.count || 0, losses: losses.count || 0, ties: ties.count || 0 };
+      const ids = (recent.data || []).map(row => `forca_antecipada-${row.id}`);
+      const [orders, queue] = ids.length ? await Promise.all([
+        supabase.from('operation_results').select('signal_id,asset,direction,created_at,iq_option_id,result,profit,entry_price').in('signal_id', ids).neq('timeframe', 'TEST'),
+        supabase.from('trade_queue').select('signal_id,status,error').in('signal_id', ids),
+      ]) : [{ data: [], error: null }, { data: [], error: null }];
+      if (orders.error || queue.error) throw orders.error || queue.error;
+      return { rows: recent.data || [], orders: orders.data || [], queue: queue.data || [], wins: wins.count || 0, losses: losses.count || 0, ties: ties.count || 0 };
     },
   });
   const wins = data?.wins || 0, losses = data?.losses || 0;
@@ -23,8 +29,20 @@ export function ForceAnticipationTestCard() {
   return <Card><CardContent className="p-3 sm:p-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="flex items-center gap-2 text-sm font-semibold"><TrendingUp className="h-4 w-4 text-call" />Antecipação de Força</h3>
-      <Badge variant="outline">TESTE</Badge>
+      <Badge variant="outline">IQ OPTION</Badge>
     </div>
+    <div className="mt-3 space-y-2 border-b pb-3">
+      <h4 className="text-xs font-semibold">Ordens confirmadas na IQ Option</h4>
+      {!data?.orders.length ? <p className="text-xs text-muted-foreground">Aguardando sinal elegível e confirmação da corretora.</p> : data.orders.filter(row => /^[0-9]+$/.test(row.iq_option_id || '')).map(row => <div key={row.signal_id} className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+        <span className="font-medium">{row.asset}</span>
+        <span className="font-mono text-muted-foreground">{new Date(row.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+        <span className={row.direction === 'PUT' ? 'text-put' : 'text-call'}>{row.direction}</span>
+        <span className="font-mono">#{row.iq_option_id} · {money(Number(row.entry_price))}</span>
+        <span className="ml-auto font-mono">{['pending', 'open'].includes(row.result) ? 'ABERTO' : row.result.toUpperCase()} · {money(Number(row.profit))}</span>
+      </div>)}
+      {data?.queue.filter(row => row.status === 'failed').map(row => <p key={row.signal_id} className="text-xs text-muted-foreground">Sem ordem confirmada: {row.error || 'entrada recusada'}</p>)}
+    </div>
+    <h4 className="mt-3 text-xs font-semibold">Resultados simulados · TESTE</h4>
     <div className="my-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-mono">
       <span className="text-call">{wins} WIN</span><span className="text-put">{losses} LOSS</span>
       <span className="text-muted-foreground">{data?.ties || 0} EMPATE</span>

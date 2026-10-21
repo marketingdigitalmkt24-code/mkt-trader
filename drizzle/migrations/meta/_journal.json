@@ -211,6 +211,13 @@
       "when": 1792609032765,
       "tag": "0029_anticipation_scheduler_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792609445885,
+      "tag": "0030_authorize_force_anticipation_iq",
+      "breakpoints": true
     }
   ]
 }

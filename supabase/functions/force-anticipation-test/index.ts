@@ -6,6 +6,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { iqMarketOpen, type IQMarketAsset } from '../_shared/iq-market-open.ts';
 import { anticipationObservation, anticipationResult, type AnticipationCandle } from '../_shared/force-anticipation-test.ts';
 import { anticipationTarget, anticipationRequestReady } from '../_shared/anticipation-timing.ts';
+import { freshAnticipationEntry, confirmedAnticipationOrder } from '../_shared/anticipation-execution.ts';
 
 const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: corsHeaders });
 const bodySchema = z.object({ scheduled: z.boolean().optional() }).strict();
@@ -59,6 +60,7 @@ Deno.serve(async req => {
       .eq('result', 'open').order('created_at').limit(1000);
     if (openError) return reply({ error: 'Test history unavailable' }, 502);
     let scanned = 0, withVolume = 0, inserted = 0, resolved = 0;
+    let brokerSubmitted = 0, brokerConfirmed = 0, brokerSkipped = 0;
     let candlesRequestedAt: string | null = null;
     const writes: Promise<unknown>[] = [];
     const marketChecks: { asset: string; enabled: boolean; suspended: boolean | null; schedule: unknown; openNow: boolean; option: unknown; instrument: unknown }[] = [];
@@ -81,6 +83,25 @@ Deno.serve(async req => {
       const { data, error } = await db.from('force_anticipation_tests').upsert(observation, { onConflict: 'signal_id', ignoreDuplicates: true }).select('id');
       if (error) console.error('Anticipation TEST write failed:', error.code);
       inserted += data?.length || 0;
+      // Only scheduled, freshly persisted observations authorize broker claims; never replay history.
+      if (error || !data?.length || !scheduled || !serviceAuthorized) return;
+      const entryAt = Date.parse(observation.entry_minute);
+      if (!freshAnticipationEntry(entryAt, Date.now())
+        || !markets.some(m => iqMarketOpen(m, Math.floor(Date.now() / 1000), entryAt / 1000 + 60))) return;
+      const { data: order, error: claimError } = await db.rpc('claim_force_anticipation_entry', { p_signal: observation.signal_id });
+      if (claimError || !order) { brokerSkipped++; return; }
+      brokerSubmitted++;
+      const response = await fetch(`${url}/functions/v1/iqoption-place-trade`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ ...order, brokerSession: { ssid, configId: cfg.id } }),
+        signal: AbortSignal.timeout(40000),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (confirmedAnticipationOrder(result)) brokerConfirmed++;
+      else {
+        await db.from('trade_queue').update({ status: 'failed', error: result.error || 'No broker confirmation' })
+          .eq('signal_id', order.signalId).eq('status', 'executing').is('error', null);
+      }
     };
     await new Promise<void>(resolve => {
       const ws = new WebSocket('wss://iqoption.com/echo/websocket');
@@ -142,7 +163,7 @@ Deno.serve(async req => {
       };
     });
     await Promise.all(writes);
-    const summary = { success: true, scanned, withVolume, inserted, resolved, mode: 'TEST_ONLY', scheduled,
+    const summary = { success: true, scanned, withVolume, inserted, resolved, brokerSubmitted, brokerConfirmed, brokerSkipped, mode: scheduled ? 'IQ_CONFIGURED_ACCOUNT' : 'OBSERVATION_ONLY', scheduled,
       targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks };
     console.log('Force anticipation TEST:', JSON.stringify(summary));
     return reply(summary);

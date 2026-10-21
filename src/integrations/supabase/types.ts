@@ -116,6 +116,24 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_display_reset: {
+        Row: {
+          cutoff: string
+          id: number
+          updated_at: string
+        }
+        Insert: {
+          cutoff?: string
+          id?: number
+          updated_at?: string
+        }
+        Update: {
+          cutoff?: string
+          id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       iq_entry_leases: {
         Row: {
           reserved_until: string

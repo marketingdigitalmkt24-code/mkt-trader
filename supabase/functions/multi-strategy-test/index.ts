@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
     // Independent reads run together after closed-candle confirmation.
     const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
       supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id)),
-      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').like('signal_id', 't7-%').limit(1),
+      supabase.from('operation_results').select('entry_strategy').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').like('signal_id', 't7-%').limit(10),
       supabase.from('operation_results').select('entry_strategy, result, created_at')
         .eq('timeframe', 'TEST').like('signal_id', 't7-%')
         .lt('created_at', new Date(curMin * 1000).toISOString())
@@ -277,11 +277,16 @@ Deno.serve(async (req) => {
         .order('created_at', { ascending: false }).order('signal_id', { ascending: false }).limit(4),
     ]);
     const seen = new Set((exist || []).map((e: any) => e.signal_id));
-    // Melhor par do minuto: só UMA entrada (mais estratégias concordando, depois vela mais forte).
-    const top = rows.filter(r => !seen.has(r.signal_id)).sort((x, y) => y._score - x._score)[0];
-    const fresh = top && !minuteTaken?.length ? [top] : [];
-    // One best candidate; Telegram is reserved for the four-win reversal.
-    const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
+    // Até UMA entrada por estratégia por minuto (21/10/2026): Recuo na média 21 e Retomada
+    // podem entrar simultâneas; cada estratégia fica com o par mais forte do minuto.
+    const takenStrategies = new Set((minuteTaken || []).map((r: any) => r.entry_strategy));
+    const available = rows.filter(r => !seen.has(r.signal_id) && r._score >= 0).sort((x, y) => y._score - x._score);
+    const fresh: typeof rows = [];
+    for (const r of available) {
+      if (takenStrategies.has(r.entry_strategy) || fresh.some(f => f.entry_strategy === r.entry_strategy)) continue;
+      fresh.push(r);
+      if (fresh.length >= 2) break;
+    }
     // Persist the selected TEST first: the atomic claim checks its four predecessors.
     // Observe the same base TEST signal; never duplicate/relabel it or authorize an order.
     const { data: sequenceHistory, error: sequenceError } = sequenceRead;

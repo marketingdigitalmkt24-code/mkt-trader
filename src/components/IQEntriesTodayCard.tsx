@@ -45,7 +45,7 @@ export const IQEntriesTodayCard = () => {
   return (
     <Card className="p-3 sm:p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option</span>
         <span className="font-mono text-xs ml-auto mr-2">
           <span className="text-emerald-500">✓{wins}</span> <span className="text-rose-500">✗{losses}</span> <span className="text-amber-500">{pct}%</span>
         </span>
@@ -56,7 +56,7 @@ export const IQEntriesTodayCard = () => {
       {isError ? (
         <p className="text-xs text-destructive py-4 text-center">Não foi possível atualizar as entradas.</p>
       ) : ops.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real nos últimos 30 dias</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real em dias anteriores</p>
       ) : (
         <>
           <div className="space-y-1 flex-1">

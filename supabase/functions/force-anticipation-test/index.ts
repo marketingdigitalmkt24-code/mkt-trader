@@ -49,7 +49,7 @@ Deno.serve(async req => {
     if (openError) return reply({ error: 'Test history unavailable' }, 502);
     let scanned = 0, withVolume = 0, inserted = 0, resolved = 0;
     const writes: Promise<unknown>[] = [];
-    const marketChecks: { asset: string; enabled: boolean; suspended: boolean | null; schedule: unknown; openNow: boolean }[] = [];
+    const marketChecks: { asset: string; enabled: boolean; suspended: boolean | null; schedule: unknown; openNow: boolean; option: unknown; instrument: unknown }[] = [];
     const process = async (asset: string, cs: AnticipationCandle[], markets: IQMarketAsset[]) => {
       const now = Math.floor(Date.now() / 1000);
       scanned++;
@@ -91,7 +91,8 @@ Deno.serve(async req => {
             const now = Math.floor(Date.now() / 1000);
             const asset = symbolOf(a.name), isOpen = iqMarketOpen(a, now, Math.floor(now / 60) * 60 + 60);
             if (asset === 'JAPAN225:N') marketChecks.push({ asset, enabled: a.enabled === true,
-              suspended: a.is_suspended ?? null, schedule: a.schedule ?? null, openNow: isOpen });
+              suspended: a.is_suspended ?? null, schedule: a.schedule ?? null, openNow: isOpen,
+              option: (value as { option?: unknown }).option ?? null, instrument: (value as { min_expiration?: unknown }).min_expiration ?? null });
             if (isOpen || (open || []).some(o => o.asset === asset)) {
               const existing = assets.get(asset);
               if (existing) existing.markets.push(a);

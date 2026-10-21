@@ -45,3 +45,20 @@ export function strategyStats(rows: StrategyRow[]): StrategyStat[] {
     return rateDifference || bSettled - aSettled || a.strategy.localeCompare(b.strategy);
   });
 }
+
+// Card "Assertividade por estratégia": só as estratégias ativas em linhas próprias;
+// todo o resto (testes antigos e histórico de estratégias desativadas) resumido em uma linha.
+export function strategyAccuracyDisplay(stats: StrategyStat[]): StrategyStat[] {
+  const active = stats.filter(s => (ACTIVE_STRATEGIES as readonly string[]).includes(s.strategy));
+  const grouped = stats.reduce<StrategyStat>(
+    (acc, s) => {
+      if (!(ACTIVE_STRATEGIES as readonly string[]).includes(s.strategy)) {
+        acc.wins += s.wins;
+        acc.losses += s.losses;
+      }
+      return acc;
+    },
+    { strategy: TESTS_GROUPED_KEY, wins: 0, losses: 0 },
+  );
+  return grouped.wins + grouped.losses > 0 ? [...active, grouped] : active;
+}

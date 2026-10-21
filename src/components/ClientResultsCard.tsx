@@ -19,9 +19,8 @@ export function ClientResultsCard() {
   const [showOpen, setShowOpen] = useState(true);
   const liveResults = useClientCopyResults();
   const openOperations = liveResults.operations.filter(op => ['pending', 'open'].includes(op.result));
-  const todayStart = clientDayStart();
-  // 21/10/2026: o card não mostra as operações de hoje, apenas dias anteriores.
-  const settledOperations = operations.filter(op => SETTLED.includes(op.result) && op.created_at < todayStart);
+  // 21/10/2026: Vela de Força saiu das entradas reais e não aparece mais neste card.
+  const settledOperations = operations.filter(op => SETTLED.includes(op.result) && op.entry_strategy !== 'VELA_FORCA');
 
   const wins = settledOperations.filter(op => op.result === 'win').length;
   const losses = settledOperations.filter(op => op.result === 'loss').length;

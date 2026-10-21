@@ -14,9 +14,8 @@ const PAGE_SIZE = 12;
 export const IQEntriesTodayCard = () => {
   const { operations, isError } = useMasterIQResults();
   const [page, setPage] = useState(0);
-  const todayStart = clientDayStart();
-  // 21/10/2026: o card não mostra as operações de hoje, apenas dias anteriores.
-  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.created_at < todayStart).map((r) => {
+  // 21/10/2026: Vela de Força saiu das entradas reais e não aparece mais neste card.
+  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.entry_strategy !== 'VELA_FORCA').map((r) => {
         const base = r.entry_strategy === 'RETOMADA' ? '📐 Retomada' : r.entry_strategy === 'VELA_FORCA' ? '🕯️ Vela de Força' : r.entry_strategy === 'RECUO_EMA21' ? '📉 Recuo na média 21' : r.entry_strategy === 'FORCA_INVERTIDA' ? '🔄 Força Invertida' : r.entry_strategy === 'THREE_FORCE' ? '🕯️ Após 3 Velas de Força' : r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
         return { ...r, profit: Number(r.profit || 0), origin: base };
       }), [operations, todayStart]);

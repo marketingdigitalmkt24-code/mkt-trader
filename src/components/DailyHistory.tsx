@@ -23,6 +23,8 @@ interface DailyHistoryProps {
   perPage?: number;
   /** Operações já filtradas (ex.: cópias do cliente); substitui a fonte da conta principal. */
   operations?: Array<{ created_at: string; profit?: number | string | null; result: string }>;
+  /** Inclui o dia atual na lista (padrão: somente dias anteriores). */
+  includeToday?: boolean;
 }
 
 const getBrasiliaDateKey = (date: Date) =>
@@ -40,6 +42,7 @@ export function DailyHistory({
   daysToFetch = 30,
   perPage = 5,
   operations,
+  includeToday = false,
 }: DailyHistoryProps) {
   const { user } = useAuth();
   const { operations: masterOperations } = useMasterIQResults();
@@ -112,9 +115,9 @@ export function DailyHistory({
     setDays(result);
   };
 
-  // Exclude today
+  // Exclude today unless includeToday
   const todayKey = getBrasiliaDateKey(new Date());
-  const pastDays = days.filter(d => d.date !== todayKey);
+  const pastDays = includeToday ? days : days.filter(d => d.date !== todayKey);
 
   if (pastDays.length === 0) return null;
 

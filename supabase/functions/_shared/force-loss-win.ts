@@ -9,5 +9,5 @@ export function forceEntryDirection(direction: 'CALL' | 'PUT'): 'CALL' | 'PUT' {
 // (Vela de Força removida das entradas reais/Telegram; segue só em TESTE),
 // ancoradas no minuto do candidato. THREE_FORCE/FOUR_WIN_REVERSAL viraram TESTE.
 export function isNextMinuteStrategy(strategy: string | undefined): boolean {
-  return strategy === 'REVERSAO_RSI' || strategy === 'RETOMADA' || strategy === 'RECUO_EMA21';
+  return strategy === 'REVERSAO_RSI' || strategy === 'RETOMADA' || strategy === 'ICHIMOKU_FORCA' || strategy === 'KDJ_RSI';
 }

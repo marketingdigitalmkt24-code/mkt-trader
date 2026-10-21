@@ -10,7 +10,7 @@ const labels: Record<string, string> = {
   TENDENCIA_V1: 'Tendência V1', FOUR_WIN_REVERSAL: 'Após 4 ganhos',
   THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI', VELA_FORCA: 'Vela de força', ROMPIMENTO: 'Rompimento',
-  RECUO_EMA21: 'Recuo na média 21', KDJ: 'KDJ', ICHIMOKU: 'Ichimoku', AI: 'IA',
+  RECUO_EMA21: 'Recuo na média 21', KDJ: 'KDJ', ICHIMOKU: 'Ichimoku', ICHIMOKU_FORCA: 'Ichimoku + Vela de Força', KDJ_RSI: 'KDJ + Reversão RSI', AI: 'IA',
 };
 export function reportClock(now = new Date()) {
   const local = new Date(now.getTime() - 3 * 3600000);

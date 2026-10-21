@@ -3,6 +3,8 @@ export function entryOriginLabel(entryStrategy: string | null | undefined): stri
   switch (entryStrategy) {
     case 'RETOMADA': return '📐 Retomada';
     case 'VELA_FORCA': return '🕯️ Vela de Força';
+    case 'ICHIMOKU_FORCA': return '☁️ Ichimoku + Vela de Força';
+    case 'KDJ_RSI': return '📊 KDJ + Reversão RSI';
     case 'RECUO_EMA21': return '📉 Recuo na média 21';
     case 'FORCA_INVERTIDA': return '🔄 Força Invertida';
     case 'THREE_FORCE': return '🕯️ Após 3 Velas de Força';

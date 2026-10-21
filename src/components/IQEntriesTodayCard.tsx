@@ -15,7 +15,7 @@ export const IQEntriesTodayCard = () => {
   const { operations, isError } = useMasterIQResults();
   const [page, setPage] = useState(0);
   // 21/10/2026: Vela de Força saiu das entradas reais e não aparece mais neste card.
-  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.entry_strategy !== 'VELA_FORCA').map((r) => {
+  const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA' && r.entry_strategy !== 'VELA_FORCA' && r.entry_strategy !== 'RECUO_EMA21').map((r) => {
         return { ...r, profit: Number(r.profit || 0), origin: entryOriginLabel(r.entry_strategy) };
       }), [operations]);
   const total = ops.reduce((s, o) => s + Number(o.profit || 0), 0);

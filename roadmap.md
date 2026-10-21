@@ -56,6 +56,7 @@
 - [x] Cache/prefetch de páginas, contagem só na primeira, enriquecimento paralelo e placares diários memoizados; navegação autenticada 1→2→3→2→1 em 0,057–0,097s, sem erros; 10 testes e build OK.
 
 # Remover entradas de hoje no admin e no cliente (21/10/2026) — CONCLUÍDO
+- [ ] Corrigir alcance: ocultar somente 21/10 até o reset; restaurar dias anteriores no admin e cliente, com testes e conferência.
 - [x] Corte global de exibição em iq_display_reset (tabela nova, gravação só admin); reset do admin aplica em admin e cliente
 - [x] Aplicado em Entradas IQ, Resultado de Hoje, Histórico Diário, saldo/profit e cópias do cliente (exibição, sem apagar registros)
 - [x] Corte aplicado agora (21/10 ~18:27 UTC); admin verificado zerado no preview; TESTE preservado em Operações em Tempo Real

@@ -63,7 +63,7 @@ export function BankManagementCard() {
         .from('iq_display_reset')
         .upsert({ id: 1, cutoff: new Date().toISOString(), updated_at: new Date().toISOString() });
       if (globalError) throw globalError;
-      toast({ title: 'Resultados zerados', description: 'Entradas na IQ Option e Resultado de Hoje zerados no admin e no cliente. Operações em Tempo Real preservadas.' });
+      toast({ title: 'Resultados de hoje zerados', description: 'Entradas de hoje ocultadas no admin e no cliente até este momento. Dias anteriores e Operações em Tempo Real preservados.' });
     } catch (error) {
       console.error('Error resetting stats:', error);
       toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });

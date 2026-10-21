@@ -61,3 +61,7 @@
 - [x] Vela de Força fora das entradas reais/Telegram (segue em TESTE)
 - [x] Recuo na média 21 entra em todos os sinais gerados (claim + Telegram)
 - [ ] Conferir primeira entrada real de Recuo na média 21
+
+# Conexão REAL e saldo (21/10/2026)
+- [ ] Corrigir confirmação ao trocar Demo/Real sem reativar copy automaticamente.
+- [ ] Conferir saldo REAL autenticado e destino das operações, sem criar ordem manual.

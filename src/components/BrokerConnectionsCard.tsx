@@ -3,6 +3,8 @@ import { Wifi, WifiOff, Loader2, MonitorSmartphone, RefreshCw } from 'lucide-rea
 import { Card, CardContent } from './ui/card';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from './ui/button';
 
 interface BrokerStatus {
   name: string;
@@ -15,6 +17,7 @@ interface BrokerStatus {
 }
 
 export function BrokerConnectionsCard() {
+  const { user } = useAuth();
   const [iqStatus, setIqStatus] = useState<BrokerStatus>({
     name: 'IQ Option',
     icon: <MonitorSmartphone className="w-4 h-4" />,
@@ -26,13 +29,14 @@ export function BrokerConnectionsCard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const checkConnections = async () => {
+    if (!user) return;
     setIsRefreshing(true);
 
     try {
       const { data: iqConfig } = await supabase
         .from('iqoption_config')
         .select('is_active, account_type, last_connected_at, email')
-        .eq('is_active', true)
+        .eq('user_id', user.id)
         .limit(1)
         .maybeSingle();
 
@@ -40,17 +44,17 @@ export function BrokerConnectionsCard() {
         setIqStatus({
           name: 'IQ Option',
           icon: <MonitorSmartphone className="w-4 h-4" />,
-          connected: true,
+          connected: iqConfig.is_active && Boolean(iqConfig.last_connected_at),
           loading: false,
           details: iqConfig.email,
           accountType: iqConfig.account_type,
           lastActivity: iqConfig.last_connected_at ? new Date(iqConfig.last_connected_at).toLocaleTimeString('pt-BR') : undefined,
         });
       } else {
-        setIqStatus(prev => ({ ...prev, loading: false, details: 'Não configurado' }));
+        setIqStatus(prev => ({ ...prev, connected: false, loading: false, details: 'Não configurado', accountType: undefined, lastActivity: undefined }));
       }
     } catch {
-      setIqStatus(prev => ({ ...prev, loading: false, details: 'Erro ao verificar' }));
+      setIqStatus(prev => ({ ...prev, connected: false, loading: false, details: 'Erro ao verificar' }));
     }
 
     setIsRefreshing(false);
@@ -60,7 +64,7 @@ export function BrokerConnectionsCard() {
     checkConnections();
     const interval = setInterval(checkConnections, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.id]);
 
   return (
     <Card className="border-border/50">
@@ -70,13 +74,16 @@ export function BrokerConnectionsCard() {
             <div className="w-2 h-2 rounded-full bg-call animate-pulse" />
             <h3 className="text-sm font-semibold">Conexão Corretora</h3>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Atualizar conexão"
             onClick={checkConnections}
             disabled={isRefreshing}
             className="p-1 hover:bg-secondary rounded transition-colors"
           >
             <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", isRefreshing && "animate-spin")} />
-          </button>
+          </Button>
         </div>
         <div className="grid grid-cols-1 gap-2">
           <div className={cn(
@@ -95,6 +102,7 @@ export function BrokerConnectionsCard() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium truncate">{iqStatus.name}</span>
+                  {iqStatus.accountType && <span className="text-xs text-muted-foreground">{iqStatus.accountType === 'REAL' ? 'REAL' : 'DEMO'} · {iqStatus.connected ? 'Conectado' : 'Desconectado'}</span>}
                 </div>
                 <p className="text-xs text-muted-foreground truncate">{iqStatus.details}</p>
               </div>

@@ -2,13 +2,16 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { iqMarketOpen } from './iq-market-open.ts';
 const now = Date.parse('2026-10-21T18:39:00Z') / 1000;
-const asset = { name: 'front.JAPAN225:N', enabled: true, is_suspended: false, schedule: [[now - 100, now + 120]], option: { start_time: now - 60, expiration_times: [60] } };
+const asset = { name: 'front.EURUSD', enabled: true, is_suspended: false, schedule: [[now - 100, now + 120]], option: { start_time: now - 60, expiration_times: [60] } };
 test('requires live schedule covering analysis and expiry', () => assert.equal(iqMarketOpen(asset, now, now + 60), true));
 test('JAPAN225:N enabled but closed schedule is not available', () => {
   assert.equal(iqMarketOpen({ ...asset, schedule: [[now - 7200, now - 3600]] }, now, now + 60), false);
 });
-test('JAPAN225:N cannot enter before broker start time or with only 15 minute expiry', () => {
-  assert.equal(iqMarketOpen({ ...asset, option: { start_time: Date.parse('2026-10-21T18:43:00Z') / 1000, expiration_times: [60] } }, now, now + 60), false);
+test('JAPAN225:N reported unavailable stays quarantined even if broker marks enabled', () => {
+  assert.equal(iqMarketOpen({ ...asset, name: 'front.JAPAN225:N' }, now, now + 60), false);
+});
+test('requires one-minute expiry; option start_time is not assumed to mean market opening', () => {
+  assert.equal(iqMarketOpen({ ...asset, option: { start_time: now + 60, expiration_times: [60] } }, now, now + 60), true);
   assert.equal(iqMarketOpen({ ...asset, option: { start_time: now - 60, expiration_times: [900] } }, now, now + 60), false);
   assert.equal(iqMarketOpen({ ...asset, option: undefined }, now, now + 60), false);
 });

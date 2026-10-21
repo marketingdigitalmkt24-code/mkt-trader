@@ -59,6 +59,7 @@ Deno.serve(async req => {
       .eq('result', 'open').order('created_at').limit(1000);
     if (openError) return reply({ error: 'Test history unavailable' }, 502);
     let scanned = 0, withVolume = 0, inserted = 0, resolved = 0;
+    let candlesRequestedAt: string | null = null;
     const writes: Promise<unknown>[] = [];
     const marketChecks: { asset: string; enabled: boolean; suspended: boolean | null; schedule: unknown; openNow: boolean; option: unknown; instrument: unknown }[] = [];
     const process = async (asset: string, cs: AnticipationCandle[], markets: IQMarketAsset[]) => {
@@ -124,6 +125,7 @@ Deno.serve(async req => {
           for (const [asset, info] of assets) pending.set(`a${info.id}`, { asset, markets: info.markets });
           await sendCandleRequestBatches([...assets], ([, info]) => {
             if (done || ws.readyState !== WebSocket.OPEN) return;
+            candlesRequestedAt ??= new Date().toISOString();
             ws.send(JSON.stringify({ name: 'sendMessage', request_id: `a${info.id}`, msg: { name: 'get-candles', version: '2.0',
               body: { active_id: info.id, size: 60, to: Math.floor(Date.now() / 1000), count: 102 } } }));
           });
@@ -141,7 +143,7 @@ Deno.serve(async req => {
     });
     await Promise.all(writes);
     const summary = { success: true, scanned, withVolume, inserted, resolved, mode: 'TEST_ONLY', scheduled,
-      targetTime: new Date(targetMs).toISOString(), marketChecks };
+      targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks };
     console.log('Force anticipation TEST:', JSON.stringify(summary));
     return reply(summary);
   } catch { return reply({ error: 'Anticipation test unavailable' }, 502); }

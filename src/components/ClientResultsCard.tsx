@@ -5,7 +5,6 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
 import { copyResultRates } from '@/lib/admin-copy-results';
-import { clientDayStart } from '@/lib/client-copy-results';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { brtDayKey, dayLabel } from '@/components/dayLabel';
 

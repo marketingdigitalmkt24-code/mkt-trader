@@ -1,3 +1,7 @@
+# Antecipação de Força — TESTE
+- [ ] Criar regra prospectiva após primeira vela vermelha pequena, com médias, RSI e volume disponível, isolada de reais/copy/Telegram.
+- [ ] Validar regras, ativar geração e conferir gravação/resolução dos testes.
+
 # Roadmap — troca de estratégias reais (18/10/2026) — CONCLUÍDO
 
 - [x] 1. Tendência, THREE_FORCE, FOUR_WIN_REVERSAL → só TESTE (claims desativados)

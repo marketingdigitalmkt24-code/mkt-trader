@@ -5,9 +5,10 @@ import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { iqMarketOpen, type IQMarketAsset } from '../_shared/iq-market-open.ts';
 import { anticipationObservation, anticipationResult, type AnticipationCandle } from '../_shared/force-anticipation-test.ts';
+import { anticipationTarget, anticipationRequestReady } from '../_shared/anticipation-timing.ts';
 
 const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: corsHeaders });
-const bodySchema = z.object({}).strict();
+const bodySchema = z.object({ scheduled: z.boolean().optional() }).strict();
 const symbolOf = (raw: string) => {
   let s = raw.toUpperCase().replace('FRONT.', '');
   const otc = s.includes('-OTC');
@@ -24,14 +25,24 @@ Deno.serve(async req => {
     if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
     const db = createClient(url, key);
     const token = req.headers.get('Authorization')?.replace(/^Bearer /, '');
-    if (!token) return reply({ error: 'Unauthorized' }, 401);
-    if (token !== key) {
+    const schedulerToken = req.headers.get('x-scheduler-token');
+    let serviceAuthorized = token === key;
+    if (!serviceAuthorized && schedulerToken) {
+      const { data: credential } = await db.from('anticipation_scheduler_auth').select('token').eq('id', 1).maybeSingle();
+      serviceAuthorized = !!credential?.token && credential.token === schedulerToken;
+    }
+    if (!token && !serviceAuthorized) return reply({ error: 'Unauthorized' }, 401);
+    if (!serviceAuthorized) {
       const { data, error } = await db.auth.getClaims(token);
       if (error || !data?.claims?.sub) return reply({ error: 'Unauthorized' }, 401);
       const { data: role } = await db.from('user_roles').select('role').eq('user_id', data.claims.sub).eq('role', 'admin').maybeSingle();
       if (!role) return reply({ error: 'Admin required' }, 403);
     }
-    if (!bodySchema.safeParse(await req.json().catch(() => null)).success) return reply({ error: 'Invalid parameters' }, 400);
+    const parsed = bodySchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return reply({ error: 'Invalid parameters' }, 400);
+    if (parsed.data.scheduled && !serviceAuthorized) return reply({ error: 'Service scheduling required' }, 403);
+    const scheduled = parsed.data.scheduled === true;
+    const targetMs = anticipationTarget(Date.now(), scheduled);
     const { data: cfg } = await readMasterIQConfig(db);
     if (!cfg) return reply({ error: 'Principal connection unavailable' }, 409);
     let ssid: string | null = null;
@@ -48,6 +59,7 @@ Deno.serve(async req => {
       .eq('result', 'open').order('created_at').limit(1000);
     if (openError) return reply({ error: 'Test history unavailable' }, 502);
     let scanned = 0, withVolume = 0, inserted = 0, resolved = 0;
+    let candlesRequestedAt: string | null = null;
     const writes: Promise<unknown>[] = [];
     const marketChecks: { asset: string; enabled: boolean; suspended: boolean | null; schedule: unknown; openNow: boolean; option: unknown; instrument: unknown }[] = [];
     const process = async (asset: string, cs: AnticipationCandle[], markets: IQMarketAsset[]) => {
@@ -73,15 +85,25 @@ Deno.serve(async req => {
     await new Promise<void>(resolve => {
       const ws = new WebSocket('wss://iqoption.com/echo/websocket');
       const pending = new Map<string, { asset: string; markets: IQMarketAsset[] }>();
-      let done = false, initialized = false;
+      let done = false, initialized = false, preparing = false;
       const finish = () => { if (done) return; done = true; clearTimeout(timer); ws.close(); resolve(); };
-      const timer = setTimeout(finish, 45000);
+      const timer = setTimeout(finish, scheduled ? 85000 : 45000);
       ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
       ws.onerror = finish;
       ws.onmessage = async ev => {
         let d; try { d = JSON.parse(ev.data); } catch { return; }
         if (d.name === 'profile') ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
         if (d.name === 'initialization-data' && !initialized) {
+          if (scheduled && !preparing) {
+            preparing = true;
+            // Login/socket are ready before :00; refresh availability at the boundary.
+            await new Promise(r => setTimeout(r, Math.max(0, targetMs - Date.now())));
+            if (done || ws.readyState !== WebSocket.OPEN) return;
+            if (!anticipationRequestReady(Date.now(), targetMs)) { finish(); return; }
+            ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
+            return;
+          }
+          if (scheduled && !anticipationRequestReady(Date.now(), targetMs)) { finish(); return; }
           initialized = true;
           const all = [...Object.entries(d.msg?.binary?.actives || {}), ...Object.entries(d.msg?.turbo?.actives || {})];
           const assets = new Map<string, { id: number; markets: IQMarketAsset[] }>();
@@ -103,6 +125,7 @@ Deno.serve(async req => {
           for (const [asset, info] of assets) pending.set(`a${info.id}`, { asset, markets: info.markets });
           await sendCandleRequestBatches([...assets], ([, info]) => {
             if (done || ws.readyState !== WebSocket.OPEN) return;
+            candlesRequestedAt ??= new Date().toISOString();
             ws.send(JSON.stringify({ name: 'sendMessage', request_id: `a${info.id}`, msg: { name: 'get-candles', version: '2.0',
               body: { active_id: info.id, size: 60, to: Math.floor(Date.now() / 1000), count: 102 } } }));
           });
@@ -119,7 +142,8 @@ Deno.serve(async req => {
       };
     });
     await Promise.all(writes);
-    const summary = { success: true, scanned, withVolume, inserted, resolved, mode: 'TEST_ONLY', marketChecks };
+    const summary = { success: true, scanned, withVolume, inserted, resolved, mode: 'TEST_ONLY', scheduled,
+      targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks };
     console.log('Force anticipation TEST:', JSON.stringify(summary));
     return reply(summary);
   } catch { return reply({ error: 'Anticipation test unavailable' }, 502); }

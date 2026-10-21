@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      anticipation_scheduler_auth: {
+        Row: {
+          id: number
+          token: string
+        }
+        Insert: {
+          id: number
+          token?: string
+        }
+        Update: {
+          id?: number
+          token?: string
+        }
+        Relationships: []
+      }
       chart_study: {
         Row: {
           candles: number

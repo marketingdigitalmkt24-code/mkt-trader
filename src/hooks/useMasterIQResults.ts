@@ -11,7 +11,8 @@ export function useMasterIQResults() {
   const { user } = useAuth();
   const userId = user?.id;
   const queryClient = useQueryClient();
-  const [cutoff, setCutoff] = useState(() => getIQResultsReset(userId));
+  const globalCutoff = useGlobalIQResetCutoff();
+  const [localCutoff, setLocalCutoff] = useState(() => getIQResultsReset(userId));
   const query = useQuery({
     queryKey: ['master-iq-results', userId], enabled: Boolean(userId), refetchInterval: 10000,
     queryFn: async () => {

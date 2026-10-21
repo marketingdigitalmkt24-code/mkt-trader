@@ -166,7 +166,7 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
           </div>
         </div>
         </>}
-        {!settingsOnly && (history.operations.some(op => op.created_at < clientDayStart() && ['win', 'loss', 'draw', 'tie'].includes(op.result))
+        {!settingsOnly && (history.operations.some(op => ['win', 'loss', 'draw', 'tie'].includes(op.result))
           ? <DailyHistory title="Histórico Diário IQ Option" operations={history.operations} perPage={5} />
           : <div className="border-t border-border pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Histórico Diário IQ Option</p>

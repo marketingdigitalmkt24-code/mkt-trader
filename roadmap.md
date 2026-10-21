@@ -1,4 +1,6 @@
-# Antecipação de Força — TESTE
+# Antecipação de Força — execução IQ autorizada
+- [ ] Habilitar execução principal na conta configurada, com sinal fresco, ativo aberto, reserva única, valor/limites atuais e confirmação IQ; preservar TESTES e não ampliar copy/Telegram.
+- [ ] Conferir testes, painel e execução automática; registrar eventual ausência de sinal elegível.
 - [x] Preparar conexão antes do próximo :00 e preservar horário/preço observados; acesso automático corrigido com credencial privada, 23 testes e build OK. Rotina alvo 15:59:00 concluída 15:59:01, 120 ativos consultados, sem sinal elegível; :00 exato não garantido, sem alterar reais.
 - [x] PUT espelhado, liquidação por direção e rótulo correto; 20 testes aprovados, rotina publicada, build OK e primeiro PUT UK100:N 15:49:12 registrado e lido no painel autenticado; sem alterar reais/copy/Telegram.
 - [x] Exigir sessão IQ cobrindo análise/expiração M1 e suspensão confirmada; JAPAN225:N fica bloqueado por divergência entre API habilitada e tela do usuário. Não interpretar option.start_time como abertura de mercado. Testes e execução autenticada conferidos; registros antigos preservados.

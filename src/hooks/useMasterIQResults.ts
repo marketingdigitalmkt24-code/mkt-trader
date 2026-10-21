@@ -31,13 +31,14 @@ export function useMasterIQResults() {
     },
   });
   useEffect(() => {
-    setCutoff(getIQResultsReset(userId));
-    const reload = () => { setCutoff(getIQResultsReset(userId)); void queryClient.invalidateQueries({ queryKey: ['master-iq-results', userId] }); };
+    setLocalCutoff(getIQResultsReset(userId));
+    const reload = () => { setLocalCutoff(getIQResultsReset(userId)); void queryClient.invalidateQueries({ queryKey: ['master-iq-results', userId] }); };
     window.addEventListener(IQ_RESULTS_RESET_EVENT, reload);
     const channel = supabase.channel(`master-iq-results-${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, reload).subscribe();
     return () => { window.removeEventListener(IQ_RESULTS_RESET_EVENT, reload); void supabase.removeChannel(channel); };
   }, [userId, queryClient]);
+  const cutoff = combineCutoffs(localCutoff, globalCutoff);
   const operations = useMemo(() => (query.data || []).filter(row => isMasterIQOrder(row, cutoff)), [query.data, cutoff]);
   return { operations, dailyStats: masterIQDailyStats(operations, cutoff), isError: query.isError };
 }

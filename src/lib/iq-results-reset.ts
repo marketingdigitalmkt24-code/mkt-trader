@@ -11,3 +11,8 @@ export function resetIQResults(userId: string) {
 export function afterIQReset(createdAt: string, cutoff: string) {
   return !cutoff || createdAt > cutoff;
 }
+// Combina cortes de reset (por usuário no navegador + corte global do servidor):
+// vale o mais recente deles.
+export function combineCutoffs(...cutoffs: string[]) {
+  return cutoffs.filter(Boolean).sort().pop() ?? '';
+}

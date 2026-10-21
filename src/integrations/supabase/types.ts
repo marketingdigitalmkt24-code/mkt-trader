@@ -95,6 +95,54 @@ export type Database = {
         }
         Relationships: []
       }
+      force_anticipation_tests: {
+        Row: {
+          asset: string
+          created_at: string
+          direction: string
+          entry_minute: string
+          entry_price: number
+          exit_price: number | null
+          expiration_time: string
+          id: string
+          indicators: Json
+          profit: number
+          result: string
+          settled_at: string | null
+          signal_id: string
+        }
+        Insert: {
+          asset: string
+          created_at: string
+          direction?: string
+          entry_minute: string
+          entry_price: number
+          exit_price?: number | null
+          expiration_time: string
+          id?: string
+          indicators: Json
+          profit?: number
+          result?: string
+          settled_at?: string | null
+          signal_id: string
+        }
+        Update: {
+          asset?: string
+          created_at?: string
+          direction?: string
+          entry_minute?: string
+          entry_price?: number
+          exit_price?: number | null
+          expiration_time?: string
+          id?: string
+          indicators?: Json
+          profit?: number
+          result?: string
+          settled_at?: string | null
+          signal_id?: string
+        }
+        Relationships: []
+      }
       forex_practice_balance: {
         Row: {
           amount: number

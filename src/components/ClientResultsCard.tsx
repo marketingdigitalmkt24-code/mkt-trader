@@ -1,103 +1,131 @@
 import { useState } from 'react';
-import { BarChart3, Loader2, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart3, Loader2, ChevronLeft, ChevronRight, Activity, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { useClientCopyResults } from '@/hooks/useClientCopyResults';
+import { useClientCopyHistory } from '@/hooks/useClientCopyHistory';
 import { copyResultRates } from '@/lib/admin-copy-results';
-import { clientSignalsPage } from '@/lib/client-copy-results';
+import { clientDayStart } from '@/lib/client-copy-results';
+import { useClientCopyResults } from '@/hooks/useClientCopyResults';
+import { brtDayKey, dayLabel } from '@/components/dayLabel';
 
-// Resultados do cliente: nunca exibe a estratégia utilizada.
+const PAGE_SIZE = 12;
+const SETTLED = ['win', 'loss', 'draw', 'tie'];
+
+// Histórico do cliente no mesmo formato do card "Entradas na IQ Option" do admin; nunca exibe a estratégia.
 export function ClientResultsCard() {
-  const { operations: ops, profit, wins, losses, trades, isLoading, isError } = useClientCopyResults();
+  const { operations, isLoading, isError } = useClientCopyHistory();
+  const [page, setPage] = useState(0);
+  const [showOpen, setShowOpen] = useState(true);
+  const liveResults = useClientCopyResults();
+  const openOperations = liveResults.operations.filter(op => ['pending', 'open'].includes(op.result));
+  const settledOperations = operations.filter(op => SETTLED.includes(op.result));
+
+  const todayStart = clientDayStart();
+  const todayOps = operations.filter(op => op.created_at >= todayStart);
+  const wins = todayOps.filter(op => op.result === 'win').length;
+  const losses = todayOps.filter(op => op.result === 'loss').length;
+  const total = todayOps.filter(op => SETTLED.includes(op.result)).reduce((s, op) => s + Number(op.profit || 0), 0);
   const { winPercent } = copyResultRates(wins, losses);
-  const [requestedPage, setRequestedPage] = useState(1);
-  const { page, totalPages, operations: visibleOps } = clientSignalsPage(ops, requestedPage);
+
+  const pageCount = Math.max(1, Math.ceil(settledOperations.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageOps = settledOperations.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  const scoreFor = (iso: string) => {
+    const key = brtDayKey(iso);
+    const dayOps = operations.filter(o => brtDayKey(o.created_at) === key);
+    const w = dayOps.filter(o => o.result === 'win').length;
+    const l = dayOps.filter(o => o.result === 'loss').length;
+    const p = dayOps.filter(o => SETTLED.includes(o.result)).reduce((s, o) => s + Number(o.profit || 0), 0);
+    return { w, l, pct: w + l ? Math.round((w / (w + l)) * 100) : 0, p };
+  };
 
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
-            <BarChart3 className="w-4 h-4 text-primary" />
-          </div>
-          Resultados e Sinais de Hoje
-          <Badge variant={profit >= 0 ? 'default' : 'destructive'} className="ml-auto text-xs">
-            {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-          <div className="p-2 rounded-lg bg-secondary/30 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase">Operações</p>
-            <p className="text-sm font-bold">{trades}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-call/10 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase">Wins</p>
-            <p className="text-sm font-bold text-call">{wins}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-put/10 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase">Losses</p>
-            <p className="text-sm font-bold text-put">{losses}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-secondary/30 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase">Win rate</p>
-            <p className="text-sm font-bold text-call tabular-nums">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</p>
-          </div>
-        </div>
+    <Card className="p-3 sm:p-4 border-border/50">
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <BarChart3 className="w-4 h-4 text-primary" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
+        <span className="font-mono text-xs ml-auto mr-2">
+          <span className="text-call">✓{wins}</span> <span className="text-put">✗{losses}</span>{' '}
+          <span className="text-gold">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span>
+        </span>
+        <span className={cn('font-mono text-sm font-bold', total >= 0 ? 'text-call' : 'text-put')}>
+          {total >= 0 ? '+' : '−'}US$ {Math.abs(total).toFixed(2)}
+        </span>
+      </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : isError ? (
-          <p className="text-sm text-destructive text-center py-6">Não foi possível atualizar as entradas.</p>
-        ) : ops.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            Nenhuma operação copiada hoje.
-          </p>
-        ) : (
-          <div className="space-y-1.5">
-            {visibleOps.map((op) => (
-              <div key={op.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/20">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className={cn(
-                    'w-6 h-6 rounded flex items-center justify-center shrink-0',
-                    op.direction === 'CALL' ? 'bg-call/20 text-call' : 'bg-put/20 text-put'
-                  )}>
-                    {op.direction === 'CALL' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium truncate">{op.asset}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(op.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })} · #{op.iq_option_id}
-                    </p>
-                  </div>
+      <div className="border-y border-border/50 my-3 py-2">
+        <Button variant="ghost" className="w-full justify-between px-0 h-8" onClick={() => setShowOpen(!showOpen)} aria-expanded={showOpen} aria-controls="client-open-operations">
+          <span className="flex items-center gap-2 text-xs"><Activity className="w-4 h-4 text-primary" />Operações Abertas <span className="font-mono">({openOperations.length})</span></span>
+          {showOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+        {showOpen && <div id="client-open-operations" className="space-y-2 py-2">
+          {liveResults.isLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+            : liveResults.isError ? <p className="text-xs text-destructive text-center">Não foi possível atualizar as operações abertas.</p>
+            : openOperations.length === 0 ? <p className="text-xs text-muted-foreground text-center">Nenhuma operação aberta.</p>
+            : openOperations.map(op => <div key={op.id} className="flex items-center gap-2 text-xs border-b border-border/50 pb-2">
+              <span className="text-muted-foreground font-mono">{new Date(op.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}</span>
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{op.asset}</span><span className="block truncate text-[9px] text-muted-foreground font-mono">#{op.iq_option_id}</span></span>
+              <span className={op.direction === 'CALL' ? 'text-call' : 'text-put'}>{op.direction}</span>
+              <span className="text-gold">Aberta</span>
+            </div>)}
+        </div>}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+      ) : isError ? (
+        <p className="text-xs text-destructive py-4 text-center">Não foi possível atualizar as entradas.</p>
+      ) : settledOperations.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma operação copiada ainda.</p>
+      ) : (
+        <>
+          <div className="space-y-1">
+            {pageOps.map((o, i) => (
+              <div key={o.id}>
+                {(i === 0 || brtDayKey(pageOps[i - 1].created_at) !== brtDayKey(o.created_at)) && (() => {
+                  const s = scoreFor(o.created_at);
+                  return (
+                    <div className="flex items-center justify-between pt-2 pb-0.5">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gold">{dayLabel(o.created_at)}</div>
+                      <div className="font-mono text-[10px]">
+                        <span className="text-call">✓{s.w}</span> <span className="text-put">✗{s.l}</span> <span className="text-gold">{s.pct}%</span>{' '}
+                        <span className={s.p >= 0 ? 'text-call' : 'text-put'}>{s.p >= 0 ? '+' : '−'}{Math.abs(s.p).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="flex items-center justify-between text-xs border-b border-border/50 py-1 gap-1">
+                  <span className="font-mono text-muted-foreground">
+                    {new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="flex-1 ml-1 min-w-0 flex flex-col leading-tight">
+                    <span className="font-medium truncate">{o.asset}</span>
+                    <span className="font-mono text-[9px] text-muted-foreground truncate">#{o.iq_option_id}</span>
+                  </span>
+                  <span className={o.direction === 'CALL' ? 'text-call' : 'text-put'}>{o.direction}</span>
+                  <span className="ml-1 w-16 text-right font-mono">
+                    {o.result === 'win' ? <span className="text-call">+{Number(o.profit).toFixed(2)}</span>
+                      : o.result === 'loss' ? <span className="text-put">{Number(o.profit).toFixed(2)}</span>
+                      : ['tie', 'draw'].includes(o.result) ? <span className="text-muted-foreground">empate</span>
+                      : <span className="text-muted-foreground">aberta</span>}
+                  </span>
                 </div>
-                <span className={cn(
-                  'text-xs font-bold shrink-0',
-                  op.result === 'win' ? 'text-call' : op.result === 'loss' ? 'text-put' : 'text-muted-foreground'
-                )}>
-                  {op.result === 'win' ? `+$${Number(op.profit).toFixed(2)}` : op.result === 'loss' ? `-$${Math.abs(Number(op.profit)).toFixed(2)}` : ['tie', 'draw'].includes(op.result) ? 'Empate' : 'Em aberto'}
-                </span>
               </div>
             ))}
           </div>
-        )}
-        {!isLoading && !isError && ops.length > 12 && (
-          <nav aria-label="Histórico de sinais" className="flex items-center justify-between gap-2 mt-3">
-            <Button variant="outline" size="icon" aria-label="Página anterior" title="Página anterior" disabled={page === 1} onClick={() => setRequestedPage(page - 1)}>
-              <ChevronLeft />
+          <div className="flex items-center justify-between mt-2">
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
+              <ChevronLeft className="h-3 w-3 mr-1" /> Anterior
             </Button>
-            <span className="text-xs text-muted-foreground tabular-nums">Página {page} de {totalPages}</span>
-            <Button variant="outline" size="icon" aria-label="Próxima página" title="Próxima página" disabled={page === totalPages} onClick={() => setRequestedPage(page + 1)}>
-              <ChevronRight />
+            <span className="text-[10px] text-muted-foreground font-mono">{safePage + 1}/{pageCount}</span>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>
+              Próxima <ChevronRight className="h-3 w-3 ml-1" />
             </Button>
-          </nav>
-        )}
-      </CardContent>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

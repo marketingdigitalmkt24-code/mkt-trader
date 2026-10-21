@@ -1,62 +1,56 @@
-- [x] Isolate admin IQ entries and bank results from client copies; shared paginated/realtime/polled master query and independent broker balance read; 12 tests passed, authenticated admin verified balance $8,865.30 and both cards 18 wins/25 losses/-$101 matching principal-only stored totals; build OK.
-- [x] Isolate client dashboard totals and entries by logged-in client's copied orders; shared paginated query with BRT days, realtime and 10-second polling; eight tests passed, authenticated client UI verified 35 orders/14 wins/21 losses/-$942 matching stored client results, no forced trades.
-- [x] Incorporate settled recent TEST outcomes into minute candidate ranking with bounded, recency-weighted asset/direction/strategy feedback; 22 tests passed and runner deployed, authorizations unchanged.
-- [ ] Validate impact of recent-outcome ranking on accuracy and profit (needs new naturally settled signals; no forced orders or guaranteed improvement).
-- [x] Reduce shared candle-request pacing for all authorized strategies; 22 tests passed, runner deployed, full-market ranking and :00 candidate preserved. Actual broker timing awaits a natural authorized entry; no forced orders.
-- [x] Add three consecutive Vela de Força signals → next same-direction principal IQ order and Telegram; 21 tests passed, service-only permissions verified, functions deployed and build OK.
-- [ ] Verify natural THREE_FORCE broker order and Telegram entry/result (waiting for three new consecutive force signals after activation; no forced or retrospective order).
-- [x] Restrict master collection, both claims, placement and reconciliation to service-only admin IQ resolver; 17 tests passed, permissions verified and four functions deployed; selected admin PRACTICE connection has auto trading enabled, no forced trade.
-- [x] Study Sept 17–Oct 17 resistance/support touches and closed rejection candles: 175 assets, 7,534,890 candles, all 44 responses per asset; final-10-day PUT touch 50.11%, PUT rejection 49.83%, CALL touch 50.29%, CALL rejection 50.15%; six tests passed, no trades/Telegram changes. Coverage is 174 OTC plus ETHUSD-OP, not regular forex evidence.
-- [x] Study PUT after five separate resistance touches, fixed prior resistance and next-minute expiry on Sept 17–Oct 17 IQ Option candles: 175 enabled/non-suspended assets (174 OTC), 7,534,890 candles; search 12W/13L, held-out 7W/6L (53.85%, only 13 cases); three tests passed, no trading or Telegram changes.
-- [x] Show daily copied profit and win/loss percentages in admin Copy Trading; four calculation tests passed, authenticated client display verified, mobile has no overflow and build OK.
-- [x] Stop client copy on Demo/Real changes or disconnect; require reconnection and show explicit connection buttons; eight tests passed, installed trigger verified, authenticated controls checked without changing a live broker account.
-- [x] Show client broker balance and today's copied wins/losses in admin Copy Trading; authenticated display read back USD 10,029.70 and 0 wins/0 losses; isolation test passed.
-- [x] Make admin copy account/status read-only and follow client IQ connection; simplify client connection buttons and replace misleading security notice with accurate credential disclosure; six rule tests and authenticated control checks passed without forcing a trade.
-- [x] Preserve client copy state across navigation; arrange results first beside connection, settings, status and centered copy button; five rules tested and authenticated layout checked; server target stop deployed.
-- [x] Remove MT5 from the site (Admin monitor code, connections card, Auto Trading MT5 amount field); only IQ Option accounts remain.
-- [x] Remove Admin Notifications tab; tabs are now Dashboard, Auto Trading, Corretoras, Copy Trading, Usuários.
-- [x] Add Copy Trading: admin tab per client (enable + Demo/Real), client card (robot toggle, account, entry amount, profit target), server mirrors confirmed master orders to enabled clients' IQ Option accounts; client results card hides strategy names.
-- [ ] Confirm first natural copied order on a client account (needs a client with saved IQ Option credentials and copy enabled; do not force a trade).
-- [x] Disable Histórico bom strategy and remove its dedicated card; verify requested Dashboard card pairs.
-- [x] Add Vela de Força LOSS→WIN next-minute broker entry, Telegram and order labels; 13 rule/regression tests passed, service-only permissions verified and both functions deployed; configured account remains PRACTICE.
-- [x] Cancel natural Força LOSS→WIN validation: user removed this strategy.
-- [x] Disable Força LOSS→WIN claims and placement; remove history displays and strategy rankings including client copies, preserving financial accounting; 20 tests passed, three functions deployed and authenticated admin verified without its labels.
-- [x] Reduce reversal preparation latency by reusing the server-authenticated same-account broker session while Telegram sends in parallel; six tests passed and both functions deployed.
-- [x] Reinforce next-minute reversal deadline, confirm broker enabled/not-suspended asset selection and prevent account fallback; five tests pass, functions deployed without forcing broker orders.
-- [x] Add next-signal reversal after four consecutive test wins, service-only one-shot queue claim, Telegram and broker-order card; unit tests pass and authenticated cards checked.
-- [ ] Verify next natural four-win reversal, Telegram entry/result and broker order read-back (waiting for four new consecutive TEST wins; current broker account is PRACTICE, not cash REAL; do not force a trade).
-- [x] Correct one-minute reversal shift: wins at 54–57 enter the selected 58 signal immediately after confirmation, never shift to 59; six regression tests passed.
-- [x] Prioritize expired TEST candle requests and confirm results as responses arrive; eight tests passed and runner deployed without forcing orders. Natural reversal timing still awaits a new four-win sequence.
-- [x] Make result reset nondestructive and isolated from live TEST operations; authenticated UI verified IQ totals zero while 411 live records remain; three rule tests passed.
-- [x] Add authenticated PRACTICE-only broker refill control beside balance refresh and verify failure feedback; function deployed and actual broker request tested.
-- [ ] Confirm demo balance refill to 10,000 (blocked: IQ Option returned isSuccessful=false to reset-training-balance with demo balance 9,990; UI reports refusal, never fabricates balance).
-- [x] Add strategy badges to IQ Option's latest operations, with honest labels for unmatched history.
-- [x] Add clear emojis throughout automatic Telegram entry alerts and final result messages.
-- [x] Compare recorded losses by strategy using linked IQ Option operations.
-- [x] Replace homepage with centered branding and clearly labeled simulated trading chart.
-- [x] Move existing homepage information to admin Dashboard and preserve separate settings tabs.
-- [x] Verify public chart and authenticated admin tab navigation.
-- [x] Connect Telegram bot.
-- [x] Obtain verified destination for AGENCIA MKT TRADER (@agenciaMKT_Trader).
-- [x] Send only authorized IQ Option signals approximately 30 seconds before entry (late signals notify immediately).
-- [x] Verify channel delivery with a clearly labeled connection message and TEST/MT5 exclusion with automated checks.
-- [ ] Confirm automatic advance delivery after retry fix on the next naturally authorized IQ Option entry (22:55 alert failed with gateway 502; waiting for next real queued signal; do not force a trade).
-- [x] Include entry origin strategy in Telegram alerts.
-- [x] Hide Histórico bom real entries and their totals from Entradas na IQ Option without changing broker execution.
-- [x] Verify strategy formatting and authenticated card filtering (7 wins, 1 loss, 88%, +US$47.40 at verification).
-- [x] Send Telegram immediately on the same executing queue signal used by the horn.
-- [x] Align Resultado de Hoje with Entradas na IQ Option and verify displayed totals (+US$47.40, 7 wins, 1 loss).
-- [x] Track delivered Telegram signals and send their final broker results with retry/deduplication.
-- [x] Verify result formatting and delivered-signal-only selection without forcing a trade.
-- [x] Diagnose horn without Telegram (gateway 502); verify channel test delivery and deploy bounded temporary-failure retries.
-- [x] Verify authenticated tab/home navigation makes no settings writes, confirm existing minute cron and continued signal generation, and move expired result reconciliation into that cron.
-- [ ] Confirm the next naturally expired notified real trade reconciles with admin closed (waiting for a real eligible trade; do not force a trade).
-- [ ] Confirm automatic result delivery after the next naturally notified broker trade closes (waiting for a real delivered signal; do not force a trade).
-- [x] Add prospective TEST-only Trend WIN → Trend LOSS → Force LOSS → next Trend observation on existing TEST row; 22 tests passed, runner deployed, admin UI checked.
-- [ ] Verify first naturally matched sequence and settled result in admin UI (waiting for a new qualifying sequence; no historical backfill or forced trade).
+# Roadmap — troca de estratégias reais (18/10/2026) — CONCLUÍDO
 
-- [x] Rename TEST sequence to Retomada and keep daily strategy accuracy current via full-day pagination, realtime, 10-second polling and focus refresh; six tests passed, authenticated admin reads verified.
-- [x] Configure daily Telegram report at 23:59 BRT using existing minute runner; principal daily results and cumulative top three strategies, no client copies; 11 tests passed, deployed function starts and rejects non-service requests.
-- [ ] Verify first scheduled daily Telegram delivery and saved message ID (waiting for 23:59 BRT; no premature report sent).
-- [x] Add prospective Força Invertida TEST observations on unchanged base rows, separate cumulative ranking and opposite-direction outcome badges; 14 rule/regression tests passed, runner and daily report deployed; original signals and real authorizations unchanged.
-- [ ] Verify first naturally selected Force signal with inverted outcome in admin UI (waiting for a new VELA_FORCA signal after deployment; no backfill or forced order).
+- [x] 1. Tendência, THREE_FORCE, FOUR_WIN_REVERSAL → só TESTE (claims desativados)
+- [x] 2. Reversão RSI, Retomada, Força Invertida → reais (IQ Option + Telegram) via claim_test_strategy_entry
+- [x] 3. Backfill desde 16/10 como "real simulada" (prefixo sim-): RSI 7W/2L, Retomada 5W/2L, Força Invertida 18W/11L
+- [x] 4. Histórico real das removidas apagado (admin + cliente); TESTE preservado
+- [x] 5. Rótulos admin/cliente atualizados (Retomada, Força Invertida)
+- [x] 6. 81 testes OK, funções republicadas, build OK
+
+# Horário de entrada e Força Invertida
+- [x] Reduzir esperas na análise e preparação de ordens sem antecipar velas fechadas.
+- [x] Comparar 29 perdas reais com abertura :00: 2 ganhos simulados, 27 perdas; histórico preservado.
+- [x] 27 testes aprovados; duas funções publicadas; acesso manual não autorizado recusado.
+- [x] Confirmar horário real após ajuste — SEI #14369555193 abriu às 02:26:03,603 BRT; :00 ainda não garantido.
+
+# Informação de teste e ordem real
+- [x] Separar resultado simulado :00 e resultado IQ vinculado na Força Invertida sem alterar estatísticas.
+- [x] Validar vínculo SEI na área administrativa: simulado WIN +8,50 e ordem #14369555193 LOSS -10 separados; 6 testes aprovados.
+
+# Estudo de viés M15
+- [x] Consultar 253 ativos e recuperar 126.380 candles M15; 5.028/5.348 entradas analisáveis, 320 excluídas por lacunas regulares.
+- [x] Cruzar candles fechados antes do minuto de entrada; separar TESTE/corretora e OTC/regular. Corretora usa minuto de registro aproximado, não fill exato.
+- [x] Cinco testes aprovados; chamada admin e rejeição sem autorização verificadas; relatório e CSVs com validação temporal de 19/10 entregues, sem alterar operações.
+
+# Estudo Tendência e velas anteriores
+- [x] Recuperar 1.234.687 candles M1 de 251 ativos; 3.863/4.040 entradas analisáveis, 177 excluídas.
+- [x] Comparar extensão, sequência e pavio: combinado OTC 49,11% em 19/10, sem melhora consistente nos dias anteriores.
+- [x] Dez testes aprovados, admin autorizado e acesso anônimo recusado; relatório e CSVs preparados sem alterar entradas.
+- [x] Regra de antecipação da vela forte (somente estudo) testada 17–19/10: ~49,8% acerto, sem vantagem
+- [x] Teste entrada no meio da vela (30s, histórico 17–19/10): ~50% acerto, retorno negativo
+
+# Painel do cliente
+- [x] Bloquear ativação sem conexão confirmada e mostrar orientação para Corretoras; botão e navegação conferidos em visualização desconectada, sem alterar conta. 16 testes aprovados.
+- [x] Ajustar e conferir principal, admin e cliente em 375, 768 e 1280px, incluindo todas as abas; sem rolagem horizontal, build OK.
+- [x] Colocar conexão primeiro e mover entrada/meta para Corretoras; navegação autenticada conferida.
+- [x] Verificar entradas e histórico: WLD e dias 16–19/10 visíveis no admin; cliente aberto sem cópias. 15 testes aprovados, build OK.
+- [x] Resumir conexão com corretora/email, ativação segura e acesso à aba Corretoras; 15 testes aprovados e navegação autenticada conferida. Conta aberta é admin, copy desligado, sem cópias; histórico agora preserva estratégias nulas e atualiza em 10s.
+- [x] Organizar banca, entradas e conexão com abas Dashboard e Corretoras, preservando copy.
+- [x] Mostrar operações abertas próprias acima das entradas; isolamento testado e abas verificadas com sessão autenticada. Nenhuma operação aberta disponível durante a conferência.
+
+# Estudo Vela de Força — oito ordens
+- [x] Recuperar velas anteriores: oito ordens e duas perdas com cobertura, sem alterar entradas reais.
+- [x] Comparar 804 TESTE anteriores (758 cobertos): corpo≥90% retém 6/8 ganhos mas fica em 46,63% e 51,81% nos períodos anteriores, retorno negativo. Relatório entregue; 7 testes, estudo autorizado e acesso anônimo 401.
+
+# Entrada única e valores independentes
+- [x] Permitir clientes distintos na mesma conta IQ do admin, preservando valores e limite por usuário; reserva e placement atualizados, 21 testes e build OK. Nenhuma nova ordem no intervalo; cópia futura ainda não observada.
+- [x] HYPE 02:13: uma principal e duas cópias na mesma conta; rejeitar self/shared-principal copies na reserva e placement. Salvar 10 e conferir após reload; 9 testes e build OK. Vela forte sem rompimento20; nenhuma nova ordem autorizada ocorreu durante a verificação, execução futura ainda não observada.
+- [x] Limitar a principal e cada cliente a uma operação por vez, com reservas atômicas e bloqueio conservador de confirmação ambígua.
+- [x] Validar valores exatos do admin Auto Trading e cliente Corretoras, sem fallback nem escala: 20 testes; ordem EOS com entrada/configuração 100 conferida. Copy real não exercitado sem cliente ativo.
+
+# Conferência PENGU e paginação
+- [x] Encurtar os rótulos para “forca sem”; painel autenticado sem erros e build OK. Sem resultados dessa estratégia disponíveis para conferir o rótulo na tela.
+- [x] Estudar RAYDIUM 02:54: vela 02:53 verde (1,874625→1,894475), corpo 89,50%, 6,14×média20 e rompimento; CALL 02:53→02:54 venceria retrospectivamente. Regra congelada RSI/médias/compressão com 100 velas anteriores não gerou sinal às 02:53; nenhuma operação alterada. Nove testes aprovados.
+- [x] Criar estratégia separada TESTE sem rompimento + primeira vela; 17 testes passaram, funções publicadas e admin conferido sem erros. Ainda sem ocorrência prospectiva; acerto e retorno aguardam novos sinais elegíveis.
+- [x] PENGU #14372665294: vela 02:23 fechou 8,457475 acima da máxima20 8,422765; corpo 72,3%, ordem LOSS -10. Estudo somente leitura, minuto registrado como aproximação da entrada.
+- [x] Cache/prefetch de páginas, contagem só na primeira, enriquecimento paralelo e placares diários memoizados; navegação autenticada 1→2→3→2→1 em 0,057–0,097s, sem erros; 10 testes e build OK.

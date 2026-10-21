@@ -25,14 +25,13 @@ export function strategyStats(rows: StrategyRow[]): StrategyStat[] {
     byStrategy.set(strategy, stat);
   };
   for (const row of rows) {
-    if (row.entry_strategy === 'FORCE_LOSS_WIN') continue;
-    if (row.entry_strategy) add(row.entry_strategy, row.result);
+    if (row.entry_strategy === 'FORCE_LOSS_WIN' || row.entry_strategy === 'FORCA_INVERTIDA') continue;
+    // Retomada real (RETOMADA) e observação TESTE (TREND_WIN_LOSS_FORCE_LOSS) são a mesma estratégia.
+    if (row.entry_strategy) add(row.entry_strategy === 'RETOMADA' ? 'TREND_WIN_LOSS_FORCE_LOSS' : row.entry_strategy, row.result);
     if (row.timeframe === 'TEST' && row.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') {
       add(row.test_sequence_strategy, row.result);
     }
-    if (row.timeframe === 'TEST' && row.entry_strategy === 'VELA_FORCA' && row.test_inverted_strategy === 'FORCA_INVERTIDA') {
-      add(row.test_inverted_strategy, row.result === 'win' ? 'loss' : row.result === 'loss' ? 'win' : row.result);
-    }
+    // Força Invertida removida (20/10/2026): sem projeção na assertividade.
   }
   return [...byStrategy.values()].sort((a, b) => {
     const aSettled = a.wins + a.losses;

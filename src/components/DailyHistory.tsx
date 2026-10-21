@@ -21,6 +21,8 @@ interface DailyHistoryProps {
   excludeTimeframe?: string; // exclude specific timeframe
   daysToFetch?: number;
   perPage?: number;
+  /** Operações já filtradas (ex.: cópias do cliente); substitui a fonte da conta principal. */
+  operations?: Array<{ created_at: string; profit?: number | string | null; result: string }>;
 }
 
 const getBrasiliaDateKey = (date: Date) =>
@@ -36,7 +38,8 @@ export function DailyHistory({
   timeframeFilter,
   excludeTimeframe,
   daysToFetch = 30,
-  perPage = 3,
+  perPage = 5,
+  operations,
 }: DailyHistoryProps) {
   const { user } = useAuth();
   const { operations: masterOperations } = useMasterIQResults();
@@ -55,7 +58,7 @@ export function DailyHistory({
   useEffect(() => {
     if (timeframeFilter) return;
     const grouped: Record<string, DayResult> = {};
-    for (const row of masterOperations) {
+    for (const row of (operations ?? masterOperations)) {
       if (!["win", "loss", "tie", "draw", "equal", "loose"].includes(row.result)) continue;
       const date = getBrasiliaDateKey(new Date(row.created_at));
       const day = grouped[date] || (grouped[date] = { date, profit: 0, wins: 0, losses: 0, trades: 0 });
@@ -64,7 +67,7 @@ export function DailyHistory({
       else if (["loss", "loose"].includes(row.result)) day.losses++;
     }
     setDays(Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date)));
-  }, [masterOperations, timeframeFilter]);
+  }, [masterOperations, operations, timeframeFilter]);
 
   const fetchHistory = async () => {
     const startDate = new Date();

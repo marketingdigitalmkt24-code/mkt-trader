@@ -16,13 +16,14 @@ interface SignalEntry {
 
 const strategyLabels: Record<string, string> = {
   TENDENCIA: 'Tendência',
-  TREND_WIN_LOSS_FORCE_LOSS: 'Retomada (TESTE)',
+  TREND_WIN_LOSS_FORCE_LOSS: 'Retomada',
   TENDENCIA_V1: 'Tendência V1',
   FOUR_WIN_REVERSAL: 'Após 4 ganhos',
   THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
-  FORCA_INVERTIDA: 'Força Invertida (TESTE)',
+  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'forca sem',
+  FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
   KDJ: 'KDJ',
@@ -56,9 +57,6 @@ export function AIAnalysisStatusCard() {
       });
       if (mounted.current) {
         const stats = summarizeStrategyStats(rows);
-        if (!stats.some(stat => stat.strategy === 'FORCA_INVERTIDA')) {
-          stats.push({ strategy: 'FORCA_INVERTIDA', wins: 0, losses: 0 });
-        }
         setStrategyStats(stats);
       }
     } catch {
@@ -247,7 +245,7 @@ export function AIAnalysisStatusCard() {
                 const percent = settled > 0 ? (stat.wins / settled) * 100 : 0;
                 return (
                   <div key={stat.strategy} className="flex items-center justify-between text-xs p-1.5 rounded bg-secondary/20">
-                    <span className="truncate">{strategyLabels[stat.strategy] ?? stat.strategy}</span>
+                    <span className="min-w-0 whitespace-normal break-words">{strategyLabels[stat.strategy] ?? stat.strategy}</span>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[10px] text-muted-foreground tabular-nums">{stat.wins}W / {stat.losses}L</span>
                       <span className={cn(

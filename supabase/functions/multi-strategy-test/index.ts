@@ -3,14 +3,13 @@
 // e resolvida pelas velas reais da IQ Option. Telegram: só o resultado WIN da Tendência (mesmo em teste).
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
-import { FOUR_WIN_STRATEGY, nextReversalMinute } from '../_shared/four-win-reversal.ts';
-import { THREE_FORCE_STRATEGY } from '../_shared/three-force.ts';
+import { nextReversalMinute } from '../_shared/four-win-reversal.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
-import { forceInvertedTag } from '../_shared/force-inverted-test.ts';
+import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -21,6 +20,7 @@ type K = { t: number; o: number; c: number; h: number; l: number };
 export const LABELS: Record<string, string> = {
   TENDENCIA: 'Tendência', REVERSAO_RSI: 'Reversão RSI', VELA_FORCA: 'Vela de força', ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21', KDJ: 'KDJ', ICHIMOKU: 'Ichimoku',
+  [FORCE_FIRST_TEST]: 'Força sem rompimento · primeira vela (TESTE)',
 };
 
 async function login(email: string, password: string): Promise<string | null> {
@@ -117,17 +117,21 @@ Deno.serve(async (req) => {
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
+    .neq('entry_strategy', FORCE_FIRST_TEST)
     .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
     .order('created_at', { ascending: false }).limit(500)
     .abortSignal(AbortSignal.timeout(1500)).then(result => result);
   const newlySettled: LearningOutcome[] = [];
-  const [{ data: cfg }, { data: open }] = await Promise.all([
-    readMasterIQConfig(supabase),
+  // Start login as soon as the master read finishes, while expired rows are still loading.
+  const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => ({
+    cfg, ssid: cfg ? await login(cfg.email, cfg.password) : null,
+  }));
+  const [{ cfg, ssid }, { data: open }] = await Promise.all([
+    masterLogin,
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000),
   ]);
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
-  const ssid = await login(cfg.email, cfg.password);
   if (!ssid) return Response.json({ success: false, error: 'login failed' }, { headers: cors });
   const nowSec = Math.floor(Date.now() / 1000);
   const curMin = Math.floor(nowSec / 60) * 60;
@@ -144,9 +148,9 @@ Deno.serve(async (req) => {
         .eq('id', o.id).eq('result', OPEN).select('id');
       if (!upd?.length) continue;
       resolved++;
-      newlySettled.push({ asset: o.asset, direction: o.direction, entry_strategy: o.entry_strategy,
+      if (o.entry_strategy !== FORCE_FIRST_TEST) newlySettled.push({ asset: o.asset, direction: o.direction, entry_strategy: o.entry_strategy,
         result: outcome.result, created_at: o.created_at });
-      if (o.telegram_sent) {
+      if (o.telegram_sent && o.entry_strategy !== FORCE_FIRST_TEST) {
         const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
         const head = outcome.result === 'win' ? '✅ RESULTADO: WIN' : outcome.result === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
         const delivery = sendTelegram([head + ' — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, `🎯 Estratégia: ${LABELS[o.entry_strategy] || o.entry_strategy}`,
@@ -238,46 +242,54 @@ Deno.serve(async (req) => {
   }
   let inserted = 0;
   if (rows.length) {
-    const { data: exist } = await supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id));
+    // Independent reads run together after closed-candle confirmation.
+    const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
+      supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id)),
+      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').neq('entry_strategy', FORCE_FIRST_TEST).limit(1),
+      supabase.from('operation_results').select('entry_strategy, result, created_at')
+        .eq('timeframe', 'TEST').like('signal_id', 't7-%')
+        .lt('created_at', new Date(curMin * 1000).toISOString())
+        .gte('created_at', new Date((curMin - 180) * 1000).toISOString())
+        .order('created_at', { ascending: false }).order('signal_id', { ascending: false }).limit(4),
+    ]);
     const seen = new Set((exist || []).map((e: any) => e.signal_id));
     // Melhor par do minuto: só UMA entrada (mais estratégias concordando, depois vela mais forte).
     const top = rows.filter(r => !seen.has(r.signal_id)).sort((x, y) => y._score - x._score)[0];
-    const { data: minuteTaken } = await supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').limit(1);
     const fresh = top && !minuteTaken?.length ? [top] : [];
     // One best candidate; Telegram is reserved for the four-win reversal.
     const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
     // Persist the selected TEST first: the atomic claim checks its four predecessors.
     // Observe the same base TEST signal; never duplicate/relabel it or authorize an order.
-    const { data: sequenceHistory, error: sequenceError } = fresh.length
-      ? await supabase.from('operation_results').select('entry_strategy, result, created_at')
-        .eq('timeframe', 'TEST').like('signal_id', 't7-%')
-        .lt('created_at', new Date(curMin * 1000).toISOString())
-        .gte('created_at', new Date((curMin - 180) * 1000).toISOString())
-        .order('created_at', { ascending: false }).order('signal_id', { ascending: false }).limit(4)
-      : { data: [], error: null };
+    const { data: sequenceHistory, error: sequenceError } = sequenceRead;
     if (sequenceError) console.error('TEST sequence read:', sequenceError.message);
     const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false,
-      test_inverted_strategy: forceInvertedTag(r.timeframe, r.entry_strategy),
+      test_inverted_strategy: null, // Força Invertida removida (20/10/2026)
       test_sequence_strategy: !sequenceError && matchesTrendSequence(sequenceHistory || [], r.entry_strategy, curMin * 1000)
         ? TREND_SEQUENCE_TEST : null,
     }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
+    // Separate shadow: never rank or claim it, and never relabel the original Force.
+    if (inserted) {
+      const observations = clean.flatMap(base => {
+        const observation = forceFirstObservation(base, series.get(base.asset) || []);
+        return observation ? [observation] : [];
+      });
+      if (observations.length) {
+        const persist = supabase.from('operation_results').upsert(observations, { onConflict: 'signal_id', ignoreDuplicates: true })
+          .then(({ error }) => { if (error) console.error('Force first TEST:', error.message); });
+        // Never delay the original real entry for study persistence.
+        // @ts-ignore Hosted background runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(persist);
+        else await persist;
+      }
+    }
     if (best && inserted) {
-      const threeClaim = await supabase.rpc('claim_three_force', { p_candidate: best.signal_id });
-      if (threeClaim.error) console.error('Three force claim:', threeClaim.error.message);
-      const { data: trade, error: claimError } = threeClaim.data
-        ? threeClaim : await supabase.rpc('claim_four_win_reversal', { p_candidate: best.signal_id });
-      if (claimError) console.error('Four-win claim:', claimError.message);
+      // Estratégias reais ativas (20/10/2026): Reversão RSI e Retomada; Força Invertida removida.
+      const { data: trade, error: claimError } = await supabase.rpc('claim_test_strategy_entry', { p_candidate: best.signal_id });
+      if (claimError) console.error('Strategy claim:', claimError.message);
       if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
-        const claimedStrategy = trade.entryStrategy === THREE_FORCE_STRATEGY ? THREE_FORCE_STRATEGY : FOUR_WIN_STRATEGY;
+        const claimedStrategy = String(trade.entryStrategy);
         const entryAt = nextReversalMinute(curMin * 1000);
-        // User rule (17/10 19:xx UTC): real IQ/Telegram entries are inverted, EXCEPT Após 4 ganhos —
-        // it enters in the signal's normal direction (the claim no longer inverts).
-        if (claimedStrategy !== FOUR_WIN_STRATEGY) {
-          trade.direction = String(trade.direction).toLowerCase() === 'call' ? 'put' : 'call';
-          await supabase.from('trade_queue').update({ direction: trade.direction.toUpperCase() })
-            .eq('signal_id', String(trade.signalId)).eq('entry_strategy', claimedStrategy);
-        }
         const task = (async () => {
           // Reuse the session that just fetched these candles, avoiding another broker login.
           // This secret travels server-to-server only, never to browser, storage or logs.

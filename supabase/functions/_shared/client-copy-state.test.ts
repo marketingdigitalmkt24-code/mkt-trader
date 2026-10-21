@@ -19,6 +19,8 @@ test('copy uses the Demo or Real account selected in the IQ Option connection wi
   assert.equal(readCopyAccount({ account_type: 'unknown' }), null);
 });
 test('activation requires a confirmed connected IQ Option account', () => {
+  assert.equal(canEnableCopy(null), false);
+  assert.equal(canEnableCopy(undefined), false);
   assert.equal(canEnableCopy({ is_active: true, last_connected_at: null }), false);
   assert.equal(canEnableCopy({ is_active: false, last_connected_at: '2026-10-17T05:02:00Z' }), false);
   assert.equal(canEnableCopy({ is_active: true, last_connected_at: '2026-10-17T05:02:00Z' }), true);
@@ -31,6 +33,11 @@ test('changing Demo to Real requires fresh confirmation before copy can activate
 });
 test('disconnecting the selected account prevents copy activation', () => {
   assert.equal(canEnableCopy({ is_active: false, last_connected_at: null }), false);
+});
+test('configured credentials alone never authorize dashboard copy activation', () => {
+  const configured = { email: 'client@example.test', account_type: 'PRACTICE', is_active: true, last_connected_at: null };
+  assert.equal(readCopyAccount(configured), 'PRACTICE');
+  assert.equal(canEnableCopy(configured), false);
 });
 test('daily target stops copying at the target, never below it or with no target', () => {
   assert.equal(copyTargetReached(9.99, 10), false);

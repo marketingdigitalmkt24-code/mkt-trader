@@ -21,5 +21,5 @@ test('requires three consecutive force signals', () => {
 test('same direction and next-minute placement rules apply', () => {
   assert.equal(forceEntryDirection('PUT'), 'PUT');
   assert.equal(forceEntryDirection('CALL'), 'CALL');
-  assert.equal(isNextMinuteStrategy('THREE_FORCE'), true);
+  assert.equal(isNextMinuteStrategy('THREE_FORCE'), false);
 });

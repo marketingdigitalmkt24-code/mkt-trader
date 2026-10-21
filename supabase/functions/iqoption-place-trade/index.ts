@@ -2,12 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
-import { FOUR_WIN_STRATEGY, FOUR_WIN_LABEL, canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
+import { canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 import { isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
-import { THREE_FORCE_STRATEGY, THREE_FORCE_LABEL } from '../_shared/three-force.ts';
 import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
+import { entrySubmissionDelay } from '../_shared/entry-schedule.ts';
+import { configuredEntryAmount, canMirrorToBroker } from '../_shared/iq-entry-policy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -130,6 +131,7 @@ async function mirrorCopyTrades(
   tradeRequest: TradeRequest,
   masterSignalId: string,
   master: Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>,
+  principal: { user_id: string; email: string; account_type: string },
 ) {
   try {
     if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
@@ -151,10 +153,15 @@ async function mirrorCopyTrades(
             .eq('user_id', copy.user_id).maybeSingle(),
         ]);
         if (!cfg?.email || !cfg?.password) { console.log(`⏭️ Copy ${copy.user_id}: sem credenciais IQ Option`); return; }
+        if (!canMirrorToBroker(principal, { ...cfg, user_id: copy.user_id })) return;
         const accountType = readCopyAccount(cfg);
         if (!accountType) return;
 
-        const amount = Number(settings?.trade_amount) > 0 ? Number(settings.trade_amount) : tradeRequest.amount;
+        if (!configuredEntryAmount(settings?.trade_amount)) return;
+        const copySignal = `copy-${copy.user_id}-${masterSignalId}`;
+        const { data: reservedAmount, error: reserveError } = await supabase.rpc('reserve_iq_entry', { p_client: copy.user_id, p_signal: copySignal });
+        const amount = configuredEntryAmount(reservedAmount);
+        if (reserveError || amount === null) return;
 
         // Respeita a meta de lucro do cliente
         if (settings?.profit_target_type === 'value' && Number(settings.profit_target_value) > 0) {
@@ -168,15 +175,28 @@ async function mirrorCopyTrades(
           }
         }
 
-        const { ssid } = await loginToIQOption(cfg.email, cfg.password);
-        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou`); return; }
+        // Retentativa de login: instabilidade/bloqueio temporário da corretora
+        // não pode derrubar o copy do cliente. A ordem só dispara após a
+        // confirmação da principal, então as tentativas correm em paralelo à espera.
+        let ssid: string | null = null;
+        for (let attempt = 1; attempt <= 3 && !ssid; attempt++) {
+          const login = await loginToIQOption(cfg.email, cfg.password);
+          ssid = login.ssid;
+          if (!ssid && attempt < 3) {
+            console.log(`🔁 Copy ${copy.user_id}: login falhou (tentativa ${attempt}/3), tentando novamente`);
+            await new Promise(r => setTimeout(r, 800));
+          }
+        }
+        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou após 3 tentativas`); return; }
 
         // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.
+        // Unknown broker outcomes fail closed; never expire a possibly submitted order.
+        await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
         const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount }, master.then(m => m.ok));
         const { timeframe, expirationIso } = await master;
         if (res.success && res.tradeId) {
-          await supabase.from('operation_results').insert({
-            signal_id: `copy-${copy.user_id}-${masterSignalId}`,
+          const { error: saveError } = await supabase.from('operation_results').insert({
+            signal_id: copySignal,
             asset: tradeRequest.asset,
             direction: tradeRequest.direction.toUpperCase(),
             entry_price: amount,
@@ -189,6 +209,7 @@ async function mirrorCopyTrades(
             timeframe,
             expiration_time: expirationIso,
           });
+          if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
           console.log(`📋 Copy ${copy.user_id}: ordem espelhada ${res.tradeId} ($${amount} ${accountType})`);
         } else {
           console.log(`❌ Copy ${copy.user_id}: ${res.error || 'ordem recusada'}`);
@@ -469,7 +490,7 @@ async function placeTradeFireAndForget(
             resolve({ success: false, error: 'Entrada prevista passou; ordem não enviada atrasada' });
             return;
           }
-          const entryDelay = Math.max(0, candleOpenMs - ENTRY_LATENCY_LEAD_MS - nowMs0);
+          const entryDelay = entrySubmissionDelay(candleOpenMs, nowMs0, ENTRY_LATENCY_LEAD_MS);
           console.log(`⏱️ Aguardando ${(entryDelay / 1000).toFixed(1)}s para entrar na abertura da vela ${new Date(candleOpenMs).toISOString()}`);
 
           const fire = async () => {
@@ -509,7 +530,8 @@ async function placeTradeFireAndForget(
               setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 2500);
             }
           };
-          setTimeout(fire, entryDelay);
+          if (entryDelay === 0) void fire();
+          else setTimeout(fire, entryDelay);
         }
 
         if (data.request_id === 'fx1') console.log('📨 FOREX resposta:', JSON.stringify(data).slice(0, 400));
@@ -598,7 +620,16 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const tradeRequest: TradeRequest = await req.json();
-    if (tradeRequest.entryStrategy === 'FORCE_LOSS_WIN' || tradeRequest.signalId?.startsWith('force-lw-') || /-force-lw-/.test(tradeRequest.signalId || '')) {
+    // Never allow an unauthenticated request to reserve or place a principal order.
+    if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`) {
+      const token = req.headers.get('Authorization')?.replace(/^Bearer /, '');
+      const { data: auth } = await supabase.auth.getUser(token || '');
+      if (!auth?.user) return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+      const { data: role } = await supabase.from('user_roles').select('role').eq('user_id', auth.user.id).eq('role', 'admin').maybeSingle();
+      if (!role) return Response.json({ error: 'Admin required' }, { status: 403, headers: corsHeaders });
+    }
+    let authorizedQueue: { id: string; created_at: string; entry_strategy: string | null } | undefined;
+    if (tradeRequest.entryStrategy === 'FORCE_LOSS_WIN' || tradeRequest.entryStrategy === 'FORCA_INVERTIDA' || /forca_invertida-/.test(tradeRequest.signalId || '') || tradeRequest.signalId?.startsWith('force-lw-') || /-force-lw-/.test(tradeRequest.signalId || '')) {
       return Response.json({ success: false, error: 'Strategy removed' }, { status: 410, headers: corsHeaders });
     }
     if (isNextMinuteStrategy(tradeRequest.entryStrategy)) {
@@ -616,8 +647,9 @@ serve(async (req) => {
         .eq('signal_id', tradeRequest.signalId || '').eq('asset', tradeRequest.asset)
         .eq('direction', tradeRequest.direction.toUpperCase()).eq('amount', tradeRequest.amount)
         .eq('entry_strategy', tradeRequest.entryStrategy || '').eq('status', 'executing').is('error', null)
-        .select('id');
+        .select('id, created_at, entry_strategy');
       if (!lease?.length) return Response.json({ error: 'Next-minute entry already claimed or unauthorized' }, { status: 409, headers: corsHeaders });
+      authorizedQueue = lease[0];
     }
     const { brokerSession: privateSession, ...loggedRequest } = tradeRequest;
     console.log('📥 Trade request:', JSON.stringify(loggedRequest));
@@ -643,6 +675,13 @@ serve(async (req) => {
       );
     }
 
+    const reservationSignal = tradeRequest.signalId || `manual-${crypto.randomUUID()}`;
+    const { data: reservedAmount, error: reserveError } = await supabase.rpc('reserve_iq_entry', { p_client: null, p_signal: reservationSignal });
+    const configuredAmount = configuredEntryAmount(reservedAmount);
+    if (reserveError || configuredAmount === null) return Response.json({ success: false, error: 'Já existe uma operação aberta ou o valor de entrada não está configurado.' }, { status: 409, headers: corsHeaders });
+    tradeRequest.amount = configuredAmount;
+    tradeRequest.signalId = reservationSignal;
+
     // Place trade (fire-and-forget, don't wait for result)
     // A notificação exige um sinal já autorizado pelo gerador na fila real.
     // Nenhum parâmetro enviado pelo navegador habilita alertas por si só.
@@ -650,7 +689,8 @@ serve(async (req) => {
     let entryStrategy: string | null = null;
     if (tradeRequest.isAutoTrade && tradeRequest.signalId && tradeRequest.mode !== 'forex'
       && tradeRequest.timeframe !== 'TEST' && tradeRequest.timeframe !== 'MT5') {
-      const { data: queued } = await supabase.from('trade_queue').select('id, created_at, entry_strategy')
+      // Reuse the exact service-only lease instead of another serial authorization read.
+      const { data: queued } = authorizedQueue ? { data: authorizedQueue } : await supabase.from('trade_queue').select('id, created_at, entry_strategy')
         .eq('signal_id', tradeRequest.signalId).eq('asset', tradeRequest.asset)
         .eq('direction', tradeRequest.direction.toUpperCase()).eq('status', 'executing')
         .gte('created_at', new Date(Date.now() - 90000).toISOString()).limit(1).maybeSingle();
@@ -659,10 +699,12 @@ serve(async (req) => {
         // Origem informada pelo gerador autorizado (Perda anterior desativada em 15/10/2026).
         const reqStrategy = queued.entry_strategy;
         if (reqStrategy === 'HISTORICO' || reqStrategy === 'TENDENCIA' || reqStrategy === 'EMPATE' || reqStrategy === 'REVERSAO_RSI' || reqStrategy === 'TENDENCIA_V1' || isNextMinuteStrategy(reqStrategy || undefined)) entryStrategy = reqStrategy;
-        const strategy = entryStrategy === THREE_FORCE_STRATEGY ? THREE_FORCE_LABEL : entryStrategy === FOUR_WIN_STRATEGY ? FOUR_WIN_LABEL : entryStrategy === 'HISTORICO' ? 'Histórico bom'
+        const strategy = entryStrategy === 'RETOMADA' ? 'Retomada' : entryStrategy === 'FORCA_INVERTIDA' ? 'Força Invertida'
+          : entryStrategy === 'HISTORICO' ? 'Histórico bom'
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
           : entryStrategy === 'TENDENCIA_V1' ? 'Tendência V1'
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'
+          : entryStrategy === 'VELA_FORCA' ? 'Vela de Força'
           : entryStrategy === 'EMPATE' ? 'Após empate' : 'IA';
         notifyEntry = async entryAt => {
           // Regra (16/10/2026): só envia ao Telegram quando houver OUTRO sinal
@@ -797,10 +839,13 @@ serve(async (req) => {
     // Copy: prepara login/gráfico dos clientes em paralelo e envia assim que a principal confirmar.
     let settleMaster!: (m: { ok: boolean; timeframe: string; expirationIso: string | null }) => void;
     const masterOutcome = new Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>(res => { settleMaster = res; });
-    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome);
+    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
     // @ts-ignore EdgeRuntime exists in Supabase runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
+    await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', 'master').eq('signal_id', reservationSignal);
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
+    const definiteRefusal = result.error && /invalid instrument|not available|não disponível|não enviada|não enviado|entrada cancelada|insufficient|not enough/i.test(result.error);
+    if (!result.success && definiteRefusal) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', 'master').eq('signal_id', reservationSignal);
     if (!(result.success && result.tradeId)) settleMaster({ ok: false, timeframe: '', expirationIso: null });
     if (!(result.success && result.tradeId)) await cancelAlert();
     console.log('📊 Trade result:', JSON.stringify(result));
@@ -816,7 +861,7 @@ serve(async (req) => {
         : new Date((Math.round(Date.now() / 60000) + (tradeRequest.expiration || 1)) * 60000).toISOString();
       settleMaster({ ok: true, timeframe, expirationIso });
       
-      await supabase.from('operation_results').insert({
+      const { error: saveError } = await supabase.from('operation_results').insert({
         signal_id: tradeRequest.signalId || `auto_${Date.now()}`,
         asset: tradeRequest.asset,
         direction: tradeRequest.direction.toUpperCase(),
@@ -830,6 +875,7 @@ serve(async (req) => {
         timeframe,
         expiration_time: expirationIso,
       });
+      if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', 'master').eq('signal_id', reservationSignal);
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
 
@@ -869,7 +915,7 @@ serve(async (req) => {
           executed_at: new Date().toISOString(),
         })
         .eq('signal_id', tradeRequest.signalId)
-        .eq('status', 'pending');
+        .in('status', ['pending', 'executing']);
     }
 
     return new Response(

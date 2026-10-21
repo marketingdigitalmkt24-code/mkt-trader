@@ -2,6 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import { countClientCopyResults, copyResultRates } from '../../../src/lib/admin-copy-results';
 
 describe('admin copy results', () => {
+  it('excludes removed force copies from all displayed totals', () => {
+    expect(countClientCopyResults([{ signal_id: 'copy-client-a-force-lw-old', result: 'loss', iq_option_id: '123', timeframe: 'M1', profit: -10 }], 'client-a'))
+      .toEqual({ wins: 0, losses: 0, profit: 0 });
+  });
   it('counts only this client’s confirmed copied wins and losses', () => {
     const row = { signal_id: 'copy-client-a-master', result: 'win', iq_option_id: '123', timeframe: 'M1' };
     expect(countClientCopyResults([

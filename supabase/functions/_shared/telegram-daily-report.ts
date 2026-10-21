@@ -31,7 +31,8 @@ export function dailyReportStats(rows: ReportRow[], now: Date) {
     .reduce((sum, r) => sum + Number(r.profit || 0), 0);
   return { wins, losses, ties, pending, profit, winRate: wins + losses ? wins / (wins + losses) * 100 : 0 };
 }
-export function bestReportStrategies(rows: ReportRow[]) {
+export function bestReportStrategies(rows: ReportRow[], now: Date) {
+  const clock = reportClock(now);
   const stats = new Map<string, { strategy: string; wins: number; losses: number }>();
   const add = (strategy: string, result: string) => {
     const stat = stats.get(strategy) ?? { strategy, wins: 0, losses: 0 };
@@ -40,21 +41,19 @@ export function bestReportStrategies(rows: ReportRow[]) {
     stats.set(strategy, stat);
   };
   for (const r of rows) {
-    if (r.entry_strategy === 'FORCE_LOSS_WIN') continue;
+    if (r.created_at < clock.start || r.created_at > clock.end) continue;
+    if (r.entry_strategy === 'FORCE_LOSS_WIN' || r.entry_strategy === 'FORCA_INVERTIDA') continue;
     if (r.timeframe === 'MT5' || /^(copy-|mt5-)/.test(r.signal_id)) continue;
     if (r.entry_strategy) add(r.entry_strategy, r.result);
     if (r.timeframe === 'TEST' && r.test_sequence_strategy === 'TREND_WIN_LOSS_FORCE_LOSS') add(r.test_sequence_strategy, r.result);
-    if (r.timeframe === 'TEST' && r.entry_strategy === 'VELA_FORCA' && r.test_inverted_strategy === 'FORCA_INVERTIDA') {
-      add(r.test_inverted_strategy, r.result === 'win' ? 'loss' : r.result === 'loss' ? 'win' : r.result);
-    }
   }
   return [...stats.values()].filter(s => s.wins + s.losses > 0).sort((a, b) =>
     b.wins / (b.wins + b.losses) - a.wins / (a.wins + a.losses)
-    || b.wins + b.losses - a.wins - a.losses || a.strategy.localeCompare(b.strategy)).slice(0, 3);
+    || b.wins + b.losses - a.wins - a.losses || a.strategy.localeCompare(b.strategy)).slice(0, 5);
 }
 export function formatDailyReport(rows: ReportRow[], now: Date, account: string) {
   const stats = dailyReportStats(rows, now);
-  const top = bestReportStrategies(rows);
+  const top = bestReportStrategies(rows, now);
   return ['📊 AGÊNCIA MKT TRADER — Relatório diário',
     `📅 ${reportClock(now).date.split('-').reverse().join('/')} • 23:59 Brasília`,
     `🏦 Conta principal IQ Option • ${account === 'REAL' ? 'REAL' : 'DEMONSTRAÇÃO'}`,
@@ -62,7 +61,7 @@ export function formatDailyReport(rows: ReportRow[], now: Date, account: string)
     `🎯 Win rate: ${stats.winRate.toFixed(1).replace('.', ',')}%`,
     `💰 Resultado líquido: ${stats.profit < 0 ? '-' : '+'}US$ ${Math.abs(stats.profit).toFixed(2).replace('.', ',')}`,
     `⏳ Ordens pendentes: ${stats.pending}`,
-    '', '🏆 3 melhores estratégias — histórico completo',
+    '', '🏆 5 melhores estratégias — resultados do dia (Brasília)',
     'Ranking por acerto; inclui observações TESTE e ordens da principal, sem cópias.',
     ...top.map((s, i) => `${i + 1}. ${labels[s.strategy] ?? s.strategy}: ${(100 * s.wins / (s.wins + s.losses)).toFixed(1).replace('.', ',')}% • ${s.wins} ganhos / ${s.losses} perdas • ${s.wins + s.losses} operações`),
     ...(top.length ? [] : ['Ainda não há estratégias com resultados encerrados.']),

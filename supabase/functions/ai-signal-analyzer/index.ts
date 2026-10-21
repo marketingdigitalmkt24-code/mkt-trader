@@ -58,6 +58,7 @@ async function buildDeepLearningProfile(supabase: any) {
     const { data: results } = await supabase
       .from('operation_results')
       .select('asset, result, profit, direction, created_at')
+      .not('signal_id', 'like', 'study-force-first-%')
       .gte('created_at', fourteenDaysAgo.toISOString())
       .order('created_at', { ascending: false })
       .limit(500);

@@ -116,6 +116,24 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_entry_leases: {
+        Row: {
+          reserved_until: string
+          scope: string
+          signal_id: string
+        }
+        Insert: {
+          reserved_until: string
+          scope: string
+          signal_id: string
+        }
+        Update: {
+          reserved_until?: string
+          scope?: string
+          signal_id?: string
+        }
+        Relationships: []
+      }
       iq_force_loss_win_state: {
         Row: {
           activated_at: string
@@ -747,6 +765,10 @@ export type Database = {
     Functions: {
       claim_force_loss_win: { Args: { p_candidate: string }; Returns: Json }
       claim_four_win_reversal: { Args: { p_candidate: string }; Returns: Json }
+      claim_test_strategy_entry: {
+        Args: { p_candidate: string }
+        Returns: Json
+      }
       claim_three_force: { Args: { p_candidate: string }; Returns: Json }
       get_master_iq_config: {
         Args: never
@@ -774,6 +796,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      reserve_iq_entry: {
+        Args: { p_client: string; p_signal: string }
+        Returns: number
       }
     }
     Enums: {

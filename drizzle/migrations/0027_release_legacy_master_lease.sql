@@ -1,1 +1,0 @@
-UPDATE public.iq_entry_leases SET reserved_until = now() WHERE scope = 'master' AND reserved_until > now();

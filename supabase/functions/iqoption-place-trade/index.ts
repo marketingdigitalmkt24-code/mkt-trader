@@ -707,8 +707,6 @@ serve(async (req) => {
     }
 
     const reservationSignal = tradeRequest.signalId || `manual-${crypto.randomUUID()}`;
-    // Mesma derivação do reserve_iq_entry: trava do principal por estratégia (prefixo do sinal).
-    const masterScope = `master:${reservationSignal.split('-')[0].toLowerCase()}`;
     const { data: reservedAmount, error: reserveError } = await supabase.rpc('reserve_iq_entry', { p_client: null, p_signal: reservationSignal });
     const configuredAmount = configuredEntryAmount(reservedAmount);
     if (reserveError || configuredAmount === null) return Response.json({ success: false, error: 'Já existe uma operação aberta ou o valor de entrada não está configurado.' }, { status: 409, headers: corsHeaders });
@@ -875,10 +873,10 @@ serve(async (req) => {
     const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
     // @ts-ignore EdgeRuntime exists in Supabase runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
-    await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', masterScope).eq('signal_id', reservationSignal);
+    await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', 'master').eq('signal_id', reservationSignal);
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
     const definiteRefusal = canReleaseRefusedIQLease(result.error);
-    if (!result.success && definiteRefusal) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', masterScope).eq('signal_id', reservationSignal);
+    if (!result.success && definiteRefusal) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', 'master').eq('signal_id', reservationSignal);
     if (!(result.success && result.tradeId)) settleMaster({ ok: false, timeframe: '', expirationIso: null });
     if (!(result.success && result.tradeId)) await cancelAlert();
     console.log('📊 Trade result:', JSON.stringify(result));
@@ -908,7 +906,7 @@ serve(async (req) => {
         timeframe,
         expiration_time: expirationIso,
       });
-      if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', masterScope).eq('signal_id', reservationSignal);
+      if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', 'master').eq('signal_id', reservationSignal);
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);
 

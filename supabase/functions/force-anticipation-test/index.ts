@@ -25,8 +25,14 @@ Deno.serve(async req => {
     if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
     const db = createClient(url, key);
     const token = req.headers.get('Authorization')?.replace(/^Bearer /, '');
-    if (!token) return reply({ error: 'Unauthorized' }, 401);
-    if (token !== key) {
+    const schedulerToken = req.headers.get('x-scheduler-token');
+    let serviceAuthorized = token === key;
+    if (!serviceAuthorized && schedulerToken) {
+      const { data: credential } = await db.from('anticipation_scheduler_auth').select('token').eq('id', 1).maybeSingle();
+      serviceAuthorized = !!credential?.token && credential.token === schedulerToken;
+    }
+    if (!token && !serviceAuthorized) return reply({ error: 'Unauthorized' }, 401);
+    if (!serviceAuthorized) {
       const { data, error } = await db.auth.getClaims(token);
       if (error || !data?.claims?.sub) return reply({ error: 'Unauthorized' }, 401);
       const { data: role } = await db.from('user_roles').select('role').eq('user_id', data.claims.sub).eq('role', 'admin').maybeSingle();
@@ -34,7 +40,7 @@ Deno.serve(async req => {
     }
     const parsed = bodySchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return reply({ error: 'Invalid parameters' }, 400);
-    if (parsed.data.scheduled && token !== key) return reply({ error: 'Service scheduling required' }, 403);
+    if (parsed.data.scheduled && !serviceAuthorized) return reply({ error: 'Service scheduling required' }, 403);
     const scheduled = parsed.data.scheduled === true;
     const targetMs = anticipationTarget(Date.now(), scheduled);
     const { data: cfg } = await readMasterIQConfig(db);

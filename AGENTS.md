@@ -8,7 +8,7 @@
 - Send Telegram immediately inside IQ Option placement for fresh authorized executing queue signals (the horn polls the same event); never wait for browser audio or delay execution; label entry time as estimated.
 - Persist real-entry origin in operation_results.entry_strategy from the loss authorizing its queue row; Telegram and cards use this origin, with legacy inference only when absent.
 - Track successful Telegram signal message IDs in a service-only delivery ledger; dispatch only linked final broker results with conditional leases from result sync and signal cron; TEST results and unnotified history never reach Telegram.
-- Telegram uses the verified numeric channel ID; bounded retries only for explicit temporary gateway failures before estimated entry; never delay trades or resend expired entry alerts.
+- Telegram uses the verified numeric channel ID; bounded retries only for explicit temporary gateway failures before estimated entry; never delay trades or resend expired alerts.
 - Reconcile expired real IQ results from the signal cron before checking pending locks; browser polling is supplementary; navigation must not strand trades or Telegram results.
 - Preserve TEST rows, streaks and accounting; paginate accuracy. Show broker outcomes by exact candidate signal and numeric IQ ID, never asset/time guesses; prices differ.
 - Research is admin-only/read-only: studies need 100 contiguous closed bars, exact OTC mapping and separate TEST/broker outcomes (broker minutes are proxies); why: no leakage or winner-selected filters changing live trades.
@@ -21,5 +21,5 @@
 - Demo refill uses a dedicated user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker confirms replenishment; REAL stays untouched.
 - Removed claims return null and placement rejects them; exclude retired orders/copies from displayed totals, preserve stored accounting; three-force keeps its lock.
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
-- Recent operations cache/prefetch pages and count only page one, invalidating on results; why: avoid recounting history on navigation.
+- Recent operations cache/prefetch pages and count only page one, invalidating on results; why: no recounting history on navigation.
 - Active real strategies (21/10/2026): REVERSAO_RSI, RETOMADA, RECUO_EMA21 only, authorized by claim_test_strategy_entry; Recuo enters every generated signal even without agreement; VELA_FORCA is TEST-only; why: user removed Force from real IQ/Telegram entries.

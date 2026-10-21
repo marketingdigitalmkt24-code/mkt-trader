@@ -1,6 +1,6 @@
 # Antecipação de Força — TESTE
-- [ ] Criar regra prospectiva após primeira vela vermelha pequena, com médias, RSI e volume disponível, isolada de reais/copy/Telegram.
-- [ ] Validar regras, ativar geração e conferir gravação/resolução dos testes.
+- [x] Criar regra prospectiva após primeira vela vermelha pequena, com médias, RSI e volume disponível, isolada em force_anticipation_tests; sem alterar reais/copy/Telegram.
+- [x] 16 testes aprovados, geração na rotina por minuto existente e painel admin conferido; 117 ativos consultados, 29 com volume informado. Primeiro CALL JAPAN225:N 15:37:25 BRT gravado e fechado LOSS simulado -10, lido na tela. Sem validação de vantagem lucrativa.
 
 # Roadmap — troca de estratégias reais (18/10/2026) — CONCLUÍDO
 

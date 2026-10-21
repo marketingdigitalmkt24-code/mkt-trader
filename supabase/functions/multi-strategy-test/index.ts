@@ -312,36 +312,43 @@ Deno.serve(async (req) => {
         else await persist;
       }
     }
-    if (best && inserted) {
-      // Estratégias reais ativas (20/10/2026): Reversão RSI e Retomada; Força Invertida removida.
-      const { data: trade, error: claimError } = await supabase.rpc('claim_test_strategy_entry', { p_candidate: best.signal_id });
-      if (claimError) console.error('Strategy claim:', claimError.message);
-      if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
-        const claimedStrategy = String(trade.entryStrategy);
-        const entryAt = nextReversalMinute(curMin * 1000);
-        const task = (async () => {
-          // Reuse the session that just fetched these candles, avoiding another broker login.
-          // This secret travels server-to-server only, never to browser, storage or logs.
-          const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
-            body: { ...trade, entryAt, brokerSession: { ssid, configId: cfg.id } },
+    if (inserted) {
+      // Estratégias reais ativas (21/10/2026): Recuo na média 21 e Retomada, podem entrar
+      // simultâneas; Reversão RSI virou TESTE. Cada candidato passa pelo claim atômico.
+      const claimedStrategies: string[] = [];
+      for (const candidate of clean) {
+        const { data: trade, error: claimError } = await supabase.rpc('claim_test_strategy_entry', { p_candidate: candidate.signal_id });
+        if (claimError) console.error('Strategy claim:', claimError.message);
+        if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
+          const claimedStrategy = String(trade.entryStrategy);
+          claimedStrategies.push(claimedStrategy);
+          const entryAt = nextReversalMinute(curMin * 1000);
+          const task = (async () => {
+            // Reuse the session that just fetched these candles, avoiding another broker login.
+            // This secret travels server-to-server only, never to browser, storage or logs.
+            const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
+              body: { ...trade, entryAt, brokerSession: { ssid, configId: cfg.id } },
+            });
+            const details = error && 'context' in error && error.context instanceof Response
+              ? await error.context.text() : error?.message;
+            await supabase.from('trade_queue').update({
+              status: data?.success ? 'executed' : 'failed', iq_option_id: data?.tradeId || null,
+              executed_at: data?.success ? new Date().toISOString() : null,
+              error: data?.success ? null : details || data?.error || 'Placement failed',
+            }).eq('signal_id', String(trade.signalId)).eq('entry_strategy', claimedStrategy);
+          })().catch(async e => {
+            console.error('Strategy placement:', String(e));
+            await supabase.from('trade_queue').update({ status: 'failed', error: String(e) })
+              .eq('signal_id', String(trade.signalId)).eq('status', 'executing');
           });
-          const details = error && 'context' in error && error.context instanceof Response
-            ? await error.context.text() : error?.message;
-          await supabase.from('trade_queue').update({
-            status: data?.success ? 'executed' : 'failed', iq_option_id: data?.tradeId || null,
-            executed_at: data?.success ? new Date().toISOString() : null,
-            error: data?.success ? null : details || data?.error || 'Placement failed',
-          }).eq('signal_id', String(trade.signalId)).eq('entry_strategy', claimedStrategy);
-        })().catch(async e => {
-          console.error('Four-win placement:', String(e));
-          await supabase.from('trade_queue').update({ status: 'failed', error: String(e) })
-            .eq('signal_id', String(trade.signalId)).eq('status', 'executing');
-        });
-        // Keep broker placement alive without blocking the minute analysis.
-        // @ts-ignore Hosted background runtime
-        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(task);
-        else await task;
-         return Response.json({ success: true, assets: series.size, inserted, resolved, strategy: claimedStrategy }, { headers: cors });
+          // Keep broker placement alive without blocking the minute analysis.
+          // @ts-ignore Hosted background runtime
+          if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(task);
+          else await task;
+        }
+      }
+      if (claimedStrategies.length) {
+        return Response.json({ success: true, assets: series.size, inserted, resolved, strategies: claimedStrategies }, { headers: cors });
       }
     }
     // Other entries remain TEST, but no longer generate new Telegram signals.

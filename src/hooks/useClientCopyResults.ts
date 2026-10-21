@@ -3,10 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { clientCopyResults, clientDayStart, type ClientCopyOperation } from '@/lib/client-copy-results';
+import { afterIQReset, combineCutoffs, getIQResultsReset } from '@/lib/iq-results-reset';
+import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
 
 export function useClientCopyResults() {
   const { user } = useAuth();
   const userId = user?.id;
+  const globalCutoff = useGlobalIQResetCutoff();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ['client-copy-results', userId],
@@ -45,5 +48,6 @@ export function useClientCopyResults() {
     return () => { void supabase.removeChannel(channel); };
   }, [userId, queryClient]);
 
-  return { ...clientCopyResults(query.data || [], userId || ''), isLoading: query.isLoading, isError: query.isError };
+  const cutoff = combineCutoffs(getIQResultsReset(userId), globalCutoff);
+  return { ...clientCopyResults((query.data || []).filter(row => afterIQReset(row.created_at, cutoff)), userId || ''), isLoading: query.isLoading, isError: query.isError };
 }

@@ -3,11 +3,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ClientCopyOperation } from '@/lib/client-copy-results';
 import { historyStart } from '@/components/dayLabel';
+import { afterIQReset, combineCutoffs, getIQResultsReset } from '@/lib/iq-results-reset';
+import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
 
 // Histórico de entradas copiadas do cliente (últimos 30 dias), sem estratégia.
 export function useClientCopyHistory() {
   const { user } = useAuth();
   const userId = user?.id;
+  const globalCutoff = useGlobalIQResetCutoff();
   const query = useQuery({
     queryKey: ['client-copy-history', userId],
     enabled: Boolean(userId),
@@ -33,5 +36,6 @@ export function useClientCopyHistory() {
       }
     },
   });
-  return { operations: query.data || [], isLoading: query.isLoading, isError: query.isError };
+  const cutoff = combineCutoffs(getIQResultsReset(userId), globalCutoff);
+  return { operations: (query.data || []).filter(row => afterIQReset(row.created_at, cutoff)), isLoading: query.isLoading, isError: query.isError };
 }

@@ -3,14 +3,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { historyStart } from '@/components/dayLabel';
-import { getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { combineCutoffs, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
 import { isMasterIQOrder, masterIQDailyStats, type MasterIQOperation } from '@/lib/master-iq-results';
 
 export function useMasterIQResults() {
   const { user } = useAuth();
   const userId = user?.id;
   const queryClient = useQueryClient();
-  const [cutoff, setCutoff] = useState(() => getIQResultsReset(userId));
+  const globalCutoff = useGlobalIQResetCutoff();
+  const [localCutoff, setLocalCutoff] = useState(() => getIQResultsReset(userId));
   const query = useQuery({
     queryKey: ['master-iq-results', userId], enabled: Boolean(userId), refetchInterval: 10000,
     queryFn: async () => {
@@ -29,13 +31,14 @@ export function useMasterIQResults() {
     },
   });
   useEffect(() => {
-    setCutoff(getIQResultsReset(userId));
-    const reload = () => { setCutoff(getIQResultsReset(userId)); void queryClient.invalidateQueries({ queryKey: ['master-iq-results', userId] }); };
+    setLocalCutoff(getIQResultsReset(userId));
+    const reload = () => { setLocalCutoff(getIQResultsReset(userId)); void queryClient.invalidateQueries({ queryKey: ['master-iq-results', userId] }); };
     window.addEventListener(IQ_RESULTS_RESET_EVENT, reload);
     const channel = supabase.channel(`master-iq-results-${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, reload).subscribe();
     return () => { window.removeEventListener(IQ_RESULTS_RESET_EVENT, reload); void supabase.removeChannel(channel); };
   }, [userId, queryClient]);
+  const cutoff = combineCutoffs(localCutoff, globalCutoff);
   const operations = useMemo(() => (query.data || []).filter(row => isMasterIQOrder(row, cutoff)), [query.data, cutoff]);
   return { operations, dailyStats: masterIQDailyStats(operations, cutoff), isError: query.isError };
 }

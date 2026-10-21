@@ -735,7 +735,7 @@ serve(async (req) => {
           : entryStrategy === 'TENDENCIA' ? 'Tendência alinhada'
           : entryStrategy === 'TENDENCIA_V1' ? 'Tendência V1'
           : entryStrategy === 'REVERSAO_RSI' ? 'Reversão RSI'
-          : entryStrategy === 'VELA_FORCA' ? 'Vela de Força'
+          : entryStrategy === 'RECUO_EMA21' ? 'Recuo na média 21'
           : entryStrategy === 'EMPATE' ? 'Após empate' : 'IA';
         notifyEntry = async entryAt => {
           // Regra (16/10/2026): só envia ao Telegram quando houver OUTRO sinal

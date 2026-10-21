@@ -56,3 +56,8 @@
 - [x] Criar estratégia separada TESTE sem rompimento + primeira vela; 17 testes passaram, funções publicadas e admin conferido sem erros. Ainda sem ocorrência prospectiva; acerto e retorno aguardam novos sinais elegíveis.
 - [x] PENGU #14372665294: vela 02:23 fechou 8,457475 acima da máxima20 8,422765; corpo 72,3%, ordem LOSS -10. Estudo somente leitura, minuto registrado como aproximação da entrada.
 - [x] Cache/prefetch de páginas, contagem só na primeira, enriquecimento paralelo e placares diários memoizados; navegação autenticada 1→2→3→2→1 em 0,057–0,097s, sem erros; 10 testes e build OK.
+
+# Troca de estratégias reais (21/10/2026)
+- [x] Vela de Força fora das entradas reais/Telegram (segue em TESTE)
+- [x] Recuo na média 21 entra em todos os sinais gerados (claim + Telegram)
+- [ ] Conferir primeira entrada real de Recuo na média 21

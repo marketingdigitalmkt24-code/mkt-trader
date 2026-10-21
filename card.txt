@@ -1,0 +1,297 @@
+Painel Admin
+$9,369.30
+-105.32
+
+LUCRO
+
+$-105
+
+TRADES
+
+202
+
+WIN RATE
+
+45%
+
+W/L
+
+91/109
+
+Dashboard
+Auto Trading
+Corretoras
+Copy Trading
+Usuários
+Conexão Corretora
+IQ Option
+
+marketingdigital.mkt24@gmail.com
+
+18:17:21
+Gestão de Banca IQ Option
+IQ
+Saldo Atual
+DEMO
+18:17:28
+$ 9,369.30
+RESULTADO DE HOJE
+$ -105.32
+Win Rate
+45.5%
+91
+WINS
+109
+LOSSES
+202
+TRADES
+2%
+RISCO
+Limite diário
+202/20
+Atenção: Limite de operações próximo
+8 perdas consecutivas - Considere pausar
+HISTÓRICO DIÁRIO IQ OPTION
+20/10
+121W/99L(55%)
++$ 140.10
+19/10
+14W/12L(54%)
+$ -3.80
+18/10
+9W/10L(47%)
+$ -25.30
+17/10
+8W/1L(89%)
++$ 58.00
+16/10
+1W/2L(33%)
+$ -11.50
+ENTRADAS NA IQ OPTION (HOJE)
+✓91 ✗109 46%
+US$ -105.32
+HOJE · 21/10/2026
+✓91 ✗109 46%
+15:08
+USD/MXN-OTC
+#14377211780
+Não identificada
+CALL
+-10.00
+15:05
+SEI/USD-OTC
+#14377205768
+Não identificada
+PUT
+-10.00
+15:00
+TRON-OTC
+#14377195130
+Não identificada
+CALL
+-10.00
+14:59
+FRANCE40:N
+#14377192793
+Não identificada
+PUT
++8.60
+14:58
+USD/AED-OTC
+#14377190453
+Não identificada
+CALL
+-10.00
+14:54
+USD/TRY-OTC
+#14377181916
+Não identificada
+CALL
+-10.00
+14:52
+RENDERUSD-OTC
+#14377177339
+Não identificada
+CALL
++8.70
+14:47
+USD/TRY-OTC
+#14377166528
+Não identificada
+CALL
++8.20
+14:46
+COT/TON-OTC
+#14377164008
+Não identificada
+PUT
+-10.00
+14:43
+USD/AED-OTC
+#14377157602
+Não identificada
+PUT
+-10.00
+14:40
+EUR/GBP
+#14377150781
+Não identificada
+CALL
+-10.00
+14:36
+TRON-OTC
+#14377141225
+Não identificada
+CALL
+-10.00
+Anterior
+1/41
+Próxima
+Operações em Tempo Real
+Buzina
+Operações Abertas
+0 abertas
+Nenhuma operação aberta agora
+IQ Option — Últimas Operações
+15717 no total
+✓ 7682 ganhos
+✗ 7846 perdas
+49%
+Resultado diário (teste)
+✓ 3379
+✗ 3529
+49%
+GOO/GLE
+21/10, 15:17
+TESTE
+📐 TENDÊNCIA
+⏳
+TESTE
+AMA/ZON
+21/10, 15:16
+TESTE
+CALL
+🕯️ VELA DE FORÇA
+-$10.00
+LOSS
+SUGAR-OTC
+21/10, 15:15
+TESTE
+CALL
+🕯️ VELA DE FORÇA
+-$10.00
+LOSS
+DASHUSD-OTC
+21/10, 15:14
+TESTE
+📐 TENDÊNCIA
+-$10.00
+LOSS
+SHIBUSD-OTC
+21/10, 15:13
+TESTE
+🔄 REVERSÃO RSI
+-$10.00
+LOSS
+JUP/USD-OTC
+21/10, 15:12
+TESTE
+📐 TENDÊNCIA
+-$10.00
+LOSS
+EOS/USD-OTC
+21/10, 15:11
+TESTE
+CALL
+🕯️ VELA DE FORÇA
+-$10.00
+LOSS
+ARB/USD-OTC
+21/10, 15:10
+TESTE
+📐 TENDÊNCIA
+-$10.00
+LOSS
+FARTCOINUSD-OTC
+21/10, 15:09
+TESTE
+forca sem
++$8.50
+WIN
+FARTCOINUSD-OTC
+21/10, 15:09
+TESTE
+CALL
+🕯️ VELA DE FORÇA
++$8.50
+WIN
+Total desta página
+$-53.00
+← Anterior
+Página 1 de 1572
+Próxima →
+IA Analisando
+
+Último sinal: 14s atrás
+
+ATIVA
+8
+Sinais (10min)
+4
+Alta Conf.
+4
+Baixa Conf.
+PUT
+UK100:N
+100%
+18:17
+CALL
+AIG
+71%
+18:17
+CALL
+LUNA-OTC
+86%
+18:16
+PUT
+USD/JPY
+100%
+18:16
+PUT
+GBP/JPY
+71%
+18:15
+ASSERTIVIDADE POR ESTRATÉGIA · TODO O HISTÓRICO
+Retomada
+53W / 43L
+55,2%
+Reversão RSI
+652W / 619L
+51,3%
+Recuo na média 21
+906W / 878L
+50,8%
+Ichimoku
+534W / 530L
+50,2%
+KDJ
+480W / 489L
+49,5%
+Tendência
+3319W / 3418L
+49,3%
+Vela de força
+1267W / 1317L
+49%
+forca sem
+18W / 19L
+48,6%
+Rompimento
+592W / 638L
+48,1%
+ICHIMOKU_FORCA
+17W / 19L
+47,2%
+KDJ_RSI
+17W / 21L
+44,7%

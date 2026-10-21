@@ -60,8 +60,8 @@
 # Troca de estratégias reais (21/10/2026)
 - [x] Vela de Força fora das entradas reais/Telegram (segue em TESTE)
 - [x] Recuo na média 21 entra em todos os sinais gerados (claim + Telegram)
-- [ ] Conferir primeira entrada real de Recuo na média 21
+- [x] Conferir primeira entrada de Recuo na média 21 na corretora — EUR/NZD #14375735930, valor 10, antes da troca para REAL.
 
 # Conexão REAL e saldo (21/10/2026)
-- [ ] Corrigir confirmação ao trocar Demo/Real sem reativar copy automaticamente.
-- [ ] Conferir saldo REAL autenticado e destino das operações, sem criar ordem manual.
+- [x] Corrigir confirmação ao trocar Demo/Real sem reativar copy automaticamente; 24 testes aprovados.
+- [x] Conferir saldo REAL autenticado: R$55,00, conexão confirmada. Sem nova ordem REAL no intervalo observado; não criar ordem manual de teste.

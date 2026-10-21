@@ -1,4 +1,4 @@
-- IQ account-type changes and persisted disconnections atomically invalidate connection confirmation and stop copy via an application trigger; why: navigation must not leave copy enabled on an unconfirmed account.
+- IQ type changes invalidate confirmation/copy via trigger; save verified type before separate confirmation. Balance/status reads stay user-scoped, without navigation login; why: no lost confirmation or fallback.
 - Admin IQ list and bank totals share paginated master-only confirmed orders, excluding copy/TEST/MT5; client metrics use user-prefixed orders; BRT days and browser reset apply, broker balance separate; why: shared IQ accounts must not mix stakes/results.
 - Client bank/entries use client-only hooks; settings-only bank mode lives in broker tab; connection leads dashboard without navigation writes; why: isolation, persistent copy.
 - Client copy saves, broker placement and read-only admin account labels use the active IQ connection account type via the shared copy-account resolver; why: only the client's connection choice sets the copied account.

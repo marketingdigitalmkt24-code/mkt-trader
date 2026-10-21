@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { allStrategyRows, strategyStats as summarizeStrategyStats, type StrategyStat } from '@/lib/strategy-stats';
+import { allStrategyRows, strategyStats as summarizeStrategyStats, strategyAccuracyDisplay, type StrategyStat } from '@/lib/strategy-stats';
 
 interface SignalEntry {
   id: string;

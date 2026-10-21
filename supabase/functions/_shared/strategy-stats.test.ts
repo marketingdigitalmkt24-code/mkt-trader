@@ -41,3 +41,27 @@ test('Force first TEST counts separately from original Force', () => {
   assert.deepEqual(stats.find(s => s.strategy === 'VELA_FORCA'), { strategy: 'VELA_FORCA', wins: 1, losses: 0 });
   assert.deepEqual(stats.find(s => s.strategy === 'FORCA_SEM_ROMPIMENTO_PRIMEIRA'), { strategy: 'FORCA_SEM_ROMPIMENTO_PRIMEIRA', wins: 0, losses: 1 });
 });
+test('accuracy display keeps active strategies and groups all other tests into one row', () => {
+  const stats = strategyStats([
+    { ...row, entry_strategy: 'ICHIMOKU_FORCA', result: 'win' },
+    { ...row, entry_strategy: 'KDJ_RSI', result: 'loss' },
+    { ...row, entry_strategy: 'KDJ_RSI', result: 'win' },
+    { ...row, entry_strategy: 'TENDENCIA', result: 'loss' },
+    { ...row, entry_strategy: 'FORCA_SEM_ROMPIMENTO_PRIMEIRA', result: 'win' },
+    { ...row, entry_strategy: 'VELA_FORCA', result: 'loss' },
+  ]);
+  const display = strategyAccuracyDisplay(stats);
+  assert.deepEqual(
+    display.find(s => s.strategy === 'ICHIMOKU_FORCA'),
+    { strategy: 'ICHIMOKU_FORCA', wins: 1, losses: 0 });
+  assert.deepEqual(
+    display.find(s => s.strategy === 'KDJ_RSI'),
+    { strategy: 'KDJ_RSI', wins: 1, losses: 1 });
+  assert.deepEqual(display.find(s => s.strategy === TESTS_GROUPED_KEY),
+    { strategy: TESTS_GROUPED_KEY, wins: 1, losses: 2 });
+  assert.equal(display.length, 3);
+});
+test('accuracy display omits the tests row when only active strategies exist', () => {
+  const stats = strategyStats([{ ...row, entry_strategy: 'KDJ_RSI', result: 'win' }]);
+  assert.deepEqual(strategyAccuracyDisplay(stats), [{ strategy: 'KDJ_RSI', wins: 1, losses: 0 }]);
+});

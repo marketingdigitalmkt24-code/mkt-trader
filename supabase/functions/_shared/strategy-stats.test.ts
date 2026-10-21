@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { allStrategyRows, strategyStats, type StrategyRow } from '../../../src/lib/strategy-stats.ts';
+import { allStrategyRows, strategyStats, strategyAccuracyDisplay, TESTS_GROUPED_KEY, type StrategyRow } from '../../../src/lib/strategy-stats.ts';
 const row: StrategyRow = { entry_strategy: 'TENDENCIA', result: 'win', timeframe: 'TEST', test_sequence_strategy: null };
 test('removed Force LOSS WIN is excluded without removing other force strategies', () => {
   assert.deepEqual(strategyStats([{ ...row, entry_strategy: 'FORCE_LOSS_WIN' }, { ...row, entry_strategy: 'VELA_FORCA' }]),

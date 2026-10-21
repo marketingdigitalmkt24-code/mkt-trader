@@ -19,13 +19,13 @@ export function ClientResultsCard() {
   const [showOpen, setShowOpen] = useState(true);
   const liveResults = useClientCopyResults();
   const openOperations = liveResults.operations.filter(op => ['pending', 'open'].includes(op.result));
-  const settledOperations = operations.filter(op => SETTLED.includes(op.result));
-
   const todayStart = clientDayStart();
-  const todayOps = operations.filter(op => op.created_at >= todayStart);
-  const wins = todayOps.filter(op => op.result === 'win').length;
-  const losses = todayOps.filter(op => op.result === 'loss').length;
-  const total = todayOps.filter(op => SETTLED.includes(op.result)).reduce((s, op) => s + Number(op.profit || 0), 0);
+  // 21/10/2026: o card não mostra as operações de hoje, apenas dias anteriores.
+  const settledOperations = operations.filter(op => SETTLED.includes(op.result) && op.created_at < todayStart);
+
+  const wins = settledOperations.filter(op => op.result === 'win').length;
+  const losses = settledOperations.filter(op => op.result === 'loss').length;
+  const total = settledOperations.reduce((s, op) => s + Number(op.profit || 0), 0);
   const { winPercent } = copyResultRates(wins, losses);
 
   const pageCount = Math.max(1, Math.ceil(settledOperations.length / PAGE_SIZE));
@@ -45,7 +45,7 @@ export function ClientResultsCard() {
     <Card className="p-3 sm:p-4 border-border/50">
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <BarChart3 className="w-4 h-4 text-primary" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option (hoje)</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Entradas na IQ Option</span>
         <span className="font-mono text-xs ml-auto mr-2">
           <span className="text-call">✓{wins}</span> <span className="text-put">✗{losses}</span>{' '}
           <span className="text-gold">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span>
@@ -78,7 +78,7 @@ export function ClientResultsCard() {
       ) : isError ? (
         <p className="text-xs text-destructive py-4 text-center">Não foi possível atualizar as entradas.</p>
       ) : settledOperations.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma operação copiada ainda.</p>
+        <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma operação copiada em dias anteriores.</p>
       ) : (
         <>
           <div className="space-y-1">

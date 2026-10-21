@@ -63,5 +63,6 @@
 - [x] Conferir primeira entrada de Recuo na média 21 na corretora — EUR/NZD #14375735930, valor 10, antes da troca para REAL.
 
 # Conexão REAL e saldo (21/10/2026)
+- [ ] Resolver bloqueio após troca: conciliar ordem Demo pendente pelo ID exato nas duas carteiras do mesmo usuário; conferir resultado e novas entradas autorizadas sem ordem manual.
 - [x] Corrigir confirmação ao trocar Demo/Real sem reativar copy automaticamente; 24 testes aprovados.
 - [x] Conferir saldo REAL autenticado: R$55,00, conexão confirmada. Sem nova ordem REAL no intervalo observado; não criar ordem manual de teste.

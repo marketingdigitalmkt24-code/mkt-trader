@@ -4,6 +4,7 @@ import { dispatchIQResults } from '../_shared/telegram-iq-results.ts';
 import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
+import { historyBalanceIds } from '../_shared/iq-history-balances.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -118,12 +119,11 @@ type WsAuthMode =
   | { mode: 'ssid'; ssid: string }
   | { mode: 'credentials'; email: string; password: string };
 
-async function getClosedPositions(auth: WsAuthMode, accountType: string): Promise<{ positions: PositionResult[]; authenticated: boolean; usedWsUrl: string | null }> {
+async function getClosedPositions(auth: WsAuthMode): Promise<{ positions: PositionResult[]; authenticated: boolean; usedWsUrl: string | null }> {
   for (const wsUrl of IQ_OPTION_WS_URLS) {
     try {
       const res = await new Promise<{ positions: PositionResult[]; authenticated: boolean; usedWsUrl: string | null }>((resolve) => {
         const positions: PositionResult[] = [];
-        let balanceId = 0;
         let authenticated = false;
         let resolved = false;
         let finishTimer: number | null = null;
@@ -177,22 +177,13 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
               authenticated = true;
               console.log('Authenticated! Getting balance and history...');
 
-              const balances = data.msg?.balances || [];
-              for (const balance of balances) {
-                if (accountType === 'PRACTICE' && balance.type === 4) {
-                  balanceId = balance.id;
-                  break;
-                } else if (accountType === 'REAL' && balance.type === 1) {
-                  balanceId = balance.id;
-                  break;
-                }
-              }
-              if (!balanceId && balances.length > 0) balanceId = balances[0].id;
-              console.log('Using balance ID:', balanceId);
+              const balanceIds = historyBalanceIds(data.msg?.balances || []);
+              if (!balanceIds.length) { finish(); return; }
 
               // Request closed history (multiple pages for better matching)
               const historyOffsets = [0, 300, 600];
 
+              for (const balanceId of balanceIds) {
               for (const offset of historyOffsets) {
                 ws.send(JSON.stringify({
                   name: 'sendMessage',
@@ -223,6 +214,7 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
                     },
                   },
                 }));
+              }
               }
             }
 
@@ -424,15 +416,14 @@ serve(async (req) => {
 
     // Strategy 1: SSID + WebSocket
     let wsResult = ssid
-      ? await getClosedPositions({ mode: 'ssid', ssid }, credentials.account_type)
+      ? await getClosedPositions({ mode: 'ssid', ssid })
       : { positions: [], authenticated: false, usedWsUrl: null as string | null };
 
     // Strategy 2: WebSocket-only auth fallback (when HTTP login times out / is blocked)
     if (!wsResult.authenticated) {
       console.log('🔄 HTTP login failed, trying WS-only authentication...');
       wsResult = await getClosedPositions(
-        { mode: 'credentials', email: credentials.email, password: credentials.password },
-        credentials.account_type
+        { mode: 'credentials', email: credentials.email, password: credentials.password }
       );
     }
 
@@ -484,7 +475,7 @@ serve(async (req) => {
       if (!config || !accountType) return;
       const { ssid: clientSession } = await loginToIQOptionResilient(config.email, config.password);
       if (!clientSession) return;
-      const history = await getClosedPositions({ mode: 'ssid', ssid: clientSession }, accountType);
+      const history = await getClosedPositions({ mode: 'ssid', ssid: clientSession });
       if (history.authenticated) copyHistories.set(userId, history.positions);
     }));
     console.log(

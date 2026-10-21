@@ -3,7 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { iqOptionClient } from '@/services/IQOptionClient';
 import { toast } from 'sonner';
-import { afterIQReset, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { afterIQReset, combineCutoffs, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
 
 interface BalanceInfo {
   balance: number;
@@ -23,6 +24,7 @@ type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export function useIQOptionConnection({ silentMissingCredentials = false, fetchStatistics = true, balanceOnly = false }: { silentMissingCredentials?: boolean; fetchStatistics?: boolean; balanceOnly?: boolean } = {}) {
   const { user } = useAuth();
+  const globalCutoff = useGlobalIQResetCutoff();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [balance, setBalance] = useState<BalanceInfo | null>(null);
   const [dailyStats, setDailyStats] = useState<DailyStats>({
@@ -100,7 +102,7 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
       }
       const startIso = brasiliaMidnightUtc.toISOString();
       // Mesmo filtro do card "Entradas na IQ Option": somente ordens reais confirmadas pela corretora
-      const results = all.filter((r) => r.created_at >= startIso && afterIQReset(r.created_at, getIQResultsReset(user?.id)) && r.timeframe !== 'MT5'
+      const results = all.filter((r) => r.created_at >= startIso && afterIQReset(r.created_at, combineCutoffs(getIQResultsReset(user?.id), globalCutoff)) && r.timeframe !== 'MT5'
         && r.iq_option_id && !String(r.iq_option_id).toLowerCase().startsWith('test'));
 
       let profit = 0;
@@ -142,7 +144,7 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
     } catch (error) {
       console.error('Error fetching daily stats:', error);
     }
-  }, [user?.id, fetchStatistics]);
+  }, [user?.id, fetchStatistics, globalCutoff]);
 
   useEffect(() => {
     const reload = () => { void fetchDailyStats(); };

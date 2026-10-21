@@ -4,8 +4,9 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { afterIQReset, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { afterIQReset, combineCutoffs, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
+import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
 
 interface DayResult {
   date: string;
@@ -42,6 +43,7 @@ export function DailyHistory({
   operations,
 }: DailyHistoryProps) {
   const { user } = useAuth();
+  const globalCutoff = useGlobalIQResetCutoff();
   const { operations: masterOperations } = useMasterIQResults();
   const [days, setDays] = useState<DayResult[]>([]);
   const [page, setPage] = useState(0);
@@ -96,7 +98,7 @@ export function DailyHistory({
     for (const r of (data as Array<{ created_at: string; profit: number; result: string; timeframe: string; iq_option_id: string | null }>)) {
       // Ignora qualquer registro de teste, mesmo que carregue um id simulado
       if (!timeframeFilter && r.iq_option_id && String(r.iq_option_id).toLowerCase().startsWith('test')) continue;
-      if (!timeframeFilter && !afterIQReset(r.created_at, getIQResultsReset(user?.id))) continue;
+      if (!timeframeFilter && !afterIQReset(r.created_at, combineCutoffs(getIQResultsReset(user?.id), globalCutoff))) continue;
       const date = getBrasiliaDateKey(new Date(r.created_at));
       if (!grouped[date]) grouped[date] = { profit: 0, wins: 0, losses: 0, trades: 0 };
       grouped[date].profit += r.profit;

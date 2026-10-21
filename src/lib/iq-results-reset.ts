@@ -9,7 +9,15 @@ export function resetIQResults(userId: string) {
   window.dispatchEvent(new Event(IQ_RESULTS_RESET_EVENT));
 }
 export function afterIQReset(createdAt: string, cutoff: string) {
-  return !cutoff || createdAt > cutoff;
+  if (!cutoff) return true;
+  const resetTime = Date.parse(cutoff);
+  const entryTime = Date.parse(createdAt);
+  if (!Number.isFinite(resetTime)) return true;
+  // A reset hides only its Brasília day up to the reset, never prior history.
+  const brtOffset = 3 * 60 * 60 * 1000;
+  const brtDate = new Date(resetTime - brtOffset);
+  const dayStart = Date.UTC(brtDate.getUTCFullYear(), brtDate.getUTCMonth(), brtDate.getUTCDate()) + brtOffset;
+  return entryTime < dayStart || entryTime > resetTime;
 }
 // Combina cortes de reset (por usuário no navegador + corte global do servidor):
 // vale o mais recente deles.

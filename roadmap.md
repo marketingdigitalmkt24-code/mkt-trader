@@ -1,5 +1,5 @@
 # Antecipação de Força — execução IQ autorizada
-- [ ] Criar versão mais ampla referenciada nos sinais anteriores de Força, testar e publicar mantendo mercado/volume/limites e Telegram confirmado.
+- [x] Publicar v3: corpo até 65% amplitude/85% média20, RSI CALL40–75/PUT25–60, volume reportado ≥0,5×média20; alinhamento preservado. 34 testes aprovados. Referência descritiva de 32 sinais PENGU/RAYDIUM (18W/14L), sem volume histórico: não valida acerto/retorno da antecipação. Comparação v2/v3 registrada na rotina; envio prospectivo depende de ordem fresca confirmada.
 - [x] Habilitar Telegram após confirmação IQ da antecipação fresca e vincular resultado pelo ledger, sem TESTE/copy; 19 testes aprovados e função publicada.
 - [ ] Confirmar primeiro envio prospectivo de antecipação ao Telegram — ainda não há ordem IQ elegível registrada; não reenviar histórico ou forçar sinal.
 - [x] Habilitar execução principal na conta configurada, sinal fresco, ativo aberto, reserva, valor/limites atuais e confirmação IQ; TESTES separados, sem copy/Telegram. Atual conta PRACTICE, valor 10; metas percentuais bloqueiam sem saldo verificado.

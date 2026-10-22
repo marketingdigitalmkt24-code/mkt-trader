@@ -31,11 +31,18 @@ export function anticipationSetup(raw: AnticipationCandle[], minute: number, rul
   if (!(direction && body > 0 && range > 0 && meanBody > 0)
     || body / range > rule.bodyShareMax
     || body / meanBody > rule.bodyMeanMax) return null;
-  // Missing/zero volume is not replaced by body size, ticks guessed from prices, or future volume.
-  if (![...prior, last].every(k => typeof k.v === 'number' && Number.isFinite(k.v) && k.v > 0)) return null;
-  const meanVolume = prior.reduce((s, k) => s + (k.v ?? 0), 0) / 20;
-  const volumeRatio = (last.v ?? 0) / meanVolume;
-  if (volumeRatio < rule.volumeRatioMin) return null;
+  // OTC and stocks report no volume at all: then volume is skipped (never invented).
+  // Partial/zero volume on a market that reports it still blocks.
+  const window = [...prior, last];
+  const hasVolume = (k: AnticipationCandle) => typeof k.v === 'number' && Number.isFinite(k.v) && k.v > 0;
+  const noVolumeMarket = window.every(k => k.v === undefined);
+  let volumeRatio: number | null = null;
+  if (!noVolumeMarket) {
+    if (!window.every(hasVolume)) return null;
+    const meanVolume = prior.reduce((s, k) => s + (k.v ?? 0), 0) / 20;
+    volumeRatio = (last.v ?? 0) / meanVolume;
+    if (volumeRatio < rule.volumeRatioMin) return null;
+  }
   let ema9 = cs[0].c, ema21 = cs[0].c, gain = 0, loss = 0;
   for (let i = 1; i < cs.length; i++) {
     const delta = cs[i].c - cs[i - 1].c;
@@ -52,7 +59,7 @@ export function anticipationSetup(raw: AnticipationCandle[], minute: number, rul
   const rsiMax = direction === 'CALL' ? rule.rsiMax : 100 - rule.rsiMin;
   if (!aligned || rsi < rsiMin || rsi > rsiMax) return null;
   return { direction, ema9, ema21, sma50, rsi, volumeRatio, bodyShare: body / range, bodyMeanRatio: body / meanBody,
-    ruleVersion: rule === ANTICIPATION_RULE_V2 ? 2 : 3, volumeSource: 'broker_reported', simulatedStake: 10, simulatedPayout: 0.85 };
+    ruleVersion: rule === ANTICIPATION_RULE_V2 ? 2 : 3, volumeSource: noVolumeMarket ? 'not_reported' : 'broker_reported', simulatedStake: 10, simulatedPayout: 0.85 };
 }
 
 export function anticipationObservation(asset: string, raw: AnticipationCandle[], now: number) {

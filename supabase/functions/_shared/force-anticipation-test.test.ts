@@ -134,3 +134,8 @@ test('settles exact entry minute only after close with simulated 10 stake and 85
   assert.equal(anticipationResult(entry, [{ ...candle, c: 100 }], minute + 60)?.profit, -10);
   assert.equal(anticipationResult(entry, [{ ...candle, c: 101 }], minute + 60)?.profit, 0);
 });
+import { ANTICIPATION_RULE_PAVIO as PAVIO_RULE } from './force-anticipation-test.ts';
+test('pavio version requires body <=35% and rejection wick >=50%', () => {
+  assert.equal(PAVIO_RULE.bodyShareMax, 0.35);
+  assert.equal(PAVIO_RULE.wickMin, 0.5);
+});

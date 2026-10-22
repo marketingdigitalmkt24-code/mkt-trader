@@ -8,20 +8,25 @@ export function ForceAnticipationTestCard() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['force-anticipation-tests'], refetchInterval: 15000,
     queryFn: async () => {
-      const [recent, wins, losses, ties] = await Promise.all([
+      const PAVIO = 'anticipation-pavio-%';
+      const count = (result: string, pavio: boolean) => {
+        const q = supabase.from('force_anticipation_tests').select('id', { count: 'exact', head: true }).eq('result', result);
+        return pavio ? q.like('signal_id', PAVIO) : q.not('signal_id', 'like', PAVIO);
+      };
+      const [recent, wins, losses, ties, pWins, pLosses] = await Promise.all([
         supabase.from('force_anticipation_tests').select('id,signal_id,asset,direction,created_at,result,profit').order('created_at', { ascending: false }).limit(10),
-        supabase.from('force_anticipation_tests').select('id', { count: 'exact', head: true }).eq('result', 'win'),
-        supabase.from('force_anticipation_tests').select('id', { count: 'exact', head: true }).eq('result', 'loss'),
-        supabase.from('force_anticipation_tests').select('id', { count: 'exact', head: true }).eq('result', 'tie'),
+        count('win', false),
+        count('loss', false),
+        count('tie', false), count('win', true), count('loss', true),
       ]);
-      for (const result of [recent, wins, losses, ties]) if (result.error) throw result.error;
+      for (const result of [recent, wins, losses, ties, pWins, pLosses]) if (result.error) throw result.error;
       const ids = (recent.data || []).map(row => `forca_antecipada-${row.id}`);
       const [orders, queue] = ids.length ? await Promise.all([
         supabase.from('operation_results').select('signal_id,asset,direction,created_at,iq_option_id,result,profit,entry_price').in('signal_id', ids).neq('timeframe', 'TEST'),
         supabase.from('trade_queue').select('signal_id,status,error').in('signal_id', ids),
       ]) : [{ data: [], error: null }, { data: [], error: null }];
       if (orders.error || queue.error) throw orders.error || queue.error;
-      return { rows: recent.data || [], orders: orders.data || [], queue: queue.data || [], wins: wins.count || 0, losses: losses.count || 0, ties: ties.count || 0 };
+      return { rows: recent.data || [], orders: orders.data || [], queue: queue.data || [], wins: wins.count || 0, losses: losses.count || 0, ties: ties.count || 0, pWins: pWins.count || 0, pLosses: pLosses.count || 0 };
     },
   });
   const wins = data?.wins || 0, losses = data?.losses || 0;
@@ -49,10 +54,15 @@ export function ForceAnticipationTestCard() {
       <span>{wins + losses ? `${(100 * wins / (wins + losses)).toFixed(1)}%` : '—'}</span>
       <span className={wins * 8.5 - losses * 10 >= 0 ? 'text-call' : 'text-put'}>{money(wins * 8.5 - losses * 10)} simulado</span>
     </div>
+    <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-mono">
+      <span className="font-sans font-semibold">Rejeição por pavio · TESTE</span>
+      <span className="text-call">{data?.pWins || 0} WIN</span><span className="text-put">{data?.pLosses || 0} LOSS</span>
+      <span>{(data?.pWins || 0) + (data?.pLosses || 0) ? `${(100 * (data?.pWins || 0) / ((data?.pWins || 0) + (data?.pLosses || 0))).toFixed(1)}%` : '—'}</span>
+    </div>
     {isLoading ? <p className="text-xs text-muted-foreground">Carregando testes…</p> : isError ? <p role="alert" className="text-xs text-destructive">Não foi possível carregar os testes.</p> : !data?.rows.length ? <p className="text-xs text-muted-foreground">Aguardando primeiro sinal elegível.</p> :
       <div className="space-y-2">{data.rows.map(row => <div key={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 text-xs">
         <span className="font-medium">{row.asset}</span><span className="text-muted-foreground font-mono">{new Date(row.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-        <span className={row.direction === 'PUT' ? 'text-put' : 'text-call'}>{row.direction}</span><span className="ml-auto font-mono">{row.result === 'open' ? 'ABERTO' : row.result === 'expired' ? 'SEM RESULTADO' : row.result === 'tie' ? 'EMPATE' : row.result.toUpperCase()} · {money(Number(row.profit))}</span>
+        <span className={row.direction === 'PUT' ? 'text-put' : 'text-call'}>{row.direction}</span>{row.signal_id.startsWith('anticipation-pavio-') && <Badge variant="outline">PAVIO</Badge>}<span className="ml-auto font-mono">{row.result === 'open' ? 'ABERTO' : row.result === 'expired' ? 'SEM RESULTADO' : row.result === 'tie' ? 'EMPATE' : row.result.toUpperCase()} · {money(Number(row.profit))}</span>
       </div>)}</div>}
   </CardContent></Card>;
 }

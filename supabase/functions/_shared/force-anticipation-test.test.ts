@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { anticipationObservation, anticipationSetup, anticipationResult, type AnticipationCandle } from './force-anticipation-test.ts';
+import { ANTICIPATION_RULE, ANTICIPATION_RULE_V2, anticipationObservation, anticipationSetup, anticipationResult, type AnticipationCandle } from './force-anticipation-test.ts';
 const minute = 1792608000;
 function fixture(): AnticipationCandle[] {
   let close = 100;
@@ -33,11 +33,11 @@ test('PUT mirrors CALL after first small green candle with descending averages R
 test('PUT rejects second green candle and large countertrend body', () => {
   const cs = putFixture(); cs[98].o = cs[98].c - 0.01;
   assert.equal(anticipationSetup(cs, minute), null);
-  const large = putFixture(); large[99].o = large[99].c - 0.15; large[99].l = large[99].o - 0.1;
+  const large = putFixture(); large[99].o = large[99].c - 0.19; large[99].l = large[99].o - 0.1;
   assert.equal(anticipationSetup(large, minute), null);
 });
 test('PUT requires reported volume and closed contiguous candles', () => {
-  for (const v of [undefined, 0, 90]) {
+  for (const v of [undefined, 0, 49]) {
     const cs = putFixture(); cs[99].v = v;
     assert.equal(anticipationSetup(cs, minute), null);
   }

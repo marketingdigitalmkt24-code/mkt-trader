@@ -22,7 +22,7 @@ Deno.serve(async req => {
   const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
   const db = createClient(url, key);
-  let claimed: { signalId: string; asset: string; amount: number; entryAt: number; configId: string } | null = null;
+  const state: { claimed?: { signalId: string; asset: string; amount: number; entryAt: number; configId: string } } = {};
   let submitted = false;
   const leaseScope = 'master:tendencia_3_loss_put';
   try {
@@ -95,7 +95,7 @@ Deno.serve(async req => {
             const { data: order, error } = await db.rpc('claim_trend_three_loss_put', { p_candidate: candidate.signal_id });
             if (error) throw error;
             if (!order) { finish({ success: false, error: 'Sequence, limits or reservation rejected; no order sent' }); return; }
-            claimed = order;
+            state.claimed = order;
             if (order.configId !== cfg.id || !freshTrendPut(order.entryAt, Date.now()) || done) {
               finish({ success: false, error: 'Configuration changed or entry window closed; no order sent' }); return;
             }
@@ -125,12 +125,10 @@ Deno.serve(async req => {
         } catch (error) { finish({ success: false, error: submitted ? 'Broker confirmation unknown' : `Preparation failed; no order sent: ${String(error)}` }); }
       };
     });
-    // The async websocket handler sets this; read persisted queue by candidate-derived ID after completion.
-    const signalId = `tendencia_3_loss_put-`;
-    const { data: queued } = await db.from('trade_queue').select('signal_id,amount')
-      .eq('entry_strategy', TREND_THREE_LOSS_PUT).eq('asset', candidate.asset)
-      .gte('created_at', candidate.created_at).like('signal_id', `${signalId}%`).order('created_at', { ascending: false }).limit(1).maybeSingle();
-    if (!queued) return reply({ skipped: outcome.error || 'No authorized order' });
+    // Never adopt another invocation's order: only the successful atomic claimant owns this result.
+    const owned = state.claimed;
+    if (!owned) return reply({ skipped: outcome.error || 'No authorized order' });
+    const queued = { signal_id: owned.signalId, amount: owned.amount };
     if (!outcome.success || !outcome.tradeId) {
       console.error('Trend PUT failed:', outcome.error);
       await db.from('trade_queue').update({ status: 'failed', error: outcome.error || 'Broker confirmation unknown' }).eq('signal_id', queued.signal_id);
@@ -171,6 +169,10 @@ Deno.serve(async req => {
     return reply({ success: true, signalId: queued.signal_id, tradeId: outcome.tradeId });
   } catch (error) {
     console.error('Trend PUT:', String(error));
+    if (state.claimed) {
+      await db.from('trade_queue').update({ status: 'failed', error: submitted ? 'Broker confirmation or persistence unknown' : 'Preparation failed; no order sent' }).eq('signal_id', state.claimed.signalId);
+      if (!submitted) await db.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', leaseScope).eq('signal_id', state.claimed.signalId);
+    }
     return reply({ error: 'Strategy processing failed; inspect service logs' }, 500);
   }
 });

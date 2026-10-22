@@ -225,6 +225,13 @@
       "when": 1792647358819,
       "tag": "0031_trend_three_loss_put",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792692394994,
+      "tag": "0032_release_copy_lease_when_master_failed",
+      "breakpoints": true
     }
   ]
 }

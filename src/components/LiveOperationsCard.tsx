@@ -40,6 +40,7 @@ interface RecentTrade {
 
 const strategyLabels: Record<string, string> = {
   TENDENCIA: 'Tendência',
+  TENDENCIA_3_LOSS_PUT: 'Tendência 3 perdas → Venda',
   TENDENCIA_V1: 'Tendência V1',
   FOUR_WIN_REVERSAL: 'Após 4 ganhos',
   THREE_FORCE: 'Após 3 Velas de Força',
@@ -533,6 +534,7 @@ export function LiveOperationsCard() {
                       <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal border-primary/50 text-primary">forca sem</Badge>
                     )}
                     {trade.entry_strategy === 'FORCA_ANTECIPADA' && <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal">Antecipação de Força · IQ</Badge>}
+                    {trade.entry_strategy === 'TENDENCIA_3_LOSS_PUT' && <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal text-put border-put/50">Tendência 3 perdas → Venda · IQ</Badge>}
                     {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy] && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">
                         {({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy]}

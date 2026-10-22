@@ -9,7 +9,7 @@ export interface StrategyStat { strategy: string; wins: number; losses: number }
 
 // Estratégias que atualmente entram na IQ Option (real) e/ou são acompanhadas ativamente.
 // Tudo fora dessa lista vira uma única linha resumida de testes/histórico no card.
-export const ACTIVE_STRATEGIES = ['ICHIMOKU_FORCA', 'KDJ_RSI', 'TREND_WIN_LOSS_FORCE_LOSS'] as const;
+export const ACTIVE_STRATEGIES = ['ICHIMOKU_FORCA', 'KDJ_RSI', 'TREND_WIN_LOSS_FORCE_LOSS', 'TENDENCIA_3_LOSS_PUT'] as const;
 export const TESTS_GROUPED_KEY = 'TESTES_HISTORICO';
 
 export async function allStrategyRows(readPage: (from: number, to: number) => Promise<StrategyRow[]>): Promise<StrategyRow[]> {

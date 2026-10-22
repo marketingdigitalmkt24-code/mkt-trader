@@ -8,7 +8,8 @@ import { previousCandles, PREVIOUS_RULE } from './previous-candles.ts';
 import { evaluateAnticipation, ANTICIPATE_RULE } from './anticipate.ts';
 import { evaluateMidCandle, MID_RULE } from './midcandle.ts';
 import { forcePattern } from './force-pattern.ts';
-const schema = z.object({ start: z.string().datetime(), end: z.string().datetime(), split: z.string().datetime(), offset: z.number().int().min(0).max(1000).default(0), count: z.number().int().min(1).max(10).default(8), listOnly: z.boolean().default(false), mode: z.enum(['M15', 'TENDENCIA_M1', 'ANTECIPA_M1', 'MEIO_VELA', 'FORCA_PADRAO']).default('M15') });
+import { forceEarly } from './force-early.ts';
+const schema = z.object({ start: z.string().datetime(), end: z.string().datetime(), split: z.string().datetime(), offset: z.number().int().min(0).max(1000).default(0), count: z.number().int().min(1).max(10).default(8), listOnly: z.boolean().default(false), mode: z.enum(['M15', 'TENDENCIA_M1', 'ANTECIPA_M1', 'MEIO_VELA', 'FORCA_PADRAO', 'FORCA_ANTES']).default('M15') });
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: corsHeaders });
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return reply({});
@@ -26,7 +27,8 @@ Deno.serve(async req => {
     if (!parsed.success) return reply({ error: 'Invalid parameters' }, 400);
     const args = parsed.data;
     const mid = args.mode === 'MEIO_VELA';
-    const force = args.mode === 'FORCA_PADRAO';
+    const earlyForce = args.mode === 'FORCA_ANTES';
+    const force = args.mode === 'FORCA_PADRAO' || earlyForce;
     const ant = args.mode === 'ANTECIPA_M1' || mid;
     const m1 = args.mode === 'TENDENCIA_M1' || ant || force;
     const seconds = mid ? 30 : m1 ? 60 : 900;
@@ -39,7 +41,7 @@ Deno.serve(async req => {
       const { data, error: readError } = await db.from('operation_results').select('signal_id,asset,direction,result,profit,created_at,timeframe,entry_strategy,iq_option_id').gte('created_at', args.start).lt('created_at', args.end).in('result', ['win', 'loss', 'tie']).order('created_at').order('id').range(offset, offset + 999);
       if (readError) return reply({ error: 'History read failed' }, 502);
       ops.push(...(data || []).filter(o => m1
-        ? (force ? o.entry_strategy === 'VELA_FORCA' && (o.timeframe === 'TEST' && o.signal_id.startsWith('t7-') || o.timeframe === 'M1' && /^\d+$/.test(o.iq_option_id || '') && !o.signal_id.startsWith('copy-')) : o.timeframe === 'TEST' && o.signal_id.startsWith('t7-') && o.entry_strategy === (ant ? 'VELA_FORCA' : 'TENDENCIA'))
+        ? (force ? o.entry_strategy === 'VELA_FORCA' && (o.timeframe === 'TEST' && (earlyForce || o.signal_id.startsWith('t7-')) || o.timeframe === 'M1' && /^\d+$/.test(o.iq_option_id || '') && !o.signal_id.startsWith('copy-')) : o.timeframe === 'TEST' && o.signal_id.startsWith('t7-') && o.entry_strategy === (ant ? 'VELA_FORCA' : 'TENDENCIA'))
         : o.timeframe === 'TEST' && o.signal_id.startsWith('t7-')
           || o.timeframe === 'M1' && /^\d+$/.test(o.iq_option_id || '') && ['FORCA_INVERTIDA', 'RETOMADA', 'REVERSAO_RSI'].includes(o.entry_strategy || '')));
       if (!data || data.length < 1000) break;
@@ -118,6 +120,7 @@ Deno.serve(async req => {
     const rows = ops.filter(o => symbols.includes(o.asset)).map(o => {
       // Conservative minute proxy; broker recording time is not a fill timestamp.
       const recorded = Date.parse(o.created_at) / 1000, entry = Math.floor(recorded / 60) * 60;
+      if (earlyForce) return { ...o, entry, timestampBasis: o.timeframe === 'TEST' ? 'test_entry_minute' : 'recorded_minute_proxy_not_fill', period: entry < split ? 'discovery' : 'validation', market: exactAssetKey(o.asset).includes('OTC') ? 'OTC' : 'Regular', ...forceEarly(candles.get(o.asset) || [], entry, o.direction) };
       if (force) return { ...o, entry, timestampBasis: o.timeframe === 'TEST' ? 'test_entry_minute' : 'recorded_minute_proxy_not_fill', period: entry < split ? 'discovery' : 'validation', market: exactAssetKey(o.asset).includes('OTC') ? 'OTC' : 'Regular', ...forcePattern(candles.get(o.asset) || [], entry, o.direction) };
       if (m1) return { ...o, entry, timestampBasis: 'test_entry_minute', period: entry < split ? 'discovery' : 'validation', market: exactAssetKey(o.asset).includes('OTC') ? 'OTC' : 'Regular', ...previousCandles(candles.get(o.asset) || [], entry, o.direction) };
       const b = marketBias(candles.get(o.asset) || [], entry);

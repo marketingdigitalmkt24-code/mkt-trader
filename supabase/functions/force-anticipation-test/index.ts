@@ -4,7 +4,7 @@ import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { iqMarketOpen, type IQMarketAsset } from '../_shared/iq-market-open.ts';
-import { anticipationObservation, anticipationResult, type AnticipationCandle } from '../_shared/force-anticipation-test.ts';
+import { ANTICIPATION_RULE_V2, anticipationSetup, anticipationObservation, anticipationResult, type AnticipationCandle } from '../_shared/force-anticipation-test.ts';
 import { anticipationTarget, anticipationRequestReady } from '../_shared/anticipation-timing.ts';
 import { freshAnticipationEntry, confirmedAnticipationOrder } from '../_shared/anticipation-execution.ts';
 
@@ -61,6 +61,7 @@ Deno.serve(async req => {
     if (openError) return reply({ error: 'Test history unavailable' }, 502);
     let scanned = 0, withVolume = 0, inserted = 0, resolved = 0;
     let brokerSubmitted = 0, brokerConfirmed = 0, brokerSkipped = 0;
+    let previousVersionEligible = 0, setupEligible = 0, missingQuote = 0;
     let candlesRequestedAt: string | null = null;
     const writes: Promise<unknown>[] = [];
     const marketChecks: { asset: string; enabled: boolean; suspended: boolean | null; schedule: unknown; openNow: boolean; option: unknown; instrument: unknown }[] = [];
@@ -78,6 +79,12 @@ Deno.serve(async req => {
         }
       }
       if (!markets.some(market => iqMarketOpen(market, now, Math.floor(now / 60) * 60 + 60))) return;
+      const minute = Math.floor(now / 60) * 60;
+      if (anticipationSetup(cs, minute, ANTICIPATION_RULE_V2)) previousVersionEligible++;
+      if (anticipationSetup(cs, minute)) {
+        setupEligible++;
+        if (!cs.some(k => k.t === minute && Number.isFinite(k.c) && k.c > 0)) missingQuote++;
+      }
       const observation = anticipationObservation(asset, cs, now);
       if (!observation) return;
       const { data, error } = await db.from('force_anticipation_tests').upsert(observation, { onConflict: 'signal_id', ignoreDuplicates: true }).select('id');
@@ -163,7 +170,7 @@ Deno.serve(async req => {
       };
     });
     await Promise.all(writes);
-    const summary = { success: true, scanned, withVolume, inserted, resolved, brokerSubmitted, brokerConfirmed, brokerSkipped, mode: scheduled ? 'IQ_CONFIGURED_ACCOUNT' : 'OBSERVATION_ONLY', scheduled,
+    const summary = { success: true, ruleVersion: 3, previousVersionEligible, setupEligible, missingQuote, scanned, withVolume, inserted, resolved, brokerSubmitted, brokerConfirmed, brokerSkipped, mode: scheduled ? 'IQ_CONFIGURED_ACCOUNT' : 'OBSERVATION_ONLY', scheduled,
       targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks };
     console.log('Force anticipation TEST:', JSON.stringify(summary));
     return reply(summary);

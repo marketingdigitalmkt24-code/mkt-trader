@@ -64,11 +64,11 @@ test('second red candle does not trigger', () => {
   assert.equal(anticipationSetup(cs, minute), null);
 });
 test('large red body does not trigger', () => {
-  const cs = fixture(); cs[99].o = cs[99].c + 0.15; cs[99].h = cs[99].o + 0.1;
+  const cs = fixture(); cs[99].o = cs[99].c + 0.19; cs[99].h = cs[99].o + 0.1;
   assert.equal(anticipationSetup(cs, minute), null);
 });
 test('missing zero or insufficient volume blocks rather than inventing volume', () => {
-  for (const v of [undefined, 0, 90]) {
+  for (const v of [undefined, 0, 49]) {
     const cs = fixture(); cs[99].v = v;
     assert.equal(anticipationSetup(cs, minute), null);
   }
@@ -87,6 +87,37 @@ test('observation uses current quote not past opening and expires in same minute
   assert.equal(anticipationObservation('AMA/ZON', cs, minute + 31), null);
 });
 test('does not enter with a missing live quote', () => assert.equal(anticipationObservation('AMA/ZON', fixture(), minute + 5), null));
+test('broader v3 accepts larger first pullback rejected by v2, CALL and PUT', () => {
+  const cs = fixture(); cs[99].o = cs[99].c + 0.15; cs[99].h = cs[99].o + 0.06; cs[99].l = cs[99].c - 0.06;
+  const put = cs.map(k => ({ ...k, o: 300-k.o, c: 300-k.c, h: 300-k.l, l: 300-k.h }));
+  for (const bars of [cs, put]) {
+    assert.equal(anticipationSetup(bars, minute, ANTICIPATION_RULE_V2), null);
+    assert.equal(anticipationSetup(bars, minute)?.ruleVersion, 3);
+  }
+});
+test('v3 reported volume floor is half the previous 20-bar mean', () => {
+  const cs = fixture(); cs[99].v = 50;
+  assert.equal(anticipationSetup(cs, minute)?.volumeRatio, 0.5);
+  assert.equal(anticipationSetup(cs, minute, ANTICIPATION_RULE_V2), null);
+  cs[99].v = 49.99; assert.equal(anticipationSetup(cs, minute), null);
+});
+test('broader RSI window accepts trend momentum rejected by v2', () => {
+  const cs = fixture();
+  for (const k of cs) { k.c += (k.t - cs[0].t) / 60 * 0.018; k.o += (k.t - cs[0].t) / 60 * 0.018; k.h += (k.t - cs[0].t) / 60 * 0.018; k.l += (k.t - cs[0].t) / 60 * 0.018; }
+  const out = anticipationSetup(cs, minute);
+  assert.ok(out); assert.ok(out.rsi > 65 && out.rsi <= 75);
+  assert.equal(anticipationSetup(cs, minute, ANTICIPATION_RULE_V2), null);
+});
+test('broader version does not admit countertrend averages', () => {
+  const cs = putFixture(); cs[99].o = cs[99].c + 0.02; cs[99].h = cs[99].o + 0.1; cs[99].l = cs[99].c - 0.1; cs[98].o = cs[98].c - 0.02;
+  assert.equal(anticipationSetup(cs, minute), null);
+});
+test('new observations identify v3 without rewriting older signals', () => {
+  const out = anticipationObservation('TRON-OTC', [...fixture(), { t: minute, o: 100, c: 101, h: 101, l: 100, v: 2 }], minute + 1);
+  assert.equal(out?.signal_id, `anticipation-v3-TRON-OTC-${minute}`);
+  assert.equal(ANTICIPATION_RULE.bodyShareMax, 0.65); assert.equal(ANTICIPATION_RULE.bodyMeanMax, 0.85);
+  assert.equal(ANTICIPATION_RULE.rsiMin, 40); assert.equal(ANTICIPATION_RULE.rsiMax, 75);
+});
 test('settles exact entry minute only after close with simulated 10 stake and 85% payout', () => {
   const entry = { entry_minute: new Date(minute * 1000).toISOString(), entry_price: 101 };
   const candle = { t: minute, o: 100, c: 102, h: 102, l: 100 };

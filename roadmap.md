@@ -1,6 +1,7 @@
 # Tendência 3 perdas → venda
-- [ ] Criar autorização prospectiva após três perdas Tendência em minutos consecutivos, PUT no próximo candidato, IQ + Telegram; preservar TESTE, limites e demais estratégias.
-- [ ] Testar regras, publicar e verificar ordem/envio elegível sem forçar ou repetir histórico.
+- [x] Criar autorização prospectiva após três perdas Tendência em minutos consecutivos, PUT no próximo candidato, IQ + Telegram; preservar TESTE, limites e demais estratégias. Função separada acionada por sinal original/fechamento, sem republicar geradores divergentes; mercado M1 confirmado antes de reservar.
+- [x] 20 testes aprovados, função publicada, claim só serviço, acesso usuário recusado; painel autenticado sem erros e build OK.
+- [ ] Confirmar primeira ordem e Telegram — depende de sequência nova elegível, ativo aberto e limites livres; nenhuma ordem forçada ou histórica.
 
 # Antecipação de Força — execução IQ autorizada
 - [x] Comparar 2.689 Força encerradas em 218 ativos, 2.530 cobertas/159 lacunas; 2 pendentes excluídas. Todos os minutos anteriores vencem por seleção retrospectiva, não vantagem: v3 sem volume 151 casos, rejeição pequena387/sequência27. Relatório/CSV entregues; 10 testes e build OK. Nenhuma entrada alterada; validação preditiva exige todos os minutos, não só Força.

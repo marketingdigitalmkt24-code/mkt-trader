@@ -22,5 +22,5 @@
 - Demo refill uses a user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker confirms replenishment and REAL balances stay untouched.
 - Removed claims return null; placement rejects them. Exclude retired orders/copies from displayed totals but preserve stored accounting; three-force keeps its lock.
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
-- Recent operations cache/prefetch pages and count only page one, invalidating on results; why: avoid recounting history on navigation.
+- Recent operations cache/prefetch pages, count page one, invalidate on results; why: avoid recounting on navigation.
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.

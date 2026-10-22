@@ -65,3 +65,11 @@ test('accuracy display omits the tests row when only active strategies exist', (
   const stats = strategyStats([{ ...row, entry_strategy: 'KDJ_RSI', result: 'win' }]);
   assert.deepEqual(strategyAccuracyDisplay(stats), [{ strategy: 'KDJ_RSI', wins: 1, losses: 0 }]);
 });
+test('three Trend losses PUT retains independent confirmed broker accuracy', () => {
+  const display = strategyAccuracyDisplay(strategyStats([
+    { ...row, entry_strategy: 'TENDENCIA_3_LOSS_PUT', timeframe: 'M1', result: 'win' },
+    { ...row, entry_strategy: 'TENDENCIA_3_LOSS_PUT', timeframe: 'M1', result: 'loss' },
+    row,
+  ]));
+  assert.deepEqual(display.find(s => s.strategy === 'TENDENCIA_3_LOSS_PUT'), { strategy: 'TENDENCIA_3_LOSS_PUT', wins: 1, losses: 1 });
+});

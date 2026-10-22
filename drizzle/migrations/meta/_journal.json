@@ -218,6 +218,13 @@
       "when": 1792609445885,
       "tag": "0030_authorize_force_anticipation_iq",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792647358819,
+      "tag": "0031_trend_three_loss_put",
+      "breakpoints": true
     }
   ]
 }

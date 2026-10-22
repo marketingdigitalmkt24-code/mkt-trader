@@ -855,6 +855,10 @@ export type Database = {
         Returns: Json
       }
       claim_three_force: { Args: { p_candidate: string }; Returns: Json }
+      claim_trend_three_loss_put: {
+        Args: { p_candidate: string }
+        Returns: Json
+      }
       get_master_iq_config: {
         Args: never
         Returns: {

@@ -103,7 +103,7 @@ test('v3 reported volume floor is half the previous 20-bar mean', () => {
 });
 test('broader RSI window accepts trend momentum rejected by v2', () => {
   const cs = fixture();
-  for (const k of cs) { k.c += (k.t - cs[0].t) / 60 * 0.018; k.o += (k.t - cs[0].t) / 60 * 0.018; k.h += (k.t - cs[0].t) / 60 * 0.018; k.l += (k.t - cs[0].t) / 60 * 0.018; }
+  for (const k of cs) { k.c += (k.t - cs[0].t) / 60 * 0.03; k.o += (k.t - cs[0].t) / 60 * 0.03; k.h += (k.t - cs[0].t) / 60 * 0.03; k.l += (k.t - cs[0].t) / 60 * 0.03; }
   const out = anticipationSetup(cs, minute);
   assert.ok(out); assert.ok(out.rsi > 65 && out.rsi <= 75);
   assert.equal(anticipationSetup(cs, minute, ANTICIPATION_RULE_V2), null);

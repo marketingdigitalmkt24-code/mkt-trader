@@ -4,7 +4,7 @@ import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { iqMarketOpen, type IQMarketAsset } from '../_shared/iq-market-open.ts';
-import { ANTICIPATION_RULE_V2, anticipationSetup, anticipationObservation, anticipationResult, type AnticipationCandle } from '../_shared/force-anticipation-test.ts';
+import { ANTICIPATION_RULE_V2, ANTICIPATION_RULE_PAVIO, anticipationSetup, anticipationObservation, anticipationResult, type AnticipationCandle } from '../_shared/force-anticipation-test.ts';
 import { anticipationTarget, anticipationRequestReady } from '../_shared/anticipation-timing.ts';
 import { freshAnticipationEntry, confirmedAnticipationOrder } from '../_shared/anticipation-execution.ts';
 
@@ -85,6 +85,9 @@ Deno.serve(async req => {
         setupEligible++;
         if (!cs.some(k => k.t === minute && Number.isFinite(k.c) && k.c > 0)) missingQuote++;
       }
+      // Wick-rejection version: simulated TEST only, all open assets incl. OTC/stocks; no broker claim.
+      const pavio = anticipationObservation(asset, cs, now, ANTICIPATION_RULE_PAVIO);
+      if (pavio) writes.push(db.from('force_anticipation_tests').upsert(pavio, { onConflict: 'signal_id', ignoreDuplicates: true }).then(r => { if (r.error) console.error('Pavio TEST write failed:', r.error.code); }));
       const observation = anticipationObservation(asset, cs, now);
       if (!observation) return;
       const { data, error } = await db.from('force_anticipation_tests').upsert(observation, { onConflict: 'signal_id', ignoreDuplicates: true }).select('id');

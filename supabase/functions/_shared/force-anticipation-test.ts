@@ -9,7 +9,9 @@ export const ANTICIPATION_RULE = {
   ...ANTICIPATION_RULE_V2, bodyShareMax: 0.65, bodyMeanMax: 0.85,
   rsiMin: 40, rsiMax: 75, volumeRatioMin: 0.5,
 } as const;
-export type AnticipationRule = { [K in keyof typeof ANTICIPATION_RULE_V2]: number };
+// Wick-rejection version: TEST only (simulated), never claims broker orders.
+export const ANTICIPATION_RULE_PAVIO = { ...ANTICIPATION_RULE, bodyShareMax: 0.35, wickMin: 0.5 } as const;
+export type AnticipationRule = { [K in keyof typeof ANTICIPATION_RULE_V2]: number } & { wickMin?: number };
 export type AnticipationCandle = { t: number; o: number; c: number; h: number; l: number; v?: number };
 
 export function anticipationSetup(raw: AnticipationCandle[], minute: number, rule: AnticipationRule = ANTICIPATION_RULE) {
@@ -31,6 +33,9 @@ export function anticipationSetup(raw: AnticipationCandle[], minute: number, rul
   if (!(direction && body > 0 && range > 0 && meanBody > 0)
     || body / range > rule.bodyShareMax
     || body / meanBody > rule.bodyMeanMax) return null;
+  // Rejection wick against the small countertrend candle (lower for CALL, upper for PUT).
+  const wick = direction === 'CALL' ? Math.min(last.o, last.c) - last.l : last.h - Math.max(last.o, last.c);
+  if (rule.wickMin !== undefined && wick / range < rule.wickMin) return null;
   // OTC and stocks report no volume at all: then volume is skipped (never invented).
   // Partial/zero volume on a market that reports it still blocks.
   const window = [...prior, last];
@@ -59,18 +64,18 @@ export function anticipationSetup(raw: AnticipationCandle[], minute: number, rul
   const rsiMax = direction === 'CALL' ? rule.rsiMax : 100 - rule.rsiMin;
   if (!aligned || rsi < rsiMin || rsi > rsiMax) return null;
   return { direction, ema9, ema21, sma50, rsi, volumeRatio, bodyShare: body / range, bodyMeanRatio: body / meanBody,
-    ruleVersion: rule === ANTICIPATION_RULE_V2 ? 2 : 3, volumeSource: noVolumeMarket ? 'not_reported' : 'broker_reported', simulatedStake: 10, simulatedPayout: 0.85 };
+    ruleVersion: rule === ANTICIPATION_RULE_V2 ? 2 : rule === ANTICIPATION_RULE_PAVIO ? 'pavio' : 3, wickShare: wick / range, volumeSource: noVolumeMarket ? 'not_reported' : 'broker_reported', simulatedStake: 10, simulatedPayout: 0.85 };
 }
 
-export function anticipationObservation(asset: string, raw: AnticipationCandle[], now: number) {
+export function anticipationObservation(asset: string, raw: AnticipationCandle[], now: number, rule: AnticipationRule = ANTICIPATION_RULE) {
   if (!Number.isFinite(now) || !asset) return null;
   const minute = Math.floor(now / 60) * 60;
   if (now - minute > ANTICIPATION_RULE.maxDelaySeconds) return null;
-  const indicators = anticipationSetup(raw, minute);
+  const indicators = anticipationSetup(raw, minute, rule);
   const current = raw.find(k => k.t === minute);
   // Actual observed intraminute quote, NOT the candle opening retroactively.
   if (!indicators || !current || !Number.isFinite(current.c) || current.c <= 0) return null;
-  return { signal_id: `anticipation-v3-${asset}-${minute}`, asset, direction: indicators.direction,
+  return { signal_id: `${rule === ANTICIPATION_RULE_PAVIO ? 'anticipation-pavio' : 'anticipation-v3'}-${asset}-${minute}`, asset, direction: indicators.direction,
     entry_minute: new Date(minute * 1000).toISOString(), created_at: new Date(now * 1000).toISOString(),
     expiration_time: new Date((minute + 60) * 1000).toISOString(), entry_price: current.c,
     result: 'open', profit: 0, indicators };

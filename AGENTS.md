@@ -4,7 +4,7 @@
 - Client copy saves, broker placement and read-only admin account labels use the active IQ connection account type via the shared copy-account resolver; why: only the client's connection choice determines the copied order account.
 - Reconcile copied broker IDs against each client's own IQ Option history and persist target autostop during server result sync; why: master history cannot settle client orders and closing a browser must not bypass daily limits.
 - Match IQ to trading_signals by signal_id, no FK; unmatched history stays unidentified, never IA.
-- Public simulated charts never use broker hooks; real cards live in authenticated admin TradingDashboard to prevent demo trades.
+- Public charts never use broker hooks; real cards require authenticated admin to prevent demo trades.
 - Send Telegram inside IQ Option placement for fresh authorized executing queue signals (the event the horn polls); never wait for browser audio or delay execution; label the entry time as estimated.
 - Persist real-entry origin in operation_results.entry_strategy from the loss authorizing its queue row; Telegram and card visibility use this origin, with legacy inference only when the recorded origin is absent.
 - Service-only Telegram ledger tracks signal message IDs; dispatch only linked final broker results via conditional leases from result sync and signal cron, so TEST results and unnotified history never reach Telegram.
@@ -15,7 +15,7 @@
 - Run multi-strategy-test only from auto-generate-signals; Force shadows stay outside ranking/claims/locks. Version anticipation IDs/indicators, preserving simulations; require volume, observed quotes, open market, principal limits and service-only fresh claims/leases; no copy. Telegram uses broker confirmation and result ledger; why: avoid replay/false results.
 - IQ reservations and stakes scope to application owners, not shared broker logins; reject principal self-copy; serialize settings saves and acknowledge only after persistence; why: preserve independent client limits and amounts.
 - Anchor reversal submission and expiry to the candidate's own minute, submitting right after the fourth candle confirms within the purchase window; why: another minute trades a different candle and stale candidates must never roll forward.
-- Reuse broker sessions only for service-authenticated same-account reversals; never log/store secrets.
+- Reuse sessions only for service-authenticated same-account reversals; never log/store secrets.
 - Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy keeps explicit client IDs; why: client connection updates must not redirect master entries.
 - Pace candle bursts, expired TEST first; await closed writes, parallelize reads, reuse exact service leases, submit ready current-candle orders immediately; why: cut waits, preserve full ranking and authorization.
 - IQ display reset combines browser and global admin cutoffs; hide only the cutoff's BRT day through that instant in admin/client views, preserving earlier days, new entries and all records; why: resetting today must not erase history.

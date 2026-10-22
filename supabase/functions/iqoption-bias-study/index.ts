@@ -41,7 +41,7 @@ Deno.serve(async req => {
       const { data, error: readError } = await db.from('operation_results').select('signal_id,asset,direction,result,profit,created_at,timeframe,entry_strategy,iq_option_id').gte('created_at', args.start).lt('created_at', args.end).in('result', ['win', 'loss', 'tie']).order('created_at').order('id').range(offset, offset + 999);
       if (readError) return reply({ error: 'History read failed' }, 502);
       ops.push(...(data || []).filter(o => m1
-        ? (force ? o.entry_strategy === 'VELA_FORCA' && (o.timeframe === 'TEST' && o.signal_id.startsWith('t7-') || o.timeframe === 'M1' && /^\d+$/.test(o.iq_option_id || '') && !o.signal_id.startsWith('copy-')) : o.timeframe === 'TEST' && o.signal_id.startsWith('t7-') && o.entry_strategy === (ant ? 'VELA_FORCA' : 'TENDENCIA'))
+        ? (force ? o.entry_strategy === 'VELA_FORCA' && (o.timeframe === 'TEST' && (earlyForce || o.signal_id.startsWith('t7-')) || o.timeframe === 'M1' && /^\d+$/.test(o.iq_option_id || '') && !o.signal_id.startsWith('copy-')) : o.timeframe === 'TEST' && o.signal_id.startsWith('t7-') && o.entry_strategy === (ant ? 'VELA_FORCA' : 'TENDENCIA'))
         : o.timeframe === 'TEST' && o.signal_id.startsWith('t7-')
           || o.timeframe === 'M1' && /^\d+$/.test(o.iq_option_id || '') && ['FORCA_INVERTIDA', 'RETOMADA', 'REVERSAO_RSI'].includes(o.entry_strategy || '')));
       if (!data || data.length < 1000) break;

@@ -59,7 +59,7 @@ export function anticipationSetup(raw: AnticipationCandle[], minute: number, rul
   const rsiMax = direction === 'CALL' ? rule.rsiMax : 100 - rule.rsiMin;
   if (!aligned || rsi < rsiMin || rsi > rsiMax) return null;
   return { direction, ema9, ema21, sma50, rsi, volumeRatio, bodyShare: body / range, bodyMeanRatio: body / meanBody,
-    ruleVersion: rule === ANTICIPATION_RULE_V2 ? 2 : 3, volumeSource: 'broker_reported', simulatedStake: 10, simulatedPayout: 0.85 };
+    ruleVersion: rule === ANTICIPATION_RULE_V2 ? 2 : 3, volumeSource: noVolumeMarket ? 'not_reported' : 'broker_reported', simulatedStake: 10, simulatedPayout: 0.85 };
 }
 
 export function anticipationObservation(asset: string, raw: AnticipationCandle[], now: number) {

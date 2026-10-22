@@ -73,6 +73,13 @@ test('missing zero or insufficient volume blocks rather than inventing volume', 
     assert.equal(anticipationSetup(cs, minute), null);
   }
 });
+test('OTC/stock markets that report no volume at all still qualify, without a volume ratio', () => {
+  const cs = fixture().map(k => ({ ...k, v: undefined }));
+  const out = anticipationSetup(cs, minute);
+  assert.equal(out?.direction, 'CALL');
+  assert.equal(out?.volumeRatio, null);
+  assert.equal(out?.volumeSource, 'not_reported');
+});
 test('100 contiguous closed candles required; future candle cannot confirm setup', () => {
   const cs = fixture(); assert.equal(anticipationSetup(cs.slice(1), minute), null);
   const expected = anticipationSetup(cs, minute);

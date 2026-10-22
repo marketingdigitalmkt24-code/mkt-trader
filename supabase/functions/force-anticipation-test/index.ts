@@ -87,7 +87,10 @@ Deno.serve(async req => {
       }
       // Wick-rejection version: simulated TEST only, all open assets incl. OTC/stocks; no broker claim.
       const pavio = anticipationObservation(asset, cs, now, ANTICIPATION_RULE_PAVIO);
-      if (pavio) writes.push(db.from('force_anticipation_tests').upsert(pavio, { onConflict: 'signal_id', ignoreDuplicates: true }).then(r => { if (r.error) console.error('Pavio TEST write failed:', r.error.code); }));
+      if (pavio) {
+        const { error: pavioError } = await db.from('force_anticipation_tests').upsert(pavio, { onConflict: 'signal_id', ignoreDuplicates: true });
+        if (pavioError) console.error('Pavio TEST write failed:', pavioError.code);
+      }
       const observation = anticipationObservation(asset, cs, now);
       if (!observation) return;
       const { data, error } = await db.from('force_anticipation_tests').upsert(observation, { onConflict: 'signal_id', ignoreDuplicates: true }).select('id');

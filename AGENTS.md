@@ -1,9 +1,9 @@
-- IQ account-type changes and persisted disconnections invalidate connection confirmation and stop copy atomically via an app trigger; why: navigation must not leave copying enabled on an unconfirmed account.
+- IQ type changes/disconnections atomically invalidate confirmation and stop copy; why: navigation must not enable unconfirmed copying.
 - Admin IQ list and bank totals share paginated master-only confirmed orders (no copy/TEST/MT5); client metrics use user-prefixed orders; BRT days and browser reset apply, broker balance separate; why: shared IQ accounts must not mix stakes or results.
 - Client bank/entries use client-only hooks; settings-only bank mode lives in the broker tab; connection leads dashboard without navigation writes; why: isolation and persistent copy.
 - Client copy saves, broker placement and read-only admin account labels use the active IQ connection account type via the shared copy-account resolver; why: only the client's connection choice determines the copied order account.
 - Reconcile copied broker IDs against each client's own IQ Option history and persist target autostop during server result sync; why: master history cannot settle client orders and closing a browser must not bypass daily limits.
-- Match IQ operations to `trading_signals` by `signal_id` (no foreign key); unmatched history stays unidentified, never guessed as IA.
+- Match IQ to trading_signals by signal_id, no FK; unmatched history stays unidentified, never IA.
 - Public simulated charts never use broker hooks; real cards live in authenticated admin TradingDashboard to prevent demo trades.
 - Send Telegram inside IQ Option placement for fresh authorized executing queue signals (the event the horn polls); never wait for browser audio or delay execution; label the entry time as estimated.
 - Persist real-entry origin in operation_results.entry_strategy from the loss authorizing its queue row; Telegram and card visibility use this origin, with legacy inference only when the recorded origin is absent.

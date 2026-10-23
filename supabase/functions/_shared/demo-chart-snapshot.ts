@@ -1,4 +1,4 @@
-import type { DemoChartCandle } from './demo-chart-comparison';
+type DemoChartCandle = { t: number; o: number; c: number; h: number; l: number };
 
 // Presentation snapshots only: entry and its following candle must be closed.
 export function extendDemoChart(saved: DemoChartCandle[], observed: DemoChartCandle[], entry: number, now: number) {

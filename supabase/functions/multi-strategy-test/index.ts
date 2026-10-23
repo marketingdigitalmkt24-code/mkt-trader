@@ -11,7 +11,7 @@ import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recen
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
-import { extendDemoChart } from '../../../src/lib/demo-chart-snapshot.ts';
+import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];

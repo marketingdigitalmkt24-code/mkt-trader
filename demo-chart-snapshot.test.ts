@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { extendDemoChart } from './src/lib/demo-chart-snapshot';
+import { extendDemoChart } from './supabase/functions/_shared/demo-chart-snapshot';
 const candle = (t: number) => ({ t, o: 100, c: 99, h: 101, l: 98 });
 test('includes the entry candle and next closed candle', () => {
   expect(extendDemoChart([candle(60)], [candle(120), candle(180), candle(240)], 120, 240).map(k => k.t)).toEqual([60, 120, 180]);

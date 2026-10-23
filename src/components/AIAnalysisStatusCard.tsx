@@ -17,7 +17,7 @@ interface SignalEntry {
 
 const strategyLabels: Record<string, string> = {
   TENDENCIA: 'Tendência',
-  CONTINUACAO_QUEDA_V1: 'Continuação de queda',
+  CONTINUACAO_QUEDA_V1: 'Queda',
   TENDENCIA_3_LOSS_PUT: 'Tendência 3 perdas → Venda',
   TREND_WIN_LOSS_FORCE_LOSS: 'Retomada',
   TENDENCIA_V1: 'Tendência V1',

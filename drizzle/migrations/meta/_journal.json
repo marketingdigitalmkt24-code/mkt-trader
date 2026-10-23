@@ -239,6 +239,13 @@
       "when": 1792781271672,
       "tag": "0033_isolated_iq_demo_test_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792781340537,
+      "tag": "0034_schedule_isolated_demo_tests",
+      "breakpoints": true
     }
   ]
 }

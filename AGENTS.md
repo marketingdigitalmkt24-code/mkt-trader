@@ -27,4 +27,4 @@
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.
 - Retired anticipation variants are blocked at observation creation, not historical settlement; the anticipation card reads broker orders directly without simulated counters; why: retirement must stop new tests without hiding confirmed orders or deleting history.
 - Demo TEST executor uses singleton admin-only stake settings, snapshots amount per order, enforces unique minute/type-4 USD and reconciles exact IDs across portfolio/legacy pages; why: no client/principal amount mixing, historical rewrites or stale replay.
-- Demo-only patterns compete in a service minute ledger outside principal claims/history; keep legacy warmup and one Demo order per minute to isolate Telegram and copy.
+- Demo patterns use a service-only minute ledger, separate from principal/Telegram/copy; preserve warmup and one order/minute. Charts compare saved direction to the exact closed entry candle, not broker profit.

@@ -179,6 +179,36 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_demo_test_candidates: {
+        Row: {
+          asset: string
+          created_at: string
+          direction: string
+          entry_minute: string
+          entry_strategy: string
+          score: number
+          signal_id: string
+        }
+        Insert: {
+          asset: string
+          created_at?: string
+          direction: string
+          entry_minute: string
+          entry_strategy: string
+          score: number
+          signal_id: string
+        }
+        Update: {
+          asset?: string
+          created_at?: string
+          direction?: string
+          entry_minute?: string
+          entry_strategy?: string
+          score?: number
+          signal_id?: string
+        }
+        Relationships: []
+      }
       iq_demo_test_orders: {
         Row: {
           account_type: string

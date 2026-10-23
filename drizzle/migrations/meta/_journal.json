@@ -246,6 +246,13 @@
       "when": 1792781340537,
       "tag": "0034_schedule_isolated_demo_tests",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792782903663,
+      "tag": "0035_configurable_demo_test_stake",
+      "breakpoints": true
     }
   ]
 }

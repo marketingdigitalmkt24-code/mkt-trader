@@ -236,6 +236,24 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_demo_test_settings: {
+        Row: {
+          amount: number
+          id: number
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          id?: number
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       iq_display_reset: {
         Row: {
           cutoff: string

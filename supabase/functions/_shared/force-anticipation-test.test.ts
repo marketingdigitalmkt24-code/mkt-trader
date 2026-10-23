@@ -139,3 +139,14 @@ test('pavio version requires body <=35% and rejection wick >=50%', () => {
   assert.equal(PAVIO_RULE.bodyShareMax, 0.35);
   assert.equal(PAVIO_RULE.wickMin, 0.5);
 });
+test('retired pavio cannot generate CALL or PUT observations, while standard anticipation stays active', () => {
+  for (const bars of [fixture(), putFixture()]) {
+    const last = bars[99];
+    if (last.c < last.o) last.l = last.c - 0.3;
+    else last.h = last.c + 0.3;
+    assert.equal(anticipationSetup(bars, minute, PAVIO_RULE)?.ruleVersion, 'pavio');
+    const live = [...bars, { t: minute, o: 100, c: 101, h: 101, l: 100, v: 2 }];
+    assert.equal(anticipationObservation('TRON-OTC', live, minute + 1, PAVIO_RULE), null);
+    assert.equal(anticipationObservation('TRON-OTC', live, minute + 1)?.indicators.ruleVersion, 3);
+  }
+});

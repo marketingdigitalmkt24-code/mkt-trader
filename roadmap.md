@@ -1,3 +1,6 @@
+# Remover testes do card Antecipação e desativar Rejeição por pavio
+- [ ] Retirar placar e lista simulados, preservar ordens confirmadas, desativar novos sinais de pavio; testar e publicar a rotina.
+
 # Tendência 3 perdas → venda
 - [x] Criar autorização prospectiva após três perdas Tendência em minutos consecutivos, PUT no próximo candidato, IQ + Telegram; preservar TESTE, limites e demais estratégias. Função separada acionada por sinal original/fechamento, sem republicar geradores divergentes; mercado M1 confirmado antes de reservar.
 - [x] 20 testes aprovados, função publicada, claim só serviço, acesso usuário recusado; painel autenticado sem erros e build OK.

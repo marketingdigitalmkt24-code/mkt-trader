@@ -9,7 +9,7 @@ export const ANTICIPATION_RULE = {
   ...ANTICIPATION_RULE_V2, bodyShareMax: 0.65, bodyMeanMax: 0.85,
   rsiMin: 40, rsiMax: 75, volumeRatioMin: 0.5,
 } as const;
-// Wick-rejection version: TEST only (simulated), never claims broker orders.
+// Retired wick-rejection version: retain parameters for historical research only.
 export const ANTICIPATION_RULE_PAVIO = { ...ANTICIPATION_RULE, bodyShareMax: 0.35, wickMin: 0.5 } as const;
 export type AnticipationRule = { [K in keyof typeof ANTICIPATION_RULE_V2]: number } & { wickMin?: number };
 export type AnticipationCandle = { t: number; o: number; c: number; h: number; l: number; v?: number };
@@ -68,6 +68,7 @@ export function anticipationSetup(raw: AnticipationCandle[], minute: number, rul
 }
 
 export function anticipationObservation(asset: string, raw: AnticipationCandle[], now: number, rule: AnticipationRule = ANTICIPATION_RULE) {
+  if (rule.wickMin !== undefined) return null; // Rejeição por pavio disabled; no new observations.
   if (!Number.isFinite(now) || !asset) return null;
   const minute = Math.floor(now / 60) * 60;
   if (now - minute > ANTICIPATION_RULE.maxDelaySeconds) return null;

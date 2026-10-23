@@ -49,7 +49,7 @@ const strategyLabels: Record<string, string> = {
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
   FORCA_ANTECIPADA: 'Antecipação de Força',
-  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'FORCA SEM',
+  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'forca sem',
   FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
@@ -531,7 +531,7 @@ export function LiveOperationsCard() {
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">🔄 REVERSÃO RSI</Badge>
                     )}
                     {trade.entry_strategy === 'FORCA_SEM_ROMPIMENTO_PRIMEIRA' && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal border-primary/50 text-primary">FORCA SEM</Badge>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal border-primary/50 text-primary">forca sem</Badge>
                     )}
                     {trade.entry_strategy === 'FORCA_ANTECIPADA' && <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal">Antecipação de Força · IQ</Badge>}
                     {trade.entry_strategy === 'TENDENCIA_3_LOSS_PUT' && <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal text-put border-put/50">Tendência 3 perdas → Venda · IQ</Badge>}

@@ -10,9 +10,6 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { combinedTestObservations, COMPARISON_PREFIX } from '../_shared/combined-strategy-tests.ts';
-import { anticipationResult } from '../_shared/force-anticipation-test.ts';
-import type { IQMarketAsset } from '../_shared/iq-market-open.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -117,9 +114,6 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors });
   }
   const supabase = createClient(url, serviceKey);
-  const comparisonRead = supabase.from('force_anticipation_tests')
-    .select('signal_id,asset,direction,entry_minute,entry_price').like('signal_id', `${COMPARISON_PREFIX}%`)
-    .eq('result','open').lte('expiration_time',new Date().toISOString()).limit(1000).then(r=>r);
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
@@ -144,19 +138,8 @@ Deno.serve(async (req) => {
 
   // Confirm each expired TEST as soon as its broker candle arrives, not after all assets.
   let resolved = 0;
-  let comparisonResolved = 0, comparisonInserted = 0;
-  const comparisonOpen = await comparisonRead;
-  if (comparisonOpen.error) console.error('Comparison history:', comparisonOpen.error.code);
-  const marketByAsset = new Map<string, IQMarketAsset[]>();
   const confirmations: Promise<void>[] = [];
   const confirmAsset = async (asset: string, candles: K[]) => {
-    for (const row of (comparisonOpen.data || []).filter(r => r.asset === asset)) {
-      const result = anticipationResult(row, candles, Math.floor(Date.now()/1000));
-      if (!result) continue;
-      const { data } = await supabase.from('force_anticipation_tests').update(result)
-        .eq('signal_id',row.signal_id).eq('result','open').select('id');
-      comparisonResolved += data?.length || 0;
-    }
     for (const o of (open || []).filter(row => row.asset === asset)) {
       const entrySec = Math.floor(new Date(o.created_at).getTime() / 1000);
       const outcome = closedTestResult(candles, entrySec, o.direction, Math.floor(Date.now() / 1000));
@@ -196,10 +179,8 @@ Deno.serve(async (req) => {
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
         const cand = new Map<string, number>();
         for (const [id, a] of Object.entries<any>(all)) {
-          const s = symbolOf(a.name);
-          const markets = marketByAsset.get(s) || [];
-          markets.push(a); marketByAsset.set(s,markets);
           if (!a.enabled || a.is_suspended) continue;
+          const s = symbolOf(a.name);
           if (!cand.has(s)) cand.set(s, Number(id));
         }
         pending = cand.size;
@@ -239,13 +220,11 @@ Deno.serve(async (req) => {
     .filter((row, index, all) => all.findIndex(other => other.asset === row.asset
       && other.created_at === row.created_at && other.entry_strategy === row.entry_strategy) === index);
   const rows: any[] = [];
-  const comparisonRows: ReturnType<typeof combinedTestObservations> = [];
   for (const [asset, cs] of series) {
     const closed = cs.filter(k => k.t + 60 <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
     // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
     const fired = detect(closed);
-    comparisonRows.push(...combinedTestObservations(asset,cs,fired,curMin,Math.floor(Date.now()/1000),marketByAsset.get(asset)||[]));
     // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
     const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
     const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];
@@ -262,15 +241,6 @@ Deno.serve(async (req) => {
     }
   }
   let inserted = 0;
-  // Persist separately, without including observations in current candidates or learning.
-  if (comparisonRows.length) {
-    const persist = supabase.from('force_anticipation_tests')
-      .upsert(comparisonRows,{onConflict:'signal_id',ignoreDuplicates:true}).select('id')
-      .then(({data,error})=>{ if(error) console.error('Combination TEST:',error.code); else comparisonInserted=data?.length||0; });
-    // @ts-ignore Hosted background runtime
-    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(persist);
-    else await persist;
-  }
   if (rows.length) {
     // Independent reads run together after closed-candle confirmation.
     const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
@@ -348,6 +318,5 @@ Deno.serve(async (req) => {
     // Other entries remain TEST, but no longer generate new Telegram signals.
     // Previously notified tests still receive their final result above.
   }
-  console.log('Combination TEST comparison:', JSON.stringify({ scanned:series.size, eligible:comparisonRows.length, comparisonResolved }));
-  return Response.json({ success: true, assets: series.size, inserted, resolved, comparisonInserted, comparisonResolved }, { headers: cors });
+  return Response.json({ success: true, assets: series.size, inserted, resolved }, { headers: cors });
 });

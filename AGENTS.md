@@ -24,6 +24,3 @@
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
 - Recent operations cache/prefetch pages, count page one, invalidate on results; why: avoid recounting on navigation.
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.
-- Force anticipation uses per-signal service-only reservations and serialized daily-budget claims, not a strategy-wide concurrency lease; why: distinct authorized signals may execute simultaneously without duplicates or exceeding daily slots.
-- Forming Force uses a separate TEST-only namespace, bounded scheduled observations with market/expiry gating and actual quote/time; independent totals and ranged page queries share a tested page-size helper; why: prevent backdating, real promotion and navigation reloads.
-- Combined strategy comparisons persist versioned observations and individual references in force_anticipation_tests, outside operation_results and claims; why: legacy combination IDs can authorize IQ orders and must never be reused for TEST-only cohorts.

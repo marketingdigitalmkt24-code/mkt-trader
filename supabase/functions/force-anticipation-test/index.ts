@@ -7,7 +7,6 @@ import { iqMarketOpen, type IQMarketAsset } from '../_shared/iq-market-open.ts';
 import { ANTICIPATION_RULE_V2, ANTICIPATION_RULE_PAVIO, anticipationSetup, anticipationObservation, anticipationResult, type AnticipationCandle } from '../_shared/force-anticipation-test.ts';
 import { anticipationTarget, anticipationRequestReady } from '../_shared/anticipation-timing.ts';
 import { freshAnticipationEntry, confirmedAnticipationOrder } from '../_shared/anticipation-execution.ts';
-import { forceFormingOpenObservation, forceFormingConfirmation, FORCE_FORMING_PREFIX } from '../_shared/force-forming-test.ts';
 
 const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: corsHeaders });
 const bodySchema = z.object({ scheduled: z.boolean().optional() }).strict();
@@ -57,28 +56,23 @@ Deno.serve(async req => {
       } catch { /* bounded alternate endpoint */ }
     }
     if (!ssid) return reply({ error: 'Broker connection failed' }, 502);
-    const { data: open, error: openError } = await db.from('force_anticipation_tests').select('signal_id,asset,direction,entry_minute,entry_price,expiration_time,indicators')
+    const { data: open, error: openError } = await db.from('force_anticipation_tests').select('signal_id,asset,direction,entry_minute,entry_price,expiration_time')
       .eq('result', 'open').order('created_at').limit(1000);
     if (openError) return reply({ error: 'Test history unavailable' }, 502);
     let scanned = 0, withVolume = 0, inserted = 0, resolved = 0;
     let brokerSubmitted = 0, brokerConfirmed = 0, brokerSkipped = 0;
     let previousVersionEligible = 0, setupEligible = 0, missingQuote = 0;
     let candlesRequestedAt: string | null = null;
-    let formingInserted = 0, formingScanned = 0;
     const writes: Promise<unknown>[] = [];
     const marketChecks: { asset: string; enabled: boolean; suspended: boolean | null; schedule: unknown; openNow: boolean; option: unknown; instrument: unknown }[] = [];
-    const process = async (asset: string, cs: AnticipationCandle[], markets: IQMarketAsset[], formingOnly = false) => {
+    const process = async (asset: string, cs: AnticipationCandle[], markets: IQMarketAsset[]) => {
       const now = Math.floor(Date.now() / 1000);
-      if (formingOnly && Math.floor(now / 60) !== Math.floor(targetMs / 60000)) return;
       scanned++;
       if (cs.some(k => typeof k.v === 'number' && k.v > 0)) withVolume++;
-      for (const pending of (formingOnly ? [] : open || []).filter(o => o.asset === asset)) {
+      for (const pending of (open || []).filter(o => o.asset === asset)) {
         const outcome = anticipationResult(pending, cs, now);
         if (outcome) {
-          const final = cs.find(k => k.t === Date.parse(pending.entry_minute) / 1000);
-          const confirmation = pending.signal_id.startsWith(FORCE_FORMING_PREFIX) && final
-            ? { indicators: forceFormingConfirmation(pending.indicators, pending.direction, final) } : {};
-          const { data } = await db.from('force_anticipation_tests').update({ ...outcome, ...confirmation }).eq('signal_id', pending.signal_id).eq('result', 'open').select('id');
+          const { data } = await db.from('force_anticipation_tests').update(outcome).eq('signal_id', pending.signal_id).eq('result', 'open').select('id');
           resolved += data?.length || 0;
         } else if (now - Date.parse(pending.expiration_time) / 1000 > 600) {
           await db.from('force_anticipation_tests').update({ result: 'expired' }).eq('signal_id', pending.signal_id).eq('result', 'open');
@@ -86,18 +80,6 @@ Deno.serve(async req => {
       }
       if (!markets.some(market => iqMarketOpen(market, now, Math.floor(now / 60) * 60 + 60))) return;
       const minute = Math.floor(now / 60) * 60;
-      formingScanned++;
-      // Scheduled boundary round is :00; later snapshots never fabricate a :00 fill.
-      const forming = scheduled
-        ? forceFormingOpenObservation(asset, cs, now, markets, targetMs / 1000)
-        : null;
-      if (forming) {
-        const { data, error } = await db.from('force_anticipation_tests').upsert(forming, { onConflict: 'signal_id', ignoreDuplicates: true }).select('id');
-        if (error) console.error('Forming Force TEST write failed:', error.code);
-        formingInserted += data?.length || 0;
-      }
-      // This namespace never enters real claims, copy, Telegram, ranking or learning.
-      if (formingOnly) return;
       if (anticipationSetup(cs, minute, ANTICIPATION_RULE_V2)) previousVersionEligible++;
       if (anticipationSetup(cs, minute)) {
         setupEligible++;
@@ -138,10 +120,8 @@ Deno.serve(async req => {
       const ws = new WebSocket('wss://iqoption.com/echo/websocket');
       const pending = new Map<string, { asset: string; markets: IQMarketAsset[] }>();
       let done = false, initialized = false, preparing = false;
-      let finalRoundStarted = !scheduled;
-      const roundTimers: ReturnType<typeof setTimeout>[] = [];
-      const finish = () => { if (done) return; done = true; clearTimeout(timer); roundTimers.forEach(clearTimeout); ws.close(); resolve(); };
-      const timer = setTimeout(finish, scheduled ? 125000 : 45000);
+      const finish = () => { if (done) return; done = true; clearTimeout(timer); ws.close(); resolve(); };
+      const timer = setTimeout(finish, scheduled ? 85000 : 45000);
       ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
       ws.onerror = finish;
       ws.onmessage = async ev => {
@@ -183,21 +163,6 @@ Deno.serve(async req => {
             ws.send(JSON.stringify({ name: 'sendMessage', request_id: `a${info.id}`, msg: { name: 'get-candles', version: '2.0',
               body: { active_id: info.id, size: 60, to: Math.floor(Date.now() / 1000), count: 102 } } }));
           });
-          if (scheduled) {
-            for (const second of [10]) {
-              roundTimers.push(setTimeout(async () => {
-                if (done || ws.readyState !== WebSocket.OPEN) return;
-                finalRoundStarted = true;
-                // Register the entire burst before sending; fast replies cannot close the socket early.
-                for (const [asset, info] of assets) pending.set(`f${second}-${info.id}`, { asset, markets: info.markets });
-                await sendCandleRequestBatches([...assets], ([, info]) => {
-                  if (done || ws.readyState !== WebSocket.OPEN) return;
-                  ws.send(JSON.stringify({ name: 'sendMessage', request_id: `f${second}-${info.id}`, msg: { name: 'get-candles', version: '2.0',
-                    body: { active_id: info.id, size: 60, to: Math.floor(Date.now() / 1000), count: 102 } } }));
-                });
-              }, Math.max(0, targetMs + second * 1000 - Date.now())));
-            }
-          }
         }
         if (d.name === 'candles') {
           const info = pending.get(d.request_id); if (!info) return;
@@ -205,15 +170,14 @@ Deno.serve(async req => {
           const cs: AnticipationCandle[] = (d.msg?.candles || []).filter((k: any) => k.to - k.from === 60)
             .map((k: any) => ({ t: k.from, o: k.open, c: k.close, h: k.max, l: k.min,
               v: typeof k.volume === 'number' && Number.isFinite(k.volume) ? k.volume : undefined }));
-          writes.push(process(info.asset, cs, info.markets, String(d.request_id).startsWith('f')));
-          if (!pending.size && finalRoundStarted) finish();
+          writes.push(process(info.asset, cs, info.markets));
+          if (!pending.size) finish();
         }
       };
     });
     await Promise.all(writes);
     const summary = { success: true, ruleVersion: 3, previousVersionEligible, setupEligible, missingQuote, scanned, withVolume, inserted, resolved, brokerSubmitted, brokerConfirmed, brokerSkipped, mode: scheduled ? 'IQ_CONFIGURED_ACCOUNT' : 'OBSERVATION_ONLY', scheduled,
-      targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks, formingInserted, formingScanned,
-      formingObservationSeconds: [0, 10], formingMode: 'TEST_ONLY_OBSERVED_QUOTE' };
+      targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks };
     console.log('Force anticipation TEST:', JSON.stringify(summary));
     return reply(summary);
   } catch { return reply({ error: 'Anticipation test unavailable' }, 502); }

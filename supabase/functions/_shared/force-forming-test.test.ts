@@ -1,10 +1,35 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { forceFormingObservation, forceFormingConfirmation } from './force-forming-test.ts';
+import { forceFormingObservation, forceFormingOpenObservation, forceFormingConfirmation } from './force-forming-test.ts';
 import { anticipationResult } from './force-anticipation-test.ts';
 const minute = 1792735200;
 const history = () => Array.from({ length: 100 }, (_, i) => ({ t: minute - (100-i)*60, o: 100, c: 101, h: 101, l: 100 }));
 const current = { t: minute, o: 100, c: 103, h: 103, l: 100 };
+const market = { name: 'front.USDBRL-OTC', enabled: true, is_suspended: false,
+  schedule: [[minute, minute + 120]], option: { expiration_times: [60] } };
+test('observation starts at :00 and keeps actual detection time and quote', () => {
+  assert.equal(forceFormingOpenObservation('USD/BRL-OTC', [...history(), {...current,c:100}], minute, [market], minute), null);
+  const out = forceFormingOpenObservation('USD/BRL-OTC', [...history(), current], minute + 15, [market], minute);
+  assert.ok(out);
+  assert.equal(out.indicators.observationStartedAt, new Date(minute * 1000).toISOString());
+  assert.equal(out.created_at, new Date((minute + 15) * 1000).toISOString());
+  assert.equal(out.entry_price, 103);
+  assert.equal(out.indicators.mode, 'TEST_ONLY');
+});
+test('forming TEST requires asset open at operation time through expiration', () => {
+  const run = (m: typeof market) => forceFormingOpenObservation('USD/BRL-OTC', [...history(), current], minute + 15, [m], minute);
+  assert.ok(run(market));
+  assert.equal(run({...market, enabled:false}), null);
+  assert.equal(run({...market, is_suspended:true}), null);
+  assert.equal(run({...market, schedule:[]}), null);
+  assert.equal(run({...market, schedule:[[minute,minute+14]]}), null);
+  assert.equal(run({...market, schedule:[[minute,minute+59]]}), null);
+  assert.equal(run({...market, option:{expiration_times:[900]}}), null);
+});
+test('a missed observation minute cannot roll forward or backdate', () => {
+  assert.equal(forceFormingOpenObservation('A', [...history(),current], minute + 15, [market], minute - 60), null);
+  assert.equal(forceFormingOpenObservation('A', [...history(),current], minute - 1, [market], minute), null);
+});
 test('observes CALL on the forming Force minute, before next-minute closed signal, without using opening price', () => {
   const out = forceFormingObservation('USD/BRL-OTC', [...history(), current], minute+15);
   assert.ok(out); assert.equal(out.direction, 'CALL'); assert.equal(out.entry_price, 103);

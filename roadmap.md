@@ -1,5 +1,5 @@
 # Vela de Força em formação — TESTE (23/10)
-- [ ] Ajustar entrada para :00 e verificar ativo aberto na operação — aguarda definição: observar desde :00 ou entrar no próximo :00 após detectar a vela em formação; nunca retroagir observação.
+- [ ] Observar desde :00 (escolha confirmada), registrar horário/preço observados e verificar ativo aberto na operação; validar testes e publicar rotina, sem retroagir nem abrir ordens IQ.
 - [x] Detectar corpo >2×média20 durante o próprio minuto (:15/:30/:45), com preço/horário observados; confirmar no fechamento sem filtrar falhas, namespace TESTE separado.
 - [x] Publicado e conferido na rotina automática (93 ativos, 4 rodadas); 32 testes passaram; painel autenticado exibiu 9 resultados, 3 WIN/6 LOSS e 4 velas confirmadas, sem erros. Nenhuma ordem IQ, copy ou Telegram da nova regra; :00 ou cobertura de todos os sinais não garantidos.
 

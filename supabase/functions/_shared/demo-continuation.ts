@@ -83,3 +83,10 @@ export function chartPatternAdjustment(samples: ChartSample[], f: number[] | nul
   for (const { x, d } of near) { const wt = 1 / (0.1 + d); w += wt; sum += wt * (x.result === 'win' ? 1 : -1.2); }
   return Math.max(-1, Math.min(1, (sum / w) * Math.min(1, near.length / k)));
 }
+// User reference (GEV-OTC 23/10 17:42 PUT WIN): Demo only enters charts close to it.
+export const DEMO_REFERENCE_SIGNAL = 'demo-continuation-v1-GEV-OTC-1792788120';
+export const DEMO_REFERENCE_MAX_DISTANCE = 0.9;
+export function similarToReference(ref: number[] | null, f: number[] | null, max = DEMO_REFERENCE_MAX_DISTANCE) {
+  if (!ref || !f || ref.length !== f.length) return false;
+  return Math.sqrt(ref.reduce((a, v, i) => a + (v - f[i]) ** 2, 0)) <= max;
+}

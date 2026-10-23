@@ -66,3 +66,11 @@ describe('chart pattern learning', () => {
   expect(chartPatternAdjustment(samples.slice(0,2),a)).toBe(0);
  });
 });
+
+Deno.test('reference filter rejects missing or distant charts', async () => {
+  const { similarToReference } = await import('./demo-continuation.ts');
+  const ref = Array(21).fill(0.2);
+  if (!similarToReference(ref, ref.map(v => v + 0.1))) throw new Error('near rejected');
+  if (similarToReference(ref, ref.map(v => v + 0.5))) throw new Error('far accepted');
+  if (similarToReference(null, ref)) throw new Error('missing accepted');
+});

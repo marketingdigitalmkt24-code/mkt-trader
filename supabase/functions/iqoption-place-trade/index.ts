@@ -9,7 +9,7 @@ import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { entrySubmissionDelay } from '../_shared/entry-schedule.ts';
 import { configuredEntryAmount, canMirrorToBroker } from '../_shared/iq-entry-policy.ts';
-import { isAnticipation, freshAnticipationEntry } from '../_shared/anticipation-execution.ts';
+import { isAnticipation, freshAnticipationEntry, anticipationLeaseScope } from '../_shared/anticipation-execution.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { canNotifyAnticipation } from '../_shared/anticipation-telegram.ts';
 
@@ -860,7 +860,7 @@ serve(async (req) => {
       : mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
     // @ts-ignore EdgeRuntime exists in Supabase runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
-    const masterLeaseScope = isAnticipation(tradeRequest.entryStrategy) ? 'master:forca_antecipada' : 'master';
+    const masterLeaseScope = isAnticipation(tradeRequest.entryStrategy) ? anticipationLeaseScope(reservationSignal) : 'master';
     await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', masterLeaseScope).eq('signal_id', reservationSignal);
     const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
     const definiteRefusal = result.error && /invalid instrument|not available|não disponível|não enviada|não enviado|entrada cancelada|insufficient|not enough/i.test(result.error);

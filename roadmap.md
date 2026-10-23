@@ -1,4 +1,5 @@
 # Testes executados na Demo
+- [x] Mostrar ganhos, perdas, acerto e saldo acumulado Demo de todas as páginas; conferidos no painel 6 ganhos/6 perdas, 50%, -US$1,05. Dez testes aprovados e build OK. Seleção existente já avalia sete estratégias e envia somente o melhor candidato do minuto; removidas e shadows preservadas fora do ranking.
 - [x] Corrigir leitura dos IDs e resultados do histórico Demo; cinco IDs informados liquidados e conferidos no painel: 15:59 WIN +0,82; 16:00 LOSS -1; 16:01 WIN +0,83; 16:02 e 16:03 LOSS -1 cada. Sete testes aprovados; função publicada e build OK, sem alterar operações principais.
 - [x] Executor e agendamento publicados para sinal TESTE selecionado por minuto na Demo USD por US$1, com unicidade por minuto e ordens simultâneas independentes.
 - [x] Ledger separado e conciliação por ID IQ exato; lista Demo autenticada conferida sem Telegram, copy ou inclusão em Entradas IQ/Resultado de Hoje. O saldo Demo da própria corretora será afetado.

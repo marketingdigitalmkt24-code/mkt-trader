@@ -23,6 +23,7 @@
 - Removed claims return null; placement rejects them. Exclude retired orders/copies from displayed totals but preserve stored accounting; three-force keeps its lock.
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
 - Recent operations show only confirmed principal IQ orders after a display cutoff, cache/prefetch pages and count page one; why: hide simulations without changing records or daily totals.
+- Demo summary paginates all confirmed broker outcomes separately from visible orders; accuracy excludes ties/pending and net includes only settled Demo profit, keeping principal totals isolated.
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.
 - Retired anticipation variants are blocked at observation creation, not historical settlement; the anticipation card reads broker orders directly without simulated counters; why: retirement must stop new tests without hiding confirmed orders or deleting history.
 - Demo TEST executions dispatch immediately after selection to a service-only executor and separate ledger with unique minute, strict type-4 USD balance and exact broker-ID settlement across portfolio and legacy paginated histories; why: delivery can lag, portfolio IDs can differ from option IDs, and old candidates must never replay.

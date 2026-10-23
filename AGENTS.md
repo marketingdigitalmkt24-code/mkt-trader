@@ -25,4 +25,4 @@
 - Recent operations show only confirmed principal IQ orders after a display cutoff, cache/prefetch pages and count page one; why: hide simulations without changing records or daily totals.
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.
 - Retired anticipation variants are blocked at observation creation, not historical settlement; the anticipation card reads broker orders directly without simulated counters; why: retirement must stop new tests without hiding confirmed orders or deleting history.
-- Demo TEST executions use a service-only executor and separate ledger with unique signal/minute, strict type-4 USD balance and exact broker-ID settlement; why: keep test stake/concurrency independent without copy, Telegram or primary accounting side effects.
+- Demo TEST executions dispatch immediately after selection to a service-only executor and separate ledger with unique minute, strict type-4 USD balance and exact broker-ID settlement; why: scheduled delivery can lag and must never replay old candidates.

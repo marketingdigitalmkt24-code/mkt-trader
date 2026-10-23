@@ -55,3 +55,31 @@ export function demoLearningAdjustment(history: DemoOutcome[], strategy: string,
   const adj = 0.6 * score(same.filter(r => hour(r.entry_minute) === h)) + 0.4 * score(same);
   return Math.max(-1, Math.min(1, adj));
 }
+// Chart-shape learning: compares the last 5 closed candles (oriented to the trade direction) with
+// confirmed Demo outcomes whose pre-entry candles were saved. Features stop before each entry.
+export function chartFeatures(candles: Candle[], entry: number, direction: string) {
+  const cs = candles.filter(k => k.t < entry).slice(-20);
+  if (cs.length < 20) return null;
+  const hi = Math.max(...cs.map(k => k.h)), lo = Math.min(...cs.map(k => k.l)), span = hi - lo;
+  if (!(span > 0)) return null;
+  const s = direction === 'PUT' ? -1 : 1, f: number[] = [];
+  for (const k of cs.slice(-5)) {
+    const r = k.h - k.l || span;
+    const up = (k.h - Math.max(k.o, k.c)) / r, dn = (Math.min(k.o, k.c) - k.l) / r;
+    f.push(s * (k.c - k.o) / r, s > 0 ? up : dn, s > 0 ? dn : up, (k.h - k.l) / span);
+  }
+  const pos = (cs[19].c - lo) / span;
+  f.push(s > 0 ? pos : 1 - pos);
+  return f;
+}
+export type ChartSample = { f: number[]; result: string };
+export function chartPatternAdjustment(samples: ChartSample[], f: number[] | null, k = 7) {
+  if (!f) return 0;
+  const near = samples.filter(x => x.f.length === f.length && (x.result === 'win' || x.result === 'loss'))
+    .map(x => ({ x, d: Math.sqrt(x.f.reduce((a, v, i) => a + (v - f[i]) ** 2, 0)) }))
+    .sort((a, b) => a.d - b.d).slice(0, k);
+  if (near.length < 3) return 0;
+  let w = 0, sum = 0;
+  for (const { x, d } of near) { const wt = 1 / (0.1 + d); w += wt; sum += wt * (x.result === 'win' ? 1 : -1.2); }
+  return Math.max(-1, Math.min(1, (sum / w) * Math.min(1, near.length / k)));
+}

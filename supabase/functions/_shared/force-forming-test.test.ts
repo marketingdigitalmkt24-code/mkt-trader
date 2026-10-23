@@ -38,7 +38,7 @@ test('observes CALL on the forming Force minute, before next-minute closed signa
   assert.equal(out.indicators.mode, 'TEST_ONLY');
 });
 test('PUT mirrors forming body and needs no RSI, volume or first pullback', () => {
-  const out = forceFormingObservation('TRON-OTC', [...history(), { ...current, c: 97, h: 100, l: 97 }], minute+30);
+  const out = forceFormingObservation('TRON-OTC', [...history(), { ...current, c: 97, h: 100, l: 97 }], minute+15);
   assert.equal(out?.direction, 'PUT'); assert.equal(out?.entry_price, 97);
 });
 test('same closed Force threshold: strictly greater than twice previous 20 mean bodies', () => {
@@ -58,7 +58,7 @@ test('100 contiguous valid bars and a valid current quote required', () => {
 });
 test('same asset/minute deduplicates even if later observation reverses direction', () => {
   const first = forceFormingObservation('A', [...history(), current], minute+15);
-  const next = forceFormingObservation('A', [...history(), {...current,c:97,h:100,l:97}], minute+30);
+  const next = forceFormingObservation('A', [...history(), {...current,c:97,h:100,l:97}], minute+15);
   assert.equal(first?.signal_id, next?.signal_id);
 });
 test('failed Force confirmations remain losses in the sample, not filtered away', () => {
@@ -69,4 +69,9 @@ test('failed Force confirmations remain losses in the sample, not filtered away'
   assert.equal(anticipationResult(out,[final],minute+60)?.profit,-10);
   assert.equal(forceFormingConfirmation(out.indicators,'CALL',{...current,c:104,h:104}).forceConfirmed,true);
   assert.equal(anticipationResult(out,[{...current,c:104,h:104}],minute+60)?.profit,8.5);
+});
+test('forming entry allowed through :15 but never at :16, :30 or :45', () => {
+  assert.ok(forceFormingObservation('A', [...history(),current], minute));
+  assert.ok(forceFormingObservation('A', [...history(),current], minute + 15));
+  for (const second of [16,30,45]) assert.equal(forceFormingObservation('A', [...history(),current], minute + second), null);
 });

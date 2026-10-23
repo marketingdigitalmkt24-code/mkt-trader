@@ -184,7 +184,7 @@ Deno.serve(async req => {
               body: { active_id: info.id, size: 60, to: Math.floor(Date.now() / 1000), count: 102 } } }));
           });
           if (scheduled) {
-            for (const second of [15]) {
+            for (const second of [10]) {
               roundTimers.push(setTimeout(async () => {
                 if (done || ws.readyState !== WebSocket.OPEN) return;
                 finalRoundStarted = true;
@@ -213,7 +213,7 @@ Deno.serve(async req => {
     await Promise.all(writes);
     const summary = { success: true, ruleVersion: 3, previousVersionEligible, setupEligible, missingQuote, scanned, withVolume, inserted, resolved, brokerSubmitted, brokerConfirmed, brokerSkipped, mode: scheduled ? 'IQ_CONFIGURED_ACCOUNT' : 'OBSERVATION_ONLY', scheduled,
       targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks, formingInserted, formingScanned,
-      formingObservationSeconds: [0, 15], formingMode: 'TEST_ONLY_OBSERVED_QUOTE' };
+      formingObservationSeconds: [0, 10], formingMode: 'TEST_ONLY_OBSERVED_QUOTE' };
     console.log('Force anticipation TEST:', JSON.stringify(summary));
     return reply(summary);
   } catch { return reply({ error: 'Anticipation test unavailable' }, 502); }

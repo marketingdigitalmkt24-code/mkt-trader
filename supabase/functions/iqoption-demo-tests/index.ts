@@ -5,7 +5,7 @@ import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { DEMO_TEST_AMOUNT, demoBalance, freshDemoTest, validDemoTestAmount } from './policy.ts';
 import { demoHistoryOutcome } from './history.ts';
-const schema = z.object({ candidate: z.string().max(200).optional() }).strict();
+const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional() }).strict();
 const reply = (body: unknown, status = 200) => {
  console.log('Demo test response:', JSON.stringify({ status, ...body as Record<string, unknown> }));
  return Response.json(body, { status, headers: corsHeaders });
@@ -66,6 +66,7 @@ Deno.serve(async req => {
  else console.log('Demo reservation rejected:',error?.code);
  }
  let placed = false, confirmed = false, updated = 0;
+ let availability: unknown[] = [];
  const writes: Promise<unknown>[]=[];
  await new Promise<void>(resolve => {
  const ws = new WebSocket('wss://iqoption.com/echo/websocket');
@@ -87,8 +88,16 @@ Deno.serve(async req => {
  send('portfolio.get-history-positions','2.0',{user_balance_id:balanceId,instrument_types:['binary-option','turbo-option','digital-option'],limit:300,offset},`portfolio-${offset}`);
  send('get-history-positions','1.0',{user_balance_id:balanceId,instrument_types:['turbo'],limit:300,offset},`legacy-${offset}`);
  }
- if(reserved) send('get-initialization-data','3.0',{});
+ if(reserved || parsed.data.inspect) send('get-initialization-data','3.0',{});
  else if(!pending?.length) finish();
+ }
+ if(d.name==='initialization-data' && parsed.data.inspect) {
+ const now=Math.floor(Date.now()/1000), expiry=Math.floor(now/60)*60+60;
+ availability=['turbo','binary'].flatMap(market=>Object.entries<any>(d.msg?.[market]?.actives || {})
+  .filter(([,a])=>symbol(a.name || '')===parsed.data.inspect)
+  .map(([id,a])=>({market,id,name:a.name,enabled:a.enabled,suspended:a.is_suspended,schedule:a.schedule,expiration_times:a.option?.expiration_times,now,expiry,eligible:iqMarketOpen(a,now,expiry)})));
+ console.log('Demo asset inspection:',JSON.stringify({asset:parsed.data.inspect,availability}));
+ if(!reserved)finish();
  }
  if(d.name==='initialization-data' && !initialized && reserved && candidate) {
  initialized=true;
@@ -129,6 +138,6 @@ Deno.serve(async req => {
  });
  await Promise.all(writes);
  if(reserved && !confirmed) await db.from('iq_demo_test_orders').update({status:placed?'unknown':'failed',error:placed?'No broker confirmation; never retry ambiguous order':'Demo balance unavailable or order not sent'}).eq('id',reserved).eq('status','reserved');
- return reply({success:true,confirmed,updated});
+ return reply({success:true,confirmed,updated,...(parsed.data.inspect?{availability}: {})});
  } catch {return reply({error:'Demo test unavailable'},502);}
 });

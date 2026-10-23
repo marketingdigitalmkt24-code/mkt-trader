@@ -1,5 +1,5 @@
 import { test, expect, describe, it } from 'bun:test';
-import { demoCeiling } from './demo-continuation';
+import { demoCeiling, demoLearningAdjustment } from './demo-continuation';
 import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION } from './demo-continuation';
 const entry = 1792783500;
 function candles() {
@@ -41,5 +41,15 @@ describe('demoCeiling', () => {
   const cs=base(); cs[98]={...cs[98],o:110,c:100,h:110.2,l:99.8}; cs[99]={...cs[99],o:100,c:110,h:110.3,l:99.9};
   expect(demoCeiling(cs,entry)?.direction).toBe('PUT');
   cs[99]={...cs[99],c:105,h:105.1}; expect(demoCeiling(cs,entry)).toBeNull();
+ });
+});
+describe('demoLearningAdjustment', () => {
+ it('favors strategy winning at the same BRT hour and penalizes losing one', () => {
+  const at = Date.parse('2026-10-23T19:10:00Z');
+  const h = (s: string, r: string) => ({ entry_strategy: s, entry_minute: '2026-10-22T19:05:00Z', result: r, profit: 0 });
+  const hist = [...Array(5)].flatMap(() => [h('A','win'), h('B','loss')]);
+  expect(demoLearningAdjustment(hist,'A',at)).toBeGreaterThan(0.9);
+  expect(demoLearningAdjustment(hist,'B',at)).toBeLessThan(-0.9);
+  expect(demoLearningAdjustment(hist,'C',at)).toBe(0);
  });
 });

@@ -42,3 +42,16 @@ export function demoCeiling(candles: Candle[], entry: number) {
   if (gap > 0.1 || last.h > prev.h + 0.1 * prevBody) return null;
   return { direction: 'PUT' as const, match: 1 - gap };
 }
+type DemoOutcome = { entry_strategy: string; entry_minute: string; result: string; profit: number };
+// Learns from confirmed Demo broker outcomes: strategy+BRT hour weighs most, then strategy overall; losses weigh more.
+export function demoLearningAdjustment(history: DemoOutcome[], strategy: string, entryMs: number) {
+  const hour = (h: string | number) => (new Date(typeof h === 'number' ? h : Date.parse(h)).getUTCHours() + 21) % 24;
+  const h = hour(entryMs);
+  const score = (rows: DemoOutcome[]) => {
+    const w = rows.filter(r => r.result === 'win').length, l = rows.filter(r => r.result === 'loss').length;
+    return w + l ? (w - 1.2 * l) / (w + l) * Math.min(1, (w + l) / 5) : 0;
+  };
+  const same = history.filter(r => r.entry_strategy === strategy);
+  const adj = 0.6 * score(same.filter(r => hour(r.entry_minute) === h)) + 0.4 * score(same);
+  return Math.max(-1, Math.min(1, adj));
+}

@@ -116,6 +116,22 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors });
   }
   const supabase = createClient(url, serviceKey);
+  // Fetch independent Demo learning inputs while broker login/candles are in flight.
+  const demoSince = new Date(Date.now()-14*86400000).toISOString();
+  const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit')
+    .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
+    .gte('entry_minute',demoSince).order('entry_minute',{ascending:false}).limit(1000).then(r=>r);
+  const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
+  const chartPromise = (async()=>{
+    const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles')
+      .not('candles','is',null).gte('entry_minute',demoSince)
+      .lt('entry_minute',new Date(Math.floor(Date.now()/60000)*60000-60000).toISOString()).limit(1000);
+    const ids=(chartRead.data||[]).map(r=>r.signal_id);
+    const chartOut=ids.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',ids).eq('status','confirmed').in('result',['win','loss']) : {data:[]};
+    const outcome=new Map((chartOut.data||[]).map(r=>[r.signal_id,r.result]));
+    return (chartRead.data||[]).flatMap(r=>{const res=outcome.get(r.signal_id);
+      const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res}]:[];});
+  })();
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
@@ -256,6 +272,7 @@ Deno.serve(async (req) => {
   // Separate service ledger: new Demo patterns never enter principal TEST history/claims.
   // Display-only enrichment: retain the result and following closed candle.
   // Retry recent snapshots so a missed runner minute cannot strand the chart.
+  const enrichCharts = async () => {
   const recentDemo = await supabase.from('iq_demo_test_candidates').select('entry_minute,asset,candles')
     .gte('entry_minute',new Date((curMin-90*60)*1000).toISOString())
     .lt('entry_minute',new Date(curMin*1000).toISOString());
@@ -266,22 +283,12 @@ Deno.serve(async (req) => {
     const {error}=await supabase.from('iq_demo_test_candidates').update({candles}).eq('entry_minute',row.entry_minute);
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
-  const demoHist = await supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit')
-    .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
-    .gte('entry_minute',new Date((curMin-14*86400)*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1000);
+  };
+  const [demoHist,chartSamples,refRow] = await Promise.all([demoHistPromise,chartPromise,refPromise]);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
-  // Chart samples: saved pre-entry candles joined to confirmed Demo outcomes.
-  const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles')
-    .not('candles','is',null).gte('entry_minute',new Date((curMin-14*86400)*1000).toISOString()).lt('entry_minute',new Date((curMin-60)*1000).toISOString()).limit(1000);
-  const chartIds = (chartRead.data||[]).map(r=>r.signal_id);
-  const chartOut = chartIds.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',chartIds).eq('status','confirmed').in('result',['win','loss']) : {data:[]};
-  const outcome = new Map((chartOut.data||[]).map(r=>[r.signal_id,r.result]));
-  const chartSamples = (chartRead.data||[]).flatMap(r=>{const res=outcome.get(r.signal_id);
-    const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res}]:[];});
   const demoPool = [...rows,...demoPatterns].map(c=>({...c,_score:Math.max(0,c._score
     +2*demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
     +2*chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)))}));
-  const refRow = await supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle();
   const refF = refRow.data ? chartFeatures(refRow.data.candles as any[],Date.parse(refRow.data.entry_minute)/1000,refRow.data.direction) : null;
   // Only charts similar to the user's reference trade may compete; no reference => no Demo entry.
   const demoWinner = chooseDemoCandidate(demoPool.filter(c=>similarToReference(refF,chartFeatures(series.get(c.asset)||[],curMin,c.direction))));
@@ -292,12 +299,15 @@ Deno.serve(async (req) => {
       candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
-      const demoTask=supabase.functions.invoke('iqoption-demo-tests',{body:{candidate:demoWinner.signal_id}})
+      const demoTask=supabase.functions.invoke('iqoption-demo-tests',{body:{candidate:demoWinner.signal_id,brokerSession:{ssid,configId:cfg.id}}})
         .then(({error})=>{if(error)console.error('Demo TEST dispatch failed');});
       // @ts-ignore Hosted background runtime
       if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(demoTask);else await demoTask;
     }
   }
+  const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));
+  // @ts-ignore Hosted background runtime: chart writes must not delay a fresh entry.
+  if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(chartTask);else await chartTask;
   if (rows.length) {
     // Independent reads run together after closed-candle confirmation.
     const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([

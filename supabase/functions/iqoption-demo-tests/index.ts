@@ -5,7 +5,8 @@ import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount } from './policy.ts';
 import { demoHistoryOutcome } from './history.ts';
-const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional() }).strict();
+import { reusableDemoSession } from '../_shared/demo-session.ts';
+const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
 const reply = (body: unknown, status = 200) => {
  console.log('Demo test response:', JSON.stringify({ status, ...body as Record<string, unknown> }));
  return Response.json(body, { status, headers: corsHeaders });
@@ -24,7 +25,8 @@ Deno.serve(async req => {
  if (!url || !key) return reply({ error: 'Service unavailable' },503);
  const db = createClient(url,key);
  const scheduler = req.headers.get('x-scheduler-token');
- let authorized = req.headers.get('Authorization') === `Bearer ${key}`;
+ const serviceAuthorized = req.headers.get('Authorization') === `Bearer ${key}`;
+ let authorized = serviceAuthorized;
  if (!authorized && scheduler) {
  const { data } = await db.from('anticipation_scheduler_auth').select('token').eq('id',1).maybeSingle();
  authorized = !!data?.token && data.token === scheduler;
@@ -34,15 +36,16 @@ Deno.serve(async req => {
  if (!parsed.success) return reply({ error: 'Invalid parameters' },400);
  const { data: cfg } = await readMasterIQConfig(db);
  if (!cfg) return reply({ error: 'Principal connection unavailable' },409);
- let ssid: string | null = null;
- for (const endpoint of ['https://auth.iqoption.com/api/v2/login','https://api.iqoption.com/api/v2/login']) {
+ let ssid = reusableDemoSession(serviceAuthorized,cfg.id,parsed.data.brokerSession);
+ for (const endpoint of ssid ? [] : ['https://auth.iqoption.com/api/v2/login','https://api.iqoption.com/api/v2/login']) {
  try {
  const response = await fetch(endpoint,{ method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','User-Agent':'Mozilla/5.0'},body:new URLSearchParams({identifier:cfg.email,password:cfg.password}),signal:AbortSignal.timeout(8000)});
  const data = await response.json(); if (data.code === 'success' && typeof data.ssid === 'string') { ssid=data.ssid;break; }
  } catch { /* bounded alternate */ }
  }
  if (!ssid) return reply({ error: 'Broker login failed' },502);
- const { data: pending } = await db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000);
+ const pendingRead = db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000).then(r=>r);
+ const settingRead = parsed.data.candidate ? db.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r) : null;
  let candidate: any = null;
  if (parsed.data.candidate) {
  // Scheduler delivery can lag one minute. Never roll the old candidate forward:
@@ -56,7 +59,8 @@ Deno.serve(async req => {
  let reserved: string | null = null;
  let testAmount = DEMO_TEST_AMOUNT;
  if (candidate) {
- const setting = await db.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle();
+ const setting = await settingRead;
+ if(!setting)return reply({error:'Demo test amount unavailable'},503);
  if(setting.error)return reply({error:'Demo test amount unavailable'},503);
  testAmount = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
  if(!validDemoTestAmount(testAmount))return reply({error:'Invalid demo test amount'},409);
@@ -64,6 +68,7 @@ Deno.serve(async req => {
  if (!error && data) reserved=data.id;
  else console.log('Demo reservation rejected:',error?.code);
  }
+ const {data:pending} = await pendingRead;
  let placed = false, confirmed = false, updated = 0;
  let availability: unknown[] = [];
  const writes: Promise<unknown>[]=[];
@@ -83,12 +88,13 @@ Deno.serve(async req => {
  profileReceived=true;
  const balance=demoBalance(d.msg?.balances || []);
  if(!balance){finish();return;} balanceId=balance.id;
+ // Ask for placement availability first; history must not queue ahead of the order.
+ if(reserved || parsed.data.inspect) send('get-initialization-data','3.0',{});
  if(pending?.length) for(const offset of [0,300,600]) {
  send('portfolio.get-history-positions','2.0',{user_balance_id:balanceId,instrument_types:['binary-option','turbo-option','digital-option'],limit:300,offset},`portfolio-${offset}`);
  send('get-history-positions','1.0',{user_balance_id:balanceId,instrument_types:['turbo'],limit:300,offset},`legacy-${offset}`);
  }
- if(reserved || parsed.data.inspect) send('get-initialization-data','3.0',{});
- else if(!pending?.length) finish();
+ if(!reserved && !parsed.data.inspect && !pending?.length) finish();
  }
  if(d.name==='initialization-data' && parsed.data.inspect) {
  const now=Math.floor(Date.now()/1000), expiry=Math.floor(now/60)*60+60;

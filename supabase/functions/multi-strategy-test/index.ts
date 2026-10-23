@@ -253,6 +253,16 @@ Deno.serve(async (req) => {
   }
   let inserted = 0;
   // Separate service ledger: new Demo patterns never enter principal TEST history/claims.
+  // Append the closed result candle to the previous minute's Demo chart snapshot.
+  const prevDemo = await supabase.from('iq_demo_test_candidates').select('entry_minute,asset,candles')
+    .eq('entry_minute',new Date((curMin-60)*1000).toISOString()).maybeSingle();
+  const prevCandles = prevDemo.data?.candles as any[] | null;
+  const resultCandle = prevDemo.data && series.get(prevDemo.data.asset)?.find(k=>k.t===curMin-60);
+  if (Array.isArray(prevCandles) && resultCandle && !prevCandles.some(k=>k.t===resultCandle.t)) {
+    const {error}=await supabase.from('iq_demo_test_candidates').update({candles:[...prevCandles,resultCandle]})
+      .eq('entry_minute',prevDemo.data!.entry_minute);
+    if (error) console.error('Demo result candle write failed:',error.code);
+  }
   const demoHist = await supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit')
     .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
     .gte('entry_minute',new Date((curMin-14*86400)*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1000);

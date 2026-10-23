@@ -1,4 +1,5 @@
-import { test, expect } from 'bun:test';
+import { test, expect, describe, it } from 'bun:test';
+import { demoCeiling } from './demo-continuation';
 import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION } from './demo-continuation';
 const entry = 1792783500;
 function candles() {

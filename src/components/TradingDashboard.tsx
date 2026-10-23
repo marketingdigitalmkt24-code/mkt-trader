@@ -4,6 +4,7 @@ import { BrokerConnectionsCard } from '@/components/BrokerConnectionsCard';
 import { LiveOperationsCard } from '@/components/LiveOperationsCard';
 import { AIAnalysisStatusCard } from '@/components/AIAnalysisStatusCard';
 import { ForceAnticipationTestCard } from '@/components/ForceAnticipationTestCard';
+import { ForceFormingTestCard } from '@/components/ForceFormingTestCard';
 
 export function TradingDashboard() {
   return (
@@ -18,6 +19,7 @@ export function TradingDashboard() {
         <AIAnalysisStatusCard />
       </div>
       <ForceAnticipationTestCard />
+      <ForceFormingTestCard />
     </div>
   );
 }

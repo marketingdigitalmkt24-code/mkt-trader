@@ -11,6 +11,7 @@ import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recen
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { extendDemoChart } from '../../../src/lib/demo-chart-snapshot.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -253,16 +254,18 @@ Deno.serve(async (req) => {
   }
   let inserted = 0;
   // Separate service ledger: new Demo patterns never enter principal TEST history/claims.
-  // Append the closed result candle to the previous minute's Demo chart snapshot.
-  const prevDemo = await supabase.from('iq_demo_test_candidates').select('entry_minute,asset,candles')
-    .eq('entry_minute',new Date((curMin-60)*1000).toISOString()).maybeSingle();
-  const prevCandles = prevDemo.data?.candles as any[] | null;
-  const resultCandle = prevDemo.data && series.get(prevDemo.data.asset)?.find(k=>k.t===curMin-60);
-  if (Array.isArray(prevCandles) && resultCandle && !prevCandles.some(k=>k.t===resultCandle.t)) {
-    const {error}=await supabase.from('iq_demo_test_candidates').update({candles:[...prevCandles,resultCandle]})
-      .eq('entry_minute',prevDemo.data!.entry_minute);
+  // Display-only enrichment: retain the result and following closed candle.
+  // Retry recent snapshots so a missed runner minute cannot strand the chart.
+  const recentDemo = await supabase.from('iq_demo_test_candidates').select('entry_minute,asset,candles')
+    .gte('entry_minute',new Date((curMin-90*60)*1000).toISOString())
+    .lt('entry_minute',new Date(curMin*1000).toISOString());
+  await Promise.all((recentDemo.data || []).map(async row => {
+    if (!Array.isArray(row.candles)) return;
+    const candles = extendDemoChart(row.candles as K[],series.get(row.asset) || [],Date.parse(row.entry_minute)/1000,curMin);
+    if (JSON.stringify(candles) === JSON.stringify(row.candles)) return;
+    const {error}=await supabase.from('iq_demo_test_candidates').update({candles}).eq('entry_minute',row.entry_minute);
     if (error) console.error('Demo result candle write failed:',error.code);
-  }
+  }));
   const demoHist = await supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit')
     .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
     .gte('entry_minute',new Date((curMin-14*86400)*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1000);

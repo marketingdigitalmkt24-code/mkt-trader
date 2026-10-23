@@ -24,3 +24,4 @@
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
 - Recent operations cache/prefetch pages, count page one, invalidate on results; why: avoid recounting on navigation.
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.
+- Force anticipation uses per-signal service-only reservations and serialized daily-budget claims, not a strategy-wide concurrency lease; why: distinct authorized signals may execute simultaneously without duplicates or exceeding daily slots.

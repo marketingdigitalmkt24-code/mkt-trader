@@ -44,9 +44,9 @@ Deno.serve(async req => {
  const { data: pending } = await db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000);
  let candidate: any = null;
  if (parsed.data.candidate) {
- const { data } = await db.from('operation_results').select('signal_id,asset,direction,created_at,timeframe,entry_strategy').eq('signal_id',parsed.data.candidate).maybeSingle();
+ const { data, error } = await db.from('operation_results').select('signal_id,asset,direction,created_at,timeframe,entry_strategy').eq('signal_id',parsed.data.candidate).maybeSingle();
  if (data && freshDemoTest(data,Date.now())) candidate=data;
- else console.log('Demo candidate skipped: missing or stale');
+ else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
  let reserved: string | null = null;
  if (candidate) {

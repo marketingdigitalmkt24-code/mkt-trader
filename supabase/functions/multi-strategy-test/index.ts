@@ -10,7 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { demoContinuation, demoCeiling, DEMO_CEILING, chooseDemoCandidate, DEMO_CONTINUATION, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, type DemoCandidate } from '../_shared/demo-continuation.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -253,11 +253,17 @@ Deno.serve(async (req) => {
   }
   let inserted = 0;
   // Separate service ledger: new Demo patterns never enter principal TEST history/claims.
-  const demoWinner = chooseDemoCandidate([...rows,...demoPatterns]);
+  const demoHist = await supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit')
+    .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
+    .gte('entry_minute',new Date((curMin-14*86400)*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1000);
+  if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
+  const demoPool = [...rows,...demoPatterns].map(c=>({...c,_score:Math.max(0,c._score+2*demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000))}));
+  const demoWinner = chooseDemoCandidate(demoPool);
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
-      entry_strategy:demoWinner.entry_strategy,score:demoWinner._score},{onConflict:'entry_minute',ignoreDuplicates:true});
+      entry_strategy:demoWinner.entry_strategy,score:demoWinner._score,
+      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
       const demoTask=supabase.functions.invoke('iqoption-demo-tests',{body:{candidate:demoWinner.signal_id}})

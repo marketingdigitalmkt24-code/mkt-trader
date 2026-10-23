@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
 import { allDemoOutcomes, demoTestStats } from '@/lib/demo-test-stats';
 
 export function DemoTestOperations() {
@@ -14,7 +15,11 @@ export function DemoTestOperations() {
  }))});
  const {data,isLoading,isError}=useQuery({queryKey:['demo-test-orders',page],refetchInterval:10000,queryFn:async()=>{
  const {data,count,error}=await supabase.from('iq_demo_test_orders').select('*',{count:'exact'}).eq('status','confirmed').not('iq_option_id','is',null).order('created_at',{ascending:false}).range(page*10,page*10+9);
- if(error)throw error;return {rows:data || [],count:count || 0};
+ if(error)throw error;
+ const ids=(data||[]).map(r=>r.signal_id);
+ const {data:cand}=ids.length?await supabase.from('iq_demo_test_candidates').select('signal_id,candles').in('signal_id',ids):{data:[]};
+ const charts=new Map((cand||[]).map(c=>[c.signal_id,c.candles as Candle[]|null]));
+ return {rows:data || [],count:count || 0,charts};
  }});
  return <section className="mb-4 border-b border-border pb-4" aria-label="Últimas operações Demo">
  <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 className="text-xs font-medium">Últimas operações · Demo</h4><Badge variant="outline">DEMO · TESTE</Badge></div>
@@ -25,12 +30,26 @@ export function DemoTestOperations() {
   <div><span className="block text-muted-foreground">{stats.data.profit>0?'Saldo positivo':stats.data.profit<0?'Saldo negativo':'Saldo zerado'}</span><strong className={`font-mono ${stats.data.profit>0?'text-call':stats.data.profit<0?'text-put':'text-muted-foreground'}`}>{stats.data.profit.toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</strong></div>
   <span className="col-span-2 text-muted-foreground sm:col-span-4">Acumulado · {stats.data.pending} abertas · {stats.data.ties} empates</span>
  </div>}
- {isLoading?<p className="text-xs text-muted-foreground">Carregando ordens Demo…</p>:isError?<p role="alert" className="text-xs text-destructive">Não foi possível carregar as ordens Demo.</p>:!data?.rows.length?<p className="text-xs text-muted-foreground">Aguardando primeira ordem Demo confirmada.</p>:<div className="space-y-1">{data.rows.map(row=><div key={row.id} className="flex flex-wrap items-center gap-2 rounded-md bg-secondary/30 p-2 text-xs">
+ {isLoading?<p className="text-xs text-muted-foreground">Carregando ordens Demo…</p>:isError?<p role="alert" className="text-xs text-destructive">Não foi possível carregar as ordens Demo.</p>:!data?.rows.length?<p className="text-xs text-muted-foreground">Aguardando primeira ordem Demo confirmada.</p>:<div className="space-y-1">{data.rows.map(row=><HoverCard key={row.id} openDelay={150}><HoverCardTrigger asChild><div tabIndex={0} className="flex cursor-default flex-wrap items-center gap-2 rounded-md bg-secondary/30 p-2 text-xs hover:bg-secondary/60">
  <span className="font-medium">{row.asset}</span><span className="text-muted-foreground font-mono text-[10px]">{new Date(row.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
  <span className={row.direction==='CALL'?'text-call':'text-put'}>{row.direction}</span><span className="text-muted-foreground">{row.entry_strategy==='CONTINUACAO_QUEDA_V1'?'Queda':row.entry_strategy==='TETO_V1'?'Teto':row.entry_strategy}</span>
  <span className="text-muted-foreground font-mono text-[10px]">{Number(row.amount).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</span>
  <span className="ml-auto font-mono">{row.status==='confirmed'?(row.result==='pending'?'ABERTA':`${row.result.toUpperCase()} · ${Number(row.profit).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}`):row.status==='failed'?'NÃO ENVIADA':row.status==='unknown'?'SEM CONFIRMAÇÃO':'AGUARDANDO'}</span>
- </div>)}</div>}
+ </div></HoverCardTrigger><HoverCardContent className="w-80"><p className="mb-1 text-xs font-medium">{row.asset} · últimas velas antes da entrada</p><MiniChart candles={data.charts.get(row.signal_id)} direction={row.direction}/></HoverCardContent></HoverCard>)}</div>}
  {(data?.count || 0)>10 && <div className="mt-2 flex items-center justify-between"><Button variant="ghost" size="sm" disabled={page===0} onClick={()=>setPage(p=>p-1)}><ChevronLeft className="h-3 w-3"/>Anterior</Button><span className="text-xs text-muted-foreground">{page+1}/{Math.ceil((data?.count || 0)/10)}</span><Button variant="ghost" size="sm" disabled={(page+1)*10>=(data?.count || 0)} onClick={()=>setPage(p=>p+1)}>Próxima<ChevronRight className="h-3 w-3"/></Button></div>}
  </section>;
+}
+
+type Candle={t:number;o:number;c:number;h:number;l:number};
+function MiniChart({candles,direction}:{candles?:Candle[]|null;direction:string}){
+ if(!candles?.length)return <p className="text-xs text-muted-foreground">Gráfico indisponível para esta operação (registrada antes do salvamento das velas).</p>;
+ const W=288,H=140,hi=Math.max(...candles.map(k=>k.h)),lo=Math.min(...candles.map(k=>k.l)),span=hi-lo||1,step=(W-20)/candles.length;
+ const y=(v:number)=>4+(hi-v)/span*(H-8);
+ return <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Velas antes da entrada">
+  {candles.map((k,i)=>{const x=i*step+step/2,up=k.c>=k.o,cls=up?'fill-call stroke-call':'fill-put stroke-put';return <g key={k.t} className={cls}>
+   <line x1={x} x2={x} y1={y(k.h)} y2={y(k.l)} strokeWidth={1}/>
+   <rect x={x-step*0.35} width={step*0.7} y={y(Math.max(k.o,k.c))} height={Math.max(1,Math.abs(y(k.o)-y(k.c)))}/></g>;})}
+  <line x1={W-18} x2={W-18} y1={0} y2={H} className="stroke-muted-foreground" strokeDasharray="3 3"/>
+  <text x={W-14} y={direction==='CALL'?H-6:14} className={`text-[10px] ${direction==='CALL'?'fill-call':'fill-put'}`}>{direction==='CALL'?'▲':'▼'}</text>
+ </svg>;
 }

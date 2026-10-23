@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { allDemoOutcomes, demoTestStats } from './demo-test-stats';
+import { allDemoOutcomes, demoTestStats } from './src/lib/demo-test-stats';
 const row = (result: string, profit: number) => ({ status: 'confirmed', iq_option_id: '14383504823', result, profit });
 test('counts confirmed Demo wins and losses with accuracy and negative net', () => {
  expect(demoTestStats([row('win', .82), row('loss', -1), row('win', .83), row('loss', -1), row('loss', -1)]))

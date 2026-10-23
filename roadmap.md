@@ -1,3 +1,6 @@
+# Últimas operações somente reais
+- [x] Limpar a exibição a partir de 23/10 15:39:21 BRT e mostrar só ordens principais confirmadas na IQ Option; registros e Resultado de Hoje preservados.
+
 # Remover testes do card Antecipação e desativar Rejeição por pavio
 - [x] Retirados placar e lista simulados; seis ordens confirmadas preservadas e conferidas no painel autenticado. Novos sinais de pavio bloqueados, histórico preservado; rotina publicada, 27 testes aprovados e build OK.
 

@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { expandTestObservations } from '@/lib/live-test-observations';
 import { linkedForceBrokerResult, type TestBrokerResult } from '@/lib/test-broker-result';
+import { isLiveBrokerOperation, LIVE_OPERATIONS_DISPLAY_CUTOFF } from '@/lib/live-operations';
 
 interface OpenPosition {
   id: string;
@@ -47,6 +48,9 @@ const strategyLabels: Record<string, string> = {
   HISTORICO: 'Histórico bom',
   EMPATE: 'Empate',
   REVERSAO_RSI: 'Reversão RSI',
+  RETOMADA: 'Retomada',
+  ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
+  KDJ_RSI: 'KDJ + Reversão RSI',
   VELA_FORCA: 'Vela de força',
   FORCA_ANTECIPADA: 'Antecipação de Força',
   FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'forca sem',
@@ -73,7 +77,7 @@ export function LiveOperationsCard() {
   const [linkedOrders, setLinkedOrders] = useState<TestBrokerResult[]>([]);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [stats, setStats] = useState({ wins: 0, losses: 0, testWinsToday: 0, testLossesToday: 0 });
+  const [stats, setStats] = useState({ wins: 0, losses: 0 });
   const pageRef = useRef(1);
   const [brokerOpen, setBrokerOpen] = useState<OpenPosition[]>([]);
   const [recordedOpen, setRecordedOpen] = useState<OpenPosition[]>([]);
@@ -200,20 +204,24 @@ export function LiveOperationsCard() {
     }
   };
 
+  // Somente ordens principais confirmadas pela IQ Option após a limpeza da lista.
+  const brokerOperations = <T extends { not: (...args: any[]) => T; or: (filter: string) => T; gte: (column: string, value: string) => T }>(query: T) => query
+    .gte('created_at', LIVE_OPERATIONS_DISPLAY_CUTOFF)
+    .not('timeframe', 'in', '(TEST,MT5)')
+    .not('iq_option_id', 'is', null)
+    .not('signal_id', 'like', 'mt5-%')
+    .not('signal_id', 'like', 'copy-%')
+    .not('signal_id', 'like', 'sim-%')
+    .not('signal_id', 'like', 'force-lw-%')
+    .not('signal_id', 'like', 'forca_invertida-%')
+    .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)');
+
   // Count only the first page; prefetch and cache each page independently.
   const loadRecentPage = async (requestedPage: number) => {
       const from = (requestedPage - 1) * PAGE_SIZE;
-      const { data, count, error } = await supabase
+      const { data, count, error } = await brokerOperations(supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', requestedPage === 1 ? { count: 'exact' } : {})
-        .or('timeframe.is.null,timeframe.neq.MT5')
-        .not('signal_id', 'like', 'mt5-%')
-        .not('signal_id', 'like', 'copy-%')
-        .not('signal_id', 'like', 'sim-%')
-        .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)')
-        .not('signal_id', 'like', '%force-lw-%')
-        // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
-        .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA,VELA_FORCA)')
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy, iq_option_id', requestedPage === 1 ? { count: 'exact' } : {}))
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
@@ -240,7 +248,7 @@ export function LiveOperationsCard() {
       ]));
       return {
         linkedOrders: brokerOrders || [],
-        trades: data.map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[],
+        trades: data.filter(isLiveBrokerOperation).map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[],
         count,
       };
   };
@@ -254,7 +262,7 @@ export function LiveOperationsCard() {
     else if (navigation) setPageLoading(true);
     try {
       const result = await queryClient.fetchQuery({
-        queryKey: ['live-operations-page', requestedPage],
+        queryKey: ['live-operations-page', LIVE_OPERATIONS_DISPLAY_CUTOFF, requestedPage],
         queryFn: () => loadRecentPage(requestedPage),
         staleTime: 15000,
       });
@@ -266,7 +274,7 @@ export function LiveOperationsCard() {
       if (typeof result.count === 'number') setTotalCount(result.count);
       if (result.trades.length === PAGE_SIZE) {
         void queryClient.prefetchQuery({
-          queryKey: ['live-operations-page', requestedPage + 1],
+          queryKey: ['live-operations-page', LIVE_OPERATIONS_DISPLAY_CUTOFF, requestedPage + 1],
           queryFn: () => loadRecentPage(requestedPage + 1),
           staleTime: 15000,
         });
@@ -281,31 +289,17 @@ export function LiveOperationsCard() {
     }
   };
 
-  // Contadores de ganhos/perdas (geral) e resultado diário em teste (dia de Brasília)
+  // Contadores somente das ordens confirmadas exibidas nesta lista.
   const fetchStats = async () => {
     try {
-      const base = () => supabase.from('operation_results').select('*', { count: 'exact', head: true })
-        .or('timeframe.is.null,timeframe.neq.MT5')
-        .not('signal_id', 'like', 'mt5-%')
-        .not('signal_id', 'like', 'copy-%')
-        .not('signal_id', 'like', 'sim-%')
-        .or('entry_strategy.is.null,entry_strategy.not.in.(FORCE_LOSS_WIN,FORCA_INVERTIDA)')
-        .not('signal_id', 'like', '%force-lw-%')
-        // Ordens reais destas estratégias já aparecem em Entradas na IQ Option; aqui fica só o TESTE original.
-        .or('timeframe.eq.TEST,entry_strategy.is.null,entry_strategy.not.in.(REVERSAO_RSI,RETOMADA,FORCA_INVERTIDA,VELA_FORCA)');
-      const brNow = new Date(Date.now() - 3 * 3600 * 1000);
-      const dayStartIso = new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()) + 3 * 3600 * 1000).toISOString();
-      const [w, l, tw, tl] = await Promise.all([
+      const base = () => brokerOperations(supabase.from('operation_results').select('*', { count: 'exact', head: true }));
+      const [w, l] = await Promise.all([
         base().eq('result', 'win'),
         base().eq('result', 'loss'),
-        base().eq('timeframe', 'TEST').gte('created_at', dayStartIso).eq('result', 'win'),
-        base().eq('timeframe', 'TEST').gte('created_at', dayStartIso).eq('result', 'loss'),
       ]);
       setStats({
         wins: w.count ?? 0,
         losses: l.count ?? 0,
-        testWinsToday: tw.count ?? 0,
-        testLossesToday: tl.count ?? 0,
       });
     } catch {
       // silent
@@ -357,9 +351,6 @@ export function LiveOperationsCard() {
   const totalIqProfit = iqTrades.reduce((sum, t) => sum + t.profit, 0);
   const hitTotal = stats.wins + stats.losses;
   const hitPct = hitTotal > 0 ? Math.round((stats.wins / hitTotal) * 100) : 0;
-  const testTodayTotal = stats.testWinsToday + stats.testLossesToday;
-  const testTodayPct = testTodayTotal > 0 ? Math.round((stats.testWinsToday / testTodayTotal) * 100) : 0;
-
   const getResultColor = (result: string) => {
     if (result === 'win') return 'text-call';
     if (result === 'loss') return 'text-put';
@@ -463,17 +454,6 @@ export function LiveOperationsCard() {
             </div>
           </div>
 
-          {testTodayTotal > 0 && (
-            <div className="flex items-center justify-between mb-2 px-2 py-1.5 rounded-lg bg-secondary/30 text-[10px]">
-              <span className="text-muted-foreground">Resultado diário (teste)</span>
-              <span className="flex items-center gap-2 font-mono">
-                <span className="text-call">✓ {stats.testWinsToday}</span>
-                <span className="text-put">✗ {stats.testLossesToday}</span>
-                <span className="text-muted-foreground">{testTodayPct}%</span>
-              </span>
-            </div>
-          )}
-
           {recentLoading ? (
             <div role="status" aria-label="Carregando operações" className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
           ) : recentError ? (
@@ -535,9 +515,9 @@ export function LiveOperationsCard() {
                     )}
                     {trade.entry_strategy === 'FORCA_ANTECIPADA' && <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal">Antecipação de Força · IQ</Badge>}
                     {trade.entry_strategy === 'TENDENCIA_3_LOSS_PUT' && <Badge variant="outline" className="text-[9px] px-1 py-0 min-h-4 h-auto whitespace-normal text-put border-put/50">Tendência 3 perdas → Venda · IQ</Badge>}
-                    {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy] && (
+                    {trade.entry_strategy && ({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU', RETOMADA: '📐 RETOMADA', ICHIMOKU_FORCA: '☁️ ICHIMOKU + VELA DE FORÇA', KDJ_RSI: '📊 KDJ + REVERSÃO RSI' } as Record<string, string>)[trade.entry_strategy] && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-primary/50 text-primary">
-                        {({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU' } as Record<string, string>)[trade.entry_strategy]}
+                        {({ VELA_FORCA: '🕯️ VELA DE FORÇA', ROMPIMENTO: '🚀 ROMPIMENTO', RECUO_EMA21: '↩️ RECUO MÉDIA 21', KDJ: '📊 KDJ', ICHIMOKU: '☁️ ICHIMOKU', RETOMADA: '📐 RETOMADA', ICHIMOKU_FORCA: '☁️ ICHIMOKU + VELA DE FORÇA', KDJ_RSI: '📊 KDJ + REVERSÃO RSI' } as Record<string, string>)[trade.entry_strategy]}
                       </Badge>
                     )}
                     {trade.telegram_sent && (
@@ -607,7 +587,7 @@ export function LiveOperationsCard() {
             </div>
           ) : (
             <div className="text-xs text-muted-foreground text-center py-3 bg-secondary/30 rounded-lg">
-              Nenhuma operação IQ Option registrada
+              Nenhuma ordem confirmada na IQ Option desde a limpeza
             </div>
           )}
         </div>

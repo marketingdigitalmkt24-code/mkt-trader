@@ -5,6 +5,7 @@ import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { allStrategyRows, strategyStats as summarizeStrategyStats, type StrategyStat } from '@/lib/strategy-stats';
+import { CombinedStrategyComparison } from './CombinedStrategyComparison';
 
 interface SignalEntry {
   id: string;
@@ -265,6 +266,8 @@ export function AIAnalysisStatusCard() {
             </div>
           </div>
         )}
+
+        <CombinedStrategyComparison />
 
         {recentSignals.length === 0 && (
           <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-lg">

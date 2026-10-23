@@ -7,7 +7,7 @@ import { iqMarketOpen, type IQMarketAsset } from '../_shared/iq-market-open.ts';
 import { ANTICIPATION_RULE_V2, ANTICIPATION_RULE_PAVIO, anticipationSetup, anticipationObservation, anticipationResult, type AnticipationCandle } from '../_shared/force-anticipation-test.ts';
 import { anticipationTarget, anticipationRequestReady } from '../_shared/anticipation-timing.ts';
 import { freshAnticipationEntry, confirmedAnticipationOrder } from '../_shared/anticipation-execution.ts';
-import { forceFormingObservation, forceFormingConfirmation, FORCE_FORMING_PREFIX } from '../_shared/force-forming-test.ts';
+import { forceFormingOpenObservation, forceFormingConfirmation, FORCE_FORMING_PREFIX } from '../_shared/force-forming-test.ts';
 
 const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: corsHeaders });
 const bodySchema = z.object({ scheduled: z.boolean().optional() }).strict();
@@ -87,7 +87,10 @@ Deno.serve(async req => {
       if (!markets.some(market => iqMarketOpen(market, now, Math.floor(now / 60) * 60 + 60))) return;
       const minute = Math.floor(now / 60) * 60;
       formingScanned++;
-      const forming = forceFormingObservation(asset, cs, now);
+      // Scheduled boundary round is :00; later snapshots never fabricate a :00 fill.
+      const forming = scheduled
+        ? forceFormingOpenObservation(asset, cs, now, markets, targetMs / 1000)
+        : null;
       if (forming) {
         const { data, error } = await db.from('force_anticipation_tests').upsert(forming, { onConflict: 'signal_id', ignoreDuplicates: true }).select('id');
         if (error) console.error('Forming Force TEST write failed:', error.code);
@@ -209,7 +212,8 @@ Deno.serve(async req => {
     });
     await Promise.all(writes);
     const summary = { success: true, ruleVersion: 3, previousVersionEligible, setupEligible, missingQuote, scanned, withVolume, inserted, resolved, brokerSubmitted, brokerConfirmed, brokerSkipped, mode: scheduled ? 'IQ_CONFIGURED_ACCOUNT' : 'OBSERVATION_ONLY', scheduled,
-      targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks, formingInserted, formingScanned };
+      targetTime: new Date(targetMs).toISOString(), candlesRequestedAt, marketChecks, formingInserted, formingScanned,
+      formingObservationSeconds: [0, 15, 30, 45], formingMode: 'TEST_ONLY_OBSERVED_QUOTE' };
     console.log('Force anticipation TEST:', JSON.stringify(summary));
     return reply(summary);
   } catch { return reply({ error: 'Anticipation test unavailable' }, 502); }

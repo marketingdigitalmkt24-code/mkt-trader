@@ -1,7 +1,21 @@
 import type { AnticipationCandle } from './force-anticipation-test.ts';
+import { iqMarketOpen, type IQMarketAsset } from './iq-market-open.ts';
 
 export const FORCE_FORMING_PREFIX = 'force-forming-v1-';
 export const FORCE_FORMING_STRATEGY = 'FORCA_EM_FORMACAO';
+
+// Start observing at :00, but persist only the quote/time actually received.
+export function forceFormingOpenObservation(asset: string, raw: AnticipationCandle[], now: number,
+  markets: IQMarketAsset[], observationStart: number) {
+  const minute = Math.floor(now / 60) * 60;
+  if (observationStart !== minute || now < observationStart
+    || !markets.some(m => iqMarketOpen(m, now, minute + 60))) return null;
+  const observation = forceFormingObservation(asset, raw, now);
+  if (!observation) return null;
+  return { ...observation, indicators: { ...observation.indicators,
+    observationStartedAt: new Date(observationStart * 1000).toISOString(),
+    marketVerifiedAt: new Date(now * 1000).toISOString() } };
+}
 
 // Same body criterion as closed VELA_FORCA, but evaluated on an observed forming bar.
 export function forceFormingObservation(asset: string, raw: AnticipationCandle[], now: number) {

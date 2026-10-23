@@ -1,3 +1,7 @@
+# Vela de Força em formação — TESTE (23/10)
+- [ ] Detectar corpo forte durante o próprio minuto, com preço/horário observados; comparar confirmação no fechamento sem escolher só os vencedores.
+- [ ] Publicar observação isolada, mostrar placar separado e verificar testes/rotina; nenhuma ordem IQ, copy ou Telegram.
+
 # Antecipação simultânea (23/10)
 - [x] Permitir sinais distintos simultâneos da Antecipação ao longo do dia; migração aplicada, reservas por sinal, orçamento diário inclui filas e placement publicado; 31 testes aprovados. Rotina ativa a cada minuto, sem horários fixos; janela fresca de compra preservada.
 - [ ] Confirmar ordens simultâneas e leitura dos resultados — depende de sinais novos com cotação atual e limites disponíveis; não forçar ordens nem usar preços históricos.

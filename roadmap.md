@@ -1,3 +1,7 @@
+# Combinações TESTE (23/10)
+- [ ] Registrar combinações de mesma direção/ativo/minuto separadas dos IDs autorizados; comparar prospectivamente com quatro referências individuais, sem alterar ranking, ordens, copy ou Telegram.
+- [ ] Testar, publicar e conferir comparação autenticada; novos resultados dependem de confluências elegíveis.
+
 # Vela de Força em formação — TESTE (23/10)
 - [x] Limitar registros até :15, apagar histórico somente Força em formação e paginar 20 operações; 22 testes passaram, build OK e painel autenticado zerado. Rotina 03:09 confirmou [0,15], 192 análises e nenhum novo teste elegível; navegação entre páginas aguarda 21 novos registros reais de TESTE, sem dados fabricados.
 - [x] Observar desde :00 (escolha confirmada), registrar horário/preço observados e verificar ativo aberto na operação; 20 testes passaram e rotina publicada, sem retroagir nem abrir ordens IQ.

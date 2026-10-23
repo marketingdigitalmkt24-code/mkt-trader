@@ -1,6 +1,7 @@
 # Combinações TESTE (23/10)
-- [ ] Registrar combinações de mesma direção/ativo/minuto separadas dos IDs autorizados; comparar prospectivamente com quatro referências individuais, sem alterar ranking, ordens, copy ou Telegram.
-- [ ] Testar, publicar e conferir comparação autenticada; novos resultados dependem de confluências elegíveis.
+- [x] Registrar combinações de mesma direção/ativo/minuto separadas dos IDs autorizados; comparar prospectivamente com quatro referências individuais, sem alterar ranking, ordens, copy ou Telegram.
+- [x] 22 testes passaram, rotina publicada, build OK e comparação autenticada conferida: 2 KDJ + RSI abertos e referências registradas às 03:20 BRT.
+- [ ] Confirmar primeira confluência Ichimoku + Força e resultados encerrados da comparação — depende dos próximos sinais/candles; nenhum teste ou ordem forçado.
 
 # Vela de Força em formação — TESTE (23/10)
 - [x] Limitar registros até :15, apagar histórico somente Força em formação e paginar 20 operações; 22 testes passaram, build OK e painel autenticado zerado. Rotina 03:09 confirmou [0,15], 192 análises e nenhum novo teste elegível; navegação entre páginas aguarda 21 novos registros reais de TESTE, sem dados fabricados.

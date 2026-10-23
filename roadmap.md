@@ -1,3 +1,8 @@
+# Testes executados na Demo
+- [ ] Executar sinal TESTE selecionado por minuto na Demo por US$1, com duplicatas bloqueadas e ordens simultâneas independentes.
+- [ ] Conciliar resultado por ID IQ exato e exibir em Últimas operações sem Telegram, copy, Entradas IQ ou Resultado de Hoje.
+- [ ] Testar isolamento, publicar e conferir ordem prospectiva; nunca reenviar histórico.
+
 # Últimas operações somente reais
 - [x] Limpar a exibição a partir de 23/10 15:39:21 BRT e mostrar só ordens principais confirmadas na IQ Option; registros e Resultado de Hoje preservados.
 

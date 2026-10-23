@@ -3,7 +3,7 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
-import { DEMO_TEST_AMOUNT, demoBalance, freshDemoTest } from './policy.ts';
+import { DEMO_TEST_AMOUNT, demoBalance, freshDemoTest, validDemoTestAmount } from './policy.ts';
 import { demoHistoryOutcome } from './history.ts';
 const schema = z.object({ candidate: z.string().max(200).optional() }).strict();
 const reply = (body: unknown, status = 200) => {
@@ -55,8 +55,13 @@ Deno.serve(async req => {
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
  let reserved: string | null = null;
+ let testAmount = DEMO_TEST_AMOUNT;
  if (candidate) {
- const { data, error } = await db.from('iq_demo_test_orders').insert({ signal_id:candidate.signal_id,entry_minute:candidate.created_at,asset:candidate.asset,direction:candidate.direction,entry_strategy:candidate.entry_strategy || 'UNKNOWN',expiration_time:new Date(Date.parse(candidate.created_at)+60000).toISOString() }).select('id').single();
+ const setting = await db.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle();
+ if(setting.error)return reply({error:'Demo test amount unavailable'},503);
+ testAmount = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
+ if(!validDemoTestAmount(testAmount))return reply({error:'Invalid demo test amount'},409);
+ const { data, error } = await db.from('iq_demo_test_orders').insert({ signal_id:candidate.signal_id,entry_minute:candidate.created_at,asset:candidate.asset,direction:candidate.direction,amount:testAmount,entry_strategy:candidate.entry_strategy || 'UNKNOWN',expiration_time:new Date(Date.parse(candidate.created_at)+60000).toISOString() }).select('id').single();
  if (!error && data) reserved=data.id;
  else console.log('Demo reservation rejected:',error?.code);
  }
@@ -93,9 +98,9 @@ Deno.serve(async req => {
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).then(()=>{}));
  if(!pending?.length) finish();return;
  }
- // PRACTICE-only balance ID, fixed USD1; never touch the primary queue, ledger or copies.
+ // PRACTICE-only balance ID, separately configured snapshot; never touch the primary queue or copies.
  placed=true;
- send('binary-options.open-option','1.0',{price:DEMO_TEST_AMOUNT,active_id:Number(found[0]),expired:expiry,direction:candidate.direction.toLowerCase(),option_type_id:3,user_balance_id:balanceId},'demo-test');
+ send('binary-options.open-option','1.0',{price:testAmount,active_id:Number(found[0]),expired:expiry,direction:candidate.direction.toLowerCase(),option_type_id:3,user_balance_id:balanceId},'demo-test');
  }
  if(d.name==='option' && placed && !confirmed && reserved && /^\d+$/.test(String(d.msg?.id || ''))) {
  confirmed=true;

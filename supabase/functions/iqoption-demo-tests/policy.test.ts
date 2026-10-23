@@ -1,6 +1,13 @@
 import { test, expect } from 'bun:test';
-import { DEMO_TEST_AMOUNT, freshDemoTest, demoBalance } from './policy';
-test('test stake is exactly USD1', () => expect(DEMO_TEST_AMOUNT).toBe(1));
+import { DEMO_TEST_AMOUNT, freshDemoTest, demoBalance, validDemoTestAmount } from './policy';
+test('initial test stake is USD1 and separate configured amounts accept cents', () => {
+ expect(DEMO_TEST_AMOUNT).toBe(1);
+ expect(validDemoTestAmount(2.5)).toBe(true);
+ expect(validDemoTestAmount(10)).toBe(true);
+ expect(validDemoTestAmount(.99)).toBe(false);
+ expect(validDemoTestAmount(1.001)).toBe(false);
+ expect(validDemoTestAmount(NaN)).toBe(false);
+});
 test('never selects REAL or falls back to another currency', () => {
  expect(demoBalance([{ id: 1, type: 1, currency: 'USD' }])).toBeUndefined();
  expect(demoBalance([{ id: 2, type: 4, currency: 'BRL' }])).toBeUndefined();

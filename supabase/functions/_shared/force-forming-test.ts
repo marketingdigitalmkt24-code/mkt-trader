@@ -21,7 +21,7 @@ export function forceFormingOpenObservation(asset: string, raw: AnticipationCand
 export function forceFormingObservation(asset: string, raw: AnticipationCandle[], now: number) {
   if (!asset || !Number.isFinite(now)) return null;
   const minute = Math.floor(now / 60) * 60;
-  if (now - minute > 15) return null;
+  if (now - minute > 10) return null;
   const valid = (k: AnticipationCandle) => [k.o, k.c, k.h, k.l].every(x => Number.isFinite(x) && x > 0)
     && k.h >= Math.max(k.o, k.c) && k.l <= Math.min(k.o, k.c) && k.h >= k.l;
   const closed = new Map(raw.filter(k => k.t < minute).map(k => [k.t, k]));

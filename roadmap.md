@@ -1,5 +1,5 @@
 # Testes executados na Demo
-- [ ] Mostrar a próxima vela fechada no gráfico Demo, preservando comparação e execução.
+- [x] Incluir a próxima vela fechada no gráfico Demo; sete testes aprovados, rotina publicada e painel conferido; coleta automática não força ordens.
 - [x] Assertividade agora lê todas as estratégias confirmadas Demo separadamente; contagem reiniciada às 16:33 BRT sem apagar ordens ou alterar demais totais. Seis testes aprovados, painel conferido Tendência/Vela de força 0W/0L, build OK.
 - [x] Criar Continuação de queda Demo separada (corpo ≥70%, pavio inferior ≤10%, médias em queda, até 3 vermelhas; 100 velas fechadas contíguas); competir com seleção atual em ledger exclusivo, sem alterar claims principais. 16 testes aprovados, duas funções publicadas, painel e build OK; seleção prospectiva 16:30 VELA_FORCA registrada.
 - [ ] Conferir primeira ordem Continuação de queda e resultado — depende do padrão aparecer e vencer a seleção em mercado M1 aberto; não forçar nem repetir histórico.

@@ -1,4 +1,7 @@
 # Tendência 3 perdas → venda
+# Antecipação simultânea (23/10)
+- [ ] Permitir sinais distintos simultâneos da Antecipação ao longo do dia, preservando valor, meta, limite diário, mercado aberto e deduplicação; validar autorização e reservas.
+
 - [x] Criar autorização prospectiva após três perdas Tendência em minutos consecutivos, PUT no próximo candidato, IQ + Telegram; preservar TESTE, limites e demais estratégias. Função separada acionada por sinal original/fechamento, sem republicar geradores divergentes; mercado M1 confirmado antes de reservar.
 - [x] 20 testes aprovados, função publicada, claim só serviço, acesso usuário recusado; painel autenticado sem erros e build OK.
 - [ ] Confirmar primeira ordem e Telegram — depende de sequência nova elegível, ativo aberto e limites livres; nenhuma ordem forçada ou histórica.

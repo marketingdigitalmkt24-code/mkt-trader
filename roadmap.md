@@ -1,5 +1,5 @@
 # Vela de Força em formação — TESTE (23/10)
-- [ ] Limitar registros até :15, apagar histórico somente Força em formação e paginar 20 operações; validar e publicar.
+- [x] Limitar registros até :15, apagar histórico somente Força em formação e paginar 20 operações; 22 testes passaram, build OK e painel autenticado zerado. Rotina 03:09 confirmou [0,15], 192 análises e nenhum novo teste elegível; navegação entre páginas aguarda 21 novos registros reais de TESTE, sem dados fabricados.
 - [x] Observar desde :00 (escolha confirmada), registrar horário/preço observados e verificar ativo aberto na operação; 20 testes passaram e rotina publicada, sem retroagir nem abrir ordens IQ.
 - [x] Confirmado registro automático: 03:04 BRT, 12 ativos distintos, observação iniciada :00 e detecção :15/:30/:45 com mercado verificado; apenas TESTE, nenhum sinal forçado.
 - [x] Detectar corpo >2×média20 durante o próprio minuto (:15/:30/:45), com preço/horário observados; confirmar no fechamento sem filtrar falhas, namespace TESTE separado.

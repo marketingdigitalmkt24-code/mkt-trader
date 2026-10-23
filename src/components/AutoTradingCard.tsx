@@ -8,6 +8,7 @@ import { Slider } from './ui/slider';
 import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X, TrendingUp, Brain, Sparkles } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { DemoTestAmountSetting } from './DemoTestAmountSetting';
 
 interface AutoTradingConfig {
   enabled: boolean;
@@ -192,6 +193,8 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
             )}
           </div>
         </div>
+
+        <DemoTestAmountSetting />
 
         {/* Dynamic Stake (IQ Option) — % of bank */}
         <div className="space-y-3 rounded-lg border border-orange-500/20 bg-orange-500/5 p-3">

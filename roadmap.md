@@ -1,9 +1,10 @@
 # Testes executados na Demo
+- [x] Corrigir leitura dos IDs e resultados do histórico Demo; cinco IDs informados liquidados e conferidos no painel: 15:59 WIN +0,82; 16:00 LOSS -1; 16:01 WIN +0,83; 16:02 e 16:03 LOSS -1 cada. Sete testes aprovados; função publicada e build OK, sem alterar operações principais.
 - [x] Executor e agendamento publicados para sinal TESTE selecionado por minuto na Demo USD por US$1, com unicidade por minuto e ordens simultâneas independentes.
 - [x] Ledger separado e conciliação por ID IQ exato; lista Demo autenticada conferida sem Telegram, copy ou inclusão em Entradas IQ/Resultado de Hoje. O saldo Demo da própria corretora será afetado.
 - [x] Oito testes de valor, conta, frescor e isolamento aprovados; build OK.
 - [x] Corrigidos erro de inicialização e atraso da fila; envio imediato após seleção. Ordens ARB/USD-OTC Demo US$1 #14383504823 (15:59) e #14383507171 (16:00) confirmadas e lidas no painel; sem repetir histórico.
-- [ ] Confirmar liquidação da primeira ordem no histórico Demo — ordens confirmadas ainda pendentes de leitura do resultado.
+- [x] Confirmada liquidação pelo ID exato no histórico Demo e na lista autenticada; primeira ordem #14383504823 WIN +US$0,82.
 
 # Últimas operações somente reais
 - [x] Limpar a exibição a partir de 23/10 15:39:21 BRT e mostrar só ordens principais confirmadas na IQ Option; registros e Resultado de Hoje preservados.

@@ -2,7 +2,7 @@ import type { DemoOutcomeRow } from './demo-test-stats';
 import type { StrategyStat } from './strategy-stats';
 
 // Display-only restart requested on Oct 23; broker records and other totals stay intact.
-export const DEMO_STRATEGY_CUTOFF = '2026-10-23T19:33:16Z';
+export const DEMO_STRATEGY_CUTOFF = '2026-10-23T18:59:00Z'; // 15:59 BRT, first Demo order
 export interface DemoStrategyRow extends DemoOutcomeRow {
  entry_strategy: string;
  entry_minute: string;

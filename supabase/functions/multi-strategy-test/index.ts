@@ -10,7 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, type DemoCandidate } from '../_shared/demo-continuation.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -267,7 +267,17 @@ Deno.serve(async (req) => {
     .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
     .gte('entry_minute',new Date((curMin-14*86400)*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1000);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
-  const demoPool = [...rows,...demoPatterns].map(c=>({...c,_score:Math.max(0,c._score+2*demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000))}));
+  // Chart samples: saved pre-entry candles joined to confirmed Demo outcomes.
+  const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles')
+    .not('candles','is',null).gte('entry_minute',new Date((curMin-14*86400)*1000).toISOString()).lt('entry_minute',new Date((curMin-60)*1000).toISOString()).limit(1000);
+  const chartIds = (chartRead.data||[]).map(r=>r.signal_id);
+  const chartOut = chartIds.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',chartIds).eq('status','confirmed').in('result',['win','loss']) : {data:[]};
+  const outcome = new Map((chartOut.data||[]).map(r=>[r.signal_id,r.result]));
+  const chartSamples = (chartRead.data||[]).flatMap(r=>{const res=outcome.get(r.signal_id);
+    const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res}]:[];});
+  const demoPool = [...rows,...demoPatterns].map(c=>({...c,_score:Math.max(0,c._score
+    +2*demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
+    +2*chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)))}));
   const demoWinner = chooseDemoCandidate(demoPool);
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,

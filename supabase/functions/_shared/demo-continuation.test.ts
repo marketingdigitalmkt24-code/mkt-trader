@@ -1,5 +1,5 @@
 import { test, expect, describe, it } from 'bun:test';
-import { demoCeiling, demoLearningAdjustment } from './demo-continuation';
+import { demoCeiling, demoLearningAdjustment, chartFeatures, chartPatternAdjustment } from './demo-continuation';
 import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION } from './demo-continuation';
 const entry = 1792783500;
 function candles() {
@@ -51,5 +51,18 @@ describe('demoLearningAdjustment', () => {
   expect(demoLearningAdjustment(hist,'A',at)).toBeGreaterThan(0.9);
   expect(demoLearningAdjustment(hist,'B',at)).toBeLessThan(-0.9);
   expect(demoLearningAdjustment(hist,'C',at)).toBe(0);
+ });
+});
+describe('chart pattern learning', () => {
+ const entry = 6000*60;
+ const mk = (up: boolean) => Array.from({length:21},(_,i)=>({t:entry-(20-i)*60,o:100,c:up?101:99,h:101.2,l:98.8}));
+ it('ignores the result candle and learns similar shapes', () => {
+  const a = chartFeatures(mk(true),entry,'CALL')!;
+  expect(chartFeatures([...mk(true),{t:entry,o:1,c:500,h:500,l:1}],entry,'CALL')).toEqual(a);
+  const b = chartFeatures(mk(false),entry,'CALL')!;
+  const samples = [...Array(4)].flatMap(() => [{f:a,result:'win'},{f:b,result:'loss'}]);
+  expect(chartPatternAdjustment(samples,a)).toBeGreaterThan(0);
+  expect(chartPatternAdjustment(samples,b)).toBeLessThan(0);
+  expect(chartPatternAdjustment(samples.slice(0,2),a)).toBe(0);
  });
 });

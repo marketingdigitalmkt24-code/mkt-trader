@@ -253,6 +253,13 @@
       "when": 1792782903663,
       "tag": "0035_configurable_demo_test_stake",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792783715379,
+      "tag": "0036_demo_minute_candidate_selection",
+      "breakpoints": true
     }
   ]
 }

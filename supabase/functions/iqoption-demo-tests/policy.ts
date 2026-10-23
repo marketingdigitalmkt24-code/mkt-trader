@@ -12,3 +12,10 @@ export function freshDemoTest(row: { signal_id: string; timeframe: string; creat
 export function demoBalance(balances: { id: number; type: number; currency?: string }[]) {
   return balances.find(b => b.type === 4 && b.currency === 'USD' && Number.isFinite(b.id));
 }
+export function freshDemoCandidate(row: { signal_id: string; timeframe: string; created_at: string; direction: string; entry_strategy?: string }, now: number) {
+ if (row.signal_id.startsWith('t7-')) return freshDemoTest(row,now);
+ const at = Date.parse(row.created_at);
+ return row.signal_id.startsWith('demo-continuation-v1-') && row.entry_strategy === 'CONTINUACAO_QUEDA_V1'
+  && row.direction === 'PUT' && row.timeframe === 'TEST' && Number.isFinite(at)
+  && at % 60000 === 0 && now >= at && now-at <= 25000;
+}

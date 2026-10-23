@@ -268,6 +268,14 @@ Deno.serve(async (req) => {
         ? TREND_SEQUENCE_TEST : null,
     }));
     if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
+    if (inserted && clean[0]) {
+      // Dispatch immediately after selection; queued scheduler delivery may lag a minute.
+      const demoTask = supabase.functions.invoke('iqoption-demo-tests', { body: { candidate: clean[0].signal_id } })
+        .then(({ error }) => { if (error) console.error('Demo TEST dispatch failed'); });
+      // @ts-ignore Hosted background runtime
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(demoTask);
+      else await demoTask;
+    }
     // Separate shadow: never rank or claim it, and never relabel the original Force.
     if (inserted) {
       const observations = clean.flatMap(base => {

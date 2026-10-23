@@ -44,8 +44,9 @@ export function DemoTestOperations() {
 type Candle={t:number;o:number;c:number;h:number;l:number};
 function MiniChart({candles,direction,entry}:{candles?:Candle[]|null;direction:string;entry:number}){
  if(!candles?.length)return <p className="text-xs text-muted-foreground">Gráfico indisponível para esta operação (registrada antes do salvamento das velas).</p>;
-  const comparison=demoChartComparison(candles,entry,direction);
-  const W=288,H=140,hi=Math.max(...candles.map(k=>k.h)),lo=Math.min(...candles.map(k=>k.l)),span=hi-lo||1,step=(W-20)/(candles.length+(candles.some(k=>k.t===entry)?0:1));
+   const comparison=demoChartComparison(candles,entry,direction);
+   const nextCandle=candles.find(k=>k.t===entry+60 && k.t+60<=Date.now()/1000);
+   const W=288,H=140,hi=Math.max(...candles.map(k=>k.h)),lo=Math.min(...candles.map(k=>k.l)),span=hi-lo||1,step=(W-20)/(candles.length+(candles.some(k=>k.t===entry)?0:1)+(nextCandle?0:1));
  const y=(v:number)=>4+(hi-v)/span*(H-8);
   return <><div className="mb-2 flex flex-wrap items-center gap-2 text-xs"><span className={direction==='CALL'?'text-call':'text-put'}>Previsão: {direction==='CALL'?'↑ Alta · CALL':'↓ Queda · PUT'}</span><span className="text-muted-foreground">Fechou: {comparison ? comparison.movement==='up'?'↑ Alta':comparison.movement==='down'?'↓ Queda':'= Empate' : 'aguardando'}</span></div><svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Velas da operação, direção prevista e fechamento real">
   {candles.map((k,i)=>{const x=i*step+step/2,up=k.c>=k.o,cls=up?'fill-call stroke-call':'fill-put stroke-put';return <g key={k.t} className={cls}>
@@ -57,5 +58,6 @@ function MiniChart({candles,direction,entry}:{candles?:Candle[]|null;direction:s
     <text x={x+2} y={direction==='CALL'?H-4:12} className={`text-[10px] ${direction==='CALL'?'fill-call':'fill-put'}`}>{direction==='CALL'?'▲':'▼'}</text>
     {comparison && <><line x1={x+step/2} x2={W} y1={y(comparison.candle.c)} y2={y(comparison.candle.c)} className="stroke-foreground" strokeDasharray="2 2"/><circle cx={x+step/2} cy={y(comparison.candle.c)} r={3} className="fill-foreground"/></>}
     </g>;})()}
-  </svg><p className={`mt-2 text-xs font-medium ${comparison?.agrees===true?'text-call':comparison?.agrees===false?'text-put':'text-muted-foreground'}`}>{!comparison?'Aguardando fechamento da vela':comparison.agrees===null?'Vela sem variação':comparison.agrees?'Previsão acertou a direção da vela':'Vela fechou contra a previsão'}</p><p className="mt-1 text-[10px] text-muted-foreground">Comparação da abertura ao fechamento da vela; pode diferir do resultado da ordem na IQ Option.</p></>;
+    {nextCandle && <g><rect x={candles.findIndex(k=>k.t===entry+60)*step} width={step} y={0} height={H} className="fill-accent/20"/><text x={candles.findIndex(k=>k.t===entry+60)*step+step/2} y={H-4} textAnchor="middle" className="fill-foreground text-[10px]">+1</text></g>}
+   </svg><p className="mt-2 text-xs text-muted-foreground">Próxima vela: {nextCandle?nextCandle.c>nextCandle.o?'↑ Alta':nextCandle.c<nextCandle.o?'↓ Queda':'= Empate':'aguardando fechamento'}</p><p className={`mt-2 text-xs font-medium ${comparison?.agrees===true?'text-call':comparison?.agrees===false?'text-put':'text-muted-foreground'}`}>{!comparison?'Aguardando fechamento da vela':comparison.agrees===null?'Vela sem variação':comparison.agrees?'Previsão acertou a direção da vela':'Vela fechou contra a previsão'}</p><p className="mt-1 text-[10px] text-muted-foreground">Comparação da abertura ao fechamento da vela; pode diferir do resultado da ordem na IQ Option.</p></>;
 }

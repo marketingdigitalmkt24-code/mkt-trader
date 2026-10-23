@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { allStrategyRows, strategyStats as summarizeStrategyStats, strategyAccuracyDisplay, type StrategyStat } from '@/lib/strategy-stats';
+import { allStrategyRows, strategyStats as summarizeStrategyStats, type StrategyStat } from '@/lib/strategy-stats';
 
 interface SignalEntry {
   id: string;
@@ -23,7 +23,7 @@ const strategyLabels: Record<string, string> = {
   THREE_FORCE: 'Após 3 Velas de Força',
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
-  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'forca sem',
+  FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'FORCA SEM',
   FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',
@@ -61,7 +61,7 @@ export function AIAnalysisStatusCard() {
       });
       if (mounted.current) {
         const stats = summarizeStrategyStats(rows);
-        setStrategyStats(strategyAccuracyDisplay(stats));
+        setStrategyStats(stats);
       }
     } catch {
       // silent

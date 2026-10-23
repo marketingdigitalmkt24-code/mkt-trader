@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
 import { allDemoOutcomes, demoTestStats } from '@/lib/demo-test-stats';
+import { demoChartComparison } from '@/lib/demo-chart-comparison';
 
 export function DemoTestOperations() {
  const [page,setPage]=useState(0);
@@ -35,7 +36,7 @@ export function DemoTestOperations() {
  <span className={row.direction==='CALL'?'text-call':'text-put'}>{row.direction}</span><span className="text-muted-foreground">{row.entry_strategy==='CONTINUACAO_QUEDA_V1'?'Queda':row.entry_strategy==='TETO_V1'?'Teto':row.entry_strategy}</span>
  <span className="text-muted-foreground font-mono text-[10px]">{Number(row.amount).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</span>
  <span className="ml-auto font-mono">{row.status==='confirmed'?(row.result==='pending'?'ABERTA':`${row.result.toUpperCase()} · ${Number(row.profit).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}`):row.status==='failed'?'NÃO ENVIADA':row.status==='unknown'?'SEM CONFIRMAÇÃO':'AGUARDANDO'}</span>
- </div></HoverCardTrigger><HoverCardContent className="w-80"><p className="mb-1 text-xs font-medium">{row.asset} · velas da operação</p><MiniChart candles={data.charts.get(row.signal_id)} direction={row.direction} entry={Date.parse(row.entry_minute)/1000}/></HoverCardContent></HoverCard>)}</div>}
+  </div></HoverCardTrigger><HoverCardContent className="w-80 max-w-[calc(100vw-2rem)]"><p className="mb-1 text-xs font-medium">{row.asset} · previsão × fechamento</p><MiniChart candles={data.charts.get(row.signal_id)} direction={row.direction} entry={Date.parse(row.entry_minute)/1000}/><p className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">IQ Option: {row.result==='pending'?'aguardando resultado':row.result.toUpperCase()}</p></HoverCardContent></HoverCard>)}</div>}
  {(data?.count || 0)>10 && <div className="mt-2 flex items-center justify-between"><Button variant="ghost" size="sm" disabled={page===0} onClick={()=>setPage(p=>p-1)}><ChevronLeft className="h-3 w-3"/>Anterior</Button><span className="text-xs text-muted-foreground">{page+1}/{Math.ceil((data?.count || 0)/10)}</span><Button variant="ghost" size="sm" disabled={(page+1)*10>=(data?.count || 0)} onClick={()=>setPage(p=>p+1)}>Próxima<ChevronRight className="h-3 w-3"/></Button></div>}
  </section>;
 }
@@ -43,15 +44,18 @@ export function DemoTestOperations() {
 type Candle={t:number;o:number;c:number;h:number;l:number};
 function MiniChart({candles,direction,entry}:{candles?:Candle[]|null;direction:string;entry:number}){
  if(!candles?.length)return <p className="text-xs text-muted-foreground">Gráfico indisponível para esta operação (registrada antes do salvamento das velas).</p>;
- const W=288,H=140,hi=Math.max(...candles.map(k=>k.h)),lo=Math.min(...candles.map(k=>k.l)),span=hi-lo||1,step=(W-20)/(candles.length+(candles.some(k=>k.t===entry)?0:1));
+  const comparison=demoChartComparison(candles,entry,direction);
+  const W=288,H=140,hi=Math.max(...candles.map(k=>k.h)),lo=Math.min(...candles.map(k=>k.l)),span=hi-lo||1,step=(W-20)/(candles.length+(candles.some(k=>k.t===entry)?0:1));
  const y=(v:number)=>4+(hi-v)/span*(H-8);
- return <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Velas antes da entrada">
+  return <><div className="mb-2 flex flex-wrap items-center gap-2 text-xs"><span className={direction==='CALL'?'text-call':'text-put'}>Previsão: {direction==='CALL'?'↑ Alta · CALL':'↓ Queda · PUT'}</span><span className="text-muted-foreground">Fechou: {comparison ? comparison.movement==='up'?'↑ Alta':comparison.movement==='down'?'↓ Queda':'= Empate' : 'aguardando'}</span></div><svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Velas da operação, direção prevista e fechamento real">
   {candles.map((k,i)=>{const x=i*step+step/2,up=k.c>=k.o,cls=up?'fill-call stroke-call':'fill-put stroke-put';return <g key={k.t} className={cls}>
    <line x1={x} x2={x} y1={y(k.h)} y2={y(k.l)} strokeWidth={1}/>
    <rect x={x-step*0.35} width={step*0.7} y={y(Math.max(k.o,k.c))} height={Math.max(1,Math.abs(y(k.o)-y(k.c)))}/></g>;})}
-  {(()=>{const i=candles.findIndex(k=>k.t===entry),x=(i<0?candles.length:i)*step,has=i>=0;return <g>
+   {(()=>{const i=candles.findIndex(k=>k.t===entry),x=(i<0?candles.length:i)*step;return <g>
    <rect x={x} width={step} y={0} height={H} className="fill-primary/10"/>
    <line x1={x} x2={x} y1={0} y2={H} className="stroke-muted-foreground" strokeDasharray="3 3"/>
-   <text x={x+2} y={direction==='CALL'?H-4:12} className={`text-[10px] ${direction==='CALL'?'fill-call':'fill-put'}`}>{direction==='CALL'?'▲':'▼'}{has?'':' aguardando'}</text></g>;})()}
- </svg>;
+    <text x={x+2} y={direction==='CALL'?H-4:12} className={`text-[10px] ${direction==='CALL'?'fill-call':'fill-put'}`}>{direction==='CALL'?'▲':'▼'}</text>
+    {comparison && <><line x1={x+step/2} x2={W} y1={y(comparison.candle.c)} y2={y(comparison.candle.c)} className="stroke-foreground" strokeDasharray="2 2"/><circle cx={x+step/2} cy={y(comparison.candle.c)} r={3} className="fill-foreground"/></>}
+    </g>;})()}
+  </svg><p className={`mt-2 text-xs font-medium ${comparison?.agrees===true?'text-call':comparison?.agrees===false?'text-put':'text-muted-foreground'}`}>{!comparison?'Aguardando fechamento da vela':comparison.agrees===null?'Vela sem variação':comparison.agrees?'Previsão acertou a direção da vela':'Vela fechou contra a previsão'}</p><p className="mt-1 text-[10px] text-muted-foreground">Comparação da abertura ao fechamento da vela; pode diferir do resultado da ordem na IQ Option.</p></>;
 }

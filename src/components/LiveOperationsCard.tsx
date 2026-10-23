@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { expandTestObservations } from '@/lib/live-test-observations';
 import { linkedForceBrokerResult, type TestBrokerResult } from '@/lib/test-broker-result';
 import { isLiveBrokerOperation, LIVE_OPERATIONS_DISPLAY_CUTOFF } from '@/lib/live-operations';
+import { DemoTestOperations } from './DemoTestOperations';
 
 interface OpenPosition {
   id: string;
@@ -440,6 +441,7 @@ export function LiveOperationsCard() {
         </div>
 
         {/* IQ Option Recent Trades */}
+        <DemoTestOperations />
         <div>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">

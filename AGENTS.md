@@ -25,4 +25,4 @@
 - Recent operations cache/prefetch pages, count page one, invalidate on results; why: avoid recounting on navigation.
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.
 - Force anticipation uses per-signal service-only reservations and serialized daily-budget claims, not a strategy-wide concurrency lease; why: distinct authorized signals may execute simultaneously without duplicates or exceeding daily slots.
-- Forming Force observations use a separate TEST-only namespace in force_anticipation_tests, service-scheduled boundary observation plus current-candle snapshots, operation-time market/expiry gating, actual quote/time, first-write deduplication and independent close-time confirmation; why: start prospectively without backdating or real-claim promotion.
+- Forming Force uses a separate TEST-only namespace, bounded scheduled observations with market/expiry gating and actual quote/time; independent totals and ranged page queries share a tested page-size helper; why: prevent backdating, real promotion and navigation reloads.

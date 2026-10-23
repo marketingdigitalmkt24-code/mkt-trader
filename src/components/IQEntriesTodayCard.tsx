@@ -88,6 +88,7 @@ export const IQEntriesTodayCard = () => {
                 <span className="ml-1 w-16 text-right font-mono">
                   {o.result === 'win' ? <span className="text-emerald-500">+{Number(o.profit).toFixed(2)}</span>
                     : o.result === 'loss' ? <span className="text-rose-500">{Number(o.profit).toFixed(2)}</span>
+                    : ['tie', 'draw', 'equal'].includes(o.result) ? <span className="text-muted-foreground">empate</span>
                     : <span className="text-muted-foreground">aberta</span>}
                 </span>
               </div>

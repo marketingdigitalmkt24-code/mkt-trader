@@ -1,5 +1,5 @@
 import { test, expect, describe, it } from 'bun:test';
-import { demoCeiling, demoLearningAdjustment, chartFeatures, chartPatternAdjustment } from './demo-continuation';
+import { demoCeiling, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, similarToReference, DEMO_REFERENCE_MAX_DISTANCE } from './demo-continuation';
 import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION } from './demo-continuation';
 const entry = 1792783500;
 function candles() {
@@ -33,7 +33,7 @@ test('chooses one Demo winner without relabeling original candidate',()=>{
  expect(chooseDemoCandidate([original,pattern])).toEqual(pattern);
  expect(original.entry_strategy).toBe('TENDENCIA');
  expect(chooseDemoCandidate([original,{...pattern,_score:1}])).toEqual(original);
-});import { demoCeiling } from './demo-continuation';
+});
 describe('demoCeiling', () => {
  const entry = 6000*60;
  const base = () => Array.from({length:100},(_,i)=>({t:entry-(100-i)*60,o:100,c:100.1,h:100.2,l:99.9}));
@@ -57,9 +57,11 @@ describe('chart pattern learning', () => {
  const entry = 6000*60;
  const mk = (up: boolean) => Array.from({length:21},(_,i)=>({t:entry-(20-i)*60,o:100,c:up?101:99,h:101.2,l:98.8}));
  it('ignores the result candle and learns similar shapes', () => {
-  const a = chartFeatures(mk(true),entry,'CALL')!;
+  const a = chartFeatures(mk(true),entry,'CALL');
+  if (!a) throw new Error('missing bullish features');
   expect(chartFeatures([...mk(true),{t:entry,o:1,c:500,h:500,l:1}],entry,'CALL')).toEqual(a);
-  const b = chartFeatures(mk(false),entry,'CALL')!;
+  const b = chartFeatures(mk(false),entry,'CALL');
+  if (!b) throw new Error('missing bearish features');
   const samples = [...Array(4)].flatMap(() => [{f:a,result:'win'},{f:b,result:'loss'}]);
   expect(chartPatternAdjustment(samples,a)).toBeGreaterThan(0);
   expect(chartPatternAdjustment(samples,b)).toBeLessThan(0);
@@ -67,10 +69,18 @@ describe('chart pattern learning', () => {
  });
 });
 
-Deno.test('reference filter rejects missing or distant charts', async () => {
-  const { similarToReference } = await import('./demo-continuation.ts');
+test('wider GEV tolerance accepts formerly rejected shapes without removing the minimum', () => {
   const ref = Array(21).fill(0.2);
-  if (!similarToReference(ref, ref.map(v => v + 0.1))) throw new Error('near rejected');
-  if (similarToReference(ref, ref.map(v => v + 0.5))) throw new Error('far accepted');
-  if (similarToReference(null, ref)) throw new Error('missing accepted');
+  const newlyEligible = ref.map(v => v + 0.25);
+  expect(DEMO_REFERENCE_MAX_DISTANCE).toBe(1.3);
+  expect(similarToReference(ref, newlyEligible, 0.9)).toBe(false);
+  expect(similarToReference(ref, newlyEligible)).toBe(true);
+});
+test('reference filter rejects missing or distant charts', () => {
+  const ref = Array(21).fill(0.2);
+  expect(similarToReference(ref, ref.map(v => v + 0.1))).toBe(true);
+  expect(similarToReference(ref, ref.map(v => v + 0.5))).toBe(false);
+  expect(similarToReference(null, ref)).toBe(false);
+  expect(similarToReference(ref, null)).toBe(false);
+  expect(similarToReference(ref, [0.2])).toBe(false);
 });

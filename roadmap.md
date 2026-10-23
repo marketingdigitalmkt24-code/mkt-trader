@@ -1,6 +1,6 @@
 # Vela de Força em formação — TESTE (23/10)
 - [x] Observar desde :00 (escolha confirmada), registrar horário/preço observados e verificar ativo aberto na operação; 20 testes passaram e rotina publicada, sem retroagir nem abrir ordens IQ.
-- [ ] Confirmar primeiro novo registro automático com início :00 e mercado verificado — depende da próxima vela elegível; nenhum sinal forçado.
+- [x] Confirmado registro automático: 03:04 BRT, 12 ativos distintos, observação iniciada :00 e detecção :15/:30/:45 com mercado verificado; apenas TESTE, nenhum sinal forçado.
 - [x] Detectar corpo >2×média20 durante o próprio minuto (:15/:30/:45), com preço/horário observados; confirmar no fechamento sem filtrar falhas, namespace TESTE separado.
 - [x] Publicado e conferido na rotina automática (93 ativos, 4 rodadas); 32 testes passaram; painel autenticado exibiu 9 resultados, 3 WIN/6 LOSS e 4 velas confirmadas, sem erros. Nenhuma ordem IQ, copy ou Telegram da nova regra; :00 ou cobertura de todos os sinais não garantidos.
 

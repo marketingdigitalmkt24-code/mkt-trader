@@ -1,4 +1,5 @@
 # Testes executados na Demo
+- [ ] Trocar assertividade por estratégias enviadas na Demo e reiniciar contagem anterior sem apagar ordens ou alterar demais totais; testar e conferir painel.
 - [x] Criar Continuação de queda Demo separada (corpo ≥70%, pavio inferior ≤10%, médias em queda, até 3 vermelhas; 100 velas fechadas contíguas); competir com seleção atual em ledger exclusivo, sem alterar claims principais. 16 testes aprovados, duas funções publicadas, painel e build OK; seleção prospectiva 16:30 VELA_FORCA registrada.
 - [ ] Conferir primeira ordem Continuação de queda e resultado — depende do padrão aparecer e vencer a seleção em mercado M1 aberto; não forçar nem repetir histórico.
 - [x] Comparação somente leitura do padrão AMZN/ALIBABA-OTC 16:22: 25 sinais Tendência com 100 velas anteriores; aproximação primeira vela PUT/pavio inferior ≤10%/extensão ≤1,5 ATR encontrou referência WIN +0,83 e BONK 16:18 LOSS -1. Amostra insuficiente, corpo grande não medido pelo estudo atual; nenhuma regra automática alterada.

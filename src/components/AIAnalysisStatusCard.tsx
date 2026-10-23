@@ -4,7 +4,8 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { allStrategyRows, strategyStats as summarizeStrategyStats, strategyAccuracyDisplay, type StrategyStat } from '@/lib/strategy-stats';
+import type { StrategyStat } from '@/lib/strategy-stats';
+import { allDemoStrategyRows, demoStrategyStats, DEMO_STRATEGY_CUTOFF } from '@/lib/demo-strategy-stats';
 
 interface SignalEntry {
   id: string;
@@ -16,6 +17,7 @@ interface SignalEntry {
 
 const strategyLabels: Record<string, string> = {
   TENDENCIA: 'Tendência',
+  CONTINUACAO_QUEDA_V1: 'Continuação de queda',
   TENDENCIA_3_LOSS_PUT: 'Tendência 3 perdas → Venda',
   TREND_WIN_LOSS_FORCE_LOSS: 'Retomada',
   TENDENCIA_V1: 'Tendência V1',
@@ -48,20 +50,17 @@ export function AIAnalysisStatusCard() {
     if (statsBusy.current) { statsQueued.current = true; return; }
     statsBusy.current = true;
     try {
-      const rows = await allStrategyRows(async (from, to) => {
-        const { data, error } = await supabase.from('operation_results')
-          .select('entry_strategy, result, timeframe, test_sequence_strategy, test_inverted_strategy')
-          .or('timeframe.is.null,timeframe.neq.MT5')
-          .not('signal_id', 'like', 'mt5-%').not('signal_id', 'like', 'copy-%')
-          .not('entry_strategy', 'is', null)
+      const rows = await allDemoStrategyRows(async (from, to) => {
+        const { data, error } = await supabase.from('iq_demo_test_orders')
+          .select('entry_strategy,result,status,profit,iq_option_id,entry_minute')
+          .eq('status','confirmed').not('iq_option_id','is',null)
           .order('created_at', { ascending: true }).order('id', { ascending: true })
           .range(from, to);
         if (error) throw error;
         return data ?? [];
       });
       if (mounted.current) {
-        const stats = summarizeStrategyStats(rows);
-        setStrategyStats(strategyAccuracyDisplay(stats));
+        setStrategyStats(demoStrategyStats(rows));
       }
     } catch {
       // silent
@@ -125,7 +124,7 @@ export function AIAnalysisStatusCard() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trading_signals' }, () => {
         fetchSignals();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'iq_demo_test_orders' }, () => {
         void fetchStrategyStats();
       })
       .subscribe(status => { if (status === 'SUBSCRIBED') void fetchStrategyStats(); });
@@ -241,8 +240,9 @@ export function AIAnalysisStatusCard() {
           <div className="mt-3 pt-3 border-t border-border/40">
             <div className="flex items-center gap-1.5 mb-2">
               <Target className="w-3.5 h-3.5 text-gold" />
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Assertividade por estratégia · Todo o histórico</span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Assertividade por estratégia · Demo</span>
             </div>
+            <p className="mb-2 text-[10px] text-muted-foreground">Desde {new Date(DEMO_STRATEGY_CUTOFF).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
             <div className="space-y-1">
               {strategyStats.map(stat => {
                 const settled = stat.wins + stat.losses;

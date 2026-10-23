@@ -1,7 +1,8 @@
 # Testes executados na Demo
-- [ ] Executar sinal TESTE selecionado por minuto na Demo por US$1, com duplicatas bloqueadas e ordens simultâneas independentes.
-- [ ] Conciliar resultado por ID IQ exato e exibir em Últimas operações sem Telegram, copy, Entradas IQ ou Resultado de Hoje.
-- [ ] Testar isolamento, publicar e conferir ordem prospectiva; nunca reenviar histórico.
+- [x] Executor e agendamento publicados para sinal TESTE selecionado por minuto na Demo USD por US$1, com unicidade por minuto e ordens simultâneas independentes.
+- [x] Ledger separado e conciliação por ID IQ exato; lista Demo autenticada conferida sem Telegram, copy ou inclusão em Entradas IQ/Resultado de Hoje. O saldo Demo da própria corretora será afetado.
+- [x] Oito testes de valor, conta, frescor e isolamento aprovados; build OK.
+- [ ] Confirmar primeira ordem e resultado prospectivos — ainda nenhum novo sinal fresco executado após ativação; não reenviar histórico nem forçar ordens.
 
 # Últimas operações somente reais
 - [x] Limpar a exibição a partir de 23/10 15:39:21 BRT e mostrar só ordens principais confirmadas na IQ Option; registros e Resultado de Hoje preservados.

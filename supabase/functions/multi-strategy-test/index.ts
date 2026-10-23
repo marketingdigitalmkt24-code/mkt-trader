@@ -12,7 +12,7 @@ import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequ
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { combinedTestObservations, COMPARISON_PREFIX } from '../_shared/combined-strategy-tests.ts';
 import { anticipationResult } from '../_shared/force-anticipation-test.ts';
-import { iqMarketOpen, type IQMarketAsset } from '../_shared/iq-market-open.ts';
+import type { IQMarketAsset } from '../_shared/iq-market-open.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
           const s = symbolOf(a.name);
           const markets = marketByAsset.get(s) || [];
           markets.push(a); marketByAsset.set(s,markets);
-          if ((!a.enabled || a.is_suspended) && !(comparisonOpen.data || []).some(r=>r.asset===s)) continue;
+          if (!a.enabled || a.is_suspended) continue;
           if (!cand.has(s)) cand.set(s, Number(id));
         }
         pending = cand.size;

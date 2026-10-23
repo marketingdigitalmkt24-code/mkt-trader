@@ -1,11 +1,14 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { DEMO_TEST_AMOUNT, demoBalance, freshDemoTest } from './policy.ts';
 const schema = z.object({ candidate: z.string().max(200).optional() }).strict();
-const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: corsHeaders });
+const reply = (body: unknown, status = 200) => {
+ console.log('Demo test response:', JSON.stringify({ status, ...body as Record<string, unknown> }));
+ return Response.json(body, { status, headers: corsHeaders });
+};
 const symbol = (raw: string) => {
  let s = raw.toUpperCase().replace('FRONT.', '').replace('-OP', '');
  const otc = s.includes('-OTC'); s = s.replace('-OTC', '');
@@ -41,13 +44,20 @@ Deno.serve(async req => {
  const { data: pending } = await db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000);
  let candidate: any = null;
  if (parsed.data.candidate) {
- const { data } = await db.from('operation_results').select('signal_id,asset,direction,created_at,timeframe,entry_strategy').eq('signal_id',parsed.data.candidate).maybeSingle();
+ // Scheduler delivery can lag one minute. Never roll the old candidate forward:
+ // independently read this minute's newly selected signal, then enforce its own freshness.
+ const { data, error } = await db.from('operation_results').select('signal_id,asset,direction,created_at,timeframe,entry_strategy')
+   .eq('timeframe','TEST').like('signal_id','t7-%')
+   .gte('created_at',new Date(Math.floor(Date.now()/60000)*60000).toISOString())
+   .order('created_at',{ascending:false}).limit(1).maybeSingle();
  if (data && freshDemoTest(data,Date.now())) candidate=data;
+ else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
  let reserved: string | null = null;
  if (candidate) {
  const { data, error } = await db.from('iq_demo_test_orders').insert({ signal_id:candidate.signal_id,entry_minute:candidate.created_at,asset:candidate.asset,direction:candidate.direction,entry_strategy:candidate.entry_strategy || 'UNKNOWN',expiration_time:new Date(Date.parse(candidate.created_at)+60000).toISOString() }).select('id').single();
  if (!error && data) reserved=data.id;
+ else console.log('Demo reservation rejected:',error?.code);
  }
  let placed = false, confirmed = false, updated = 0;
  const writes: Promise<unknown>[]=[];

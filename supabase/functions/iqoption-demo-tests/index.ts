@@ -44,7 +44,12 @@ Deno.serve(async req => {
  const { data: pending } = await db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000);
  let candidate: any = null;
  if (parsed.data.candidate) {
- const { data, error } = await db.from('operation_results').select('signal_id,asset,direction,created_at,timeframe,entry_strategy').eq('signal_id',parsed.data.candidate).maybeSingle();
+ // Scheduler delivery can lag one minute. Never roll the old candidate forward:
+ // independently read this minute's newly selected signal, then enforce its own freshness.
+ const { data, error } = await db.from('operation_results').select('signal_id,asset,direction,created_at,timeframe,entry_strategy')
+   .eq('timeframe','TEST').like('signal_id','t7-%')
+   .gte('created_at',new Date(Math.floor(Date.now()/60000)*60000).toISOString())
+   .order('created_at',{ascending:false}).limit(1).maybeSingle();
  if (data && freshDemoTest(data,Date.now())) candidate=data;
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }

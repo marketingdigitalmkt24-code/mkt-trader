@@ -179,6 +179,63 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_demo_test_orders: {
+        Row: {
+          account_type: string
+          amount: number
+          asset: string
+          created_at: string
+          direction: string
+          entry_minute: string
+          entry_strategy: string
+          error: string | null
+          expiration_time: string
+          id: string
+          iq_option_id: string | null
+          profit: number
+          result: string
+          settled_at: string | null
+          signal_id: string
+          status: string
+        }
+        Insert: {
+          account_type?: string
+          amount?: number
+          asset: string
+          created_at?: string
+          direction: string
+          entry_minute: string
+          entry_strategy: string
+          error?: string | null
+          expiration_time: string
+          id?: string
+          iq_option_id?: string | null
+          profit?: number
+          result?: string
+          settled_at?: string | null
+          signal_id: string
+          status?: string
+        }
+        Update: {
+          account_type?: string
+          amount?: number
+          asset?: string
+          created_at?: string
+          direction?: string
+          entry_minute?: string
+          entry_strategy?: string
+          error?: string | null
+          expiration_time?: string
+          id?: string
+          iq_option_id?: string | null
+          profit?: number
+          result?: string
+          settled_at?: string | null
+          signal_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       iq_display_reset: {
         Row: {
           cutoff: string

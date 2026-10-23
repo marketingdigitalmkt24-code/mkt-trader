@@ -232,6 +232,13 @@
       "when": 1792692394994,
       "tag": "0032_release_copy_lease_when_master_failed",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792781271672,
+      "tag": "0033_isolated_iq_demo_test_orders",
+      "breakpoints": true
     }
   ]
 }

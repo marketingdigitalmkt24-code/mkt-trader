@@ -260,6 +260,13 @@
       "when": 1792783715379,
       "tag": "0036_demo_minute_candidate_selection",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792785410895,
+      "tag": "0037_demo_candidate_candles",
+      "breakpoints": true
     }
   ]
 }

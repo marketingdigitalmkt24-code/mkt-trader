@@ -182,6 +182,7 @@ export type Database = {
       iq_demo_test_candidates: {
         Row: {
           asset: string
+          candles: Json | null
           created_at: string
           direction: string
           entry_minute: string
@@ -191,6 +192,7 @@ export type Database = {
         }
         Insert: {
           asset: string
+          candles?: Json | null
           created_at?: string
           direction: string
           entry_minute: string
@@ -200,6 +202,7 @@ export type Database = {
         }
         Update: {
           asset?: string
+          candles?: Json | null
           created_at?: string
           direction?: string
           entry_minute?: string

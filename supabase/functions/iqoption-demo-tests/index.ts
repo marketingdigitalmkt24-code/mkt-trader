@@ -3,7 +3,7 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
-import { DEMO_TEST_AMOUNT, demoBalance, freshDemoTest, validDemoTestAmount } from './policy.ts';
+import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount } from './policy.ts';
 import { demoHistoryOutcome } from './history.ts';
 const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional() }).strict();
 const reply = (body: unknown, status = 200) => {
@@ -47,11 +47,10 @@ Deno.serve(async req => {
  if (parsed.data.candidate) {
  // Scheduler delivery can lag one minute. Never roll the old candidate forward:
  // independently read this minute's newly selected signal, then enforce its own freshness.
- const { data, error } = await db.from('operation_results').select('signal_id,asset,direction,created_at,timeframe,entry_strategy')
-   .eq('timeframe','TEST').like('signal_id','t7-%')
-   .gte('created_at',new Date(Math.floor(Date.now()/60000)*60000).toISOString())
-   .order('created_at',{ascending:false}).limit(1).maybeSingle();
- if (data && freshDemoTest(data,Date.now())) candidate=data;
+ const { data: selected, error } = await db.from('iq_demo_test_candidates').select('signal_id,asset,direction,entry_minute,entry_strategy')
+   .eq('entry_minute',new Date(Math.floor(Date.now()/60000)*60000).toISOString()).maybeSingle();
+ const data = selected ? {...selected,created_at:selected.entry_minute,timeframe:'TEST'} : null;
+ if (data && freshDemoCandidate(data,Date.now())) candidate=data;
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
  let reserved: string | null = null;
@@ -103,7 +102,7 @@ Deno.serve(async req => {
  initialized=true;
  const expiry=Date.parse(candidate.created_at)/1000+60;
  const found=Object.entries<any>(d.msg?.turbo?.actives || {}).find(([,a])=>symbol(a.name || '')===candidate.asset && iqMarketOpen(a,Math.floor(Date.now()/1000),expiry));
- if(!found || !freshDemoTest(candidate,Date.now())) {
+ if(!found || !freshDemoCandidate(candidate,Date.now())) {
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).then(()=>{}));
  if(!pending?.length) finish();return;
  }

@@ -1,4 +1,5 @@
 # Testes executados na Demo
+- [ ] Criar Continuação de queda Demo separada; competir com a seleção atual sem alterar sinais principais, testar isolamento e conferir execução prospectiva.
 - [x] Comparação somente leitura do padrão AMZN/ALIBABA-OTC 16:22: 25 sinais Tendência com 100 velas anteriores; aproximação primeira vela PUT/pavio inferior ≤10%/extensão ≤1,5 ATR encontrou referência WIN +0,83 e BONK 16:18 LOSS -1. Amostra insuficiente, corpo grande não medido pelo estudo atual; nenhuma regra automática alterada.
 - [x] Consulta atual ALIBABA confirmou aberta somente em binary, ID1908, expiração disponível 900s (15min), ausente de turbo/M1. Bloqueio Demo M1 mantido; sem ordem retroativa nem mudança de prazo. Diagnóstico somente leitura publicado, 10 testes e build OK. MSFT não inspecionada ao vivo nesta consulta.
 - [x] Valor entrada de teste Demo configurável separadamente no Auto Trading; US$1 salvo e conferido após recarregar, executor publicado usa valor persistido e grava por ordem. Dez testes aprovados e build OK; preservados histórico e valores principais/clientes. Valor diferente não enviado sem escolha do usuário.

@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { expandTestObservations } from '@/lib/live-test-observations';
 import { linkedForceBrokerResult, type TestBrokerResult } from '@/lib/test-broker-result';
-import { LIVE_OPERATIONS_DISPLAY_CUTOFF } from '@/lib/live-operations';
+import { isLiveBrokerOperation, LIVE_OPERATIONS_DISPLAY_CUTOFF } from '@/lib/live-operations';
 
 interface OpenPosition {
   id: string;
@@ -221,7 +221,7 @@ export function LiveOperationsCard() {
       const from = (requestedPage - 1) * PAGE_SIZE;
       const { data, count, error } = await brokerOperations(supabase
         .from('operation_results')
-        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy', requestedPage === 1 ? { count: 'exact' } : {}))
+        .select('id, asset, direction, result, profit, created_at, is_auto_trade, timeframe, signal_id, entry_strategy, telegram_sent, test_sequence_strategy, test_inverted_strategy, iq_option_id', requestedPage === 1 ? { count: 'exact' } : {}))
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
@@ -248,7 +248,7 @@ export function LiveOperationsCard() {
       ]));
       return {
         linkedOrders: brokerOrders || [],
-        trades: data.map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[],
+        trades: data.filter(isLiveBrokerOperation).map(trade => ({ ...trade, strategy: strategies.get(trade.signal_id) || '' })) as RecentTrade[],
         count,
       };
   };
@@ -262,7 +262,7 @@ export function LiveOperationsCard() {
     else if (navigation) setPageLoading(true);
     try {
       const result = await queryClient.fetchQuery({
-        queryKey: ['live-operations-page', requestedPage],
+        queryKey: ['live-operations-page', LIVE_OPERATIONS_DISPLAY_CUTOFF, requestedPage],
         queryFn: () => loadRecentPage(requestedPage),
         staleTime: 15000,
       });
@@ -274,7 +274,7 @@ export function LiveOperationsCard() {
       if (typeof result.count === 'number') setTotalCount(result.count);
       if (result.trades.length === PAGE_SIZE) {
         void queryClient.prefetchQuery({
-          queryKey: ['live-operations-page', requestedPage + 1],
+          queryKey: ['live-operations-page', LIVE_OPERATIONS_DISPLAY_CUTOFF, requestedPage + 1],
           queryFn: () => loadRecentPage(requestedPage + 1),
           staleTime: 15000,
         });

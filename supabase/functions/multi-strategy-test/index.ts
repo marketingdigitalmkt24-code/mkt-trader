@@ -10,7 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoContinuation, demoCeiling, DEMO_CEILING, chooseDemoCandidate, DEMO_CONTINUATION, type DemoCandidate } from '../_shared/demo-continuation.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -232,6 +232,10 @@ Deno.serve(async (req) => {
     if (pattern) demoPatterns.push({signal_id:`demo-continuation-v1-${asset}-${curMin}`,asset,direction:'PUT',
       entry_strategy:DEMO_CONTINUATION,created_at:new Date(curMin*1000).toISOString(),
       _score:fired.filter(([,direction])=>direction==='PUT').length+0.99*pattern.bodyRatio});
+    const ceiling = demoCeiling(cs,curMin);
+    if (ceiling) demoPatterns.push({signal_id:`demo-teto-v1-${asset}-${curMin}`,asset,direction:'PUT',
+      entry_strategy:DEMO_CEILING,created_at:new Date(curMin*1000).toISOString(),
+      _score:fired.filter(([,direction])=>direction==='PUT').length+0.99*ceiling.match});
     // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
     const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
     const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];

@@ -1,4 +1,5 @@
-import { test, expect } from 'bun:test';
+import { test, expect, describe, it } from 'bun:test';
+import { demoCeiling } from './demo-continuation';
 import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION } from './demo-continuation';
 const entry = 1792783500;
 function candles() {
@@ -32,4 +33,13 @@ test('chooses one Demo winner without relabeling original candidate',()=>{
  expect(chooseDemoCandidate([original,pattern])).toEqual(pattern);
  expect(original.entry_strategy).toBe('TENDENCIA');
  expect(chooseDemoCandidate([original,{...pattern,_score:1}])).toEqual(original);
+});import { demoCeiling } from './demo-continuation';
+describe('demoCeiling', () => {
+ const entry = 6000*60;
+ const base = () => Array.from({length:100},(_,i)=>({t:entry-(100-i)*60,o:100,c:100.1,h:100.2,l:99.9}));
+ it('PUT when green returns to red top', () => {
+  const cs=base(); cs[98]={...cs[98],o:110,c:100,h:110.2,l:99.8}; cs[99]={...cs[99],o:100,c:110,h:110.3,l:99.9};
+  expect(demoCeiling(cs,entry)?.direction).toBe('PUT');
+  cs[99]={...cs[99],c:105,h:105.1}; expect(demoCeiling(cs,entry)).toBeNull();
+ });
 });

@@ -4,6 +4,7 @@ import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { DEMO_TEST_AMOUNT, demoBalance, freshDemoTest } from './policy.ts';
+import { demoHistoryOutcome } from './history.ts';
 const schema = z.object({ candidate: z.string().max(200).optional() }).strict();
 const reply = (body: unknown, status = 200) => {
  console.log('Demo test response:', JSON.stringify({ status, ...body as Record<string, unknown> }));
@@ -63,7 +64,8 @@ Deno.serve(async req => {
  const writes: Promise<unknown>[]=[];
  await new Promise<void>(resolve => {
  const ws = new WebSocket('wss://iqoption.com/echo/websocket');
- let balanceId=0, finished=false, initialized=false, histories=0;
+ let balanceId=0, finished=false, initialized=false, histories=0, profileReceived=false;
+ const historyResponses = new Set<string>();
  const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);ws.close();resolve();};
  const timer=setTimeout(finish,25000);
  const send=(name:string,version:string,body:unknown,request_id?:string)=>ws.send(JSON.stringify({name:'sendMessage',request_id,msg:{name,version,body}}));
@@ -72,10 +74,14 @@ Deno.serve(async req => {
  ws.onmessage=async ev=>{
  try {
  const d=JSON.parse(ev.data);
- if(d.name==='profile') {
+ if(d.name==='profile' && !profileReceived) {
+ profileReceived=true;
  const balance=demoBalance(d.msg?.balances || []);
  if(!balance){finish();return;} balanceId=balance.id;
- if(pending?.length) for(const offset of [0,300,600]) send('portfolio.get-history-positions','2.0',{user_balance_id:balanceId,instrument_types:['binary-option','turbo-option','digital-option'],limit:300,offset},`h${offset}`);
+ if(pending?.length) for(const offset of [0,300,600]) {
+ send('portfolio.get-history-positions','2.0',{user_balance_id:balanceId,instrument_types:['binary-option','turbo-option','digital-option'],limit:300,offset},`portfolio-${offset}`);
+ send('get-history-positions','1.0',{user_balance_id:balanceId,instrument_types:['turbo'],limit:300,offset},`legacy-${offset}`);
+ }
  if(reserved) send('get-initialization-data','3.0',{});
  else if(!pending?.length) finish();
  }
@@ -94,26 +100,24 @@ Deno.serve(async req => {
  if(d.name==='option' && placed && !confirmed && reserved && /^\d+$/.test(String(d.msg?.id || ''))) {
  confirmed=true;
  writes.push(db.from('iq_demo_test_orders').update({status:'confirmed',iq_option_id:String(d.msg.id),created_at:new Date().toISOString()}).eq('id',reserved).then(()=>{}));
- if(!pending?.length || histories>=3) finish();
+ if(!pending?.length || histories>=6) finish();
  }
  if((d.name==='error' || d.name==='result') && d.request_id==='demo-test' && !confirmed && reserved) {
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Broker refused demo order'}).eq('id',reserved).then(()=>{}));
- if(!pending?.length || histories>=3) finish();
+ if(!pending?.length || histories>=6) finish();
  }
- if(d.name==='history-positions' || d.name==='portfolio.get-history-positions') {
- histories++;
- for(const pos of d.msg?.positions || d.msg?.history || (Array.isArray(d.msg)?d.msg:[])) {
- if(!(pos.status==='closed' || pos.close_time || pos.close_at))continue;
- const ids=[pos.id,pos.order_id,...(pos.order_ids || [])].map(String);
- const match=pending?.find(p=>p.iq_option_id && ids.includes(p.iq_option_id));if(!match)continue;
- let profit=Number(pos.pnl_net ?? pos.pnl ?? pos.close_profit ?? pos.profit ?? pos.close_profit_amount ?? pos.net_profit);
- if(!Number.isFinite(profit) && pos.win_amount != null)profit=Number(pos.win_amount)-Number(pos.amount ?? pos.invest ?? pos.investment ?? pos.buy_amount ?? pos.open_amount);
- if(!Number.isFinite(profit))continue;
- const raw=pos.raw_event?.binary_options_option_changed1?.result || pos.result;
- const result=raw==='win'?'win':['loose','loss'].includes(raw)?'loss':['equal','tie'].includes(raw)?'tie':profit>0?'win':profit<0?'loss':'tie';
- writes.push(db.from('iq_demo_test_orders').update({result,profit,settled_at:new Date().toISOString()}).eq('id',match.id).eq('result','pending').then(({error})=>{if(!error)updated++;}));
+ if(['history-positions','portfolio.get-history-positions','get-history-positions'].includes(d.name)) {
+ const responseId = d.request_id || `${d.name}-${histories}`;
+ if(historyResponses.has(responseId)) return;
+ historyResponses.add(responseId); histories++;
+ const positions = d.msg?.positions || d.msg?.history || (Array.isArray(d.msg)?d.msg:[]);
+ console.log('Demo history page:',JSON.stringify({request:responseId,count:positions.length,pending:pending?.length || 0}));
+ for(const pos of positions) {
+ const outcome=demoHistoryOutcome(pos);if(!outcome)continue;
+ const match=pending?.find(p=>p.iq_option_id && outcome.ids.includes(p.iq_option_id));if(!match)continue;
+ writes.push(db.from('iq_demo_test_orders').update({result:outcome.result,profit:outcome.profit,settled_at:new Date().toISOString()}).eq('id',match.id).eq('result','pending').select('id').then(({data,error})=>{if(error)console.error('Demo settlement write failed:',error.code);else updated+=data?.length || 0;}));
  }
- if(histories>=3 && (!reserved || confirmed)) finish();
+ if(histories>=6 && (!reserved || confirmed)) finish();
  }
  } catch { /* ignore unrelated broker message */ }
  };

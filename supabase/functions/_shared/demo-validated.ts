@@ -7,3 +7,9 @@ export const DEMO_VALIDATED_PRINCIPAL = ['TENDENCIA_WIN_INVERTIDA', 'QUEDA_WIN_R
 export function isDemoValidatedPrincipal(strategy: string | undefined | null): boolean {
   return DEMO_PRINCIPAL_ENABLED && !!strategy && DEMO_VALIDATED_PRINCIPAL.includes(strategy);
 }
+// Super-selected (user, Oct 24 2026): only Demo winners with a very high learned score open real IQ entries + Telegram.
+export const SUPER_SELECIONADA = 'SUPER_SELECIONADA';
+export const SUPER_SELECTED_MIN_SCORE = 4.0;
+export function isSuperSelected(score: number | undefined | null): boolean {
+  return typeof score === 'number' && Number.isFinite(score) && score >= SUPER_SELECTED_MIN_SCORE;
+}

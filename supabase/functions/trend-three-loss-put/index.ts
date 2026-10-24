@@ -144,6 +144,16 @@ Deno.serve(async req => {
     if (saveError) throw saveError;
     await db.from('trade_queue').update({ status: 'executed', iq_option_id: outcome.tradeId, executed_at: new Date().toISOString(), error: null }).eq('signal_id', queued.signal_id);
     await db.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', leaseScope).eq('signal_id', queued.signal_id);
+    const copyTask = fetch(`${url}/functions/v1/iqoption-place-trade`, {
+      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ copyPrincipalSignalId: queued.signal_id }), signal: AbortSignal.timeout(90000),
+    }).then(async response => {
+      if (!response.ok) console.error('Trend PUT copy dispatch:', response.status);
+      else console.log('Trend PUT copy dispatch:', await response.text());
+    }).catch(error => console.error('Trend PUT copy dispatch failed:', String(error)));
+    // @ts-ignore Hosted background runtime
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
+    else await copyTask;
     const background = async () => {
       if (notifyTrendPut(outcome, entryAt, Date.now())) {
         try {

@@ -13,12 +13,12 @@ test('references require confirmed WIN and one of the eight displayed scores',()
  expect(winningPatterns([c],[{...o,status:'pending'}])).toHaveLength(0);
 });
 test('comparison does not use future outcome',()=>{const pre=preEntryCandles(candles,entry);expect(patternDistance(pre,entry,'CALL',preEntryCandles([...candles.slice(0,20),{...candles[20],c:999}],entry),entry,'CALL')).toBe(0);});
-test('six extra displayed notes are analysis only, not added to execution cohort',()=>{
- expect([...DEMO_ANALYSIS_SCORE_CENTS]).toEqual([204,261,278,237,276,220]);
+test('six additional notes now provide Demo winning references',()=>{
+ expect([...DEMO_ANALYSIS_SCORE_CENTS]).toEqual([]);
  for(const score of [2.04,2.61,2.78,2.37,2.76,2.20]){
   const c={signal_id:'a',entry_minute:entry,direction:'CALL',asset:'A',entry_strategy:'TENDENCIA',score,candles};
   const o={signal_id:'a',result:'win',status:'confirmed',iq_option_id:'123'};
   expect(winningPatterns([c],[o],DEMO_VISIBLE_PATTERN_SCORES)).toHaveLength(1);
-  expect(winningPatterns([c],[o])).toHaveLength(0);
+  expect(winningPatterns([c],[o])).toHaveLength(1);
  }
 });

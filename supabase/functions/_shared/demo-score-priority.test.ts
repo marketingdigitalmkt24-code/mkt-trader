@@ -12,10 +12,10 @@ test('equal accuracy prefers more wins, not highest numeric score',()=>{
  const ranked=rankDemoScores([row('a'),row('b'),row('b')],new Map([['a',2.91],['b',2.03]]));
  expect(ranked[0].cents).toBe(203);
 });
-test('only exact displayed eight scores and confirmed Demo outcomes contribute',()=>{
+test('only exact displayed fourteen scores and confirmed Demo outcomes contribute',()=>{
  const ranked=rankDemoScores([row('a'),{...row('a'),status:'failed'},{...row('a'),account_type:'REAL'},row('a','pending',100),row('outside')],new Map([['a',2.264],['outside',2.27]]));
  expect(ranked.find(r=>r.cents===226)).toMatchObject({wins:1,profit:1.64});
- expect(ranked.length).toBe(8);
+ expect(ranked.length).toBe(14);
 });
 test('historical order overrides fixed 2.26 priority without broadening principal authorization or chart gate',()=>{
  const c=(score:number,distance:number):DemoCandidate=>({signal_id:String(score),asset:'X',direction:'PUT',entry_strategy:'TENDENCIA',created_at:'2026-10-24T23:10:00Z',_score:score,_preferredPatternDistance:distance});

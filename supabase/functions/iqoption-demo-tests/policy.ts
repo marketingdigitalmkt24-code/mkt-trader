@@ -15,8 +15,9 @@ export function demoBalance(balances: { id: number; type: number; currency?: str
 export function freshDemoCandidate(row: { signal_id: string; timeframe: string; created_at: string; direction: string; entry_strategy?: string }, now: number) {
  if (row.signal_id.startsWith('t7-')) return freshDemoTest(row,now);
  const at = Date.parse(row.created_at);
- return ((row.signal_id.startsWith('demo-continuation-v1-') && row.entry_strategy === 'CONTINUACAO_QUEDA_V1')
-  || (row.signal_id.startsWith('demo-teto-v1-') && row.entry_strategy === 'TETO_V1'))
-  && row.direction === 'PUT' && row.timeframe === 'TEST' && Number.isFinite(at)
+ const known = (row.signal_id.startsWith('demo-continuation-v1-') && row.entry_strategy === 'CONTINUACAO_QUEDA_V1' && row.direction === 'PUT')
+  || (row.signal_id.startsWith('demo-teto-v1-') && row.entry_strategy === 'TETO_V1' && row.direction === 'PUT')
+  || (row.signal_id.startsWith('queda-win-call-v1-') && row.entry_strategy === 'QUEDA_WIN_CALL_V1' && row.direction === 'CALL');
+ return known && row.timeframe === 'TEST' && Number.isFinite(at)
   && at % 60000 === 0 && now >= at && now-at <= 25000;
 }

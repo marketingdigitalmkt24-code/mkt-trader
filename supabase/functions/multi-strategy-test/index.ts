@@ -14,6 +14,7 @@ import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, ch
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoTrend } from '../_shared/selected-demo-trend.ts';
 import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.ts';
+import { quedaWinCall, QUEDA_WIN_CALL } from '../_shared/queda-win-call.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -128,7 +129,7 @@ Deno.serve(async (req) => {
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Fetch independent Demo learning inputs while broker login/candles are in flight.
   const demoSince = new Date(Date.now()-14*86400000).toISOString();
-  const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit')
+  const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit,asset,direction')
     .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
     .gte('entry_minute',demoSince).order('entry_minute',{ascending:false}).limit(1000).then(r=>r);
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
@@ -317,6 +318,11 @@ Deno.serve(async (req) => {
   const demoPool = [...rows,...demoPatterns].map(c=>({...c,_score:Math.max(0,c._score
     +2*demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
     +2*chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)))}));
+  // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
+  const qw = quedaWinCall(demoHist.data || [], curMin);
+  if (qw && series.has(qw.asset)) demoPool.push({ signal_id: `queda-win-call-v1-${qw.asset}-${curMin}`,
+    asset: qw.asset, direction: qw.direction, entry_strategy: QUEDA_WIN_CALL,
+    created_at: new Date(curMin * 1000).toISOString(), _score: 1 });
   const refF = refRow.data ? chartFeatures(refRow.data.candles as any[],Date.parse(refRow.data.entry_minute)/1000,refRow.data.direction) : null;
   // Only charts similar to the user's reference trade may compete; no reference => no Demo entry.
   const demoWinner = chooseDemoCandidate(demoPool.filter(c=>similarToReference(refF,chartFeatures(series.get(c.asset)||[],curMin,c.direction))));

@@ -112,3 +112,4 @@
 - [x] Aplicado em Entradas IQ, Resultado de Hoje, Histórico Diário, saldo/profit e cópias do cliente (exibição, sem apagar registros)
 - [x] Corte aplicado agora (21/10 ~18:27 UTC); admin verificado zerado no preview; TESTE preservado em Operações em Tempo Real
 - [x] 103 testes OK (bun), build OK
+- [x] Estrategia Demo "Queda win" (QUEDA_WIN_CALL_V1): CALL no minuto seguinte a WIN confirmado de Queda PUT; policy, rotulos e 21 testes OK; deploy multi-strategy-test + iqoption-demo-tests

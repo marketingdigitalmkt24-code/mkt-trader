@@ -1,14 +1,14 @@
 import { test, expect } from 'bun:test';
 import { selectedTrendCopyRequest } from './selected-trend-copy';
 const at = Date.parse('2026-10-24T01:21:00Z');
-const order = {signal_id:'tendencia-demo-v1-t7-GEV-OTC-TENDENCIA-1792804860',asset:'GEV-OTC',direction:'PUT',
-  iq_option_id:'14383507171',entry_strategy:'TENDENCIA',timeframe:'M1',expiration_time:new Date(at+60000).toISOString(),entry_price:10};
-test('confirmed additional principal Tendência is copyable in its own minute',()=>{
+const order = {signal_id:'principal-retomada-1792804860',asset:'GEV-OTC',direction:'PUT',
+  iq_option_id:'14383507171',entry_strategy:'RETOMADA',timeframe:'M1',expiration_time:new Date(at+60000).toISOString(),entry_price:10};
+test('confirmed active principal is copyable in its own minute',()=>{
   expect(selectedTrendCopyRequest(order,at+3000)).toMatchObject({signalId:order.signal_id,entryAt:at,direction:'put',expiration:1});
   expect(selectedTrendCopyRequest({...order,direction:'CALL'},at+3000)?.direction).toBe('call');
 });
 test('all visible confirmed principal strategies authorize client copies',()=>{
-  for (const strategy of ['QUEDA_WIN_RETRY_V1','TENDENCIA','TENDENCIA_WIN_INVERTIDA','TENDENCIA_3_LOSS_PUT','FORCA_ANTECIPADA','REVERSAO_RSI','RETOMADA','VELA_FORCA']) {
+  for (const strategy of ['QUEDA_WIN_RETRY_V1','TENDENCIA_WIN_INVERTIDA','TENDENCIA_3_LOSS_PUT','FORCA_ANTECIPADA','REVERSAO_RSI','RETOMADA','VELA_FORCA']) {
     expect(selectedTrendCopyRequest({...order,signal_id:`principal-${strategy}`,entry_strategy:strategy},at+3000)?.entryStrategy).toBe(strategy);
   }
   expect(selectedTrendCopyRequest({...order,entry_strategy:null},at+3000)).not.toBeNull();
@@ -18,6 +18,7 @@ test('inverted Trend copy keeps authorized inverted direction and original expir
   .toMatchObject({direction:'call',entryAt:at,expiration:1,entryStrategy:'TENDENCIA_WIN_INVERTIDA'});
 });
 test('isolated tests, copies and retired orders never authorize client copies',()=>{
+  expect(selectedTrendCopyRequest({...order,entry_strategy:'TENDENCIA'},at)).toBeNull();
   expect(selectedTrendCopyRequest({...order,timeframe:'TEST'},at)).toBeNull();
   expect(selectedTrendCopyRequest({...order,timeframe:'MT5'},at)).toBeNull();
   expect(selectedTrendCopyRequest({...order,entry_strategy:'FORCA_INVERTIDA'},at)).toBeNull();

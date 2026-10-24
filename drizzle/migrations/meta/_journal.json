@@ -267,6 +267,13 @@
       "when": 1792785410895,
       "tag": "0037_demo_candidate_candles",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792804395364,
+      "tag": "0038_authorize_selected_demo_trend_principal",
+      "breakpoints": true
     }
   ]
 }

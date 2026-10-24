@@ -12,6 +12,7 @@ import { configuredEntryAmount, canMirrorToBroker } from '../_shared/iq-entry-po
 import { isAnticipation, freshAnticipationEntry } from '../_shared/anticipation-execution.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { canNotifyAnticipation } from '../_shared/anticipation-telegram.ts';
+import { selectedTrendCopyRequest } from '../_shared/selected-trend-copy.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -241,6 +242,8 @@ async function placeTradeFireAndForget(
   gate?: Promise<boolean>,
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
   return new Promise((resolve) => {
+    // Copies follow the confirmed principal's minute, never a new future candle.
+    const anchoredEntry = !!gate || isNextMinuteStrategy(trade.entryStrategy);
     console.log('📡 Connecting to IQ Option WebSocket for trading...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
     
@@ -284,7 +287,7 @@ async function placeTradeFireAndForget(
               balanceId = balance.id; break;
             }
           }
-          if (!balanceId && isNextMinuteStrategy(trade.entryStrategy)) {
+          if (!balanceId && anchoredEntry) {
             clearTimeout(timeout); ws.close();
             resolve({ success: false, error: 'Conta configurada não disponível; entrada cancelada' });
             return;
@@ -306,7 +309,7 @@ async function placeTradeFireAndForget(
             for (const [id, info] of Object.entries(actives)) {
               const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
               if (!assetInfo.enabled || assetInfo.is_suspended) continue;
-              if (isAnticipation(trade.entryStrategy) && (!trade.entryAt || optionType !== 3
+              if ((isAnticipation(trade.entryStrategy) || !!gate) && (!trade.entryAt || optionType !== 3
                 || !iqMarketOpen(info, Math.floor(Date.now() / 1000), trade.entryAt / 1000 + 60))) continue;
               
               const name = (assetInfo.name || '').toUpperCase();
@@ -397,7 +400,7 @@ async function placeTradeFireAndForget(
           }
           
           // OTC fallback if not found and not OTC asset
-          if (!foundAsset && !isOTCAsset && !isNextMinuteStrategy(trade.entryStrategy)) {
+          if (!foundAsset && !isOTCAsset && !anchoredEntry) {
             const otcVariations = [
               `${cleanAsset}-OTC`, `${cleanAsset} OTC`, `${withSlash}-OTC`, `${withSlash} OTC`,
             ];
@@ -488,9 +491,9 @@ async function placeTradeFireAndForget(
           // ===== Entrada sincronizada: exatamente na ABERTURA da próxima vela (:00) =====
           // Envia ~120ms antes para compensar a latência do relay e chegar na IQ às :00.
           const nowMs0 = Date.now();
-          const candleOpenMs = isNextMinuteStrategy(trade.entryStrategy) && trade.entryAt
+          const candleOpenMs = anchoredEntry && trade.entryAt
             ? trade.entryAt : Math.ceil((nowMs0 + 1000) / 60000) * 60000;
-          if (isNextMinuteStrategy(trade.entryStrategy) && (!canSendReversal(candleOpenMs, nowMs0)
+          if (anchoredEntry && (!canSendReversal(candleOpenMs, nowMs0)
             || (isAnticipation(trade.entryStrategy) && !freshAnticipationEntry(candleOpenMs, nowMs0)))) {
             clearTimeout(timeout); ws.close();
             resolve({ success: false, error: 'Entrada prevista passou; ordem não enviada atrasada' });
@@ -506,19 +509,19 @@ async function placeTradeFireAndForget(
               return;
             }
             // Recheck at actual submission: event-loop delay must never create a late order.
-            if (isNextMinuteStrategy(trade.entryStrategy) && (!canSendReversal(candleOpenMs, Date.now())
+            if (anchoredEntry && (!canSendReversal(candleOpenMs, Date.now())
               || (isAnticipation(trade.entryStrategy) && !freshAnticipationEntry(candleOpenMs, Date.now())))) {
               clearTimeout(timeout); ws.close();
               resolve({ success: false, error: 'Virada do minuto perdida; entrada cancelada sem ordem atrasada' });
               return;
             }
             const optPayout = payoutById[foundAsset!.turboId || foundAsset!.binaryId || foundAsset!.id] || 0;
-            if (isAnticipation(trade.entryStrategy) && !hasTurbo) {
+            if ((isAnticipation(trade.entryStrategy) || !!gate) && !hasTurbo) {
               clearTimeout(timeout); ws.close();
               resolve({ success: false, error: 'Ativo M1 não disponível; entrada cancelada' });
               return;
             }
-            if (!isAnticipation(trade.entryStrategy) && (!hasTurbo || (optPayout > 0 && optPayout < 80))) {
+            if (!gate && !isAnticipation(trade.entryStrategy) && (!hasTurbo || (optPayout > 0 && optPayout < 80))) {
               sendDigital(!hasTurbo ? 'sem turbo' : `payout ${optPayout}%`);
               return;
             }
@@ -538,7 +541,7 @@ async function placeTradeFireAndForget(
                 },
               },
             }));
-            if (!isNextMinuteStrategy(trade.entryStrategy)) {
+            if (!anchoredEntry) {
               setTimeout(() => { if (!tradeId) sendDigital('turbo sem resposta'); }, 2500);
             }
           };
@@ -627,11 +630,35 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return Response.json({ error: 'Service unavailable' }, { status: 503, headers: corsHeaders });
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const tradeRequest: TradeRequest = await req.json();
+    const body = await req.json();
+    if (body?.copyPrincipalSignalId !== undefined) {
+      if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+      }
+      if (typeof body.copyPrincipalSignalId !== 'string' || body.copyPrincipalSignalId.length > 255
+        || Object.keys(body).length !== 1) return Response.json({ error: 'Invalid copy request' }, { status: 400, headers: corsHeaders });
+      const { data: order, error } = await supabase.from('operation_results')
+        .select('signal_id,asset,direction,iq_option_id,entry_strategy,timeframe,expiration_time,entry_price')
+        .eq('signal_id', body.copyPrincipalSignalId).maybeSingle();
+      if (error) throw error;
+      const copyRequest = selectedTrendCopyRequest(order, Date.now());
+      if (!copyRequest) return Response.json({ skipped: 'No fresh confirmed principal Trend' }, { headers: corsHeaders });
+      const [{ data: principal }, { data: queued }] = await Promise.all([
+        readMasterIQConfig(supabase),
+        supabase.from('trade_queue').select('id').eq('signal_id', copyRequest.signalId)
+          .eq('status', 'executed').eq('entry_strategy', 'TENDENCIA').eq('iq_option_id', order.iq_option_id).maybeSingle(),
+      ]);
+      if (!principal || !queued) return Response.json({ skipped: 'Principal confirmation unavailable' }, { headers: corsHeaders });
+      await mirrorCopyTrades(supabase, copyRequest, copyRequest.signalId,
+        Promise.resolve({ ok: true, timeframe: 'M1', expirationIso: order.expiration_time }), principal);
+      return Response.json({ success: true, signalId: copyRequest.signalId }, { headers: corsHeaders });
+    }
+    const tradeRequest: TradeRequest = body;
     if ((tradeRequest.signalId || '').startsWith('forca_antecipada-') && !isAnticipation(tradeRequest.entryStrategy)) {
       return Response.json({ error: 'Invalid anticipation strategy' }, { status: 400, headers: corsHeaders });
     }

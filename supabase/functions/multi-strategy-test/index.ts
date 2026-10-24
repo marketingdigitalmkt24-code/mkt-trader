@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
   const previousDemoRead = supabase.from('iq_demo_test_orders')
     .select('id,entry_strategy,entry_minute,result,profit,asset,direction,status,iq_option_id')
     .eq('status','confirmed').not('iq_option_id','is',null)
-    .in('entry_strategy',['CONTINUACAO_QUEDA_V1',QUEDA_WIN_CALL])
+    .in('entry_strategy',['CONTINUACAO_QUEDA_V1',QUEDA_WIN_CALL,'TENDENCIA'])
     .eq('entry_minute',new Date(targetMs-60000).toISOString()).then(r=>r);
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Fetch independent Demo learning inputs while broker login/candles are in flight.
@@ -293,7 +293,7 @@ Deno.serve(async (req) => {
   if(previousPending.length)previousDemo = await supabase.from('iq_demo_test_orders')
     .select('id,entry_strategy,entry_minute,result,profit,asset,direction,status,iq_option_id')
     .eq('status','confirmed').not('iq_option_id','is',null)
-    .in('entry_strategy',['CONTINUACAO_QUEDA_V1',QUEDA_WIN_CALL])
+    .in('entry_strategy',['CONTINUACAO_QUEDA_V1',QUEDA_WIN_CALL,'TENDENCIA'])
     .eq('entry_minute',new Date(targetMs-60000).toISOString());
   console.log('Demo timing candles settled:', new Date().toISOString(), 'assets:', series.size);
   for (const o of open || []) {

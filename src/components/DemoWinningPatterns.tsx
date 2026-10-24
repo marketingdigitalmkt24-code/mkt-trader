@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { winningPatterns,preEntryCandles,patternDistance } from '@/lib/demo-winning-patterns';
+import { winningPatterns,preEntryCandles,patternDistance,DEMO_VISIBLE_PATTERN_SCORES,DEMO_ANALYSIS_SCORE_CENTS } from '@/lib/demo-winning-patterns';
 import { DEMO_PREFERRED_SCORE_CENTS,DEMO_REFERENCE_MAX_DISTANCE } from '../../supabase/functions/_shared/demo-continuation';
 import { DemoPatternChart } from './DemoPatternChart';
 import { Button } from './ui/button';
@@ -27,7 +27,7 @@ export function DemoWinningPatterns(){
    const {data:orders,error:orderError}=await supabase.from('iq_demo_test_orders').select('signal_id,result,status,iq_option_id').in('signal_id',(data??[]).slice(i,i+200).map(c=>c.signal_id)).eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss']);
    if(orderError)throw orderError;outcomes.push(...orders??[]);
   }
-  return winningPatterns(data??[],outcomes);
+  return winningPatterns(data??[],outcomes,DEMO_VISIBLE_PATTERN_SCORES);
  }});
  const recent=useQuery({queryKey:['demo-pattern-comparison',user?.id],enabled:!!user,refetchInterval:10000,queryFn:async()=>{
   const {data,error}=await supabase.from('demo_selection_rejections').select('id,asset,direction,entry_minute,entry_strategy,score,candles').order('entry_minute',{ascending:false}).order('id').limit(100);
@@ -42,7 +42,7 @@ export function DemoWinningPatterns(){
  const distance=selected&&candidate?patternDistance(selected.candles,selected.entry_minute,selected.direction,candidateCandles,candidate.entry_minute,candidate.direction):null;
  return <section aria-label="Padrões vencedores" className="space-y-5">
   <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Padrões vencedores por nota</h2><p className="mt-1 text-xs text-muted-foreground">WIN confirmado · Referências disponíveis para a próxima escolha · Brasília</p></div><Button variant="outline" size="sm" disabled={query.isFetching} onClick={()=>{query.refetch();recent.refetch();}}>Atualizar padrões</Button></div>
-  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" role="group" aria-label="Notas dos padrões">{DEMO_PREFERRED_SCORE_CENTS.map(c=><Button key={c} variant={score===String(c)?'default':'outline'} className="h-auto min-h-12 flex-col gap-1 py-2" aria-pressed={score===String(c)} onClick={()=>{setScore(String(c));setPage(0);setReference(null);}}><span className="font-mono">{(c/100).toFixed(2).replace('.',',')}</span><span className="text-xs">{(query.data??[]).filter(r=>Math.round(r.score*100)===c).length} WIN</span></Button>)}</div>
+  {[{label:'Notas da regra',scores:DEMO_PREFERRED_SCORE_CENTS},{label:'Notas em análise',scores:DEMO_ANALYSIS_SCORE_CENTS}].map(group=><div key={group.label} className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">{group.label}</h3><div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" role="group" aria-label={group.label}>{group.scores.map(c=><Button key={c} variant={score===String(c)?'default':'outline'} className="h-auto min-h-12 flex-col gap-1 py-2" aria-pressed={score===String(c)} onClick={()=>{setScore(String(c));setPage(0);setReference(null);}}><span className="font-mono">{(c/100).toFixed(2).replace('.',',')}</span><span className="text-xs">{(query.data??[]).filter(r=>Math.round(r.score*100)===c).length} WIN</span></Button>)}</div></div>)}
   {query.isPending?<p role="status" className="text-sm text-muted-foreground">Carregando gráficos vencedores…</p>:query.isError?<p role="alert" className="text-sm text-destructive">Não foi possível carregar os padrões.</p>:<>
    <div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">Nota {(Number(score)/100).toFixed(2).replace('.',',')}</h3><Badge variant="outline">{rows.length} gráficos WIN</Badge><span className="text-xs text-muted-foreground">Somente velas anteriores à entrada</span></div>
    {!rows.length?<p className="text-sm text-muted-foreground">Nenhum gráfico vencedor válido desta nota na janela atual da regra.</p>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{rows.slice(current*6,current*6+6).map(row=><article key={row.signal_id} className={`min-w-0 rounded-lg border bg-card p-4 ${selected?.signal_id===row.signal_id?'border-primary':'border-border'}`}>

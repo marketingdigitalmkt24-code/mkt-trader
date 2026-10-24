@@ -1,5 +1,5 @@
 import { test,expect } from 'bun:test';
-import { preEntryCandles,winningPatterns,patternDistance } from './src/lib/demo-winning-patterns';
+import { preEntryCandles,winningPatterns,patternDistance,DEMO_ANALYSIS_SCORE_CENTS,DEMO_VISIBLE_PATTERN_SCORES } from './src/lib/demo-winning-patterns';
 const entry='2026-10-24T23:00:00Z';
 const t=Date.parse(entry)/1000;
 const candles=Array.from({length:22},(_,i)=>({t:t+(i-20)*60,o:100+i,c:101+i,h:102+i,l:99+i}));
@@ -13,3 +13,12 @@ test('references require confirmed WIN and one of the eight displayed scores',()
  expect(winningPatterns([c],[{...o,status:'pending'}])).toHaveLength(0);
 });
 test('comparison does not use future outcome',()=>{const pre=preEntryCandles(candles,entry);expect(patternDistance(pre,entry,'CALL',preEntryCandles([...candles.slice(0,20),{...candles[20],c:999}],entry),entry,'CALL')).toBe(0);});
+test('six extra displayed notes are analysis only, not added to execution cohort',()=>{
+ expect([...DEMO_ANALYSIS_SCORE_CENTS]).toEqual([204,261,278,237,276,220]);
+ for(const score of [2.04,2.61,2.78,2.37,2.76,2.20]){
+  const c={signal_id:'a',entry_minute:entry,direction:'CALL',asset:'A',entry_strategy:'TENDENCIA',score,candles};
+  const o={signal_id:'a',result:'win',status:'confirmed',iq_option_id:'123'};
+  expect(winningPatterns([c],[o],DEMO_VISIBLE_PATTERN_SCORES)).toHaveLength(1);
+  expect(winningPatterns([c],[o])).toHaveLength(0);
+ }
+});

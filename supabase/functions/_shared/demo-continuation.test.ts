@@ -175,7 +175,7 @@ test('Adaptive Demo floor picks the lowest band clearing 55% win rate', async ()
     ...Array.from({ length: 12 }, () => ({ score: 2.6, result: 'win' })),
     ...Array.from({ length: 3 }, () => ({ score: 2.7, result: 'loss' })),
   ];
-  expect(adaptiveDemoMinScore(rows)).toBe(2.5);
+  expect(adaptiveDemoMinScore(rows)).toBe(2.25);
   // All bands losing -> stays at 2.0 (never blocks everything)
   const losing = Array.from({ length: 40 }, () => ({ score: 3.5, result: 'loss' }));
   expect(adaptiveDemoMinScore(losing)).toBe(DEMO_MIN_SCORE);

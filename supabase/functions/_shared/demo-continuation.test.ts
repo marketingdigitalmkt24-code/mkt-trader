@@ -52,6 +52,17 @@ describe('demoLearningAdjustment', () => {
   expect(demoLearningAdjustment(hist,'B',at)).toBeLessThan(-0.9);
   expect(demoLearningAdjustment(hist,'C',at)).toBe(0);
  });
+ it('ignores the hour bonus with fewer than 3 outcomes at that hour', () => {
+  const at = Date.parse('2026-10-23T19:10:00Z');
+  const sameHour = { entry_strategy: 'A', entry_minute: '2026-10-22T19:05:00Z', result: 'win', profit: 1.6 };
+  const otherHour = { entry_strategy: 'A', entry_minute: '2026-10-22T03:05:00Z', result: 'loss', profit: -2 };
+  const hist = [sameHour, otherHour, otherHour, otherHour];
+  // hour has 1 sample -> 0; overall 1W/3L -> negative, so the single hour win cannot inflate the score.
+  expect(demoLearningAdjustment(hist, 'A', at)).toBeLessThan(0);
+  const onlyHourWin = [sameHour];
+  expect(demoLearningAdjustment(onlyHourWin, 'A', at)).toBeGreaterThan(0);
+  expect(demoLearningAdjustment(onlyHourWin, 'A', at)).toBeLessThan(0.25);
+ });
 });
 describe('chart pattern learning', () => {
  const entry = 6000*60;

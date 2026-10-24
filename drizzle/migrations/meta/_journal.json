@@ -302,6 +302,13 @@
       "when": 1792820761176,
       "tag": "0042_super_selected_score_band",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1792820962642,
+      "tag": "0043_retire_trend_three_loss_put_principal",
+      "breakpoints": true
     }
   ]
 }

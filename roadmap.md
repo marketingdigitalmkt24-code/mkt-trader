@@ -1,3 +1,6 @@
+# Histórico de acertos por nota
+- [ ] Criar aba admin somente leitura com notas exatas, saldo acumulado, taxa de acerto e filtros de período/nota; testar cálculos e conferir com histórico Demo autenticado.
+
 # Prioridade Demo por notas vencedoras
 - [x] Correspondência gráfica às oito notas obrigatória, sem alternativa; 32 testes aprovados, função publicada e republicada às 22:56 UTC, build OK; rotina ao vivo confirmada às 22:57 UTC (boot novo + "Demo blocked"), 0 ordens Demo desde 22:17 UTC.
 - [x] Prioridade das próximas escolhas e gráficos vencedores das notas 2,26; 2,23; 2,18; 2,64; 2,88; 2,03; 2,69; 2,91 implementada, preservando nota original, filtros e autorização principal só 2,26.

@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { demoHistoryOutcome } from './history';
+import { demoHistoryOutcome } from '../_shared/demo-history';
 test('matches exact broker option ID even when portfolio ID differs', () => {
  const outcome = demoHistoryOutcome({ id: 'portfolio-1', option_id: 14383504823, status: 'closed', pnl_net: '0.86', result: 'win' });
  expect(outcome?.ids).toContain('14383504823');

@@ -9,15 +9,14 @@ export function freshDemoTest(row: { signal_id: string; timeframe: string; creat
     && ['CALL', 'PUT'].includes(row.direction) && Number.isFinite(at)
     && at % 60000 === 0 && now >= at && now - at <= 25000;
 }
-export function demoBalance(balances: { id: number; type: number; currency?: string }[]) {
-  return balances.find(b => b.type === 4 && b.currency === 'USD' && Number.isFinite(b.id));
-}
+export { demoBalance } from '../_shared/demo-balance.ts';
 export function freshDemoCandidate(row: { signal_id: string; timeframe: string; created_at: string; direction: string; entry_strategy?: string }, now: number) {
  if (row.signal_id.startsWith('t7-')) return freshDemoTest(row,now);
  const at = Date.parse(row.created_at);
  const known = (row.signal_id.startsWith('demo-continuation-v1-') && row.entry_strategy === 'CONTINUACAO_QUEDA_V1' && row.direction === 'PUT')
   || (row.signal_id.startsWith('demo-teto-v1-') && row.entry_strategy === 'TETO_V1' && row.direction === 'PUT')
-  || (row.signal_id.startsWith('queda-win-call-v1-') && row.entry_strategy === 'QUEDA_WIN_CALL_V1' && row.direction === 'CALL');
+   || (row.signal_id.startsWith('queda-win-call-v1-') && row.entry_strategy === 'QUEDA_WIN_CALL_V1' && row.direction === 'CALL')
+   || (row.signal_id.startsWith('queda-win-retry-v1-') && row.entry_strategy === 'QUEDA_WIN_RETRY_V1' && row.direction === 'CALL');
  return known && row.timeframe === 'TEST' && Number.isFinite(at)
   && at % 60000 === 0 && now >= at && now-at <= 25000;
 }

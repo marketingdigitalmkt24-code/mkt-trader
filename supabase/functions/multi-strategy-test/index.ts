@@ -14,7 +14,9 @@ import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, ch
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoTrend } from '../_shared/selected-demo-trend.ts';
 import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.ts';
-import { quedaWinCall, QUEDA_WIN_CALL } from '../_shared/queda-win-call.ts';
+import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
+import { demoHistoryOutcome } from '../_shared/demo-history.ts';
+import { demoBalance } from '../_shared/demo-balance.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -126,6 +128,11 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Invalid parameters' }, { status: 400, headers: cors });
   }
   const targetMs = demoTargetMinute(Date.now(), input.scheduled === true);
+  const previousDemoRead = supabase.from('iq_demo_test_orders')
+    .select('id,entry_strategy,entry_minute,result,profit,asset,direction,status,iq_option_id')
+    .eq('status','confirmed').not('iq_option_id','is',null)
+    .in('entry_strategy',['CONTINUACAO_QUEDA_V1',QUEDA_WIN_CALL])
+    .eq('entry_minute',new Date(targetMs-60000).toISOString()).then(r=>r);
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Fetch independent Demo learning inputs while broker login/candles are in flight.
   const demoSince = new Date(Date.now()-14*86400000).toISOString();
@@ -195,10 +202,17 @@ Deno.serve(async (req) => {
   };
 
   const series = new Map<string, K[]>();
+  // Reconcile the exact previous Demo order on this already authenticated socket, before selection.
+  let previousDemo = await previousDemoRead;
+  const previousPending = (previousDemo.data || []).filter(o=>o.result==='pending');
+  const demoSettlements: Promise<void>[] = [];
   await new Promise<void>((resolve) => {
     const ws = new WebSocket(WS_URL);
     let pending = 0; const byReq = new Map<string, string>();
-    const finish = () => { try { ws.close(); } catch (_) { /* */ } resolve(); };
+    let demoBalanceId = 0, demoHistoryPending = 0, candleDone = false;
+    let demoHistoryTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => { if(demoHistoryTimer)clearTimeout(demoHistoryTimer); try { ws.close(); } catch (_) { /* */ } resolve(); };
+    const finishCandles = () => { candleDone=true; if(!demoHistoryPending)finish(); };
     const timer = setTimeout(finish, Math.max(0, targetMs - Date.now()) + 30000);
     let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
     let initialized = false;
@@ -211,6 +225,7 @@ Deno.serve(async (req) => {
     ws.onmessage = async (ev) => {
       const d = JSON.parse(ev.data);
       if (d.name === 'profile') {
+        demoBalanceId = demoBalance(d.msg?.balances || [])?.id || 0;
         // Connection is already authenticated; only fresh closed candles are requested at :00.
         console.log('Demo timing broker ready:', new Date().toISOString());
         if (Date.now() < targetMs) boundaryTimer = setTimeout(requestInitialization, targetMs - Date.now());
@@ -222,6 +237,13 @@ Deno.serve(async (req) => {
         initialized = true;
         nowSec = requestTime;
         console.log('Demo timing candles requested:', new Date().toISOString());
+        if(previousPending.length && demoBalanceId) {
+          demoHistoryPending=2;
+          demoHistoryTimer=setTimeout(()=>{demoHistoryPending=0;if(candleDone)finish();},1500);
+          for(const [name,version] of [['portfolio.get-history-positions','2.0'],['get-history-positions','1.0']]) {
+            ws.send(JSON.stringify({name:'sendMessage',request_id:`demo-trigger-${name}`,msg:{name,version,body:{user_balance_id:demoBalanceId,instrument_types:name.startsWith('portfolio')?['binary-option','turbo-option','digital-option']:['turbo'],limit:300,offset:0}}}));
+          }
+        }
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
         const cand = new Map<string, number>();
         for (const [id, a] of Object.entries<any>(all)) {
@@ -230,7 +252,7 @@ Deno.serve(async (req) => {
           if (!cand.has(s)) cand.set(s, Number(id));
         }
         pending = cand.size;
-        if (!pending) { clearTimeout(timer); finish(); return; }
+        if (!pending) { clearTimeout(timer); finishCandles(); return; }
         await sendCandleRequestBatches(prioritizeResultAssets(cand, (open || []).map(o => o.asset)), ([s, id]) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const rid = `m${id}`; byReq.set(rid, s);
@@ -243,13 +265,36 @@ Deno.serve(async (req) => {
         series.set(s, (d.msg?.candles || []).map((c: any) => ({ t: c.from, o: c.open, c: c.close, h: c.max, l: c.min }))
           .filter((k: K) => typeof k.c === 'number').sort((a: K, b: K) => a.t - b.t));
         confirmations.push(confirmAsset(s, series.get(s) || []));
-        if (--pending <= 0) { clearTimeout(timer); finish(); }
+        if (--pending <= 0) { clearTimeout(timer); finishCandles(); }
+      }
+      if(typeof d.request_id==='string' && d.request_id.startsWith('demo-trigger-')
+        && ['history-positions','portfolio.get-history-positions','get-history-positions'].includes(d.name)) {
+        const positions=d.msg?.positions || d.msg?.history || (Array.isArray(d.msg)?d.msg:[]);
+        for(const pos of positions) {
+          const outcome=demoHistoryOutcome(pos);if(!outcome)continue;
+          const match=previousPending.find(o=>o.iq_option_id && outcome.ids.includes(o.iq_option_id));
+          if(!match)continue;
+          demoSettlements.push(supabase.from('iq_demo_test_orders')
+            .update({result:outcome.result,profit:outcome.profit,settled_at:new Date().toISOString()})
+            .eq('id',match.id).eq('result','pending').select('id').then(({data,error})=>{
+              if(!error && data?.length){match.result=outcome.result;match.profit=outcome.profit;}
+            }));
+        }
+        demoHistoryPending=Math.max(0,demoHistoryPending-1);
+        if(!demoHistoryPending && candleDone)finish();
       }
     };
   });
 
   // Await database confirmation, not Telegram, before the atomic four-win claim.
   await Promise.all(confirmations);
+  await Promise.all(demoSettlements);
+  // Another settlement worker may win the conditional write; refresh instead of trusting its old snapshot.
+  if(previousPending.length)previousDemo = await supabase.from('iq_demo_test_orders')
+    .select('id,entry_strategy,entry_minute,result,profit,asset,direction,status,iq_option_id')
+    .eq('status','confirmed').not('iq_option_id','is',null)
+    .in('entry_strategy',['CONTINUACAO_QUEDA_V1',QUEDA_WIN_CALL])
+    .eq('entry_minute',new Date(targetMs-60000).toISOString());
   console.log('Demo timing candles settled:', new Date().toISOString(), 'assets:', series.size);
   for (const o of open || []) {
     const entrySec = Math.floor(new Date(o.created_at).getTime() / 1000);
@@ -319,10 +364,14 @@ Deno.serve(async (req) => {
     +2*demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
     +2*chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)))}));
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
-  const qw = quedaWinCall(demoHist.data || [], curMin);
+  const qw = quedaWinCall(previousDemo.data || [], curMin);
   if (qw && series.has(qw.asset)) demoPool.push({ signal_id: `queda-win-call-v1-${qw.asset}-${curMin}`,
     asset: qw.asset, direction: qw.direction, entry_strategy: QUEDA_WIN_CALL,
     created_at: new Date(curMin * 1000).toISOString(), _score: 1 });
+  const retry = quedaWinRetry(previousDemo.data || [], curMin);
+  if(retry && series.has(retry.asset))demoPool.push({signal_id:`queda-win-retry-v1-${retry.asset}-${curMin}`,
+    asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
+    created_at:new Date(curMin*1000).toISOString(),_score:1});
   const refF = refRow.data ? chartFeatures(refRow.data.candles as any[],Date.parse(refRow.data.entry_minute)/1000,refRow.data.direction) : null;
   // Only charts similar to the user's reference trade may compete; no reference => no Demo entry.
   const demoWinner = chooseDemoCandidate(demoPool.filter(c=>similarToReference(refF,chartFeatures(series.get(c.asset)||[],curMin,c.direction))));

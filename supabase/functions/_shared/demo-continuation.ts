@@ -129,3 +129,14 @@ export function similarToAnyReference(refs: (number[] | null)[], f: number[] | n
   if (!f) return false;
   return refs.some(r => similarToReference(r, f, max));
 }
+
+// Queda history over signal (user, Oct 24 2026 06:12 UTC): for Continuação de queda the learned
+// history weighs 4x (vs 2x) and any losing history caps the score below the 2.0 Demo floor.
+export const QUEDA_HISTORY_WEIGHT = 4;
+export function demoFinalScore(base: number, learn: number, strategy: string) {
+  if (strategy === DEMO_CONTINUATION) {
+    const s = Math.max(0, base + QUEDA_HISTORY_WEIGHT * learn);
+    return learn < 0 ? Math.min(s, DEMO_MIN_SCORE - 0.01) : s;
+  }
+  return Math.max(0, base + 2 * learn);
+}

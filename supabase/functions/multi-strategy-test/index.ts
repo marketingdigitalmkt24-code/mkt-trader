@@ -380,7 +380,7 @@ Deno.serve(async (req) => {
       chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
       c.entry_strategy,c.asset,curMin*1000);
     if(demoLearnedReject(learn))return[];
-    return[{...c,_score:Math.max(0,c._score+2*learn)}];});
+    return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);
   if (qw && series.has(qw.asset)) demoPool.push({ signal_id: `queda-win-call-v1-${qw.asset}-${curMin}`,

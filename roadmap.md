@@ -1,9 +1,10 @@
 # Exclusão permanente do histórico IQ Option
-- [ ] Autorizar próximos sinais Tendência selecionados na Demo como ordem adicional principal IQ + Telegram; manter TESTE separado e limites atuais, sem replay.
+- [x] Autorização Tendência selecionada → ordem principal adicional implementada e publicada com claim atômico, conta/valor principal, limites e ativo M1; Telegram após confirmação IQ, sem copy/replay. 22 testes aprovados, chamada com sessão navegador recusada 401. Configuração atual PRACTICE/US$10; Demo TESTE preservada.
+- [ ] Conferir primeira nova Tendência principal, alerta Telegram e resultado no painel — aguarda Tendência vencer a seleção Demo dentro da janela; nenhuma ordem histórica forçada, últimos candidatos eram Vela de Força.
 - [x] Excluídos permanentemente 1.001 registros principais e 831 cópias; consulta confirmou zero entradas IQ restantes de qualquer dia/cliente, 18.848 TESTES simulados e 164 ordens Demo preservados. Painel admin autenticado conferido sem entradas e com resultado zerado; histórico cliente confirmado pela fonte compartilhada, sem sessão cliente distinta. Saldo/configuração da corretora intactos.
 
 # Testes executados na Demo
-- [ ] Reduzir espera da entrada Demo rumo a :00; manter velas fechadas, seleção completa e janela atual.
+- [x] Publicadas otimizações pendentes da entrada Demo: sessão de serviço reaproveitada, leituras em paralelo e gráficos fora do envio; testes de sessão/seleção aprovados, :00 exato não garantido.
 - [x] Incluir a próxima vela fechada no gráfico Demo; sete testes aprovados, rotina publicada e painel conferido; coleta automática não força ordens.
 - [x] Assertividade agora lê todas as estratégias confirmadas Demo separadamente; contagem reiniciada às 16:33 BRT sem apagar ordens ou alterar demais totais. Seis testes aprovados, painel conferido Tendência/Vela de força 0W/0L, build OK.
 - [x] Criar Continuação de queda Demo separada (corpo ≥70%, pavio inferior ≤10%, médias em queda, até 3 vermelhas; 100 velas fechadas contíguas); competir com seleção atual em ledger exclusivo, sem alterar claims principais. 16 testes aprovados, duas funções publicadas, painel e build OK; seleção prospectiva 16:30 VELA_FORCA registrada.

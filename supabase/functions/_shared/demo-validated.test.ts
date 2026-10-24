@@ -14,9 +14,12 @@ describe('isDemoValidatedPrincipal', () => {
   });
 });
 describe('isSuperSelected', () => {
- it('accepts only scores at or above the 4.0 threshold', () => {
+ it('accepts only the 4.0-4.5 band and rejects inflated scores', () => {
   expect(isSuperSelected(4.0)).toBe(true);
-  expect(isSuperSelected(5.2)).toBe(true);
+  expect(isSuperSelected(4.49)).toBe(true);
+  expect(isSuperSelected(4.5)).toBe(false);
+  expect(isSuperSelected(5.2)).toBe(false);
+  expect(isSuperSelected(6.12)).toBe(false);
   expect(isSuperSelected(3.99)).toBe(false);
   expect(isSuperSelected(0)).toBe(false);
   expect(isSuperSelected(undefined)).toBe(false);

@@ -1,0 +1,1 @@
+export { isNormalPrincipalTrend } from '../../supabase/functions/_shared/normal-trend';

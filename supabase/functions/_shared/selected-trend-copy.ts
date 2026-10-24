@@ -1,9 +1,12 @@
+import { isNormalPrincipalTrend } from './normal-trend.ts';
+
 export function selectedTrendCopyRequest(order: {
   signal_id: string; asset: string; direction: string; iq_option_id: string | null;
   entry_strategy: string | null; timeframe: string; expiration_time: string | null;
   entry_price: number;
 } | null, now: number) {
   if (!order || order.signal_id.startsWith('copy-') || order.signal_id.startsWith('mt5-')
+    || isNormalPrincipalTrend(order)
     || order.signal_id.startsWith('force-lw-') || order.signal_id.startsWith('forca_invertida-')
     || ['FORCE_LOSS_WIN', 'FORCA_INVERTIDA'].includes(order.entry_strategy || '')
     || !['M1', 'M5'].includes(order.timeframe)

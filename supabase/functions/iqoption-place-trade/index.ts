@@ -13,6 +13,7 @@ import { isAnticipation, freshAnticipationEntry } from '../_shared/anticipation-
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { canNotifyAnticipation } from '../_shared/anticipation-telegram.ts';
 import { selectedTrendCopyRequest } from '../_shared/selected-trend-copy.ts';
+import { isNormalPrincipalTrend } from '../_shared/normal-trend.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -674,7 +675,7 @@ serve(async (req) => {
       if (!role) return Response.json({ error: 'Admin required' }, { status: 403, headers: corsHeaders });
     }
     let authorizedQueue: { id: string; created_at: string; entry_strategy: string | null } | undefined;
-    if (tradeRequest.entryStrategy === 'FORCE_LOSS_WIN' || tradeRequest.entryStrategy === 'FORCA_INVERTIDA' || /forca_invertida-/.test(tradeRequest.signalId || '') || tradeRequest.signalId?.startsWith('force-lw-') || /-force-lw-/.test(tradeRequest.signalId || '')) {
+    if (isNormalPrincipalTrend({ signal_id: tradeRequest.signalId || '', entry_strategy: tradeRequest.entryStrategy }) || tradeRequest.entryStrategy === 'FORCE_LOSS_WIN' || tradeRequest.entryStrategy === 'FORCA_INVERTIDA' || /forca_invertida-/.test(tradeRequest.signalId || '') || tradeRequest.signalId?.startsWith('force-lw-') || /-force-lw-/.test(tradeRequest.signalId || '')) {
       return Response.json({ success: false, error: 'Strategy removed' }, { status: 410, headers: corsHeaders });
     }
     if (isNextMinuteStrategy(tradeRequest.entryStrategy)) {

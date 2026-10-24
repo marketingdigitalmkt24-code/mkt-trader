@@ -288,6 +288,13 @@
       "when": 1792812475237,
       "tag": "0040_authorize_queda_win_retry_principal",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792812735569,
+      "tag": "0041_disable_normal_trend_principal",
+      "breakpoints": true
     }
   ]
 }

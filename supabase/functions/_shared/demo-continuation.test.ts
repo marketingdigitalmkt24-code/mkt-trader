@@ -163,3 +163,26 @@ test('Queda with losing history stays below 2.0; others unchanged', async () => 
   expect(demoFinalScore(2.5, 0.25, DEMO_CONTINUATION)).toBe(3.5);
   expect(demoFinalScore(2.5, -0.1, 'TENDENCIA')).toBeCloseTo(2.3);
 });
+
+test('Adaptive Demo floor picks the lowest band clearing 55% win rate', async () => {
+  const { adaptiveDemoMinScore, DEMO_MIN_SCORE } = await import('./demo-continuation');
+  // Not enough data -> fallback 2.0
+  expect(adaptiveDemoMinScore([{ score: 3, result: 'win' }])).toBe(DEMO_MIN_SCORE);
+  // 40 outcomes: below 2.5 mostly losses, from 2.5 up mostly wins -> floor rises to 2.5
+  const rows = [
+    ...Array.from({ length: 20 }, () => ({ score: 2.1, result: 'loss' })),
+    ...Array.from({ length: 5 }, () => ({ score: 2.2, result: 'win' })),
+    ...Array.from({ length: 12 }, () => ({ score: 2.6, result: 'win' })),
+    ...Array.from({ length: 3 }, () => ({ score: 2.7, result: 'loss' })),
+  ];
+  expect(adaptiveDemoMinScore(rows)).toBe(2.25);
+  // All bands losing -> stays at 2.0 (never blocks everything)
+  const losing = Array.from({ length: 40 }, () => ({ score: 3.5, result: 'loss' }));
+  expect(adaptiveDemoMinScore(losing)).toBe(DEMO_MIN_SCORE);
+  // Already winning from 2.0 -> keeps 2.0
+  const winning = [
+    ...Array.from({ length: 25 }, () => ({ score: 2.1, result: 'win' })),
+    ...Array.from({ length: 10 }, () => ({ score: 2.1, result: 'loss' })),
+  ];
+  expect(adaptiveDemoMinScore(winning)).toBe(DEMO_MIN_SCORE);
+});

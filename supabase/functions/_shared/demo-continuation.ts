@@ -72,8 +72,22 @@ export function demoAssetAdjustment(history: DemoOutcome[], strategy: string, as
 export const DEMO_LEARNED_REJECT = -0.8;
 // Demo entry floor (user, Oct 24 2026 05:59 UTC): only candidates with final score >= 2.0 open in Demo.
 export const DEMO_MIN_SCORE = 2.0;
-export function demoScoreAllowed(score: number) {
-  return Number.isFinite(score) && score >= DEMO_MIN_SCORE;
+export function demoScoreAllowed(score: number, min = DEMO_MIN_SCORE) {
+  return Number.isFinite(score) && score >= min;
+}
+// Adaptive Demo floor (user, Oct 24 2026 06:51 UTC): learning scans recent settled candidates by
+// score band and picks the lowest band whose win rate clears the ~55% breakeven (win pays ~0.82,
+// loss costs 1). Needs 30+ settled outcomes overall and 15+ per band; falls back to DEMO_MIN_SCORE.
+export function adaptiveDemoMinScore(rows: { score: number; result: string }[]) {
+  const settled = rows.filter(r => Number.isFinite(r.score) && (r.result === 'win' || r.result === 'loss'));
+  if (settled.length < 30) return DEMO_MIN_SCORE;
+  for (let floor = DEMO_MIN_SCORE; floor <= 4.0; floor += 0.25) {
+    const band = settled.filter(r => r.score >= floor);
+    if (band.length < 15) break;
+    const w = band.filter(r => r.result === 'win').length;
+    if (w / band.length >= 0.55) return Math.round(floor * 100) / 100;
+  }
+  return DEMO_MIN_SCORE;
 }
 export function demoLearnedReject(adjustment: number) {
   return adjustment <= DEMO_LEARNED_REJECT;
@@ -133,10 +147,10 @@ export function similarToAnyReference(refs: (number[] | null)[], f: number[] | n
 // Queda history over signal (user, Oct 24 2026 06:12 UTC): for Continuação de queda the learned
 // history weighs 4x (vs 2x) and any losing history caps the score below the 2.0 Demo floor.
 export const QUEDA_HISTORY_WEIGHT = 4;
-export function demoFinalScore(base: number, learn: number, strategy: string) {
+export function demoFinalScore(base: number, learn: number, strategy: string, minScore = DEMO_MIN_SCORE) {
   if (strategy === DEMO_CONTINUATION) {
     const s = Math.max(0, base + QUEDA_HISTORY_WEIGHT * learn);
-    return learn < 0 ? Math.min(s, DEMO_MIN_SCORE - 0.01) : s;
+    return learn < 0 ? Math.min(s, minScore - 0.01) : s;
   }
   return Math.max(0, base + 2 * learn);
 }

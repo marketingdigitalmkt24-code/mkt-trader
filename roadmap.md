@@ -1,4 +1,5 @@
 # Histórico de acertos por nota
+- [ ] Aplicar limite Demo de menos de 200 WIN por padrão, testar fronteira 199/200 e publicar a seleção sem alterar histórico/principal.
 - [x] Referências Demo de todas as páginas/notas, prioridade por WIN similares (desempate acerto/distância) e selo com quantidade de WIN; 56 testes aprovados, rotina publicada, painel autenticado sem erros, build OK. Leitura real confirmou 712 gráficos, 365 WIN; perdas similares mantidas no aprendizado.
 - [ ] Conferir primeira ordem pela prioridade chart-wins-v3 e selo com quantidade — depende de candidato elegível no minuto, sem forçar ordem ou reclassificar entradas antigas.
 - [x] Bloqueio GEV retirado; correspondência com qualquer WIN confirmado da amostra aceita além das 14 notas, com limites preservados. Origem persistida e selo prospectivo Padrão vencedor implementado; 40 testes aprovados, build OK e rotina nova confirmada às 23:30/23:31 UTC.

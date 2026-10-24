@@ -410,7 +410,7 @@ Deno.serve(async (req) => {
     const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
     const match=demoWinningPatternMatch(chartSamples,f);
     const distance=match?.distance??Infinity;
-    const reason=demoRejectionReason({score:c._score,patternDistance:distance});
+    const reason=demoRejectionReason({score:c._score,patternDistance:distance,patternWins:match?.wins??0});
     if(reason){reject(c,reason);return[];}
     return [{...c,_preferredPatternDistance:distance,_patternMatch:match,_patternWins:match?.wins??0,_patternAccuracy:match?.accuracy??0}];
   });

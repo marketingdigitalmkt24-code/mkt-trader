@@ -33,6 +33,10 @@ const scoreDistance = (s: number) => Math.abs(Math.round(s * 100) - DEMO_TARGET_
 export function demoPreferredPatternAllowed(distance: number | undefined) {
   return typeof distance === 'number' && Number.isFinite(distance) && distance >= 0 && distance <= DEMO_REFERENCE_MAX_DISTANCE;
 }
+export const DEMO_PATTERN_WIN_LIMIT = 200;
+export function demoPatternWinsAllowed(wins: number | undefined) {
+  return typeof wins === 'number' && Number.isInteger(wins) && wins > 0 && wins < DEMO_PATTERN_WIN_LIMIT;
+}
 export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningScores = false, scorePriority?: number[]) {
   const tier = (c: DemoCandidate) => {
     if (scorePriority && preferWinningScores) {
@@ -46,6 +50,7 @@ export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningSc
     return matched ? 3 : 4;
   };
   return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0
+    && (!preferWinningScores || c._patternWins === undefined || demoPatternWinsAllowed(c._patternWins))
     && (!preferWinningScores || demoPreferredPatternAllowed(c._preferredPatternDistance)))
     .sort((a,b) => (preferWinningScores && (a._patternWins !== undefined || b._patternWins !== undefined)
         ? (b._patternWins ?? 0) - (a._patternWins ?? 0)

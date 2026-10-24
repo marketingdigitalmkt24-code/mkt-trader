@@ -1,7 +1,21 @@
 import {test,expect} from 'bun:test';
-import {demoWinningPatternMatch,chooseDemoCandidate} from './demo-continuation';
+import {demoWinningPatternMatch,chooseDemoCandidate,demoPatternWinsAllowed} from './demo-continuation';
 import {demoRejectionReason} from './demo-rejection';
 import {isSuperSelected} from './demo-validated';
+test('Demo requires fewer than 200 confirmed pattern WIN and retains the best eligible pattern',()=>{
+  expect(demoPatternWinsAllowed(199)).toBe(true);
+  expect(demoPatternWinsAllowed(200)).toBe(false);
+  expect(demoPatternWinsAllowed(201)).toBe(false);
+  expect(demoPatternWinsAllowed(0)).toBe(false);
+  expect(demoPatternWinsAllowed(undefined)).toBe(false);
+  const base={asset:'X',direction:'PUT',entry_strategy:'TENDENCIA',created_at:'2026-10-24T23:50:00Z',_score:2.26,_preferredPatternDistance:0.1};
+  const eligible={...base,signal_id:'199-wins',_patternWins:199};
+  const blocked={...base,signal_id:'200-wins',_patternWins:200};
+  expect(chooseDemoCandidate([blocked,eligible,{...eligible,signal_id:'198-wins',_patternWins:198}],true)?.signal_id).toBe('199-wins');
+  expect(chooseDemoCandidate([blocked],true)).toBeNull();
+  expect(demoRejectionReason({score:2.26,patternDistance:0.1,patternWins:199})).toBeNull();
+  expect(demoRejectionReason({score:2.26,patternDistance:0.1,patternWins:200})).toEqual({code:'pattern_win_limit',details:{wins:200,exclusive_maximum:200}});
+});
 test('WIN beyond fourteen notes is eligible without GEV while score and principal limits remain',()=>{
  const match=demoWinningPatternMatch([{f:[0,1],result:'win',score:3.15,signal_id:'win-ref'}],[0,1]);
  expect(match).toMatchObject({signal_id:'win-ref',score:3.15,distance:0});

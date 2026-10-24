@@ -1,5 +1,5 @@
 import { test, expect, describe, it } from 'bun:test';
-import { isDemoValidatedPrincipal, DEMO_VALIDATED_PRINCIPAL, DEMO_PRINCIPAL_ENABLED } from './demo-validated';
+import { isDemoValidatedPrincipal, DEMO_VALIDATED_PRINCIPAL, DEMO_PRINCIPAL_ENABLED, isSuperSelected } from './demo-validated';
 
 describe('isDemoValidatedPrincipal', () => {
   it('blocks everything while real principal entries are paused', () => {
@@ -12,4 +12,15 @@ describe('isDemoValidatedPrincipal', () => {
     expect(isDemoValidatedPrincipal(null)).toBe(false);
     expect(isDemoValidatedPrincipal('')).toBe(false);
   });
+});
+describe('isSuperSelected', () => {
+ it('accepts only scores at or above the 4.0 threshold', () => {
+  expect(isSuperSelected(4.0)).toBe(true);
+  expect(isSuperSelected(5.2)).toBe(true);
+  expect(isSuperSelected(3.99)).toBe(false);
+  expect(isSuperSelected(0)).toBe(false);
+  expect(isSuperSelected(undefined)).toBe(false);
+  expect(isSuperSelected(null)).toBe(false);
+  expect(isSuperSelected(NaN)).toBe(false);
+ });
 });

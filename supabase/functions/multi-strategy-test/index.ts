@@ -11,7 +11,7 @@ import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recen
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, combinedLearnedScore, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
-import { DEMO_PRINCIPAL_ENABLED } from '../_shared/demo-validated.ts';
+import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
@@ -403,8 +403,9 @@ Deno.serve(async (req) => {
     else {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
       // A selected Trend may independently authorize a principal order; no Demo stake/history reuse.
-      // Real principal entries paused (user, Oct 24 2026): Demo-only until a "super selected" trigger exists.
-      if (DEMO_PRINCIPAL_ENABLED && selectedDemoPrincipal({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now())) {
+      // Real principal entries paused (user, Oct 24 2026): only a super-selected Demo winner (high learned score) opens real.
+      if ((DEMO_PRINCIPAL_ENABLED && selectedDemoPrincipal({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now()))
+        || isSuperSelected(demoWinner._score)) {
         const principalTask = supabase.functions.invoke('selected-demo-trend', {
           body: { candidate: demoWinner.signal_id, brokerSession: { ssid, configId: cfg.id } },
         }).then(async ({ data, error }) => {

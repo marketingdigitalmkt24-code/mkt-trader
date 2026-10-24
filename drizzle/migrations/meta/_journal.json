@@ -281,6 +281,13 @@
       "when": 1792812233578,
       "tag": "0039_trend_win_next_minute_inverted",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792812475237,
+      "tag": "0040_authorize_queda_win_retry_principal",
+      "breakpoints": true
     }
   ]
 }

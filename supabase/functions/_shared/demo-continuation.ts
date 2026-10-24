@@ -43,16 +43,18 @@ export function demoCeiling(candles: Candle[], entry: number) {
   return { direction: 'PUT' as const, match: 1 - gap };
 }
 type DemoOutcome = { entry_strategy: string; entry_minute: string; result: string; profit: number; asset?: string };
-// Learns from confirmed Demo broker outcomes: strategy+BRT hour weighs most, then strategy overall; losses weigh more.
+// Learns from confirmed Demo broker outcomes: strategy overall weighs most (0.6), then strategy+BRT hour (0.4);
+// losses weigh more. The hour bonus needs at least 3 outcomes so a single win cannot inflate the score.
 export function demoLearningAdjustment(history: DemoOutcome[], strategy: string, entryMs: number) {
   const hour = (h: string | number) => (new Date(typeof h === 'number' ? h : Date.parse(h)).getUTCHours() + 21) % 24;
   const h = hour(entryMs);
-  const score = (rows: DemoOutcome[]) => {
+  const score = (rows: DemoOutcome[], minSamples = 1) => {
     const w = rows.filter(r => r.result === 'win').length, l = rows.filter(r => r.result === 'loss').length;
-    return w + l ? (w - 1.2 * l) / (w + l) * Math.min(1, (w + l) / 5) : 0;
+    if (w + l < minSamples) return 0;
+    return (w - 1.2 * l) / (w + l) * Math.min(1, (w + l) / 5);
   };
   const same = history.filter(r => r.entry_strategy === strategy);
-  const adj = 0.6 * score(same.filter(r => hour(r.entry_minute) === h)) + 0.4 * score(same);
+  const adj = 0.4 * score(same.filter(r => hour(r.entry_minute) === h), 3) + 0.6 * score(same);
   return Math.max(-1, Math.min(1, adj));
 }
 // Profit-aware learning per strategy+asset: net profit and win rate on that exact pair; losses weigh more.

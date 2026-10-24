@@ -30,6 +30,9 @@ export function demoPreferredScore(score: number) {
 }
 const DEMO_TARGET_SCORE_CENTS = 226;
 const scoreDistance = (s: number) => Math.abs(Math.round(s * 100) - DEMO_TARGET_SCORE_CENTS);
+export function demoPreferredPatternAllowed(distance: number | undefined) {
+  return typeof distance === 'number' && Number.isFinite(distance) && distance >= 0 && distance <= DEMO_REFERENCE_MAX_DISTANCE;
+}
 export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningScores = false) {
   const tier = (c: DemoCandidate) => {
     if (scoreDistance(c._score) === 0) return 0;
@@ -38,7 +41,8 @@ export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningSc
     if (demoPreferredScore(c._score)) return matched ? 1 : 2;
     return matched ? 3 : 4;
   };
-  return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0)
+  return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0
+    && (!preferWinningScores || demoPreferredPatternAllowed(c._preferredPatternDistance)))
     .sort((a,b) => tier(a)-tier(b)
       || (preferWinningScores ? (a._preferredPatternDistance ?? Infinity) - (b._preferredPatternDistance ?? Infinity) : 0)
       || scoreDistance(a._score)-scoreDistance(b._score) || b._score-a._score || a.signal_id.localeCompare(b.signal_id))[0] ?? null;

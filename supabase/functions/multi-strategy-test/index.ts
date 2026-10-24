@@ -400,6 +400,7 @@ Deno.serve(async (req) => {
     return [{...c,_preferredPatternDistance:demoPreferredPatternDistance(chartSamples,f)}];
   });
   const demoWinner = chooseDemoCandidate(demoEligible, true);
+  if (!demoWinner) console.log('Demo blocked: no eligible candidate matches winning patterns of the eight scores');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,

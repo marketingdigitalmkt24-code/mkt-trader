@@ -1,4 +1,5 @@
 # Prioridade Demo por notas vencedoras
+- [ ] Tornar obrigatória a correspondência gráfica às oito notas; bloquear alternativa sem padrão, testar e publicar.
 - [x] Prioridade das próximas escolhas e gráficos vencedores das notas 2,26; 2,23; 2,18; 2,64; 2,88; 2,03; 2,69; 2,91 implementada, preservando nota original, filtros e autorização principal só 2,26.
 - [x] 38 testes aprovados, multi-strategy-test publicada, build OK e painel autenticado conferido com notas carregadas.
 - [ ] Conferir primeira seleção prospectiva da nova prioridade — depende de candidato elegível no minuto; nenhum novo selecionado às 22:06 UTC, sem replay/ordem forçada.

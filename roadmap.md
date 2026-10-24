@@ -1,4 +1,5 @@
 # Histórico de acertos por nota
+- [x] Aplicado e publicado limite Demo de 1–199 WIN por padrão; 200 ou mais bloqueiam antes da seleção e registram motivo exato. 43 testes aprovados incluindo fronteira 199/200; build OK. Histórico/principal preservados; nenhuma nova rejeição por esse limite disponível na consulta imediata, sem forçar ordem.
 - [x] Referências Demo de todas as páginas/notas, prioridade por WIN similares (desempate acerto/distância) e selo com quantidade de WIN; 56 testes aprovados, rotina publicada, painel autenticado sem erros, build OK. Leitura real confirmou 712 gráficos, 365 WIN; perdas similares mantidas no aprendizado.
 - [ ] Conferir primeira ordem pela prioridade chart-wins-v3 e selo com quantidade — depende de candidato elegível no minuto, sem forçar ordem ou reclassificar entradas antigas.
 - [x] Bloqueio GEV retirado; correspondência com qualquer WIN confirmado da amostra aceita além das 14 notas, com limites preservados. Origem persistida e selo prospectivo Padrão vencedor implementado; 40 testes aprovados, build OK e rotina nova confirmada às 23:30/23:31 UTC.

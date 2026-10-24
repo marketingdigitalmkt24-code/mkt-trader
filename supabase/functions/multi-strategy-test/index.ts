@@ -10,7 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, combinedLearnedScore, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
@@ -140,6 +140,13 @@ Deno.serve(async (req) => {
   const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit,asset,direction')
     .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
     .gte('entry_minute',demoSince).order('entry_minute',{ascending:false}).limit(1000).then(r=>r);
+  // Real principal IQ entries and their confirmed results also teach the scorer (heavier weight).
+  const realHistPromise = supabase.from('operation_results')
+    .select('entry_strategy,asset,direction,result,created_at')
+    .not('timeframe','in','("TEST","MT5")').in('result',['win','loss'])
+    .not('iq_option_id','is',null).not('iq_option_id','like','mt5-%').not('iq_option_id','ilike','test%')
+    .gte('created_at',demoSince).order('created_at',{ascending:false}).limit(1000)
+    .then(r=>({...r,data:(r.data||[]).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:x.result==='win'?1:-1,asset:x.asset}))}));
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
   const chartPromise = (async()=>{
     const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles')
@@ -363,13 +370,14 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  const [demoHist,chartSamples,refRow] = await Promise.all([demoHistPromise,chartPromise,refPromise]);
+  const [demoHist,chartSamples,refRow,realHist] = await Promise.all([demoHistPromise,chartPromise,refPromise,realHistPromise]);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
+  if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
   // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
-    const learn=demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
-      +demoAssetAdjustment(demoHist.data||[],c.entry_strategy,c.asset)
-      +chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction));
+    const learn=combinedLearnedScore(demoHist.data||[],realHist.data||[],
+      chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
+      c.entry_strategy,c.asset,curMin*1000);
     if(demoLearnedReject(learn))return[];
     return[{...c,_score:Math.max(0,c._score+2*learn)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.

@@ -1,5 +1,5 @@
 import { test, expect, describe, it } from 'bun:test';
-import { demoCeiling, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, DEMO_LEARNED_REJECT, chartFeatures, chartPatternAdjustment, similarToReference, DEMO_REFERENCE_MAX_DISTANCE } from './demo-continuation';
+import { demoCeiling, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, DEMO_LEARNED_REJECT, combinedLearnedScore, REAL_LEARNING_WEIGHT, chartFeatures, chartPatternAdjustment, similarToReference, DEMO_REFERENCE_MAX_DISTANCE } from './demo-continuation';
 import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION } from './demo-continuation';
 const entry = 1792783500;
 function candles() {
@@ -90,6 +90,24 @@ describe('demoLearnedReject', () => {
   expect(demoLearnedReject(-3)).toBe(true);
   expect(demoLearnedReject(-1)).toBe(false);
   expect(demoLearnedReject(0)).toBe(false);
+ });
+});
+describe('combinedLearnedScore', () => {
+ const at = Date.parse('2026-10-23T19:10:00Z');
+ const row = (s: string, a: string, r: string) => ({ entry_strategy: s, entry_minute: '2026-10-22T19:05:00Z', result: r, profit: r === 'win' ? 1.6 : -2, asset: a });
+ it('weighs real IQ results heavier than Demo history', () => {
+  const demo = [row('A','X','win'), row('A','X','win'), row('A','X','win'), row('A','X','win'), row('A','X','win')];
+  const realWin = [row('A','X','win'), row('A','X','win'), row('A','X','win'), row('A','X','win'), row('A','X','win')];
+  const realLoss = realWin.map(r => ({ ...r, result: 'loss', profit: -2 }));
+  const onlyDemo = combinedLearnedScore(demo, [], 0, 'A', 'X', at);
+  const withRealWin = combinedLearnedScore(demo, realWin, 0, 'A', 'X', at);
+  const withRealLoss = combinedLearnedScore(demo, realLoss, 0, 'A', 'X', at);
+  expect(withRealWin).toBeGreaterThan(onlyDemo);
+  expect(withRealLoss).toBeLessThan(onlyDemo);
+  expect(withRealWin - onlyDemo).toBeCloseTo(REAL_LEARNING_WEIGHT * (onlyDemo), 5);
+ });
+ it('adds the chart pattern adjustment on top', () => {
+  expect(combinedLearnedScore([], [], 0.5, 'A', 'X', at)).toBe(0.5);
  });
 });
 

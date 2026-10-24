@@ -328,6 +328,10 @@ Deno.serve(async (req) => {
     if (ceiling) demoPatterns.push({signal_id:`demo-teto-v1-${asset}-${curMin}`,asset,direction:'PUT',
       entry_strategy:DEMO_CEILING,created_at:new Date(curMin*1000).toISOString(),
       _score:fired.filter(([,direction])=>direction==='PUT').length+0.99*ceiling.match});
+    const forcaPadrao = demoForcaPadrao(cs,curMin);
+    if (forcaPadrao) demoPatterns.push({signal_id:`forca-padrao-v1-${asset}-${curMin}`,asset,direction:forcaPadrao.direction,
+      entry_strategy:FORCA_PADRAO,created_at:new Date(curMin*1000).toISOString(),
+      _score:fired.filter(([,direction])=>direction===forcaPadrao.direction).length+0.99*forcaPadrao.bodyRatio});
     // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
     const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
     const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];

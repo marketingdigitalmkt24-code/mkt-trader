@@ -30,9 +30,16 @@ test('rejects countertrend and fourth consecutive bearish candle',()=>{
 test('chooses one Demo winner without relabeling original candidate',()=>{
  const original={signal_id:'t7-A-TENDENCIA-1',asset:'A',direction:'CALL',entry_strategy:'TENDENCIA',created_at:new Date(entry*1000).toISOString(),_score:2};
  const pattern={...original,signal_id:'demo-continuation-v1-A-1',direction:'PUT',entry_strategy:DEMO_CONTINUATION,_score:2.8};
- expect(chooseDemoCandidate([original,pattern])).toEqual(pattern);
+ expect(chooseDemoCandidate([original,pattern])).toEqual(original);
  expect(original.entry_strategy).toBe('TENDENCIA');
- expect(chooseDemoCandidate([original,{...pattern,_score:1}])).toEqual(original);
+ expect(chooseDemoCandidate([original,{...pattern,_score:2.3}])).toEqual({...pattern,_score:2.3});
+});
+test('prefers the score closest to 2.26, exact 2.26 first',()=>{
+ const base={asset:'A',direction:'CALL',entry_strategy:'TENDENCIA',created_at:new Date(entry*1000).toISOString()};
+ const pick=(...s:number[])=>chooseDemoCandidate(s.map((x,i)=>({...base,signal_id:`s${i}`,_score:x})))?._score;
+ expect(pick(4.2,2.26,2.27)).toBe(2.26);
+ expect(pick(4.2,2.4,2.1)).toBe(2.4);
+ expect(pick(3.5,2.2)).toBe(2.2);
 });
 describe('demoCeiling', () => {
  const entry = 6000*60;

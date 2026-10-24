@@ -150,3 +150,9 @@ describe('similarToAnyReference', () => {
   expect(similarToAnyReference([a],null)).toBe(false);
  });
 });
+
+test('Demo entry floor requires score 2.0', async () => {
+  const { demoScoreAllowed } = await import('./demo-continuation');
+  expect(demoScoreAllowed(1.99)).toBe(false);
+  expect(demoScoreAllowed(2.0)).toBe(true);
+});

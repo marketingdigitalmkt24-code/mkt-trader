@@ -1,5 +1,5 @@
 export const DEMO_CONTINUATION = 'CONTINUACAO_QUEDA_V1';
-export type DemoCandidate = { signal_id: string; asset: string; direction: string; entry_strategy: string; created_at: string; _score: number };
+export type DemoCandidate = { signal_id: string; asset: string; direction: string; entry_strategy: string; created_at: string; _score: number; _preferredPatternDistance?: number };
 type Candle = { t: number; o: number; c: number; h: number; l: number };
 // Provisional prospective rule, not an accuracy claim. Features stop before entry.
 export function demoContinuation(candles: Candle[], entry: number) {
@@ -22,13 +22,26 @@ export function demoContinuation(candles: Candle[], entry: number) {
   if (streak > 3) return null;
   return { direction: 'PUT' as const, bodyRatio, lowerWick, streak };
 }
-// The minute slot prefers the score closest to the displayed 2.26 (the only real-entry score):
-// exact 2.26 first, then the nearest displayed score; ties go to the higher score.
+// Preserve exact principal authorization first; then prefer the user's winning-score cohort
+// and its pre-entry chart shapes, without changing the calculated score or eligibility gates.
+export const DEMO_PREFERRED_SCORE_CENTS = [226, 223, 218, 264, 288, 203, 269, 291] as const;
+export function demoPreferredScore(score: number) {
+  return Number.isFinite(score) && DEMO_PREFERRED_SCORE_CENTS.some(c => c === Math.round(score * 100));
+}
 const DEMO_TARGET_SCORE_CENTS = 226;
 const scoreDistance = (s: number) => Math.abs(Math.round(s * 100) - DEMO_TARGET_SCORE_CENTS);
-export function chooseDemoCandidate(candidates: DemoCandidate[]) {
+export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningScores = false) {
+  const tier = (c: DemoCandidate) => {
+    if (scoreDistance(c._score) === 0) return 0;
+    if (!preferWinningScores) return 1;
+    const matched = Number.isFinite(c._preferredPatternDistance) && Number(c._preferredPatternDistance) <= DEMO_REFERENCE_MAX_DISTANCE;
+    if (demoPreferredScore(c._score)) return matched ? 1 : 2;
+    return matched ? 3 : 4;
+  };
   return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0)
-    .sort((a,b) => scoreDistance(a._score)-scoreDistance(b._score) || b._score-a._score || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
+    .sort((a,b) => tier(a)-tier(b)
+      || (preferWinningScores ? (a._preferredPatternDistance ?? Infinity) - (b._preferredPatternDistance ?? Infinity) : 0)
+      || scoreDistance(a._score)-scoreDistance(b._score) || b._score-a._score || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
 }
 export const DEMO_CEILING = 'TETO_V1';
 // Provisional: red candle then green candle closing back at the red open (prior top); PUT next minute.
@@ -110,7 +123,14 @@ export function chartFeatures(candles: Candle[], entry: number, direction: strin
   f.push(s > 0 ? pos : 1 - pos);
   return f;
 }
-export type ChartSample = { f: number[]; result: string };
+export type ChartSample = { f: number[]; result: string; score?: number };
+export function demoPreferredPatternDistance(samples: ChartSample[], f: number[] | null) {
+  if (!f || !f.every(Number.isFinite)) return Infinity;
+  const distances = samples.filter(s => s.result === 'win' && demoPreferredScore(s.score ?? NaN)
+    && s.f.length === f.length && s.f.every(Number.isFinite))
+    .map(s => Math.sqrt(s.f.reduce((sum, v, i) => sum + (v - f[i]) ** 2, 0)));
+  return distances.length ? Math.min(...distances) : Infinity;
+}
 export function chartPatternAdjustment(samples: ChartSample[], f: number[] | null, k = 7) {
   if (!f) return 0;
   const near = samples.filter(x => x.f.length === f.length && (x.result === 'win' || x.result === 'loss'))

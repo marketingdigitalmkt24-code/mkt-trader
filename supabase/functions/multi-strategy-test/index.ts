@@ -10,7 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
@@ -150,14 +150,15 @@ Deno.serve(async (req) => {
     .then(r=>({...r,data:(r.data||[]).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:x.result==='win'?1:-1,asset:x.asset}))}));
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
   const chartPromise = (async()=>{
-    const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles')
+    const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles,score')
       .not('candles','is',null).gte('entry_minute',demoSince)
-      .lt('entry_minute',new Date(Math.floor(Date.now()/60000)*60000-60000).toISOString()).limit(1000);
+      .lt('entry_minute',new Date(Math.floor(Date.now()/60000)*60000-60000).toISOString())
+      .order('entry_minute',{ascending:false}).limit(1000);
     const ids=(chartRead.data||[]).map(r=>r.signal_id);
-    const chartOut=ids.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',ids).eq('status','confirmed').in('result',['win','loss']) : {data:[]};
+    const chartOut=ids.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',ids).eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss']) : {data:[]};
     const outcome=new Map((chartOut.data||[]).map(r=>[r.signal_id,r.result]));
     return (chartRead.data||[]).flatMap(r=>{const res=outcome.get(r.signal_id);
-      const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res}]:[];});
+      const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res,score:r.score}]:[];});
   })();
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
@@ -393,7 +394,12 @@ Deno.serve(async (req) => {
   const refF = refRow.data ? chartFeatures(refRow.data.candles as any[],Date.parse(refRow.data.entry_minute)/1000,refRow.data.direction) : null;
   // References: the user's GEV trade plus every confirmed winning Demo chart — seek charts like recent winners.
   const refFs: (number[] | null)[] = [refF, ...chartSamples.filter(s => s.result === 'win').map(s => s.f)];
-  const demoWinner = chooseDemoCandidate(demoPool.filter(c=>demoScoreAllowed(c._score)&&similarToAnyReference(refFs,chartFeatures(series.get(c.asset)||[],curMin,c.direction))));
+  const demoEligible = demoPool.flatMap(c => {
+    const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
+    if (!demoScoreAllowed(c._score) || !similarToAnyReference(refFs,f)) return [];
+    return [{...c,_preferredPatternDistance:demoPreferredPatternDistance(chartSamples,f)}];
+  });
+  const demoWinner = chooseDemoCandidate(demoEligible, true);
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
@@ -402,6 +408,8 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
+      console.log('Demo winning-score priority:', JSON.stringify({score:demoWinner._score,
+        preferredPatternDistance:Number.isFinite(demoWinner._preferredPatternDistance)?demoWinner._preferredPatternDistance:null}));
       // A selected Trend may independently authorize a principal order; no Demo stake/history reuse.
       // Real principal entries paused (user, Oct 24 2026): only a super-selected Demo winner (high learned score) opens real.
       if ((DEMO_PRINCIPAL_ENABLED && selectedDemoPrincipal({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now()))

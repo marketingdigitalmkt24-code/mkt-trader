@@ -13,7 +13,7 @@ function reasonText(code: string, details: unknown) {
   case 'learned_history': return `Aprendizado ${number(d.learned)} ≤ limite ${number(d.maximum)}. Histórico desfavorável bloqueou a escolha.`;
   case 'score_floor': return `Nota calculada ${number(d.score)} abaixo do mínimo ${number(d.minimum)}. O bloqueio usa a nota sem arredondar.`;
   case 'reference_mismatch': return `Gráfico não correspondeu à GEV nem às referências WIN disponíveis; distância máxima permitida ${number(d.maximum_distance)}.`;
-  case 'eight_pattern_mismatch': return d.distance == null ? 'Não havia comparação válida com gráficos WIN das notas selecionadas.' : `Distância do gráfico ${number(d.distance)} acima do máximo ${number(d.maximum_distance)} para os padrões WIN das notas selecionadas.`;
+  case 'eight_pattern_mismatch': return d.distance == null ? 'Não havia comparação válida com gráficos WIN confirmados disponíveis na análise.' : `Distância do gráfico ${number(d.distance)} acima do máximo ${number(d.maximum_distance)} para os padrões WIN disponíveis na análise.`;
   case 'priority_unavailable': return 'Leitura das prioridades do histórico indisponível naquele minuto. Seleção bloqueada por segurança.';
   case 'minute_priority': return `Passou pelos bloqueios, mas outro candidato teve prioridade no único lugar do minuto. Selecionado: ${String(d.selected_signal ?? 'não registrado')}.`;
   default: return `Motivo registrado: ${code}`;

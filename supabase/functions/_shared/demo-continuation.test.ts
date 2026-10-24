@@ -1,5 +1,5 @@
 import { test, expect, describe, it } from 'bun:test';
-import { demoCeiling, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, similarToReference, DEMO_REFERENCE_MAX_DISTANCE } from './demo-continuation';
+import { demoCeiling, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, DEMO_LEARNED_REJECT, chartFeatures, chartPatternAdjustment, similarToReference, DEMO_REFERENCE_MAX_DISTANCE } from './demo-continuation';
 import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION } from './demo-continuation';
 const entry = 1792783500;
 function candles() {
@@ -66,6 +66,30 @@ describe('chart pattern learning', () => {
   expect(chartPatternAdjustment(samples,a)).toBeGreaterThan(0);
   expect(chartPatternAdjustment(samples,b)).toBeLessThan(0);
   expect(chartPatternAdjustment(samples.slice(0,2),a)).toBe(0);
+ });
+});
+describe('demoAssetAdjustment', () => {
+ const row = (s: string, a: string, r: string, p: number) => ({ entry_strategy: s, entry_minute: '2026-10-23T19:05:00Z', result: r, profit: p, asset: a });
+ it('rewards profitable strategy+asset and penalizes losing one', () => {
+  const hist = [
+   ...Array(6).fill(row('A','X','win',1.6)), ...Array(2).fill(row('A','X','loss',-2)),
+   ...Array(6).fill(row('A','Y','loss',-2)), ...Array(2).fill(row('A','Y','win',1.6)),
+  ];
+  expect(demoAssetAdjustment(hist,'A','X')).toBeGreaterThan(0);
+  expect(demoAssetAdjustment(hist,'A','Y')).toBeLessThan(0);
+  expect(demoAssetAdjustment(hist,'A','Z')).toBe(0);
+ });
+ it('needs at least 3 outcomes before judging a pair', () => {
+  const hist = [row('A','X','loss',-2), row('A','X','loss',-2)];
+  expect(demoAssetAdjustment(hist,'A','X')).toBe(0);
+ });
+});
+describe('demoLearnedReject', () => {
+ it('blocks only strongly negative learned scores', () => {
+  expect(demoLearnedReject(DEMO_LEARNED_REJECT)).toBe(true);
+  expect(demoLearnedReject(-3)).toBe(true);
+  expect(demoLearnedReject(-1)).toBe(false);
+  expect(demoLearnedReject(0)).toBe(false);
  });
 });
 

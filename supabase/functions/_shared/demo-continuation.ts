@@ -42,7 +42,7 @@ export function demoCeiling(candles: Candle[], entry: number) {
   if (gap > 0.1 || last.h > prev.h + 0.1 * prevBody) return null;
   return { direction: 'PUT' as const, match: 1 - gap };
 }
-type DemoOutcome = { entry_strategy: string; entry_minute: string; result: string; profit: number };
+type DemoOutcome = { entry_strategy: string; entry_minute: string; result: string; profit: number; asset?: string };
 // Learns from confirmed Demo broker outcomes: strategy+BRT hour weighs most, then strategy overall; losses weigh more.
 export function demoLearningAdjustment(history: DemoOutcome[], strategy: string, entryMs: number) {
   const hour = (h: string | number) => (new Date(typeof h === 'number' ? h : Date.parse(h)).getUTCHours() + 21) % 24;
@@ -54,6 +54,21 @@ export function demoLearningAdjustment(history: DemoOutcome[], strategy: string,
   const same = history.filter(r => r.entry_strategy === strategy);
   const adj = 0.6 * score(same.filter(r => hour(r.entry_minute) === h)) + 0.4 * score(same);
   return Math.max(-1, Math.min(1, adj));
+}
+// Profit-aware learning per strategy+asset: net profit and win rate on that exact pair; losses weigh more.
+export function demoAssetAdjustment(history: DemoOutcome[], strategy: string, asset: string) {
+  const rows = history.filter(r => r.entry_strategy === strategy && r.asset === asset);
+  const w = rows.filter(r => r.result === 'win').length, l = rows.filter(r => r.result === 'loss').length;
+  if (w + l < 3) return 0;
+  const net = rows.reduce((s, r) => s + (Number(r.profit) || 0), 0);
+  const wr = (w - 1.2 * l) / (w + l);
+  const pf = net > 0 ? 1 : net < 0 ? -1 : 0;
+  return Math.max(-1, Math.min(1, 0.6 * wr + 0.4 * pf * Math.min(1, (w + l) / 8)));
+}
+// Combined learned score below this (with evidence) blocks the Demo entry: seek only profitable patterns.
+export const DEMO_LEARNED_REJECT = -1.2;
+export function demoLearnedReject(adjustment: number) {
+  return adjustment <= DEMO_LEARNED_REJECT;
 }
 // Chart-shape learning: compares the last 5 closed candles (oriented to the trade direction) with
 // confirmed Demo outcomes whose pre-entry candles were saved. Features stop before each entry.

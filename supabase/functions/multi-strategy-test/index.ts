@@ -10,7 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
@@ -365,9 +365,13 @@ Deno.serve(async (req) => {
   };
   const [demoHist,chartSamples,refRow] = await Promise.all([demoHistPromise,chartPromise,refPromise]);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
-  const demoPool = [...rows,...demoPatterns].map(c=>({...c,_score:Math.max(0,c._score
-    +2*demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
-    +2*chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)))}));
+  // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
+  const demoPool = [...rows,...demoPatterns].flatMap(c=>{
+    const learn=demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
+      +demoAssetAdjustment(demoHist.data||[],c.entry_strategy,c.asset)
+      +chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction));
+    if(demoLearnedReject(learn))return[];
+    return[{...c,_score:Math.max(0,c._score+2*learn)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);
   if (qw && series.has(qw.asset)) demoPool.push({ signal_id: `queda-win-call-v1-${qw.asset}-${curMin}`,

@@ -140,6 +140,13 @@ Deno.serve(async (req) => {
   const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit,asset,direction')
     .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
     .gte('entry_minute',demoSince).order('entry_minute',{ascending:false}).limit(1000).then(r=>r);
+  // Real principal IQ entries and their confirmed results also teach the scorer (heavier weight).
+  const realHistPromise = supabase.from('operation_results')
+    .select('entry_strategy,asset,direction,result,created_at')
+    .not('timeframe','in','("TEST","MT5")').in('result',['win','loss'])
+    .not('iq_option_id','is',null).not('iq_option_id','like','mt5-%').not('iq_option_id','ilike','test%')
+    .gte('created_at',demoSince).order('created_at',{ascending:false}).limit(1000)
+    .then(r=>({...r,data:(r.data||[]).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:x.result==='win'?1:-1,asset:x.asset}))}));
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
   const chartPromise = (async()=>{
     const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles')

@@ -92,6 +92,24 @@ describe('demoLearnedReject', () => {
   expect(demoLearnedReject(0)).toBe(false);
  });
 });
+describe('combinedLearnedScore', () => {
+ const at = Date.parse('2026-10-23T19:10:00Z');
+ const row = (s: string, a: string, r: string) => ({ entry_strategy: s, entry_minute: '2026-10-22T19:05:00Z', result: r, profit: r === 'win' ? 1.6 : -2, asset: a });
+ it('weighs real IQ results heavier than Demo history', () => {
+  const demo = [row('A','X','win'), row('A','X','win'), row('A','X','win'), row('A','X','win'), row('A','X','win')];
+  const realWin = [row('A','X','win'), row('A','X','win'), row('A','X','win'), row('A','X','win'), row('A','X','win')];
+  const realLoss = realWin.map(r => ({ ...r, result: 'loss', profit: -2 }));
+  const onlyDemo = combinedLearnedScore(demo, [], 0, 'A', 'X', at);
+  const withRealWin = combinedLearnedScore(demo, realWin, 0, 'A', 'X', at);
+  const withRealLoss = combinedLearnedScore(demo, realLoss, 0, 'A', 'X', at);
+  expect(withRealWin).toBeGreaterThan(onlyDemo);
+  expect(withRealLoss).toBeLessThan(onlyDemo);
+  expect(withRealWin - onlyDemo).toBeCloseTo(REAL_LEARNING_WEIGHT * (onlyDemo), 5);
+ });
+ it('adds the chart pattern adjustment on top', () => {
+  expect(combinedLearnedScore([], [], 0.5, 'A', 'X', at)).toBe(0.5);
+ });
+});
 
 test('wider GEV tolerance accepts formerly rejected shapes without removing the minimum', () => {
   const ref = Array(21).fill(0.2);

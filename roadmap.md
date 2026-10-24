@@ -1,4 +1,5 @@
 # Histórico de acertos por nota
+- [ ] Registrar rejeições prospectivas da seleção Demo e mostrar motivos exatos no histórico, sem alterar execução ou fabricar rejeições antigas.
 - [x] Operações da nota exata com gráficos individuais na mesma aba; reutilizada comparação prevista/fechada e próxima vela real, paginação de seis ordens. Doze testes aprovados, build OK; seis operações 2,26 e segunda página 2,03 conferidas com sessão admin, celular sem overflow/erros. Execução preservada.
 - [x] Aba admin somente leitura criada com notas exatas, saldo acumulado, taxa de acerto, filtros de período/nota e ordenação; oito testes aprovados, build OK, 718 ordens Demo conferidas com sessão admin, filtro 2,26 e Hoje funcionando, sem erros nem rolagem horizontal no celular. Prioridades de execução preservadas.
 

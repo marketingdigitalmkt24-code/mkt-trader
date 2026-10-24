@@ -243,7 +243,8 @@ async function placeTradeFireAndForget(
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
   return new Promise((resolve) => {
     // Copies follow the confirmed principal's minute, never a new future candle.
-    const anchoredEntry = !!gate || isNextMinuteStrategy(trade.entryStrategy);
+    const anchoredCopy = !!gate && trade.signalId?.startsWith('tendencia-demo-v1-t7-') === true;
+    const anchoredEntry = anchoredCopy || isNextMinuteStrategy(trade.entryStrategy);
     console.log('📡 Connecting to IQ Option WebSocket for trading...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
     
@@ -309,7 +310,7 @@ async function placeTradeFireAndForget(
             for (const [id, info] of Object.entries(actives)) {
               const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
               if (!assetInfo.enabled || assetInfo.is_suspended) continue;
-              if ((isAnticipation(trade.entryStrategy) || !!gate) && (!trade.entryAt || optionType !== 3
+              if ((isAnticipation(trade.entryStrategy) || anchoredCopy) && (!trade.entryAt || optionType !== 3
                 || !iqMarketOpen(info, Math.floor(Date.now() / 1000), trade.entryAt / 1000 + 60))) continue;
               
               const name = (assetInfo.name || '').toUpperCase();
@@ -516,12 +517,12 @@ async function placeTradeFireAndForget(
               return;
             }
             const optPayout = payoutById[foundAsset!.turboId || foundAsset!.binaryId || foundAsset!.id] || 0;
-            if ((isAnticipation(trade.entryStrategy) || !!gate) && !hasTurbo) {
+            if ((isAnticipation(trade.entryStrategy) || anchoredCopy) && !hasTurbo) {
               clearTimeout(timeout); ws.close();
               resolve({ success: false, error: 'Ativo M1 não disponível; entrada cancelada' });
               return;
             }
-            if (!gate && !isAnticipation(trade.entryStrategy) && (!hasTurbo || (optPayout > 0 && optPayout < 80))) {
+            if (!anchoredCopy && !isAnticipation(trade.entryStrategy) && (!hasTurbo || (optPayout > 0 && optPayout < 80))) {
               sendDigital(!hasTurbo ? 'sem turbo' : `payout ${optPayout}%`);
               return;
             }

@@ -19,6 +19,8 @@ const symbolOf = (raw: string) => {
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return reply({});
   if (req.method !== 'POST') return reply({ error: 'Method not allowed' }, 405);
+  // Retired from principal (user, Oct 24 2026): only "Super selecionada" may open real IQ entries.
+  return reply({ skipped: true, reason: 'Tendência 3 perdas retired; only Super selecionada opens real entries' }, 410);
   const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
   const db = createClient(url, key);

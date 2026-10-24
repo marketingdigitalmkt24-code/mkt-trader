@@ -20,7 +20,7 @@
 - Demo prepares before :00; parallel reads, closed candles, deferred charts. Reconcile previous PRACTICE IDs on that session before selection; retries use a separate strategy and unchanged stake; why: avoid stale triggers and recursive retries.
 - IQ display reset combines browser and global admin cutoffs; hide only the cutoff's BRT day through that instant in admin/client views, preserving earlier days, new entries and all records; why: resetting today must not erase history.
 - Demo refill uses a user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker confirms replenishment and REAL balances stay untouched.
-- Removed claims return null; placement rejects them. Exclude retired orders/copies from displayed totals but preserve stored accounting; three-force keeps its lock.
+- Retired claims return null. Shared normal-Trend filter blocks placement/copy/history, not Demo or derived strategies; retain accounting and three-force lock.
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
 - Recent operations cache pages and count page one; show confirmed principal IQ after cutoff, never simulations.
 - Demo summaries paginate confirmed broker outcomes; strategy accuracy uses entry-minute display cutoff with zero rows for previously sent strategies; exclude ties/pending and preserve accumulated net and principal totals.

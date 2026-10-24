@@ -12,7 +12,6 @@ import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequ
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
-import { selectedDemoTrend } from '../_shared/selected-demo-trend.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.ts';
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';

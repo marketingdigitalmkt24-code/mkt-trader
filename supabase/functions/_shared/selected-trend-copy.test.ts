@@ -8,7 +8,7 @@ test('confirmed additional principal Tendência is copyable in its own minute',(
   expect(selectedTrendCopyRequest({...order,direction:'CALL'},at+3000)?.direction).toBe('call');
 });
 test('all visible confirmed principal strategies authorize client copies',()=>{
-  for (const strategy of ['TENDENCIA','TENDENCIA_WIN_INVERTIDA','TENDENCIA_3_LOSS_PUT','FORCA_ANTECIPADA','REVERSAO_RSI','RETOMADA','VELA_FORCA']) {
+  for (const strategy of ['QUEDA_WIN_RETRY_V1','TENDENCIA','TENDENCIA_WIN_INVERTIDA','TENDENCIA_3_LOSS_PUT','FORCA_ANTECIPADA','REVERSAO_RSI','RETOMADA','VELA_FORCA']) {
     expect(selectedTrendCopyRequest({...order,signal_id:`principal-${strategy}`,entry_strategy:strategy},at+3000)?.entryStrategy).toBe(strategy);
   }
   expect(selectedTrendCopyRequest({...order,entry_strategy:null},at+3000)).not.toBeNull();

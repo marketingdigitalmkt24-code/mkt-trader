@@ -4,7 +4,7 @@ import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
-import { selectedDemoTrend, freshSelectedTrend, notifySelectedTrend } from '../_shared/selected-demo-trend.ts';
+import { freshSelectedTrend, notifySelectedTrend } from '../_shared/selected-demo-trend.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { TREND_WIN_INVERTED } from '../_shared/trend-win-inverted.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';

@@ -1,5 +1,5 @@
 export const DEMO_CONTINUATION = 'CONTINUACAO_QUEDA_V1';
-export type DemoCandidate = { signal_id: string; asset: string; direction: string; entry_strategy: string; created_at: string; _score: number; _preferredPatternDistance?: number };
+export type DemoCandidate = { signal_id: string; asset: string; direction: string; entry_strategy: string; created_at: string; _score: number; _preferredPatternDistance?: number; _patternWins?: number; _patternAccuracy?: number };
 type Candle = { t: number; o: number; c: number; h: number; l: number };
 // Provisional prospective rule, not an accuracy claim. Features stop before entry.
 export function demoContinuation(candles: Candle[], entry: number) {
@@ -47,7 +47,11 @@ export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningSc
   };
   return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0
     && (!preferWinningScores || demoPreferredPatternAllowed(c._preferredPatternDistance)))
-    .sort((a,b) => tier(a)-tier(b)
+    .sort((a,b) => (preferWinningScores && (a._patternWins !== undefined || b._patternWins !== undefined)
+        ? (b._patternWins ?? 0) - (a._patternWins ?? 0)
+          || (b._patternAccuracy ?? 0) - (a._patternAccuracy ?? 0)
+          || (a._preferredPatternDistance ?? Infinity) - (b._preferredPatternDistance ?? Infinity)
+        : tier(a)-tier(b))
       || (preferWinningScores ? (a._preferredPatternDistance ?? Infinity) - (b._preferredPatternDistance ?? Infinity) : 0)
       || scoreDistance(a._score)-scoreDistance(b._score) || b._score-a._score || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
 }
@@ -131,14 +135,27 @@ export function chartFeatures(candles: Candle[], entry: number, direction: strin
   f.push(s > 0 ? pos : 1 - pos);
   return f;
 }
-export type ChartSample = { f: number[]; result: string; score?: number; signal_id?: string; asset?: string; entry_minute?: string };
+export type ChartSample = { f: number[]; result: string; profit?: number; score?: number; signal_id?: string; asset?: string; entry_minute?: string };
 export function demoWinningPatternMatch(samples: ChartSample[], f: number[] | null) {
   if (!f || !f.every(Number.isFinite)) return null;
   const matches=samples.filter(s=>s.result==='win'&&s.signal_id&&s.f.length===f.length&&s.f.every(Number.isFinite))
     .map(s=>({signal_id:s.signal_id,asset:s.asset??null,entry_minute:s.entry_minute??null,score:s.score??null,
       distance:Math.sqrt(s.f.reduce((sum,v,i)=>sum+(v-f[i])**2,0))}))
     .filter(s=>demoPreferredPatternAllowed(s.distance)).sort((a,b)=>a.distance-b.distance||String(a.signal_id).localeCompare(String(b.signal_id)));
-  return matches[0]??null;
+  const reference = matches[0];
+  if (!reference) return null;
+  const seen = new Set<string>();
+  const nearby = samples.filter(s => {
+    if (!s.signal_id || seen.has(s.signal_id) || !['win','loss'].includes(s.result)
+      || s.f.length !== f.length || !s.f.every(Number.isFinite)) return false;
+    const distance = Math.sqrt(s.f.reduce((sum,v,i)=>sum+(v-f[i])**2,0));
+    if (!demoPreferredPatternAllowed(distance)) return false;
+    seen.add(s.signal_id); return true;
+  });
+  const wins = nearby.filter(s=>s.result==='win').length;
+  const losses = nearby.filter(s=>s.result==='loss').length;
+  return {...reference,wins,losses,accuracy:wins/(wins+losses),
+    profit:nearby.reduce((sum,s)=>sum+(Number.isFinite(s.profit)?Number(s.profit):0),0)};
 }
 export function demoPreferredPatternDistance(samples: ChartSample[], f: number[] | null) {
   if (!f || !f.every(Number.isFinite)) return Infinity;

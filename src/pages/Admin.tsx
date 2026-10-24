@@ -5,6 +5,7 @@ import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { UserManagementCard } from '@/components/UserManagementCard';
 import { CopyTradingCard } from '@/components/CopyTradingCard';
+import { DemoScoreHistory } from '@/components/DemoScoreHistory';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
@@ -107,7 +108,7 @@ const Admin = () => {
 
         {/* Tabbed Layout */}
         <Tabs defaultValue="dashboard" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto gap-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 h-auto gap-1">
             <TabsTrigger value="dashboard" className="text-xs sm:text-sm py-2 gap-1"><LayoutDashboard className="w-3.5 h-3.5" />Dashboard</TabsTrigger>
             <TabsTrigger value="trading" className="text-xs sm:text-sm py-2 gap-1">
               <Bot className="w-3.5 h-3.5" />
@@ -125,9 +126,11 @@ const Admin = () => {
               <Users className="w-3.5 h-3.5" />
               Usuários
             </TabsTrigger>
+            <TabsTrigger value="score-history" className="text-xs sm:text-sm py-2 gap-1"><BarChart3 className="w-3.5 h-3.5"/>Histórico por nota</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard"><TradingDashboard /></TabsContent>
+          <TabsContent value="score-history"><DemoScoreHistory /></TabsContent>
 
           {/* Auto Trading Tab */}
           <TabsContent value="trading" className="space-y-4">

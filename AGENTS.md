@@ -21,5 +21,6 @@
 - Retired claims return null. Shared normal-Trend filter blocks placement/copy/history, not Demo or derived strategies; retain accounting and three-force lock.
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
 - Recent operations cache pages and count page one; show confirmed principal IQ after cutoff, never simulations. Demo summaries paginate confirmed broker outcomes; strategy accuracy uses entry-minute display cutoff with zero rows for previously sent strategies; exclude ties/pending, preserve accumulated net and principal totals.
+- Admin score history is read-only: paginate confirmed PRACTICE orders, join candidate scores by exact signal ID, group displayed scores, and plot settled net/accuracy separately from principal totals; why: comparisons must not change execution priorities or omit older pages.
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.
 - Retired anticipation variants are blocked at observation creation, not historical settlement; the anticipation card reads broker orders directly without simulated counters; why: retirement must stop new tests without hiding confirmed orders or deleting history.

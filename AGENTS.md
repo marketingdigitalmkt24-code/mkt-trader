@@ -17,7 +17,7 @@
 - Anchor reversal submission and expiry to the candidate's own minute, submitting right after the fourth candle confirms within the purchase window; why: another minute trades a different candle and stale candidates must never roll forward.
 - Reuse broker sessions only for service-authenticated same-account reversals/Demo; never log/store secrets.
 - Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy keeps explicit client IDs; why: client connection updates must not redirect master entries.
-- Scheduled Demo authenticates before next :00, then reads closed candles; await TEST settlement, parallelize learning, reuse leases, defer charts/history until dispatch; why: reduce delay safely.
+- Demo prepares before :00; parallel reads, closed candles, deferred charts. Reconcile previous PRACTICE IDs on that session before selection; retries use a separate strategy and unchanged stake; why: avoid stale triggers and recursive retries.
 - IQ display reset combines browser and global admin cutoffs; hide only the cutoff's BRT day through that instant in admin/client views, preserving earlier days, new entries and all records; why: resetting today must not erase history.
 - Demo refill uses a user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker confirms replenishment and REAL balances stay untouched.
 - Removed claims return null; placement rejects them. Exclude retired orders/copies from displayed totals but preserve stored accounting; three-force keeps its lock.

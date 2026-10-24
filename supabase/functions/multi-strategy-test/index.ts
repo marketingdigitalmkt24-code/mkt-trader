@@ -12,6 +12,7 @@ import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequ
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
+import { selectedDemoTrend } from '../_shared/selected-demo-trend.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -299,6 +300,19 @@ Deno.serve(async (req) => {
       candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
+      // A selected Trend may independently authorize a principal order; no Demo stake/history reuse.
+      if (selectedDemoTrend({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now())) {
+        const principalTask = supabase.functions.invoke('selected-demo-trend', {
+          body: { candidate: demoWinner.signal_id, brokerSession: { ssid, configId: cfg.id } },
+        }).then(async ({ data, error }) => {
+          if (error) {
+            const details = 'context' in error && error.context instanceof Response ? await error.context.text() : error.message;
+            console.error('Selected Trend principal dispatch failed:', details);
+          } else console.log('Selected Trend principal outcome:', JSON.stringify(data));
+        }).catch(error => console.error('Selected Trend dispatch failed:', String(error)));
+        // @ts-ignore Hosted background runtime
+        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(principalTask); else await principalTask;
+      }
       const demoTask=supabase.functions.invoke('iqoption-demo-tests',{body:{candidate:demoWinner.signal_id,brokerSession:{ssid,configId:cfg.id}}})
         .then(({error})=>{if(error)console.error('Demo TEST dispatch failed');});
       // @ts-ignore Hosted background runtime

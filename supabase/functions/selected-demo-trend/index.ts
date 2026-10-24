@@ -42,7 +42,7 @@ Deno.serve(async req => {
     const entryAt = Date.parse(candidate.entry_minute);
     const { data: cfg } = await readMasterIQConfig(db);
     if (!cfg || !cfg.last_connected_at || !['PRACTICE', 'REAL'].includes(cfg.account_type)) return reply({ skipped: 'Principal connection unavailable' });
-    let ssid: string | null = reusableDemoSession(parsed.data.brokerSession, cfg.id);
+    let ssid: string | null = reusableDemoSession(true, cfg.id, parsed.data.brokerSession);
     for (const endpoint of ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login']) {
       if (ssid || !freshTrendPut(entryAt, Date.now())) break;
       try {

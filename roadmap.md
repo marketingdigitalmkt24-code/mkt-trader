@@ -1,3 +1,6 @@
+# Exclusão permanente do histórico IQ Option
+- [x] Excluídos permanentemente 1.001 registros principais e 831 cópias; consulta confirmou zero entradas IQ restantes de qualquer dia/cliente, 18.848 TESTES simulados e 164 ordens Demo preservados. Painel admin autenticado conferido sem entradas e com resultado zerado; histórico cliente confirmado pela fonte compartilhada, sem sessão cliente distinta. Saldo/configuração da corretora intactos.
+
 # Testes executados na Demo
 - [ ] Reduzir espera da entrada Demo rumo a :00; manter velas fechadas, seleção completa e janela atual.
 - [x] Incluir a próxima vela fechada no gráfico Demo; sete testes aprovados, rotina publicada e painel conferido; coleta automática não força ordens.

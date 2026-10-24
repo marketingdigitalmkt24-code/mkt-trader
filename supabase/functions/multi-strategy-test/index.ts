@@ -10,7 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, combinedLearnedScore, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, combinedLearnedScore, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
@@ -390,8 +390,9 @@ Deno.serve(async (req) => {
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1});
   const refF = refRow.data ? chartFeatures(refRow.data.candles as any[],Date.parse(refRow.data.entry_minute)/1000,refRow.data.direction) : null;
-  // Only charts similar to the user's reference trade may compete; no reference => no Demo entry.
-  const demoWinner = chooseDemoCandidate(demoPool.filter(c=>similarToReference(refF,chartFeatures(series.get(c.asset)||[],curMin,c.direction))));
+  // References: the user's GEV trade plus every confirmed winning Demo chart — seek charts like recent winners.
+  const refFs: (number[] | null)[] = [refF, ...chartSamples.filter(s => s.result === 'win').map(s => s.f)];
+  const demoWinner = chooseDemoCandidate(demoPool.filter(c=>similarToAnyReference(refFs,chartFeatures(series.get(c.asset)||[],curMin,c.direction))));
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,

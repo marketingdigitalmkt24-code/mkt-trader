@@ -117,3 +117,8 @@ export function similarToReference(ref: number[] | null, f: number[] | null, max
   if (!ref || !f || ref.length !== f.length) return false;
   return Math.sqrt(ref.reduce((a, v, i) => a + (v - f[i]) ** 2, 0)) <= max;
 }
+// Seek charts like any confirmed winner: true when the chart is close to at least one reference.
+export function similarToAnyReference(refs: (number[] | null)[], f: number[] | null, max = DEMO_REFERENCE_MAX_DISTANCE) {
+  if (!f) return false;
+  return refs.some(r => similarToReference(r, f, max));
+}

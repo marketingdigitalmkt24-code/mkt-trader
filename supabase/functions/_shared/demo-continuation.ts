@@ -70,6 +70,16 @@ export const DEMO_LEARNED_REJECT = -1.2;
 export function demoLearnedReject(adjustment: number) {
   return adjustment <= DEMO_LEARNED_REJECT;
 }
+// Real principal IQ outcomes weigh 1.5x over Demo history: patterns with real profit prioritize candidates more.
+export const REAL_LEARNING_WEIGHT = 1.5;
+export function combinedLearnedScore(
+  demoHist: DemoOutcome[], realHist: DemoOutcome[], chartAdj: number,
+  strategy: string, asset: string, entryMs: number,
+) {
+  const demo = demoLearningAdjustment(demoHist, strategy, entryMs) + demoAssetAdjustment(demoHist, strategy, asset);
+  const real = demoLearningAdjustment(realHist, strategy, entryMs) + demoAssetAdjustment(realHist, strategy, asset);
+  return demo + REAL_LEARNING_WEIGHT * real + chartAdj;
+}
 // Chart-shape learning: compares the last 5 closed candles (oriented to the trade direction) with
 // confirmed Demo outcomes whose pre-entry candles were saved. Features stop before each entry.
 export function chartFeatures(candles: Candle[], entry: number, direction: string) {

@@ -1,5 +1,5 @@
 import { test, expect, describe, it } from 'bun:test';
-import { demoCeiling, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, DEMO_LEARNED_REJECT, chartFeatures, chartPatternAdjustment, similarToReference, DEMO_REFERENCE_MAX_DISTANCE } from './demo-continuation';
+import { demoCeiling, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, DEMO_LEARNED_REJECT, combinedLearnedScore, REAL_LEARNING_WEIGHT, chartFeatures, chartPatternAdjustment, similarToReference, DEMO_REFERENCE_MAX_DISTANCE } from './demo-continuation';
 import { demoContinuation, chooseDemoCandidate, DEMO_CONTINUATION } from './demo-continuation';
 const entry = 1792783500;
 function candles() {

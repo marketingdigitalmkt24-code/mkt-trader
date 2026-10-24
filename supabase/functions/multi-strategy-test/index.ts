@@ -390,8 +390,9 @@ Deno.serve(async (req) => {
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1});
   const refF = refRow.data ? chartFeatures(refRow.data.candles as any[],Date.parse(refRow.data.entry_minute)/1000,refRow.data.direction) : null;
-  // Only charts similar to the user's reference trade may compete; no reference => no Demo entry.
-  const demoWinner = chooseDemoCandidate(demoPool.filter(c=>similarToReference(refF,chartFeatures(series.get(c.asset)||[],curMin,c.direction))));
+  // References: the user's GEV trade plus every confirmed winning Demo chart — seek charts like recent winners.
+  const refFs: (number[] | null)[] = [refF, ...chartSamples.filter(s => s.result === 'win').map(s => s.f)];
+  const demoWinner = chooseDemoCandidate(demoPool.filter(c=>similarToAnyReference(refFs,chartFeatures(series.get(c.asset)||[],curMin,c.direction))));
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,

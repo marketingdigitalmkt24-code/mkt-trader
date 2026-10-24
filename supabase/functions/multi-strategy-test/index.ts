@@ -13,6 +13,7 @@ import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoTrend } from '../_shared/selected-demo-trend.ts';
+import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.ts';
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
@@ -384,7 +385,7 @@ Deno.serve(async (req) => {
     else {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
       // A selected Trend may independently authorize a principal order; no Demo stake/history reuse.
-      if (selectedDemoTrend({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now())) {
+      if (selectedDemoPrincipal({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now())) {
         const principalTask = supabase.functions.invoke('selected-demo-trend', {
           body: { candidate: demoWinner.signal_id, brokerSession: { ssid, configId: cfg.id } },
         }).then(async ({ data, error }) => {

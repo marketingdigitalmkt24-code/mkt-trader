@@ -7,10 +7,12 @@ import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.t
 import { selectedDemoTrend, freshSelectedTrend, notifySelectedTrend } from '../_shared/selected-demo-trend.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { TREND_WIN_INVERTED } from '../_shared/trend-win-inverted.ts';
+import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
+import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 const freshTrendPut = freshSelectedTrend;
 const notifyTrendPut = notifySelectedTrend;
 
-const schema = z.object({ candidate: z.string().startsWith('t7-').max(255), brokerSession: z.object({ ssid: z.string().min(1).max(4096), configId: z.string().uuid() }).optional() }).strict();
+const schema = z.object({ candidate: z.string().min(1).max(255), brokerSession: z.object({ ssid: z.string().min(1).max(4096), configId: z.string().uuid() }).optional() }).strict();
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: corsHeaders });
 const symbolOf = (raw: string) => {
   let name = raw.toUpperCase().replace(/^FRONT\./, '');
@@ -36,7 +38,7 @@ Deno.serve(async req => {
     const { data: candidate, error: candidateError } = await db.from('iq_demo_test_candidates')
       .select('signal_id,asset,entry_minute,entry_strategy,direction').eq('signal_id', parsed.data.candidate).maybeSingle();
     if (candidateError) throw candidateError;
-    if (!selectedDemoTrend(candidate, Date.now())) return reply({ skipped: 'No fresh selected Trend signal' });
+    if (!selectedDemoPrincipal(candidate, Date.now())) return reply({ skipped: 'No fresh authorized selected signal' });
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);
     const { data: cfg } = await readMasterIQConfig(db);
@@ -93,7 +95,7 @@ Deno.serve(async req => {
             state.claimed = order;
             leaseScope = `master:${String(order.entryStrategy).toLowerCase()}`;
             if (order.configId !== cfg.id || !['call','put'].includes(order.direction)
-              || !['TENDENCIA',TREND_WIN_INVERTED].includes(order.entryStrategy)
+              || !['TENDENCIA',TREND_WIN_INVERTED,QUEDA_WIN_RETRY].includes(order.entryStrategy)
               || !freshTrendPut(order.entryAt, Date.now()) || done) {
               finish({ success: false, error: 'Configuration changed or entry window closed; no order sent' }); return;
             }
@@ -128,7 +130,7 @@ Deno.serve(async req => {
     if (!owned) return reply({ skipped: outcome.error || 'No authorized order' });
     const queued = { signal_id: owned.signalId, amount: owned.amount };
     const direction = owned.direction.toUpperCase();
-    const strategyLabel = owned.entryStrategy === TREND_WIN_INVERTED ? 'Tendência invertida' : 'Tendência';
+    const strategyLabel = owned.entryStrategy === QUEDA_WIN_RETRY ? 'Queda win +1' : owned.entryStrategy === TREND_WIN_INVERTED ? 'Tendência invertida' : 'Tendência';
     if (!outcome.success || !outcome.tradeId) {
       console.error('Selected Trend failed:', outcome.error);
       await db.from('trade_queue').update({ status: 'failed', error: outcome.error || 'Broker confirmation unknown' }).eq('signal_id', queued.signal_id);

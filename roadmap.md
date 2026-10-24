@@ -7,6 +7,7 @@
 - [x] Excluídos permanentemente 1.001 registros principais e 831 cópias; consulta confirmou zero entradas IQ restantes de qualquer dia/cliente, 18.848 TESTES simulados e 164 ordens Demo preservados. Painel admin autenticado conferido sem entradas e com resultado zerado; histórico cliente confirmado pela fonte compartilhada, sem sessão cliente distinta. Saldo/configuração da corretora intactos.
 
 # Testes executados na Demo
+- [ ] Autorizar Queda win +1 selecionada também na principal/Telegram/copy, com origem LOSS Demo validada, limites/valor atuais; testar e publicar.
 - [x] Tendência WIN Demo → próximo Tendência selecionado invertido implementada no claim principal atômico (prioridade sobre principal normal, sem duplicar). Direção retornada usada na IQ, registros, Telegram e copy; valor/limites atuais e ativo aberto preservados. Migração 0039 aplicada, três funções publicadas, 34 testes aprovados, grants serviço-only conferidos, build OK e painel autenticado sem erros.
 - [ ] Conferir primeira Tendência invertida e Telegram/copy — depende de WIN Demo + novo Tendência imediatamente seguinte, janela aberta e limites livres; nenhuma ordem anterior reexecutada e nenhuma inversão confirmada no intervalo.
 - [x] Queda win verificada sem ordens anteriores; corrigida leitura antecipada dos resultados com conciliação por ID na sessão existente. Queda win +1 candidata CALL somente no minuto após LOSS original, mesmo ativo/valor, sem repetição recursiva; filtro/slot preservados. Duas funções publicadas, 31 testes aprovados e build OK.

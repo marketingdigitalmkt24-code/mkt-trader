@@ -31,6 +31,15 @@ test('never selects REAL or falls back to another currency', () => {
  expect(demoBalance([{ id: 2, type: 4, currency: 'BRL' }])).toBeUndefined();
  expect(demoBalance([{ id: 1, type: 1, currency: 'USD' }, { id: 2, type: 4, currency: 'USD' }])?.id).toBe(2);
 });
+test('one Queda win retry uses the existing Demo stake policy and only a fresh CALL', () => {
+ const row = { signal_id: 'queda-win-retry-v1-APPLE-OTC-1792862400', timeframe: 'TEST', direction: 'CALL', entry_strategy: 'QUEDA_WIN_RETRY_V1', created_at: '2026-10-24T02:40:00Z' };
+ const at = Date.parse(row.created_at);
+ expect(freshDemoCandidate(row, at + 1000)).toBe(true);
+ expect(freshDemoCandidate(row, at + 60000)).toBe(false);
+ expect(freshDemoCandidate({ ...row, timeframe: 'M1' }, at)).toBe(false);
+ expect(freshDemoCandidate({ ...row, direction: 'PUT' }, at)).toBe(false);
+ expect(freshDemoCandidate({ ...row, entry_strategy: 'QUEDA_WIN_CALL_V1' }, at)).toBe(false);
+});
 test('only fresh selected TEST in own minute can place, no historical replay', () => {
  const row = { signal_id: 't7-SMH-TENDENCIA-1', timeframe: 'TEST', direction: 'CALL', created_at: '2026-10-23T19:00:00Z' };
  const at = Date.parse(row.created_at);

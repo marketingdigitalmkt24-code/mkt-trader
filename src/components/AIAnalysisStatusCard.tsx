@@ -20,6 +20,7 @@ const strategyLabels: Record<string, string> = {
   CONTINUACAO_QUEDA_V1: 'Queda',
   TETO_V1: 'Teto',
   QUEDA_WIN_CALL_V1: 'Queda win',
+  QUEDA_WIN_RETRY_V1: 'Queda win +1',
   TENDENCIA_3_LOSS_PUT: 'Tendência 3 perdas → Venda',
   TREND_WIN_LOSS_FORCE_LOSS: 'Retomada',
   TENDENCIA_V1: 'Tendência V1',

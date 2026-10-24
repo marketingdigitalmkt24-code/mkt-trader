@@ -17,7 +17,8 @@ export function freshDemoCandidate(row: { signal_id: string; timeframe: string; 
  const at = Date.parse(row.created_at);
  const known = (row.signal_id.startsWith('demo-continuation-v1-') && row.entry_strategy === 'CONTINUACAO_QUEDA_V1' && row.direction === 'PUT')
   || (row.signal_id.startsWith('demo-teto-v1-') && row.entry_strategy === 'TETO_V1' && row.direction === 'PUT')
-  || (row.signal_id.startsWith('queda-win-call-v1-') && row.entry_strategy === 'QUEDA_WIN_CALL_V1' && row.direction === 'CALL');
+   || (row.signal_id.startsWith('queda-win-call-v1-') && row.entry_strategy === 'QUEDA_WIN_CALL_V1' && row.direction === 'CALL')
+   || (row.signal_id.startsWith('queda-win-retry-v1-') && row.entry_strategy === 'QUEDA_WIN_RETRY_V1' && row.direction === 'CALL');
  return known && row.timeframe === 'TEST' && Number.isFinite(at)
   && at % 60000 === 0 && now >= at && now-at <= 25000;
 }

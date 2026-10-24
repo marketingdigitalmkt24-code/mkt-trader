@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { chartFeatures, chooseDemoCandidate, demoPreferredPatternDistance, demoPreferredScore, type DemoCandidate } from './demo-continuation';
+import { chartFeatures, chooseDemoCandidate, demoPreferredPatternAllowed, demoPreferredPatternDistance, demoPreferredScore, type DemoCandidate } from './demo-continuation';
 import { isSuperSelected } from './demo-validated';
 
 const candidate = (score: number, distance = Infinity): DemoCandidate => ({
@@ -40,4 +40,15 @@ test('result and following candles cannot change the matching features', () => {
   const f = chartFeatures(closed,entry,'PUT');
   expect(f).not.toBeNull();
   expect(chartFeatures([...closed,{t:entry,o:99,c:500,h:500,l:1}],entry,'PUT')).toEqual(f);
+});
+test('blocks every candidate without eight-score chart correspondence, even exact 2.26', () => {
+  expect(chooseDemoCandidate([candidate(2.26),candidate(2.23,1.31),candidate(5.19),candidate(3.18,NaN)],true)).toBeNull();
+  expect(demoPreferredPatternAllowed(undefined)).toBe(false);
+  expect(demoPreferredPatternAllowed(Infinity)).toBe(false);
+  expect(demoPreferredPatternAllowed(-1)).toBe(false);
+  expect(demoPreferredPatternAllowed(1.3)).toBe(true);
+});
+test('retains a matched candidate but never falls back to an unmatched exact note', () => {
+  expect(chooseDemoCandidate([candidate(2.26),candidate(3.18,0.8)],true)?._score).toBe(3.18);
+  expect(chooseDemoCandidate([],true)).toBeNull();
 });

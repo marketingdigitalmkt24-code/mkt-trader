@@ -22,9 +22,9 @@
 - Demo refill uses a user-authenticated, same-user PRACTICE-only function with reset-training-balance and fresh type-4 profile verification; why: only the broker confirms replenishment and REAL balances stay untouched.
 - Removed claims return null; placement rejects them. Exclude retired orders/copies from displayed totals but preserve stored accounting; three-force keeps its lock.
 - Daily Telegram reports use the minute runner, service-only function and date ledger; isolate principal totals, list pending orders, never retry ambiguous sends.
-- Recent operations show only confirmed principal IQ orders after a display cutoff, cache/prefetch pages and count page one; why: hide simulations without changing records or daily totals.
+- Recent operations cache pages and count page one; show confirmed principal IQ after cutoff, never simulations.
 - Demo summaries paginate confirmed broker outcomes; strategy accuracy uses entry-minute display cutoff with zero rows for previously sent strategies; exclude ties/pending and preserve accumulated net and principal totals.
 - Trend-loss PUT runs separately on fresh selected t7 rows with atomic closed-loss claims and IQ-confirmed Telegram; why: preserve deployed strategy generators and prevent replay.
 - Retired anticipation variants are blocked at observation creation, not historical settlement; the anticipation card reads broker orders directly without simulated counters; why: retirement must stop new tests without hiding confirmed orders or deleting history.
 - Demo TEST executor uses singleton admin-only stake settings, snapshots amount per order, enforces unique minute/type-4 USD and reconciles exact IDs across portfolio/legacy pages; why: no client/principal amount mixing, historical rewrites or stale replay.
-- Demo ledger is service-only, isolated from principal/Telegram/copy; keep warmup and one order/minute. Charts compare the entry candle, not broker profit; retry its next closed candle outside learning.
+- Demo ledger stays service-only, one order/minute and isolated; charts compare candles with retries outside learning. Selected Tendência alone may separately claim a fresh principal order with its own stake/limits, no copy, and broker-confirmed Telegram; never relabel or replay TEST.

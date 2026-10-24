@@ -958,6 +958,10 @@ export type Database = {
       }
       claim_force_loss_win: { Args: { p_candidate: string }; Returns: Json }
       claim_four_win_reversal: { Args: { p_candidate: string }; Returns: Json }
+      claim_selected_demo_trend: {
+        Args: { p_balance: number; p_candidate: string; p_config: string }
+        Returns: Json
+      }
       claim_test_strategy_entry: {
         Args: { p_candidate: string }
         Returns: Json

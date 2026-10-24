@@ -149,6 +149,15 @@ Deno.serve(async (req) => {
     .gte('created_at',demoSince).order('created_at',{ascending:false}).limit(1000)
     .then(r=>({...r,data:(r.data||[]).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:x.result==='win'?1:-1,asset:x.asset}))}));
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
+  // Score-band learning: settled Demo outcomes joined with their candidate scores pick the Demo floor.
+  const scoreRowsPromise = (async()=>{
+    const candRead = await supabase.from('iq_demo_test_candidates').select('signal_id,score')
+      .gte('entry_minute',demoSince).order('entry_minute',{ascending:false}).limit(500);
+    const ids=(candRead.data||[]).map(r=>r.signal_id);
+    const out=ids.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',ids).eq('status','confirmed').in('result',['win','loss']) : {data:[]};
+    const res=new Map((out.data||[]).map(r=>[r.signal_id,r.result]));
+    return (candRead.data||[]).flatMap(r=>{const result=res.get(r.signal_id);return result?[{score:Number(r.score),result}]:[];});
+  })();
   const chartPromise = (async()=>{
     const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles')
       .not('candles','is',null).gte('entry_minute',demoSince)
@@ -371,16 +380,18 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  const [demoHist,chartSamples,refRow,realHist] = await Promise.all([demoHistPromise,chartPromise,refPromise,realHistPromise]);
+  const [demoHist,chartSamples,refRow,realHist,scoreRows] = await Promise.all([demoHistPromise,chartPromise,refPromise,realHistPromise,scoreRowsPromise]);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
   if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
+  const demoFloor = adaptiveDemoMinScore(scoreRows);
+  console.log('Demo adaptive floor:', demoFloor, 'from', scoreRows.length, 'settled scored outcomes');
   // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
     const learn=combinedLearnedScore(demoHist.data||[],realHist.data||[],
       chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
       c.entry_strategy,c.asset,curMin*1000);
     if(demoLearnedReject(learn))return[];
-    return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)}];});
+    return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy,demoFloor)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);
   if (qw && series.has(qw.asset)) demoPool.push({ signal_id: `queda-win-call-v1-${qw.asset}-${curMin}`,

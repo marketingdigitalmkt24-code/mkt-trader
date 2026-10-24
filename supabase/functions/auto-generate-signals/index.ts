@@ -1078,7 +1078,7 @@ serve(async (req) => {
       if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(report);
     }
     // Teste das 7 estratégias em todos os ativos abertos, disparado pelo mesmo job de 1 minuto.
-    const multiTest = supabase.functions.invoke('multi-strategy-test', { body: {} }).catch((e) => console.log('⚠️ multi-strategy-test:', e));
+    const multiTest = supabase.functions.invoke('multi-strategy-test', { body: { scheduled: true } }).catch((e) => console.log('⚠️ multi-strategy-test:', e));
     // @ts-ignore EdgeRuntime is available in the hosted runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(multiTest);
 

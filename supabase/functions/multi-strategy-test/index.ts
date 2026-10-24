@@ -10,7 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, combinedLearnedScore, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';

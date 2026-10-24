@@ -17,6 +17,15 @@ test('separate bearish pattern is Demo-only, fresh and never accepted as origina
  expect(freshDemoCandidate({...row,direction:'CALL'},at)).toBe(false);
  expect(freshDemoCandidate({...row,signal_id:'forca_antecipada-1'},at)).toBe(false);
 });
+test('Queda win CALL is Demo-only, fresh and requires the exact prefix and direction',()=>{
+ const row={signal_id:'queda-win-call-v1-APPLE-OTC-1792862400',timeframe:'TEST',direction:'CALL',entry_strategy:'QUEDA_WIN_CALL_V1',created_at:'2026-10-24T02:40:00Z'};
+ const at=Date.parse(row.created_at);
+ expect(freshDemoCandidate(row,at+1000)).toBe(true);
+ expect(freshDemoCandidate(row,at+60000)).toBe(false);
+ expect(freshDemoCandidate({...row,direction:'PUT'},at)).toBe(false);
+ expect(freshDemoCandidate({...row,entry_strategy:'CONTINUACAO_QUEDA_V1'},at)).toBe(false);
+ expect(freshDemoCandidate({...row,signal_id:'t7-APPLE-OTC-TENDENCIA-1'},at)).toBe(false);
+});
 test('never selects REAL or falls back to another currency', () => {
  expect(demoBalance([{ id: 1, type: 1, currency: 'USD' }])).toBeUndefined();
  expect(demoBalance([{ id: 2, type: 4, currency: 'BRL' }])).toBeUndefined();

@@ -24,7 +24,7 @@ export function demoContinuation(candles: Candle[], entry: number) {
 }
 // Preserve exact principal authorization first; then prefer the user's winning-score cohort
 // and its pre-entry chart shapes, without changing the calculated score or eligibility gates.
-export const DEMO_PREFERRED_SCORE_CENTS = [226, 223, 218, 264, 288, 203, 269, 291] as const;
+export const DEMO_PREFERRED_SCORE_CENTS = [226, 223, 218, 264, 288, 203, 269, 291, 204, 261, 278, 237, 276, 220] as const;
 export function demoPreferredScore(score: number) {
   return Number.isFinite(score) && DEMO_PREFERRED_SCORE_CENTS.some(c => c === Math.round(score * 100));
 }

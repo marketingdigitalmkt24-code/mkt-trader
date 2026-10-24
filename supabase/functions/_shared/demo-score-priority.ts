@@ -1,6 +1,7 @@
+import { DEMO_PREFERRED_SCORE_CENTS } from './demo-continuation.ts';
 export type ScoreOutcome = {signal_id:string;status:string;account_type:string;iq_option_id:string|null;result:string;profit:number|string};
 export type ScorePriority = {cents:number;wins:number;losses:number;profit:number;accuracy:number};
-const cohort = [226,223,218,264,288,203,269,291];
+const cohort = DEMO_PREFERRED_SCORE_CENTS;
 export function rankDemoScores(rows:ScoreOutcome[],scores:Map<string,number>):ScorePriority[] {
  const stats = new Map(cohort.map(cents=>[cents,{cents,wins:0,losses:0,profit:0,accuracy:0}]));
  for(const row of rows){

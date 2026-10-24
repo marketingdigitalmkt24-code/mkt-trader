@@ -1,6 +1,6 @@
 import { chartFeatures, DEMO_PREFERRED_SCORE_CENTS } from '../../supabase/functions/_shared/demo-continuation';
-export const DEMO_ANALYSIS_SCORE_CENTS = [204, 261, 278, 237, 276, 220] as const;
-export const DEMO_VISIBLE_PATTERN_SCORES = [...DEMO_PREFERRED_SCORE_CENTS, ...DEMO_ANALYSIS_SCORE_CENTS];
+export const DEMO_ANALYSIS_SCORE_CENTS: readonly number[] = [];
+export const DEMO_VISIBLE_PATTERN_SCORES = [...DEMO_PREFERRED_SCORE_CENTS];
 export type PatternCandle = { t:number;o:number;c:number;h:number;l:number };
 export type PatternCandidate = { signal_id:string;entry_minute:string;direction:string;asset:string;entry_strategy:string;score:number;candles:unknown };
 export function preEntryCandles(value:unknown, entry:string):PatternCandle[] {

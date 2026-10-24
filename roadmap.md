@@ -1,3 +1,6 @@
+# Exclusão permanente do histórico IQ Option
+- [ ] Excluir entradas IQ Option principais e cópias de todos os dias e conferir histórico diário admin/cliente; preservar ledger Demo TESTE separado.
+
 # Testes executados na Demo
 - [ ] Reduzir espera da entrada Demo rumo a :00; manter velas fechadas, seleção completa e janela atual.
 - [x] Incluir a próxima vela fechada no gráfico Demo; sete testes aprovados, rotina publicada e painel conferido; coleta automática não força ordens.

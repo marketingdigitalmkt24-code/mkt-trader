@@ -1,3 +1,7 @@
+# Autorização adicional da nota Demo 2,26
+- [ ] Liberar exatamente nota exibida 2,26 nos filtros e claim, preservando faixa 4,0–<4,5, limites, Telegram e copy; publicar e testar.
+- [ ] Conferir primeira execução prospectiva completa — depende de nova Demo elegível e contas/limites disponíveis, sem replay.
+
 # Retirar e desativar Tendência normal IQ
 - [x] Bloqueada principal normal e cópias, retirada do histórico admin/cliente; Demo e estratégias invertida/3 perdas, registros financeiros e conciliação preservados.
 - [x] Migração 0041 e dois executores publicados; claim sem fallback normal e serviço-only conferido; 34 testes aprovados, build OK e painel admin autenticado sem Tendência normal no histórico. Cliente validado pelos filtros/testes compartilhados, sem sessão cliente distinta.

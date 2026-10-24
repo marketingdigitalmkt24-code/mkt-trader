@@ -14,6 +14,10 @@ describe('isDemoValidatedPrincipal', () => {
   });
 });
 describe('isSuperSelected', () => {
+ it('additionally accepts displayed score exactly 2.26, not a new minimum', () => {
+  for (const score of [2.26, 2.255, 2.2599, 2.2649]) expect(isSuperSelected(score)).toBe(true);
+  for (const score of [2.25, 2.2549, 2.265, 2.27, 2.5, 3.7, Infinity, -Infinity]) expect(isSuperSelected(score)).toBe(false);
+ });
  it('accepts only the 4.0-4.5 band and rejects inflated scores', () => {
   expect(isSuperSelected(4.0)).toBe(true);
   expect(isSuperSelected(4.49)).toBe(true);

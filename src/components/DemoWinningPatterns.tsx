@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { winningPatterns,preEntryCandles,patternDistance,DEMO_VISIBLE_PATTERN_SCORES,DEMO_ANALYSIS_SCORE_CENTS } from '@/lib/demo-winning-patterns';
@@ -12,15 +12,29 @@ import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from './ui/
 const time=(v:string)=>new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
 export function DemoWinningPatterns(){
  const {user}=useAuth();
+ const queryClient=useQueryClient();
  const [score,setScore]=useState('226');
  const [page,setPage]=useState(0);
  const [reference,setReference]=useState<string|null>(null);
  const [comparison,setComparison]=useState('');
- const query=useQuery({queryKey:['demo-winning-patterns',user?.id],enabled:!!user,refetchInterval:30000,queryFn:async()=>{
+ useEffect(()=>{
+  if(!user)return;
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const refresh=()=>{
+   if(timer)clearTimeout(timer);
+   timer=setTimeout(()=>{void queryClient.invalidateQueries({queryKey:['demo-winning-patterns',user.id]});},300);
+  };
+  const channel=supabase.channel(`demo-winning-patterns-${user.id}`)
+   .on('postgres_changes',{event:'*',schema:'public',table:'iq_demo_test_orders'},refresh)
+   .on('postgres_changes',{event:'*',schema:'public',table:'iq_demo_test_candidates'},refresh)
+   .subscribe();
+  return()=>{if(timer)clearTimeout(timer);void supabase.removeChannel(channel);};
+ },[user?.id,queryClient]);
+ const query=useQuery({queryKey:['demo-winning-patterns',user?.id],enabled:!!user,refetchInterval:10000,refetchIntervalInBackground:true,refetchOnWindowFocus:'always',queryFn:async()=>{
   const now=Date.now();
   const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,asset,entry_strategy,score,candles')
    .not('candles','is',null).gte('entry_minute',new Date(now-14*86400000).toISOString())
-   .lt('entry_minute',new Date(Math.floor(now/60000)*60000-60000).toISOString()).order('entry_minute',{ascending:false}).limit(1000);
+   .lt('entry_minute',new Date(Math.floor(now/60000)*60000).toISOString()).order('entry_minute',{ascending:false}).limit(1000);
   if(error)throw error;
   const outcomes: {signal_id:string;result:string;status:string;iq_option_id:string|null}[]=[];
   for(let i=0;i<(data??[]).length;i+=200){
@@ -42,8 +56,10 @@ export function DemoWinningPatterns(){
  const distance=selected&&candidate?patternDistance(selected.candles,selected.entry_minute,selected.direction,candidateCandles,candidate.entry_minute,candidate.direction):null;
  return <section aria-label="Padrões vencedores" className="space-y-5">
   <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Padrões vencedores por nota</h2><p className="mt-1 text-xs text-muted-foreground">WIN confirmado · Referências disponíveis para a próxima escolha · Brasília</p></div><Button variant="outline" size="sm" disabled={query.isFetching} onClick={()=>{query.refetch();recent.refetch();}}>Atualizar padrões</Button></div>
+  <p className="text-xs text-muted-foreground" aria-live="polite">{query.dataUpdatedAt?`Atualizado às ${new Date(query.dataUpdatedAt).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'})}`:'Aguardando atualização'}{query.isFetching?' · Atualizando…':''}</p>
   {[{label:'Notas da regra',scores:DEMO_PREFERRED_SCORE_CENTS},{label:'Notas em análise',scores:DEMO_ANALYSIS_SCORE_CENTS}].map(group=><div key={group.label} className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">{group.label}</h3><div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" role="group" aria-label={group.label}>{group.scores.map(c=><Button key={c} variant={score===String(c)?'default':'outline'} className="h-auto min-h-12 flex-col gap-1 py-2" aria-pressed={score===String(c)} onClick={()=>{setScore(String(c));setPage(0);setReference(null);}}><span className="font-mono">{(c/100).toFixed(2).replace('.',',')}</span><span className="text-xs">{(query.data??[]).filter(r=>Math.round(r.score*100)===c).length} WIN</span></Button>)}</div></div>)}
-  {query.isPending?<p role="status" className="text-sm text-muted-foreground">Carregando gráficos vencedores…</p>:query.isError?<p role="alert" className="text-sm text-destructive">Não foi possível carregar os padrões.</p>:<>
+  {query.isError&&query.data&&<p role="alert" className="text-sm text-destructive">Atualização indisponível. Os últimos gráficos permanecem visíveis; uma nova tentativa será feita automaticamente.</p>}
+  {query.isPending?<p role="status" className="text-sm text-muted-foreground">Carregando gráficos vencedores…</p>:query.isError&&!query.data?<p role="alert" className="text-sm text-destructive">Não foi possível carregar os padrões.</p>:<>
    <div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">Nota {(Number(score)/100).toFixed(2).replace('.',',')}</h3><Badge variant="outline">{rows.length} gráficos WIN</Badge><span className="text-xs text-muted-foreground">Somente velas anteriores à entrada</span></div>
    {!rows.length?<p className="text-sm text-muted-foreground">Nenhum gráfico vencedor válido desta nota na janela atual da regra.</p>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{rows.slice(current*6,current*6+6).map(row=><article key={row.signal_id} className={`min-w-0 rounded-lg border bg-card p-4 ${selected?.signal_id===row.signal_id?'border-primary':'border-border'}`}>
     <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">{row.asset}</h4><Badge variant="outline" className="text-call">WIN</Badge></div><p className="my-2 text-xs text-muted-foreground">{time(row.entry_minute)} · {row.entry_strategy}</p><DemoPatternChart candles={row.candles} direction={row.direction}/><Button variant="outline" size="sm" className="mt-3 w-full" onClick={()=>setReference(row.signal_id)}>{selected?.signal_id===row.signal_id?'Referência selecionada':'Comparar com este padrão'}</Button>

@@ -11,6 +11,7 @@ import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recen
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.ts';
@@ -327,6 +328,10 @@ Deno.serve(async (req) => {
     if (ceiling) demoPatterns.push({signal_id:`demo-teto-v1-${asset}-${curMin}`,asset,direction:'PUT',
       entry_strategy:DEMO_CEILING,created_at:new Date(curMin*1000).toISOString(),
       _score:fired.filter(([,direction])=>direction==='PUT').length+0.99*ceiling.match});
+    const forcaPadrao = demoForcaPadrao(cs,curMin);
+    if (forcaPadrao) demoPatterns.push({signal_id:`forca-padrao-v1-${asset}-${curMin}`,asset,direction:forcaPadrao.direction,
+      entry_strategy:FORCA_PADRAO,created_at:new Date(curMin*1000).toISOString(),
+      _score:fired.filter(([,direction])=>direction===forcaPadrao.direction).length+0.99*forcaPadrao.bodyRatio});
     // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
     const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
     const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];

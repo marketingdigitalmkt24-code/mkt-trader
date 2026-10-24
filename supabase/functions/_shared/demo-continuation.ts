@@ -66,7 +66,8 @@ export function demoAssetAdjustment(history: DemoOutcome[], strategy: string, as
   return Math.max(-1, Math.min(1, 0.6 * wr + 0.4 * pf * Math.min(1, (w + l) / 8)));
 }
 // Combined learned score below this (with evidence) blocks the Demo entry: seek only profitable patterns.
-export const DEMO_LEARNED_REJECT = -1.2;
+// Stricter conservative gate (user, Oct 24 2026): cut strategies in a losing phase earlier.
+export const DEMO_LEARNED_REJECT = -0.8;
 export function demoLearnedReject(adjustment: number) {
   return adjustment <= DEMO_LEARNED_REJECT;
 }

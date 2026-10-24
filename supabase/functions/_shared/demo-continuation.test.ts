@@ -85,10 +85,11 @@ describe('demoAssetAdjustment', () => {
  });
 });
 describe('demoLearnedReject', () => {
- it('blocks only strongly negative learned scores', () => {
+ it('blocks negative learned scores at the conservative -0.8 gate', () => {
   expect(demoLearnedReject(DEMO_LEARNED_REJECT)).toBe(true);
   expect(demoLearnedReject(-3)).toBe(true);
-  expect(demoLearnedReject(-1)).toBe(false);
+  expect(demoLearnedReject(-0.9)).toBe(true);
+  expect(demoLearnedReject(-0.7)).toBe(false);
   expect(demoLearnedReject(0)).toBe(false);
  });
 });

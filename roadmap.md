@@ -4,6 +4,7 @@
 - [x] Excluídos permanentemente 1.001 registros principais e 831 cópias; consulta confirmou zero entradas IQ restantes de qualquer dia/cliente, 18.848 TESTES simulados e 164 ordens Demo preservados. Painel admin autenticado conferido sem entradas e com resultado zerado; histórico cliente confirmado pela fonte compartilhada, sem sessão cliente distinta. Saldo/configuração da corretora intactos.
 
 # Testes executados na Demo
+- [ ] Preparar sessão e conexão Demo antes do minuto e coletar velas fechadas em :00; retirar conciliação do caminho da entrada e verificar horários observados.
 - [x] Publicadas otimizações pendentes da entrada Demo: sessão de serviço reaproveitada, leituras em paralelo e gráficos fora do envio; testes de sessão/seleção aprovados, :00 exato não garantido.
 - [x] Incluir a próxima vela fechada no gráfico Demo; sete testes aprovados, rotina publicada e painel conferido; coleta automática não força ordens.
 - [x] Assertividade agora lê todas as estratégias confirmadas Demo separadamente; contagem reiniciada às 16:33 BRT sem apagar ordens ou alterar demais totais. Seis testes aprovados, painel conferido Tendência/Vela de força 0W/0L, build OK.

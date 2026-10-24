@@ -127,3 +127,15 @@ test('reference filter rejects missing or distant charts', () => {
   expect(similarToReference(ref, null)).toBe(false);
   expect(similarToReference(ref, [0.2])).toBe(false);
 });
+describe('similarToAnyReference', () => {
+ const entry = 6000*60;
+ const mk = (up: boolean) => Array.from({length:21},(_,i)=>({t:entry-(20-i)*60,o:100,c:up?101:99,h:101.2,l:98.8}));
+ it('accepts charts close to at least one winner and rejects distant charts', () => {
+  const a = chartFeatures(mk(true),entry,'CALL');
+  const b = chartFeatures(mk(false),entry,'CALL');
+  expect(similarToAnyReference([b],a)).toBe(false);
+  expect(similarToAnyReference([b,a],a)).toBe(true);
+  expect(similarToAnyReference([],a)).toBe(false);
+  expect(similarToAnyReference([a],null)).toBe(false);
+ });
+});

@@ -7,6 +7,7 @@
 - [x] Excluídos permanentemente 1.001 registros principais e 831 cópias; consulta confirmou zero entradas IQ restantes de qualquer dia/cliente, 18.848 TESTES simulados e 164 ordens Demo preservados. Painel admin autenticado conferido sem entradas e com resultado zerado; histórico cliente confirmado pela fonte compartilhada, sem sessão cliente distinta. Saldo/configuração da corretora intactos.
 
 # Testes executados na Demo
+- [ ] Criar Tendência WIN → próximo Tendência invertido na principal/Telegram, com confirmação Demo anterior, direção oposta do novo sinal e limites/copy atuais; testar e publicar.
 - [x] Queda win verificada sem ordens anteriores; corrigida leitura antecipada dos resultados com conciliação por ID na sessão existente. Queda win +1 candidata CALL somente no minuto após LOSS original, mesmo ativo/valor, sem repetição recursiva; filtro/slot preservados. Duas funções publicadas, 31 testes aprovados e build OK.
 - [ ] Conferir primeira Queda win +1 na corretora/painel — depende de nova Queda win LOSS confirmada dentro da janela e seleção compatível; nenhuma ordem histórica forçada.
 - [x] Preparação Demo publicada: login/WebSocket antes do próximo minuto, leituras independentes paralelas e histórico enviado depois da ordem. 28 testes aprovados. Execução real observada USD/CHF-OTC 22:20 BRT: velas :00.282, candidato :00.761, envio :03.153, confirmação :03.255; entrada lida no painel autenticado, build OK. Não garante :00 exato.

@@ -151,8 +151,8 @@ describe('similarToAnyReference', () => {
  });
 });
 
-Deno.test('Demo entry floor requires score 2.0', async () => {
-  const { demoScoreAllowed } = await import('./demo-continuation.ts');
-  if (demoScoreAllowed(1.99)) throw new Error('1.99 must be blocked');
-  if (!demoScoreAllowed(2.0)) throw new Error('2.0 must pass');
+test('Demo entry floor requires score 2.0', async () => {
+  const { demoScoreAllowed } = await import('./demo-continuation');
+  expect(demoScoreAllowed(1.99)).toBe(false);
+  expect(demoScoreAllowed(2.0)).toBe(true);
 });

@@ -1,4 +1,5 @@
 # Exclusão permanente do histórico IQ Option
+- [ ] Ampliar cópia a todas as novas entradas confirmadas do admin, incluindo Antecipação e Tendência 3 perdas; manter controles/limites dos clientes e isolamento TESTE.
 - [x] Restaurada e publicada cópia da Tendência principal confirmada pelo executor existente; preserva conta/valor/limites do cliente e minuto original, sem TESTE/replay. 35 testes aprovados, build OK, painel admin autenticado conferido; um cliente conectado com copy ativo identificado.
 - [ ] Conferir primeira cópia Tendência principal no cliente — depende de nova Tendência selecionada e janela disponível; não reenviar as ordens anteriores nem forçar negociação.
 - [x] Autorização Tendência selecionada → ordem principal adicional implementada e publicada com claim atômico, conta/valor principal, limites e ativo M1; Telegram após confirmação IQ, sem copy/replay. 22 testes aprovados, chamada com sessão navegador recusada 401. Configuração atual PRACTICE/US$10; Demo TESTE preservada.

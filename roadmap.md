@@ -1,7 +1,8 @@
 # Exclusão permanente do histórico IQ Option
-- [ ] Restaurar cópia da Tendência principal confirmada para clientes conectados com copy ativo; preservar valor/conta/limites próprios, sem copiar TESTE nem histórico.
+- [x] Restaurada e publicada cópia da Tendência principal confirmada pelo executor existente; preserva conta/valor/limites do cliente e minuto original, sem TESTE/replay. 35 testes aprovados, build OK, painel admin autenticado conferido; um cliente conectado com copy ativo identificado.
+- [ ] Conferir primeira cópia Tendência principal no cliente — depende de nova Tendência selecionada e janela disponível; não reenviar as ordens anteriores nem forçar negociação.
 - [x] Autorização Tendência selecionada → ordem principal adicional implementada e publicada com claim atômico, conta/valor principal, limites e ativo M1; Telegram após confirmação IQ, sem copy/replay. 22 testes aprovados, chamada com sessão navegador recusada 401. Configuração atual PRACTICE/US$10; Demo TESTE preservada.
-- [ ] Conferir primeiro resultado final Tendência principal no painel/Telegram — USD/CHF-OTC 22:20 BRT confirmado na principal por US$10, exibido no painel e alerta Telegram registrado; resultado ainda pendente na conferência.
+- [x] Resultado Tendência principal USD/CHF-OTC 22:20 BRT confirmado LOSS −US$10 no registro e painel autenticado; alerta de entrada Telegram previamente confirmado.
 - [x] Excluídos permanentemente 1.001 registros principais e 831 cópias; consulta confirmou zero entradas IQ restantes de qualquer dia/cliente, 18.848 TESTES simulados e 164 ordens Demo preservados. Painel admin autenticado conferido sem entradas e com resultado zerado; histórico cliente confirmado pela fonte compartilhada, sem sessão cliente distinta. Saldo/configuração da corretora intactos.
 
 # Testes executados na Demo

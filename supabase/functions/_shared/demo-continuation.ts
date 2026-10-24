@@ -70,6 +70,11 @@ export function demoAssetAdjustment(history: DemoOutcome[], strategy: string, as
 // Combined learned score below this (with evidence) blocks the Demo entry: seek only profitable patterns.
 // Stricter conservative gate (user, Oct 24 2026): cut strategies in a losing phase earlier.
 export const DEMO_LEARNED_REJECT = -0.8;
+// Demo entry floor (user, Oct 24 2026 05:59 UTC): only candidates with final score >= 2.0 open in Demo.
+export const DEMO_MIN_SCORE = 2.0;
+export function demoScoreAllowed(score: number) {
+  return Number.isFinite(score) && score >= DEMO_MIN_SCORE;
+}
 export function demoLearnedReject(adjustment: number) {
   return adjustment <= DEMO_LEARNED_REJECT;
 }

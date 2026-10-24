@@ -19,7 +19,7 @@ import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
-import { readDemoPatternHistory } from '../_shared/demo-pattern-history.ts';
+import { readDemoScorePriorities } from '../_shared/demo-score-priority.ts';
 import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
 import { demoWinningPatternMatch } from '../_shared/demo-continuation.ts';
 
@@ -151,18 +151,28 @@ Deno.serve(async (req) => {
     .not('iq_option_id','is',null).not('iq_option_id','like','mt5-%').not('iq_option_id','ilike','test%')
     .gte('created_at',demoSince).order('created_at',{ascending:false}).limit(1000)
     .then(r=>({...r,data:(r.data||[]).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:x.result==='win'?1:-1,asset:x.asset}))}));
-  const chartPromise = readDemoPatternHistory(async(from,to)=>{
+  const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
+  const scorePriorityPromise = readDemoScorePriorities(async(from,to)=>{
     const {data,error}=await supabase.from('iq_demo_test_orders')
       .select('signal_id,status,account_type,iq_option_id,result,profit')
       .eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null)
-      .in('result',['win','loss']).lt('entry_minute',new Date(targetMs).toISOString())
       .order('entry_minute',{ascending:true}).order('id').range(from,to);
     if(error)throw error;return data||[];
   },async ids=>{
-    const {data,error}=await supabase.from('iq_demo_test_candidates')
-      .select('signal_id,asset,entry_minute,direction,candles,score').in('signal_id',ids);
+    const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id',ids);
     if(error)throw error;return data||[];
   }).then(data=>({data,error:null})).catch(error=>({data:null,error}));
+  const chartPromise = (async()=>{
+    const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,asset,entry_minute,direction,candles,score')
+      .not('candles','is',null).gte('entry_minute',demoSince)
+      .lt('entry_minute',new Date(Math.floor(Date.now()/60000)*60000-60000).toISOString())
+      .order('entry_minute',{ascending:false}).limit(1000);
+    const ids=(chartRead.data||[]).map(r=>r.signal_id);
+    const chartOut=ids.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',ids).eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss']) : {data:[]};
+    const outcome=new Map((chartOut.data||[]).map(r=>[r.signal_id,r.result]));
+    return (chartRead.data||[]).flatMap(r=>{const res=outcome.get(r.signal_id);
+      const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res,score:r.score,signal_id:r.signal_id,asset:r.asset,entry_minute:r.entry_minute}]:[];});
+  })();
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
@@ -375,10 +385,7 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  const [demoHist,patternRead,realHist] = await Promise.all([demoHistPromise,chartPromise,realHistPromise]);
-  const chartSamples = patternRead.data || [];
-  if(patternRead.error)console.error('Demo pattern history unavailable: selection blocked');
-  console.log('Demo pattern history:', JSON.stringify({samples:chartSamples.length,wins:chartSamples.filter(s=>s.result==='win').length,priority:'chart-wins-v3'}));
+  const [demoHist,chartSamples,refRow,realHist] = await Promise.all([demoHistPromise,chartPromise,refPromise,realHistPromise]);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
   if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
   // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
@@ -386,7 +393,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'chart-wins-v3',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'win-pattern-v2',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -405,19 +412,22 @@ Deno.serve(async (req) => {
   if(retry && series.has(retry.asset))demoPool.push({signal_id:`queda-win-retry-v1-${retry.asset}-${curMin}`,
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1});
-  // All scores qualify by chart; prioritize the largest number of similar confirmed WINs.
+  // Any confirmed WIN pre-entry pattern may qualify; exact selected scores retain historical priority.
   const demoEligible = demoPool.flatMap(c => {
     const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
     const match=demoWinningPatternMatch(chartSamples,f);
     const distance=match?.distance??Infinity;
-    const reason=demoRejectionReason({score:c._score,patternDistance:distance,patternWins:match?.wins??0});
+    const reason=demoRejectionReason({score:c._score,patternDistance:distance});
     if(reason){reject(c,reason);return[];}
-    return [{...c,_preferredPatternDistance:distance,_patternMatch:match,_patternWins:match?.wins??0,_patternAccuracy:match?.accuracy??0}];
+    return [{...c,_preferredPatternDistance:distance,_patternMatch:match}];
   });
-  const priorityAvailable = !patternRead.error;
-  const demoWinner = priorityAvailable ? chooseDemoCandidate(demoEligible, true) : null;
+  const priorityRead = await scorePriorityPromise;
+  if(priorityRead.error)console.error('Demo score priorities unavailable: selection blocked');
+  const priority = priorityRead.data?.map(row=>row.cents);
+  if(priorityRead.data)console.log('Demo historical score priorities:',JSON.stringify(priorityRead.data));
+  const demoWinner = priority ? chooseDemoCandidate(demoEligible, true, priority) : null;
   for(const c of demoEligible){
-    const reason=demoRejectionReason({score:c._score,priorityAvailable,winner:demoWinner?.signal_id,signalId:c.signal_id});
+    const reason=demoRejectionReason({score:c._score,priorityAvailable:!!priority,winner:demoWinner?.signal_id,signalId:c.signal_id});
     if(reason)reject(c,reason);
   }
   // Audit is independent of execution: never delay an eligible entry for its rejected competitors.

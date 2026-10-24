@@ -9,6 +9,7 @@ import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { TREND_WIN_INVERTED } from '../_shared/trend-win-inverted.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
+import { isSuperSelected, SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
 const freshTrendPut = freshSelectedTrend;
 const notifyTrendPut = notifySelectedTrend;
 
@@ -36,9 +37,10 @@ Deno.serve(async req => {
     const parsed = schema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return reply({ error: 'Invalid candidate' }, 400);
     const { data: candidate, error: candidateError } = await db.from('iq_demo_test_candidates')
-      .select('signal_id,asset,entry_minute,entry_strategy,direction').eq('signal_id', parsed.data.candidate).maybeSingle();
+      .select('signal_id,asset,entry_minute,entry_strategy,direction,score').eq('signal_id', parsed.data.candidate).maybeSingle();
     if (candidateError) throw candidateError;
-    if (!selectedDemoPrincipal(candidate, Date.now())) return reply({ skipped: 'No fresh authorized selected signal' });
+    const superSelected = isSuperSelected(candidate?.score);
+    if (!superSelected && !selectedDemoPrincipal(candidate, Date.now())) return reply({ skipped: 'No fresh authorized selected signal' });
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);
     const { data: cfg } = await readMasterIQConfig(db);
@@ -89,13 +91,13 @@ Deno.serve(async req => {
             }
             const activeId = Number(instrument[0]);
             if (!Number.isSafeInteger(activeId) || activeId <= 0) { finish({ success: false, error: 'Invalid instrument; no order sent' }); return; }
-            const { data: order, error } = await db.rpc('claim_selected_demo_trend', { p_candidate: candidate.signal_id, p_config: cfg.id, p_balance: balanceAmount });
+            const { data: order, error } = await db.rpc(superSelected ? 'claim_super_selected' : 'claim_selected_demo_trend', { p_candidate: candidate.signal_id, p_config: cfg.id, p_balance: balanceAmount });
             if (error) throw error;
             if (!order) { finish({ success: false, error: 'Sequence, limits or reservation rejected; no order sent' }); return; }
             state.claimed = order;
             leaseScope = `master:${String(order.entryStrategy).toLowerCase()}`;
             if (order.configId !== cfg.id || !['call','put'].includes(order.direction)
-              || ![TREND_WIN_INVERTED,QUEDA_WIN_RETRY].includes(order.entryStrategy)
+              || ![TREND_WIN_INVERTED,QUEDA_WIN_RETRY,SUPER_SELECIONADA].includes(order.entryStrategy)
               || !freshTrendPut(order.entryAt, Date.now()) || done) {
               finish({ success: false, error: 'Configuration changed or entry window closed; no order sent' }); return;
             }
@@ -130,7 +132,7 @@ Deno.serve(async req => {
     if (!owned) return reply({ skipped: outcome.error || 'No authorized order' });
     const queued = { signal_id: owned.signalId, amount: owned.amount };
     const direction = owned.direction.toUpperCase();
-    const strategyLabel = owned.entryStrategy === QUEDA_WIN_RETRY ? 'Queda win +1' : owned.entryStrategy === TREND_WIN_INVERTED ? 'Tendência invertida' : 'Tendência';
+    const strategyLabel = owned.entryStrategy === SUPER_SELECIONADA ? 'Super selecionada' : owned.entryStrategy === QUEDA_WIN_RETRY ? 'Queda win +1' : owned.entryStrategy === TREND_WIN_INVERTED ? 'Tendência invertida' : 'Tendência';
     if (!outcome.success || !outcome.tradeId) {
       console.error('Selected Trend failed:', outcome.error);
       await db.from('trade_queue').update({ status: 'failed', error: outcome.error || 'Broker confirmation unknown' }).eq('signal_id', queued.signal_id);

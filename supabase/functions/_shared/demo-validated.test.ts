@@ -18,9 +18,9 @@ describe('isSuperSelected', () => {
   for (const score of [2.26, 2.255, 2.2599, 2.2649]) expect(isSuperSelected(score)).toBe(true);
   for (const score of [2.25, 2.2549, 2.265, 2.27, 2.5, 3.7, Infinity, -Infinity]) expect(isSuperSelected(score)).toBe(false);
  });
- it('accepts only the 4.0-4.5 band and rejects inflated scores', () => {
-  expect(isSuperSelected(4.0)).toBe(true);
-  expect(isSuperSelected(4.49)).toBe(true);
+ it('no longer accepts the retired 4.0-4.5 band', () => {
+  expect(isSuperSelected(4.0)).toBe(false);
+  expect(isSuperSelected(4.49)).toBe(false);
   expect(isSuperSelected(4.5)).toBe(false);
   expect(isSuperSelected(5.2)).toBe(false);
   expect(isSuperSelected(6.12)).toBe(false);

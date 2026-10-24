@@ -1,4 +1,4 @@
-import { test, expect, describe } from 'bun:test';
+import { test, expect, describe, it } from 'bun:test';
 import { isDemoValidatedPrincipal, DEMO_VALIDATED_PRINCIPAL } from './demo-validated';
 
 describe('isDemoValidatedPrincipal', () => {

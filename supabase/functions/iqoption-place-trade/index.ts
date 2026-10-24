@@ -14,6 +14,7 @@ import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { canNotifyAnticipation } from '../_shared/anticipation-telegram.ts';
 import { selectedTrendCopyRequest } from '../_shared/selected-trend-copy.ts';
 import { isNormalPrincipalTrend } from '../_shared/normal-trend.ts';
+import { isDemoValidatedPrincipal } from '../_shared/demo-validated.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -677,6 +678,10 @@ serve(async (req) => {
     let authorizedQueue: { id: string; created_at: string; entry_strategy: string | null } | undefined;
     if (isNormalPrincipalTrend({ signal_id: tradeRequest.signalId || '', entry_strategy: tradeRequest.entryStrategy }) || tradeRequest.entryStrategy === 'FORCE_LOSS_WIN' || tradeRequest.entryStrategy === 'FORCA_INVERTIDA' || /forca_invertida-/.test(tradeRequest.signalId || '') || tradeRequest.signalId?.startsWith('force-lw-') || /-force-lw-/.test(tradeRequest.signalId || '')) {
       return Response.json({ success: false, error: 'Strategy removed' }, { status: 410, headers: corsHeaders });
+    }
+    // Only Demo-validated strategies may open principal orders (user, Oct 24 2026); copies use the endpoint above.
+    if (!isDemoValidatedPrincipal(tradeRequest.entryStrategy)) {
+      return Response.json({ success: false, error: 'Strategy not validated by Demo operations' }, { status: 410, headers: corsHeaders });
     }
     if (isNextMinuteStrategy(tradeRequest.entryStrategy)) {
       if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`) {

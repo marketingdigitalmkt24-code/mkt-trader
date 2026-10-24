@@ -20,6 +20,7 @@ import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '..
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
 import { readDemoScorePriorities } from '../_shared/demo-score-priority.ts';
+import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -387,11 +388,19 @@ Deno.serve(async (req) => {
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
   if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
   // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
+  const rejections: any[] = [];
+  const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
+    signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
+    entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
+    reason_code:reason.code,reason_details:reason.details,rule_version:'score-pattern-v1',
+    candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
+  });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
     const learn=combinedLearnedScore(demoHist.data||[],realHist.data||[],
       chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
       c.entry_strategy,c.asset,curMin*1000);
-    if(demoLearnedReject(learn))return[];
+    const reason=demoRejectionReason({learned:learn,score:demoFinalScore(c._score,learn,c.entry_strategy)});
+    if(reason?.code==='learned_history'){reject({...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)},reason);return[];}
     return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);
@@ -407,14 +416,31 @@ Deno.serve(async (req) => {
   const refFs: (number[] | null)[] = [refF, ...chartSamples.filter(s => s.result === 'win').map(s => s.f)];
   const demoEligible = demoPool.flatMap(c => {
     const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
-    if (!demoScoreAllowed(c._score) || !similarToAnyReference(refFs,f)) return [];
-    return [{...c,_preferredPatternDistance:demoPreferredPatternDistance(chartSamples,f)}];
+    const distance=demoPreferredPatternDistance(chartSamples,f);
+    const reason=demoRejectionReason({score:c._score,referenceMatch:similarToAnyReference(refFs,f),patternDistance:distance});
+    if(reason){reject(c,reason);return[];}
+    return [{...c,_preferredPatternDistance:distance}];
   });
   const priorityRead = await scorePriorityPromise;
   if(priorityRead.error)console.error('Demo score priorities unavailable: selection blocked');
   const priority = priorityRead.data?.map(row=>row.cents);
   if(priorityRead.data)console.log('Demo historical score priorities:',JSON.stringify(priorityRead.data));
   const demoWinner = priority ? chooseDemoCandidate(demoEligible, true, priority) : null;
+  for(const c of demoEligible){
+    const reason=demoRejectionReason({score:c._score,priorityAvailable:!!priority,winner:demoWinner?.signal_id,signalId:c.signal_id});
+    if(reason)reject(c,reason);
+  }
+  // Audit is independent of execution: never delay an eligible entry for its rejected competitors.
+  if(rejections.length){
+    const auditTask=(async()=>{
+      for(let i=0;i<rejections.length;i+=200){
+        const {error}=await supabase.from('demo_selection_rejections').upsert(rejections.slice(i,i+200),{onConflict:'entry_minute,signal_id,rule_version',ignoreDuplicates:true});
+        if(error){console.error('Demo rejection audit failed:',error.code);break;}
+      }
+    })().catch(()=>console.error('Demo rejection audit failed'));
+    // @ts-ignore Hosted background runtime
+    if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
+  }
   if (!demoWinner) console.log('Demo blocked: no eligible candidate matches winning patterns of the eight scores');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,

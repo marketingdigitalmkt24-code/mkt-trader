@@ -110,6 +110,51 @@ export type Database = {
         }
         Relationships: []
       }
+      demo_selection_rejections: {
+        Row: {
+          asset: string
+          candles: Json
+          direction: string
+          entry_minute: string
+          entry_strategy: string
+          id: string
+          reason_code: string
+          reason_details: Json
+          recorded_at: string
+          rule_version: string
+          score: number | null
+          signal_id: string
+        }
+        Insert: {
+          asset: string
+          candles?: Json
+          direction: string
+          entry_minute: string
+          entry_strategy: string
+          id?: string
+          reason_code: string
+          reason_details?: Json
+          recorded_at?: string
+          rule_version?: string
+          score?: number | null
+          signal_id: string
+        }
+        Update: {
+          asset?: string
+          candles?: Json
+          direction?: string
+          entry_minute?: string
+          entry_strategy?: string
+          id?: string
+          reason_code?: string
+          reason_details?: Json
+          recorded_at?: string
+          rule_version?: string
+          score?: number | null
+          signal_id?: string
+        }
+        Relationships: []
+      }
       force_anticipation_tests: {
         Row: {
           asset: string

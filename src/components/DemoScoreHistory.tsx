@@ -10,6 +10,7 @@ import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from './ui/chart';
 import { DemoScoreOperations } from './DemoScoreOperations';
+import { DemoRejectedOperations } from './DemoRejectedOperations';
 
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' });
 const percent = (value: number) => `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
@@ -84,5 +85,6 @@ export function DemoScoreHistory() {
    </>}
    <p className="text-xs text-muted-foreground">Atualizado às {new Date(query.dataUpdatedAt).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'})} · Resultado financeiro Demo, não saldo da conta principal.</p>
   </>}
+  <DemoRejectedOperations key={`${period}-${score}`} period={period} score={score}/>
  </section>;
 }

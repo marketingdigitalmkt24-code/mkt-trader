@@ -131,7 +131,15 @@ export function chartFeatures(candles: Candle[], entry: number, direction: strin
   f.push(s > 0 ? pos : 1 - pos);
   return f;
 }
-export type ChartSample = { f: number[]; result: string; score?: number };
+export type ChartSample = { f: number[]; result: string; score?: number; signal_id?: string; asset?: string; entry_minute?: string };
+export function demoWinningPatternMatch(samples: ChartSample[], f: number[] | null) {
+  if (!f || !f.every(Number.isFinite)) return null;
+  const matches=samples.filter(s=>s.result==='win'&&s.signal_id&&s.f.length===f.length&&s.f.every(Number.isFinite))
+    .map(s=>({signal_id:s.signal_id,asset:s.asset??null,entry_minute:s.entry_minute??null,score:s.score??null,
+      distance:Math.sqrt(s.f.reduce((sum,v,i)=>sum+(v-f[i])**2,0))}))
+    .filter(s=>demoPreferredPatternAllowed(s.distance)).sort((a,b)=>a.distance-b.distance||String(a.signal_id).localeCompare(String(b.signal_id)));
+  return matches[0]??null;
+}
 export function demoPreferredPatternDistance(samples: ChartSample[], f: number[] | null) {
   if (!f || !f.every(Number.isFinite)) return Infinity;
   const distances = samples.filter(s => s.result === 'win' && demoPreferredScore(s.score ?? NaN)

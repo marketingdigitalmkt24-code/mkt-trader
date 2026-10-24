@@ -21,6 +21,7 @@ import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
 import { readDemoScorePriorities } from '../_shared/demo-score-priority.ts';
 import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
+import { demoWinningPatternMatch } from '../_shared/demo-continuation.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -162,7 +163,7 @@ Deno.serve(async (req) => {
     if(error)throw error;return data||[];
   }).then(data=>({data,error:null})).catch(error=>({data:null,error}));
   const chartPromise = (async()=>{
-    const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles,score')
+    const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,asset,entry_minute,direction,candles,score')
       .not('candles','is',null).gte('entry_minute',demoSince)
       .lt('entry_minute',new Date(Math.floor(Date.now()/60000)*60000-60000).toISOString())
       .order('entry_minute',{ascending:false}).limit(1000);
@@ -170,7 +171,7 @@ Deno.serve(async (req) => {
     const chartOut=ids.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',ids).eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss']) : {data:[]};
     const outcome=new Map((chartOut.data||[]).map(r=>[r.signal_id,r.result]));
     return (chartRead.data||[]).flatMap(r=>{const res=outcome.get(r.signal_id);
-      const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res,score:r.score}]:[];});
+      const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res,score:r.score,signal_id:r.signal_id,asset:r.asset,entry_minute:r.entry_minute}]:[];});
   })();
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
@@ -392,7 +393,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'score-pattern-v1',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'win-pattern-v2',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -411,15 +412,14 @@ Deno.serve(async (req) => {
   if(retry && series.has(retry.asset))demoPool.push({signal_id:`queda-win-retry-v1-${retry.asset}-${curMin}`,
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1});
-  const refF = refRow.data ? chartFeatures(refRow.data.candles as any[],Date.parse(refRow.data.entry_minute)/1000,refRow.data.direction) : null;
-  // References: the user's GEV trade plus every confirmed winning Demo chart — seek charts like recent winners.
-  const refFs: (number[] | null)[] = [refF, ...chartSamples.filter(s => s.result === 'win').map(s => s.f)];
+  // Any confirmed WIN pre-entry pattern may qualify; exact selected scores retain historical priority.
   const demoEligible = demoPool.flatMap(c => {
     const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
-    const distance=demoPreferredPatternDistance(chartSamples,f);
-    const reason=demoRejectionReason({score:c._score,referenceMatch:similarToAnyReference(refFs,f),patternDistance:distance});
+    const match=demoWinningPatternMatch(chartSamples,f);
+    const distance=match?.distance??Infinity;
+    const reason=demoRejectionReason({score:c._score,patternDistance:distance});
     if(reason){reject(c,reason);return[];}
-    return [{...c,_preferredPatternDistance:distance}];
+    return [{...c,_preferredPatternDistance:distance,_patternMatch:match}];
   });
   const priorityRead = await scorePriorityPromise;
   if(priorityRead.error)console.error('Demo score priorities unavailable: selection blocked');
@@ -441,11 +441,12 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo blocked: no eligible candidate matches winning patterns of the selected scores');
+  if (!demoWinner) console.log('Demo blocked: no eligible candidate matches confirmed winning patterns');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
       entry_strategy:demoWinner.entry_strategy,score:demoWinner._score,
+      pattern_match:demoEligible.find(c=>c.signal_id===demoWinner.signal_id)?._patternMatch??null,
       candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
     if (error) console.error('Demo candidate write failed:',error.code);
     else {

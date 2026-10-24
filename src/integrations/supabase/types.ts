@@ -232,6 +232,7 @@ export type Database = {
           direction: string
           entry_minute: string
           entry_strategy: string
+          pattern_match: Json | null
           score: number
           signal_id: string
         }
@@ -242,6 +243,7 @@ export type Database = {
           direction: string
           entry_minute: string
           entry_strategy: string
+          pattern_match?: Json | null
           score: number
           signal_id: string
         }
@@ -252,6 +254,7 @@ export type Database = {
           direction?: string
           entry_minute?: string
           entry_strategy?: string
+          pattern_match?: Json | null
           score?: number
           signal_id?: string
         }

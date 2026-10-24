@@ -8,10 +8,14 @@ test('confirmed additional principal Tendência is copyable in its own minute',(
   expect(selectedTrendCopyRequest({...order,direction:'CALL'},at+3000)?.direction).toBe('call');
 });
 test('all visible confirmed principal strategies authorize client copies',()=>{
-  for (const strategy of ['TENDENCIA','TENDENCIA_3_LOSS_PUT','FORCA_ANTECIPADA','REVERSAO_RSI','RETOMADA','VELA_FORCA']) {
+  for (const strategy of ['TENDENCIA','TENDENCIA_WIN_INVERTIDA','TENDENCIA_3_LOSS_PUT','FORCA_ANTECIPADA','REVERSAO_RSI','RETOMADA','VELA_FORCA']) {
     expect(selectedTrendCopyRequest({...order,signal_id:`principal-${strategy}`,entry_strategy:strategy},at+3000)?.entryStrategy).toBe(strategy);
   }
   expect(selectedTrendCopyRequest({...order,entry_strategy:null},at+3000)).not.toBeNull();
+});
+test('inverted Trend copy keeps authorized inverted direction and original expiry',()=>{
+ expect(selectedTrendCopyRequest({...order,signal_id:'tendencia_win_invertida-v1-'+order.signal_id,entry_strategy:'TENDENCIA_WIN_INVERTIDA',direction:'CALL'},at+3000))
+  .toMatchObject({direction:'call',entryAt:at,expiration:1,entryStrategy:'TENDENCIA_WIN_INVERTIDA'});
 });
 test('isolated tests, copies and retired orders never authorize client copies',()=>{
   expect(selectedTrendCopyRequest({...order,timeframe:'TEST'},at)).toBeNull();

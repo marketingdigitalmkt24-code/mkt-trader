@@ -7,11 +7,22 @@ test('confirmed additional principal Tendência is copyable in its own minute',(
   expect(selectedTrendCopyRequest(order,at+3000)).toMatchObject({signalId:order.signal_id,entryAt:at,direction:'put',expiration:1});
   expect(selectedTrendCopyRequest({...order,direction:'CALL'},at+3000)?.direction).toBe('call');
 });
-test('isolated Demo tests and other strategies never authorize client copies',()=>{
-  expect(selectedTrendCopyRequest({...order,signal_id:'t7-GEV-OTC-TENDENCIA-1792804860'},at)).toBeNull();
+test('all visible confirmed principal strategies authorize client copies',()=>{
+  for (const strategy of ['TENDENCIA','TENDENCIA_3_LOSS_PUT','FORCA_ANTECIPADA','REVERSAO_RSI','RETOMADA','VELA_FORCA']) {
+    expect(selectedTrendCopyRequest({...order,signal_id:`principal-${strategy}`,entry_strategy:strategy},at+3000)?.entryStrategy).toBe(strategy);
+  }
+  expect(selectedTrendCopyRequest({...order,entry_strategy:null},at+3000)).not.toBeNull();
+});
+test('isolated tests, copies and retired orders never authorize client copies',()=>{
   expect(selectedTrendCopyRequest({...order,timeframe:'TEST'},at)).toBeNull();
-  expect(selectedTrendCopyRequest({...order,entry_strategy:'VELA_FORCA'},at)).toBeNull();
+  expect(selectedTrendCopyRequest({...order,timeframe:'MT5'},at)).toBeNull();
+  expect(selectedTrendCopyRequest({...order,entry_strategy:'FORCA_INVERTIDA'},at)).toBeNull();
+  expect(selectedTrendCopyRequest({...order,entry_strategy:'FORCE_LOSS_WIN'},at)).toBeNull();
   expect(selectedTrendCopyRequest({...order,signal_id:'copy-client-'+order.signal_id},at)).toBeNull();
+});
+test('M5 principal copies retain original expiry and duration',()=>{
+  expect(selectedTrendCopyRequest({...order,timeframe:'M5',expiration_time:new Date(at+300000).toISOString()},at+3000))
+    .toMatchObject({entryAt:at,expiration:5,timeframe:'M5'});
 });
 test('missing broker confirmation cannot trigger client copies',()=>{
   expect(selectedTrendCopyRequest({...order,iq_option_id:null},at)).toBeNull();

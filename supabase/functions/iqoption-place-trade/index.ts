@@ -196,7 +196,9 @@ async function mirrorCopyTrades(
         // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.
         // Unknown broker outcomes fail closed; never expire a possibly submitted order.
         await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
-        const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount }, master.then(m => m.ok));
+        const confirmed = await master;
+        const entryAt = confirmed.expirationIso ? Date.parse(confirmed.expirationIso) - tradeRequest.expiration * 60000 : tradeRequest.entryAt;
+        const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount, entryAt }, Promise.resolve(confirmed.ok));
         const { timeframe, expirationIso } = await master;
         if (res.success && res.tradeId) {
           const { error: saveError } = await supabase.from('operation_results').insert({
@@ -243,7 +245,7 @@ async function placeTradeFireAndForget(
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
   return new Promise((resolve) => {
     // Copies follow the confirmed principal's minute, never a new future candle.
-    const anchoredCopy = !!gate && trade.signalId?.startsWith('tendencia-demo-v1-t7-') === true;
+    const anchoredCopy = !!gate;
     const anchoredEntry = anchoredCopy || isNextMinuteStrategy(trade.entryStrategy);
     console.log('📡 Connecting to IQ Option WebSocket for trading...');
     const ws = new WebSocket(IQ_OPTION_WS_URL);
@@ -311,7 +313,7 @@ async function placeTradeFireAndForget(
               const assetInfo = info as { name?: string; enabled?: boolean; is_suspended?: boolean };
               if (!assetInfo.enabled || assetInfo.is_suspended) continue;
               if ((isAnticipation(trade.entryStrategy) || anchoredCopy) && (!trade.entryAt || optionType !== 3
-                || !iqMarketOpen(info, Math.floor(Date.now() / 1000), trade.entryAt / 1000 + 60))) continue;
+                || !iqMarketOpen(info, Math.floor(Date.now() / 1000), trade.entryAt / 1000 + trade.expiration * 60))) continue;
               
               const name = (assetInfo.name || '').toUpperCase();
               const numId = parseInt(id);
@@ -648,15 +650,15 @@ serve(async (req) => {
         .eq('signal_id', body.copyPrincipalSignalId).maybeSingle();
       if (error) throw error;
       const copyRequest = selectedTrendCopyRequest(order, Date.now());
-      if (!copyRequest) return Response.json({ skipped: 'No fresh confirmed principal Trend' }, { headers: corsHeaders });
+      if (!copyRequest) return Response.json({ skipped: 'No fresh confirmed principal order' }, { headers: corsHeaders });
       const [{ data: principal }, { data: queued }] = await Promise.all([
         readMasterIQConfig(supabase),
         supabase.from('trade_queue').select('id').eq('signal_id', copyRequest.signalId)
-          .eq('status', 'executed').eq('entry_strategy', 'TENDENCIA').eq('iq_option_id', order.iq_option_id).maybeSingle(),
+          .eq('status', 'executed').eq('iq_option_id', order.iq_option_id).maybeSingle(),
       ]);
       if (!principal || !queued) return Response.json({ skipped: 'Principal confirmation unavailable' }, { headers: corsHeaders });
       await mirrorCopyTrades(supabase, copyRequest, copyRequest.signalId,
-        Promise.resolve({ ok: true, timeframe: 'M1', expirationIso: order.expiration_time }), principal);
+        Promise.resolve({ ok: true, timeframe: order.timeframe, expirationIso: order.expiration_time }), principal);
       return Response.json({ success: true, signalId: copyRequest.signalId }, { headers: corsHeaders });
     }
     const tradeRequest: TradeRequest = body;
@@ -882,10 +884,9 @@ serve(async (req) => {
       );
     }
     // Copy: prepara login/gráfico dos clientes em paralelo e envia assim que a principal confirmar.
-    let settleMaster!: (m: { ok: boolean; timeframe: string; expirationIso: string | null }) => void;
+    let settleMaster: (m: { ok: boolean; timeframe: string; expirationIso: string | null }) => void = () => {};
     const masterOutcome = new Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>(res => { settleMaster = res; });
-    const copyTask = isAnticipation(tradeRequest.entryStrategy) ? Promise.resolve()
-      : mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
+    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
     // @ts-ignore EdgeRuntime exists in Supabase runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
     const masterLeaseScope = isAnticipation(tradeRequest.entryStrategy) ? 'master:forca_antecipada' : 'master';
@@ -906,7 +907,6 @@ serve(async (req) => {
         : isNextMinuteStrategy(tradeRequest.entryStrategy) && tradeRequest.entryAt
         ? new Date(tradeRequest.entryAt + tradeRequest.expiration * 60000).toISOString()
         : new Date((Math.round(Date.now() / 60000) + (tradeRequest.expiration || 1)) * 60000).toISOString();
-      settleMaster({ ok: true, timeframe, expirationIso });
       
       const { error: saveError } = await supabase.from('operation_results').insert({
         signal_id: tradeRequest.signalId || `auto_${Date.now()}`,
@@ -922,6 +922,7 @@ serve(async (req) => {
         timeframe,
         expiration_time: expirationIso,
       });
+      settleMaster({ ok: !saveError && timeframe !== 'TEST' && timeframe !== 'MT5', timeframe, expirationIso });
       if (!saveError) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', masterLeaseScope).eq('signal_id', reservationSignal);
       
       console.log(`💾 Saved pending trade: ${result.tradeId}`);

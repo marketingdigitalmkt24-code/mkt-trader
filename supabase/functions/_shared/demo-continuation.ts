@@ -22,11 +22,13 @@ export function demoContinuation(candles: Candle[], entry: number) {
   if (streak > 3) return null;
   return { direction: 'PUT' as const, bodyRatio, lowerWick, streak };
 }
-// The displayed exact 2.26 score (the only real-entry score) is preferred over higher scores in the minute slot.
-const isExact226 = (s: number) => Math.round(s * 100) === 226;
+// The minute slot prefers the score closest to the displayed 2.26 (the only real-entry score):
+// exact 2.26 first, then the nearest displayed score; ties go to the higher score.
+const DEMO_TARGET_SCORE_CENTS = 226;
+const scoreDistance = (s: number) => Math.abs(Math.round(s * 100) - DEMO_TARGET_SCORE_CENTS);
 export function chooseDemoCandidate(candidates: DemoCandidate[]) {
   return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0)
-    .sort((a,b) => Number(isExact226(b._score))-Number(isExact226(a._score)) || b._score-a._score || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
+    .sort((a,b) => scoreDistance(a._score)-scoreDistance(b._score) || b._score-a._score || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
 }
 export const DEMO_CEILING = 'TETO_V1';
 // Provisional: red candle then green candle closing back at the red open (prior top); PUT next minute.

@@ -19,6 +19,9 @@ test('normal Tendência cannot dispatch a new client copy', () => {
 test('legacy normal Tendência IDs are hidden without misclassifying derived strategies', () => {
   expect(isNormalPrincipalTrend({ ...normal, entry_strategy: null })).toBe(true);
   expect(isNormalPrincipalTrend({ signal_id: 'copy-client-' + normal.signal_id })).toBe(true);
+  const realCopy = { ...normal, signal_id: 'copy-client-' + normal.signal_id, entry_strategy: 'COPY_TRADE' };
+  expect(isNormalPrincipalTrend(realCopy)).toBe(true);
+  expect(clientCopyResults([realCopy], 'client', new Date(at + 1000)).operations).toHaveLength(0);
   for (const strategy of ['TENDENCIA_WIN_INVERTIDA', 'TENDENCIA_3_LOSS_PUT', 'QUEDA_WIN_RETRY_V1']) {
     const other = { ...normal, entry_strategy: strategy, signal_id: strategy.toLowerCase() + '-v1-t7-APPLE-OTC-TENDENCIA-1' };
     expect(isNormalPrincipalTrend(other)).toBe(false);

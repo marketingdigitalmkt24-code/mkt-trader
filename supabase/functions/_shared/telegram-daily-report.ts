@@ -6,6 +6,7 @@ export interface ReportRow {
 }
 const labels: Record<string, string> = {
   TENDENCIA_WIN_INVERTIDA: 'Tendência invertida',
+  QUEDA_WIN_RETRY_V1: 'Queda win +1',
   TENDENCIA: 'Tendência', TREND_WIN_LOSS_FORCE_LOSS: 'Retomada (TESTE)',
   FORCA_INVERTIDA: 'Força Invertida (TESTE)',
   TENDENCIA_V1: 'Tendência V1', FOUR_WIN_REVERSAL: 'Após 4 ganhos',

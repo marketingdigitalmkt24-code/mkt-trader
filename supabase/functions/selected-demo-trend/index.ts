@@ -6,8 +6,7 @@ import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { selectedDemoTrend, freshSelectedTrend, notifySelectedTrend } from '../_shared/selected-demo-trend.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
-const TREND_THREE_LOSS_LABEL = 'Tendência';
-const TREND_THREE_LOSS_PUT = 'TENDENCIA';
+import { TREND_WIN_INVERTED } from '../_shared/trend-win-inverted.ts';
 const freshTrendPut = freshSelectedTrend;
 const notifyTrendPut = notifySelectedTrend;
 
@@ -27,9 +26,9 @@ Deno.serve(async req => {
   const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
   const db = createClient(url, key);
-  const state: { claimed?: { signalId: string; asset: string; amount: number; entryAt: number; configId: string } } = {};
+  const state: { claimed?: { signalId: string; asset: string; amount: number; entryAt: number; configId: string; direction: string; entryStrategy: string } } = {};
   let submitted = false;
-  const leaseScope = 'master:tendencia';
+  let leaseScope = 'master:tendencia';
   try {
     if (req.headers.get('Authorization') !== `Bearer ${key}`) return reply({ error: 'Unauthorized' }, 401);
     const parsed = schema.safeParse(await req.json().catch(() => null));
@@ -92,11 +91,14 @@ Deno.serve(async req => {
             if (error) throw error;
             if (!order) { finish({ success: false, error: 'Sequence, limits or reservation rejected; no order sent' }); return; }
             state.claimed = order;
-            if (order.configId !== cfg.id || !freshTrendPut(order.entryAt, Date.now()) || done) {
+            leaseScope = `master:${String(order.entryStrategy).toLowerCase()}`;
+            if (order.configId !== cfg.id || !['call','put'].includes(order.direction)
+              || !['TENDENCIA',TREND_WIN_INVERTED].includes(order.entryStrategy)
+              || !freshTrendPut(order.entryAt, Date.now()) || done) {
               finish({ success: false, error: 'Configuration changed or entry window closed; no order sent' }); return;
             }
             const { data: lease, error: leaseError } = await db.from('trade_queue').update({ error: 'placement_claimed' })
-              .eq('signal_id', order.signalId).eq('entry_strategy', TREND_THREE_LOSS_PUT).eq('status', 'executing').is('error', null).select('id');
+              .eq('signal_id', order.signalId).eq('entry_strategy', order.entryStrategy).eq('status', 'executing').is('error', null).select('id');
             if (leaseError) throw leaseError;
             if (!lease?.length || done || !freshTrendPut(order.entryAt, Date.now())) {
               finish({ success: false, error: 'Placement lease rejected; no order sent' }); return;
@@ -107,7 +109,7 @@ Deno.serve(async req => {
             if (done || !freshTrendPut(entryAt, Date.now())) { finish({ success: false, error: 'Entry window closed; no order sent' }); return; }
             submitted = true;
             ws.send(JSON.stringify({ name: 'sendMessage', request_id: 'trend-put', msg: { name: 'binary-options.open-option', version: '1.0', body: {
-              user_balance_id: balanceId, active_id: activeId, option_type_id: 3, direction: candidate.direction.toLowerCase(),
+              user_balance_id: balanceId, active_id: activeId, option_type_id: 3, direction: order.direction,
               expired: entryAt / 1000 + 60, price: order.amount, profit_percent: 0,
             } } }));
           }
@@ -125,6 +127,8 @@ Deno.serve(async req => {
     const owned = state.claimed;
     if (!owned) return reply({ skipped: outcome.error || 'No authorized order' });
     const queued = { signal_id: owned.signalId, amount: owned.amount };
+    const direction = owned.direction.toUpperCase();
+    const strategyLabel = owned.entryStrategy === TREND_WIN_INVERTED ? 'Tendência invertida' : 'Tendência';
     if (!outcome.success || !outcome.tradeId) {
       console.error('Selected Trend failed:', outcome.error);
       await db.from('trade_queue').update({ status: 'failed', error: outcome.error || 'Broker confirmation unknown' }).eq('signal_id', queued.signal_id);
@@ -133,8 +137,8 @@ Deno.serve(async req => {
       return reply({ success: false, error: outcome.error });
     }
     const { error: saveError } = await db.from('operation_results').insert({
-      signal_id: queued.signal_id, asset: candidate.asset, direction: candidate.direction, entry_price: Number(queued.amount), result: 'pending', profit: 0,
-      iq_option_id: outcome.tradeId, is_auto_trade: true, is_ai_analyzed: false, entry_strategy: TREND_THREE_LOSS_PUT,
+      signal_id: queued.signal_id, asset: candidate.asset, direction, entry_price: Number(queued.amount), result: 'pending', profit: 0,
+      iq_option_id: outcome.tradeId, is_auto_trade: true, is_ai_analyzed: false, entry_strategy: owned.entryStrategy,
       timeframe: 'M1', created_at: new Date().toISOString(), expiration_time: new Date(entryAt + 60000).toISOString(),
     });
     if (saveError) throw saveError;
@@ -154,12 +158,12 @@ Deno.serve(async req => {
     const background = async () => {
       if (notifyTrendPut(outcome, entryAt, Date.now())) {
         try {
-          const messageId = await sendIQAlert({ asset: candidate.asset, direction: candidate.direction === 'CALL' ? 'call' : 'put', expiration: 1, entryAt,
-            signalId: queued.signal_id, timeframe: 'M1', strategy: TREND_THREE_LOSS_LABEL, brokerOrderId: outcome.tradeId, accountType: cfg.account_type,
+          const messageId = await sendIQAlert({ asset: candidate.asset, direction: direction === 'CALL' ? 'call' : 'put', expiration: 1, entryAt,
+            signalId: queued.signal_id, timeframe: 'M1', strategy: strategyLabel, brokerOrderId: outcome.tradeId, accountType: cfg.account_type,
           }, { lovableKey: Deno.env.get('LOVABLE_API_KEY') || '', telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '' });
           if (messageId !== undefined) {
             const { error } = await db.from('telegram_iq_deliveries').upsert({ signal_id: queued.signal_id, chat_id: IQ_TELEGRAM_CHANNEL,
-              signal_message_id: messageId, strategy: TREND_THREE_LOSS_LABEL }, { onConflict: 'signal_id', ignoreDuplicates: true });
+              signal_message_id: messageId, strategy: strategyLabel }, { onConflict: 'signal_id', ignoreDuplicates: true });
             if (error) throw error;
             await db.from('operation_results').update({ telegram_sent: true }).eq('signal_id', queued.signal_id);
           }

@@ -4,6 +4,12 @@ import { isMasterIQOrder, masterIQDailyStats, type MasterIQOperation } from '../
 const row = (extra: Partial<MasterIQOperation> = {}): MasterIQOperation => ({ id: '1', signal_id: 'fourwin-1', asset: 'JUP/USD-OTC', direction: 'CALL', result: 'loss', profit: -10, created_at: '2026-10-17T15:14:00.000Z', timeframe: 'M1', entry_strategy: 'FOUR_WIN_REVERSAL', iq_option_id: '14364506363', ...extra });
 const now = new Date('2026-10-17T21:59:00.000Z');
 describe('Principal IQ results', () => {
+  test('new inverted Trend principal is visible and counted separately from copies', () => {
+    const inverted = row({ signal_id: 'tendencia_win_invertida-v1-t7-new', entry_strategy: 'TENDENCIA_WIN_INVERTIDA', result: 'win', profit: 8.5 });
+    expect(isMasterIQOrder(inverted)).toBe(true);
+    expect(masterIQDailyStats([inverted, { ...inverted, signal_id: 'copy-client-'+inverted.signal_id }], '', now))
+      .toMatchObject({ wins: 1, dailyProfit: 8.5, todayTrades: 1 });
+  });
   test('removed Force LOSS WIN contributes neither trades nor displayed profit', () => {
     const removed = row({ entry_strategy: 'FORCE_LOSS_WIN', profit: 8.5, result: 'win' });
     expect(isMasterIQOrder(removed)).toBe(false);

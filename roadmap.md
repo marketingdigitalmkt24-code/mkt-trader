@@ -1,5 +1,5 @@
 # Autorização adicional da nota Demo 2,26
-- [ ] Liberar exatamente nota exibida 2,26 nos filtros e claim, preservando faixa 4,0–<4,5, limites, Telegram e copy; publicar e testar.
+- [x] Liberada exatamente nota exibida 2,26 nos filtros e claim, preservando faixa 4,0–<4,5, limites, Telegram e copy; migração 0044 aplicada, três executores publicados, 18 testes aprovados e build OK.
 - [ ] Conferir primeira execução prospectiva completa — depende de nova Demo elegível e contas/limites disponíveis, sem replay.
 
 # Retirar e desativar Tendência normal IQ

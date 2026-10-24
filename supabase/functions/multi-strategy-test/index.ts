@@ -370,13 +370,14 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  const [demoHist,chartSamples,refRow] = await Promise.all([demoHistPromise,chartPromise,refPromise]);
+  const [demoHist,chartSamples,refRow,realHist] = await Promise.all([demoHistPromise,chartPromise,refPromise,realHistPromise]);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
+  if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
   // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
-    const learn=demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
-      +demoAssetAdjustment(demoHist.data||[],c.entry_strategy,c.asset)
-      +chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction));
+    const learn=combinedLearnedScore(demoHist.data||[],realHist.data||[],
+      chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
+      c.entry_strategy,c.asset,curMin*1000);
     if(demoLearnedReject(learn))return[];
     return[{...c,_score:Math.max(0,c._score+2*learn)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.

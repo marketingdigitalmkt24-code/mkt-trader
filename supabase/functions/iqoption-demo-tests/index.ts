@@ -4,7 +4,7 @@ import { z } from 'npm:zod@3';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount } from './policy.ts';
-import { demoHistoryOutcome } from './history.ts';
+import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
 const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
 const reply = (body: unknown, status = 200) => {

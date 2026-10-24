@@ -15,8 +15,8 @@ import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoTrend } from '../_shared/selected-demo-trend.ts';
 import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.ts';
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
-import { demoHistoryOutcome } from '../iqoption-demo-tests/history.ts';
-import { demoBalance } from '../iqoption-demo-tests/policy.ts';
+import { demoHistoryOutcome } from '../_shared/demo-history.ts';
+import { demoBalance } from '../_shared/demo-balance.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];

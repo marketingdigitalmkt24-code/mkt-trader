@@ -95,7 +95,7 @@ Deno.serve(async req => {
             state.claimed = order;
             leaseScope = `master:${String(order.entryStrategy).toLowerCase()}`;
             if (order.configId !== cfg.id || !['call','put'].includes(order.direction)
-              || !['TENDENCIA',TREND_WIN_INVERTED,QUEDA_WIN_RETRY].includes(order.entryStrategy)
+              || ![TREND_WIN_INVERTED,QUEDA_WIN_RETRY].includes(order.entryStrategy)
               || !freshTrendPut(order.entryAt, Date.now()) || done) {
               finish({ success: false, error: 'Configuration changed or entry window closed; no order sent' }); return;
             }

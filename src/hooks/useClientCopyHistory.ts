@@ -5,6 +5,7 @@ import type { ClientCopyOperation } from '@/lib/client-copy-results';
 import { historyStart } from '@/components/dayLabel';
 import { afterIQReset, combineCutoffs, getIQResultsReset } from '@/lib/iq-results-reset';
 import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
+import { isNormalPrincipalTrend } from '@/lib/normal-trend';
 
 // Histórico de entradas copiadas do cliente (últimos 30 dias), sem estratégia.
 export function useClientCopyHistory() {
@@ -37,5 +38,5 @@ export function useClientCopyHistory() {
     },
   });
   const cutoff = combineCutoffs(getIQResultsReset(userId), globalCutoff);
-  return { operations: (query.data || []).filter(row => afterIQReset(row.created_at, cutoff)), isLoading: query.isLoading, isError: query.isError };
+  return { operations: (query.data || []).filter(row => !isNormalPrincipalTrend(row) && afterIQReset(row.created_at, cutoff)), isLoading: query.isLoading, isError: query.isError };
 }

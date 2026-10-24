@@ -1,3 +1,7 @@
+# Retirar e desativar Tendência normal IQ
+- [ ] Bloquear principal normal e cópias, retirar histórico admin/cliente; manter Demo e estratégias invertida/3 perdas, registros financeiros e conciliação.
+- [ ] Publicar bloqueio, executar testes e conferir painel autenticado.
+
 # Exclusão permanente do histórico IQ Option
 - [x] Ampliada e publicada cópia das novas entradas confirmadas do admin, incluindo Antecipação e Tendência 3 perdas; mantém controles/limites dos clientes, minuto/expiração originais e isolamento TESTE. 42 testes aprovados, build OK e painel autenticado conferido.
 - [x] Restaurada e publicada cópia da Tendência principal confirmada pelo executor existente; preserva conta/valor/limites do cliente e minuto original, sem TESTE/replay. 35 testes aprovados, build OK, painel admin autenticado conferido; um cliente conectado com copy ativo identificado.

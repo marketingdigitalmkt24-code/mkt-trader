@@ -1,4 +1,5 @@
 import { countClientCopyResults, type CopyResultRow } from './admin-copy-results';
+import { isNormalPrincipalTrend } from './normal-trend';
 
 export interface ClientCopyOperation extends CopyResultRow {
   id: string;
@@ -23,6 +24,7 @@ export function clientDayStart(now = new Date()) {
 export function clientCopyResults(rows: ClientCopyOperation[], userId: string, now = new Date()) {
   const start = clientDayStart(now);
   const operations = rows.filter(row => row.signal_id.startsWith(`copy-${userId}-`)
+    && !isNormalPrincipalTrend(row)
     && row.entry_strategy !== 'FORCE_LOSS_WIN' && !row.signal_id.includes('-force-lw-')
     && row.entry_strategy !== 'FORCA_INVERTIDA' && !row.signal_id.includes('-forca_invertida-')
     && Boolean(row.iq_option_id) && !['TEST', 'MT5'].includes(row.timeframe)

@@ -1,6 +1,7 @@
 # Prioridade Demo por notas vencedoras
-- [ ] Priorizar próximas escolhas e gráficos vencedores das notas 2,26; 2,23; 2,18; 2,64; 2,88; 2,03; 2,69; 2,91, preservando nota original, filtros e autorização principal só 2,26.
-- [ ] Testar, publicar e conferir seleção prospectiva sem replay.
+- [x] Prioridade das próximas escolhas e gráficos vencedores das notas 2,26; 2,23; 2,18; 2,64; 2,88; 2,03; 2,69; 2,91 implementada, preservando nota original, filtros e autorização principal só 2,26.
+- [x] 38 testes aprovados, multi-strategy-test publicada, build OK e painel autenticado conferido com notas carregadas.
+- [ ] Conferir primeira seleção prospectiva da nova prioridade — depende de candidato elegível no minuto; nenhum novo selecionado às 22:06 UTC, sem replay/ordem forçada.
 
 # Autorização adicional da nota Demo 2,26
 - [x] Liberada exatamente nota exibida 2,26 nos filtros e claim, preservando faixa 4,0–<4,5, limites, Telegram e copy; migração 0044 aplicada, três executores publicados, 18 testes aprovados e build OK.

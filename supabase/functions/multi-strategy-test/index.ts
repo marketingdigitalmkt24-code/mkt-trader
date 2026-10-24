@@ -365,9 +365,13 @@ Deno.serve(async (req) => {
   };
   const [demoHist,chartSamples,refRow] = await Promise.all([demoHistPromise,chartPromise,refPromise]);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
-  const demoPool = [...rows,...demoPatterns].map(c=>({...c,_score:Math.max(0,c._score
-    +2*demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
-    +2*chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)))}));
+  // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
+  const demoPool = [...rows,...demoPatterns].flatMap(c=>{
+    const learn=demoLearningAdjustment(demoHist.data||[],c.entry_strategy,curMin*1000)
+      +demoAssetAdjustment(demoHist.data||[],c.entry_strategy,c.asset)
+      +chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction));
+    if(demoLearnedReject(learn))return[];
+    return[{...c,_score:Math.max(0,c._score+2*learn)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);
   if (qw && series.has(qw.asset)) demoPool.push({ signal_id: `queda-win-call-v1-${qw.asset}-${curMin}`,

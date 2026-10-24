@@ -13,6 +13,7 @@ import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, chartFeatures, chartPatternAdjustment, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoTrend } from '../_shared/selected-demo-trend.ts';
+import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -117,6 +118,14 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors });
   }
   const supabase = createClient(url, serviceKey);
+  const input = await req.json().catch(() => null);
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some(key => key !== 'scheduled')
+    || (input.scheduled !== undefined && typeof input.scheduled !== 'boolean')) {
+    return Response.json({ error: 'Invalid parameters' }, { status: 400, headers: cors });
+  }
+  const targetMs = demoTargetMinute(Date.now(), input.scheduled === true);
+  console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Fetch independent Demo learning inputs while broker login/candles are in flight.
   const demoSince = new Date(Date.now()-14*86400000).toISOString();
   const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit')
@@ -148,12 +157,13 @@ Deno.serve(async (req) => {
   const [{ cfg, ssid }, { data: open }] = await Promise.all([
     masterLogin,
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
-      .eq('result', OPEN).lte('expiration_time', new Date().toISOString()).limit(1000),
+      .eq('result', OPEN).lte('expiration_time', new Date(targetMs).toISOString()).limit(1000),
   ]);
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
   if (!ssid) return Response.json({ success: false, error: 'login failed' }, { headers: cors });
-  const nowSec = Math.floor(Date.now() / 1000);
-  const curMin = Math.floor(nowSec / 60) * 60;
+  let nowSec = Math.floor(Date.now() / 1000);
+  const curMin = targetMs / 1000;
+  console.log('Demo timing login ready:', new Date().toISOString());
 
   // Confirm each expired TEST as soon as its broker candle arrives, not after all assets.
   let resolved = 0;
@@ -188,13 +198,29 @@ Deno.serve(async (req) => {
     const ws = new WebSocket(WS_URL);
     let pending = 0; const byReq = new Map<string, string>();
     const finish = () => { try { ws.close(); } catch (_) { /* */ } resolve(); };
-    const timer = setTimeout(finish, 40000);
+    const timer = setTimeout(finish, Math.max(0, targetMs - Date.now()) + 30000);
+    let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
+    let initialized = false;
+    const requestInitialization = () => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
+    };
     ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
     ws.onerror = () => { clearTimeout(timer); finish(); };
+    ws.onclose = () => { if (boundaryTimer) clearTimeout(boundaryTimer); };
     ws.onmessage = async (ev) => {
       const d = JSON.parse(ev.data);
-      if (d.name === 'profile') ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
-      if (d.name === 'initialization-data') {
+      if (d.name === 'profile') {
+        // Connection is already authenticated; only fresh closed candles are requested at :00.
+        console.log('Demo timing broker ready:', new Date().toISOString());
+        if (Date.now() < targetMs) boundaryTimer = setTimeout(requestInitialization, targetMs - Date.now());
+        else requestInitialization();
+      }
+      if (d.name === 'initialization-data' && !initialized) {
+        const requestTime = demoCandleRequestTime(Date.now(), targetMs);
+        if (requestTime === null) { clearTimeout(timer); finish(); return; }
+        initialized = true;
+        nowSec = requestTime;
+        console.log('Demo timing candles requested:', new Date().toISOString());
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
         const cand = new Map<string, number>();
         for (const [id, a] of Object.entries<any>(all)) {
@@ -223,6 +249,7 @@ Deno.serve(async (req) => {
 
   // Await database confirmation, not Telegram, before the atomic four-win claim.
   await Promise.all(confirmations);
+  console.log('Demo timing candles settled:', new Date().toISOString(), 'assets:', series.size);
   for (const o of open || []) {
     const entrySec = Math.floor(new Date(o.created_at).getTime() / 1000);
     const k = series.get(o.asset)?.find(x => x.t === entrySec);
@@ -300,6 +327,7 @@ Deno.serve(async (req) => {
       candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
+      console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
       // A selected Trend may independently authorize a principal order; no Demo stake/history reuse.
       if (selectedDemoTrend({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now())) {
         const principalTask = supabase.functions.invoke('selected-demo-trend', {

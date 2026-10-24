@@ -1,9 +1,10 @@
 # Exclusão permanente do histórico IQ Option
 - [x] Autorização Tendência selecionada → ordem principal adicional implementada e publicada com claim atômico, conta/valor principal, limites e ativo M1; Telegram após confirmação IQ, sem copy/replay. 22 testes aprovados, chamada com sessão navegador recusada 401. Configuração atual PRACTICE/US$10; Demo TESTE preservada.
-- [ ] Conferir primeira nova Tendência principal, alerta Telegram e resultado no painel — aguarda Tendência vencer a seleção Demo dentro da janela; nenhuma ordem histórica forçada, últimos candidatos eram Vela de Força.
+- [ ] Conferir primeiro resultado final Tendência principal no painel/Telegram — USD/CHF-OTC 22:20 BRT confirmado na principal por US$10, exibido no painel e alerta Telegram registrado; resultado ainda pendente na conferência.
 - [x] Excluídos permanentemente 1.001 registros principais e 831 cópias; consulta confirmou zero entradas IQ restantes de qualquer dia/cliente, 18.848 TESTES simulados e 164 ordens Demo preservados. Painel admin autenticado conferido sem entradas e com resultado zerado; histórico cliente confirmado pela fonte compartilhada, sem sessão cliente distinta. Saldo/configuração da corretora intactos.
 
 # Testes executados na Demo
+- [x] Preparação Demo publicada: login/WebSocket antes do próximo minuto, leituras independentes paralelas e histórico enviado depois da ordem. 28 testes aprovados. Execução real observada USD/CHF-OTC 22:20 BRT: velas :00.282, candidato :00.761, envio :03.153, confirmação :03.255; entrada lida no painel autenticado, build OK. Não garante :00 exato.
 - [x] Publicadas otimizações pendentes da entrada Demo: sessão de serviço reaproveitada, leituras em paralelo e gráficos fora do envio; testes de sessão/seleção aprovados, :00 exato não garantido.
 - [x] Incluir a próxima vela fechada no gráfico Demo; sete testes aprovados, rotina publicada e painel conferido; coleta automática não força ordens.
 - [x] Assertividade agora lê todas as estratégias confirmadas Demo separadamente; contagem reiniciada às 16:33 BRT sem apagar ordens ou alterar demais totais. Seis testes aprovados, painel conferido Tendência/Vela de força 0W/0L, build OK.

@@ -34,6 +34,11 @@ Deno.serve(async req => {
  if (!authorized) return reply({ error: 'Unauthorized' },401);
  const parsed = schema.safeParse(await req.json().catch(() => null));
  if (!parsed.success) return reply({ error: 'Invalid parameters' },400);
+ // Start independent ledger/settings reads before broker authentication.
+ const pendingRead = db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000).then(r=>r);
+ const settingRead = parsed.data.candidate ? db.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r) : null;
+ const selectedRead = parsed.data.candidate ? db.from('iq_demo_test_candidates').select('signal_id,asset,direction,entry_minute,entry_strategy')
+   .eq('entry_minute',new Date(Math.floor(Date.now()/60000)*60000).toISOString()).maybeSingle().then(r=>r) : null;
  const { data: cfg } = await readMasterIQConfig(db);
  if (!cfg) return reply({ error: 'Principal connection unavailable' },409);
  let ssid = reusableDemoSession(serviceAuthorized,cfg.id,parsed.data.brokerSession);
@@ -44,14 +49,13 @@ Deno.serve(async req => {
  } catch { /* bounded alternate */ }
  }
  if (!ssid) return reply({ error: 'Broker login failed' },502);
- const pendingRead = db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000).then(r=>r);
- const settingRead = parsed.data.candidate ? db.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r) : null;
  let candidate: any = null;
  if (parsed.data.candidate) {
  // Scheduler delivery can lag one minute. Never roll the old candidate forward:
  // independently read this minute's newly selected signal, then enforce its own freshness.
- const { data: selected, error } = await db.from('iq_demo_test_candidates').select('signal_id,asset,direction,entry_minute,entry_strategy')
-   .eq('entry_minute',new Date(Math.floor(Date.now()/60000)*60000).toISOString()).maybeSingle();
+ const selectedResult = await selectedRead;
+ const selected = selectedResult?.data;
+ const error = selectedResult?.error;
  const data = selected ? {...selected,created_at:selected.entry_minute,timeframe:'TEST'} : null;
  if (data && freshDemoCandidate(data,Date.now())) candidate=data;
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
@@ -79,6 +83,14 @@ Deno.serve(async req => {
  const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);ws.close();resolve();};
  const timer=setTimeout(finish,25000);
  const send=(name:string,version:string,body:unknown,request_id?:string)=>ws.send(JSON.stringify({name:'sendMessage',request_id,msg:{name,version,body}}));
+ let historyRequested=false;
+ const requestHistory=()=>{
+ if(historyRequested)return;historyRequested=true;
+ if(pending?.length) for(const offset of [0,300,600]) {
+ send('portfolio.get-history-positions','2.0',{user_balance_id:balanceId,instrument_types:['binary-option','turbo-option','digital-option'],limit:300,offset},`portfolio-${offset}`);
+ send('get-history-positions','1.0',{user_balance_id:balanceId,instrument_types:['turbo'],limit:300,offset},`legacy-${offset}`);
+ }
+ };
  ws.onopen=()=>ws.send(JSON.stringify({name:'ssid',msg:ssid}));
  ws.onerror=finish;
  ws.onmessage=async ev=>{
@@ -90,10 +102,7 @@ Deno.serve(async req => {
  if(!balance){finish();return;} balanceId=balance.id;
  // Ask for placement availability first; history must not queue ahead of the order.
  if(reserved || parsed.data.inspect) send('get-initialization-data','3.0',{});
- if(pending?.length) for(const offset of [0,300,600]) {
- send('portfolio.get-history-positions','2.0',{user_balance_id:balanceId,instrument_types:['binary-option','turbo-option','digital-option'],limit:300,offset},`portfolio-${offset}`);
- send('get-history-positions','1.0',{user_balance_id:balanceId,instrument_types:['turbo'],limit:300,offset},`legacy-${offset}`);
- }
+ if(!reserved) requestHistory();
  if(!reserved && !parsed.data.inspect && !pending?.length) finish();
  }
  if(d.name==='initialization-data' && parsed.data.inspect) {
@@ -109,15 +118,19 @@ Deno.serve(async req => {
  const expiry=Date.parse(candidate.created_at)/1000+60;
  const found=Object.entries<any>(d.msg?.turbo?.actives || {}).find(([,a])=>symbol(a.name || '')===candidate.asset && iqMarketOpen(a,Math.floor(Date.now()/1000),expiry));
  if(!found || !freshDemoCandidate(candidate,Date.now())) {
+ requestHistory();
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).then(()=>{}));
  if(!pending?.length) finish();return;
  }
  // PRACTICE-only balance ID, separately configured snapshot; never touch the primary queue or copies.
  placed=true;
+ console.log('Demo timing order submitted:',new Date().toISOString(),candidate.signal_id);
  send('binary-options.open-option','1.0',{price:testAmount,active_id:Number(found[0]),expired:expiry,direction:candidate.direction.toLowerCase(),option_type_id:3,user_balance_id:balanceId},'demo-test');
+ requestHistory();
  }
  if(d.name==='option' && placed && !confirmed && reserved && /^\d+$/.test(String(d.msg?.id || ''))) {
  confirmed=true;
+ console.log('Demo timing order confirmed:',new Date().toISOString(),candidate?.signal_id);
  writes.push(db.from('iq_demo_test_orders').update({status:'confirmed',iq_option_id:String(d.msg.id),created_at:new Date().toISOString()}).eq('id',reserved).then(()=>{}));
  if(!pending?.length || histories>=6) finish();
  }

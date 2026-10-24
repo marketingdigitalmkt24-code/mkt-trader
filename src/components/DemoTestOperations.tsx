@@ -43,7 +43,7 @@ export function DemoTestOperations() {
 }
 
 type Candle={t:number;o:number;c:number;h:number;l:number};
-function MiniChart({candles,direction,entry}:{candles?:Candle[]|null;direction:string;entry:number}){
+export function MiniChart({candles,direction,entry}:{candles?:Candle[]|null;direction:string;entry:number}){
  if(!candles?.length)return <p className="text-xs text-muted-foreground">Gráfico indisponível para esta operação (registrada antes do salvamento das velas).</p>;
    const comparison=demoChartComparison(candles,entry,direction);
    const nextCandle=candles.find(k=>k.t===entry+60 && k.t+60<=Date.now()/1000);

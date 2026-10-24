@@ -9,6 +9,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from './ui/chart';
+import { DemoScoreOperations } from './DemoScoreOperations';
 
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' });
 const percent = (value: number) => `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
@@ -79,6 +80,7 @@ export function DemoScoreHistory() {
     </div>
     <div><h3 className="mb-3 text-sm font-medium">Resultados por nota</h3><div className="overflow-x-auto"><table className="w-full text-left text-xs sm:text-sm"><thead className="border-y border-border text-muted-foreground"><tr>{['Nota','Ordens','WIN','LOSS','Empates','Abertas','Acerto','Saldo'].map(label=><th key={label} className="whitespace-nowrap px-3 py-3 font-medium first:pl-0">{label}</th>)}</tr></thead><tbody>{sorted.slice(currentPage*20,currentPage*20+20).map(row=><tr key={row.score} className="border-b border-border/60"><td className="whitespace-nowrap py-3 pr-3 font-mono font-semibold">{scoreLabel(row.score)}</td><td className="px-3 py-3 font-mono">{row.orders}</td><td className="px-3 py-3 font-mono text-call">{row.wins}</td><td className="px-3 py-3 font-mono text-put">{row.losses}</td><td className="px-3 py-3 font-mono">{row.ties}</td><td className="px-3 py-3 font-mono">{row.pending}</td><td className="whitespace-nowrap px-3 py-3 font-mono">{row.wins+row.losses ? percent(row.accuracy):'—'}</td><td className={`whitespace-nowrap px-3 py-3 font-mono ${row.profit<0?'text-put':'text-call'}`}>{money(row.profit)}</td></tr>)}</tbody></table></div>
     {pageCount>1 && <div className="mt-3 flex items-center justify-between"><Button variant="outline" size="sm" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>Anterior</Button><span className="text-xs text-muted-foreground">{currentPage+1} / {pageCount}</span><Button variant="outline" size="sm" disabled={currentPage+1>=pageCount} onClick={()=>setPage(currentPage+1)}>Próxima</Button></div>}</div>
+    {score !== 'all' && score !== 'unscored' && <DemoScoreOperations key={`${period}-${score}`} score={score} ids={[...rows].sort((a,b)=>Date.parse(b.entry_minute)-Date.parse(a.entry_minute)||b.id.localeCompare(a.id)).map(row=>row.id)}/>}
    </>}
    <p className="text-xs text-muted-foreground">Atualizado às {new Date(query.dataUpdatedAt).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'})} · Resultado financeiro Demo, não saldo da conta principal.</p>
   </>}

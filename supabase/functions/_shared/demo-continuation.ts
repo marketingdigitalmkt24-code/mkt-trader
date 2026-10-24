@@ -33,8 +33,12 @@ const scoreDistance = (s: number) => Math.abs(Math.round(s * 100) - DEMO_TARGET_
 export function demoPreferredPatternAllowed(distance: number | undefined) {
   return typeof distance === 'number' && Number.isFinite(distance) && distance >= 0 && distance <= DEMO_REFERENCE_MAX_DISTANCE;
 }
-export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningScores = false) {
+export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningScores = false, scorePriority?: number[]) {
   const tier = (c: DemoCandidate) => {
+    if (scorePriority && preferWinningScores) {
+      const rank = scorePriority.indexOf(Math.round(c._score * 100));
+      return rank >= 0 ? rank : scorePriority.length;
+    }
     if (scoreDistance(c._score) === 0) return 0;
     if (!preferWinningScores) return 1;
     const matched = Number.isFinite(c._preferredPatternDistance) && Number(c._preferredPatternDistance) <= DEMO_REFERENCE_MAX_DISTANCE;

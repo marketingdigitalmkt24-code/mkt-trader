@@ -19,6 +19,7 @@ import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
+import { readDemoScorePriorities } from '../_shared/demo-score-priority.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -149,6 +150,16 @@ Deno.serve(async (req) => {
     .gte('created_at',demoSince).order('created_at',{ascending:false}).limit(1000)
     .then(r=>({...r,data:(r.data||[]).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:x.result==='win'?1:-1,asset:x.asset}))}));
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
+  const scorePriorityPromise = readDemoScorePriorities(async(from,to)=>{
+    const {data,error}=await supabase.from('iq_demo_test_orders')
+      .select('signal_id,status,account_type,iq_option_id,result,profit')
+      .eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null)
+      .order('entry_minute',{ascending:true}).order('id').range(from,to);
+    if(error)throw error;return data||[];
+  },async ids=>{
+    const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id',ids);
+    if(error)throw error;return data||[];
+  }).then(data=>({data,error:null})).catch(error=>({data:null,error}));
   const chartPromise = (async()=>{
     const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles,score')
       .not('candles','is',null).gte('entry_minute',demoSince)
@@ -399,7 +410,11 @@ Deno.serve(async (req) => {
     if (!demoScoreAllowed(c._score) || !similarToAnyReference(refFs,f)) return [];
     return [{...c,_preferredPatternDistance:demoPreferredPatternDistance(chartSamples,f)}];
   });
-  const demoWinner = chooseDemoCandidate(demoEligible, true);
+  const priorityRead = await scorePriorityPromise;
+  if(priorityRead.error)console.error('Demo score priorities unavailable: selection blocked');
+  const priority = priorityRead.data?.map(row=>row.cents);
+  if(priorityRead.data)console.log('Demo historical score priorities:',JSON.stringify(priorityRead.data));
+  const demoWinner = priority ? chooseDemoCandidate(demoEligible, true, priority) : null;
   if (!demoWinner) console.log('Demo blocked: no eligible candidate matches winning patterns of the eight scores');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,

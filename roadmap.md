@@ -3,6 +3,7 @@
 - [x] Aba admin somente leitura criada com notas exatas, saldo acumulado, taxa de acerto, filtros de período/nota e ordenação; oito testes aprovados, build OK, 718 ordens Demo conferidas com sessão admin, filtro 2,26 e Hoje funcionando, sem erros nem rolagem horizontal no celular. Prioridades de execução preservadas.
 
 # Prioridade Demo por notas vencedoras
+- [x] Oito notas reordenadas dinamicamente por saldo positivo, acerto, ganhos e saldo no histórico completo; 42 testes aprovados, rotina publicada e leitura real confirmada às 23:13 UTC: 2,26 → 2,23 → 2,18 → 2,64 → 2,88 → 2,69 → 2,91 → 2,03. Painel autenticado e build OK; sem candidato correspondente no minuto, bloqueio preservado e autorização principal inalterada.
 - [x] Correspondência gráfica às oito notas obrigatória, sem alternativa; 32 testes aprovados, função publicada e republicada às 22:56 UTC, build OK; rotina ao vivo confirmada às 22:57 UTC (boot novo + "Demo blocked"), 0 ordens Demo desde 22:17 UTC.
 - [x] Prioridade das próximas escolhas e gráficos vencedores das notas 2,26; 2,23; 2,18; 2,64; 2,88; 2,03; 2,69; 2,91 implementada, preservando nota original, filtros e autorização principal só 2,26.
 - [x] 38 testes aprovados, multi-strategy-test publicada, build OK e painel autenticado conferido com notas carregadas.

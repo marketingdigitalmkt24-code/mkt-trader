@@ -1,7 +1,6 @@
 - IQ type changes/disconnections atomically invalidate confirmation and stop copy; why: navigation must not enable unconfirmed copying.
 - Admin IQ list and bank totals share paginated master-only confirmed orders (no copy/TEST/MT5); client metrics use user-prefixed orders; BRT days and browser reset apply, broker balance separate; why: shared IQ accounts must not mix stakes/results.
-- Client bank/entries use client-only hooks; settings-only bank mode lives in the broker tab; connection leads dashboard without navigation writes; why: isolation and persistent copy.
-- Client copy saves, broker placement and read-only admin account labels use the active IQ connection account type via the shared copy-account resolver; why: only the client's connection choice determines the copied order account.
+- Client bank/entries use client-only hooks; settings-only bank mode lives in the broker tab; connection leads dashboard without navigation writes. Client copy saves, broker placement and read-only admin account labels use the active IQ connection account type via the shared copy-account resolver; why: isolation, persistent copy, and only the client's connection choice determines the copied order account.
 - Reconcile copied broker IDs against each client's own IQ Option history and persist target autostop during server result sync; why: master history cannot settle client orders and closing a browser must not bypass daily limits.
 - Match IQ to trading_signals by signal_id, no FK; unmatched history stays unidentified, never IA.
 - Public charts never use broker hooks; real cards require authenticated admin to prevent demo trades.
@@ -13,7 +12,7 @@
 - Research is admin-only/read-only: 100 closed contiguous bars, exact OTC mapping; Force-early features end before the target, simulated outcomes stay separate from broker-minute proxies; why: no leakage or retrospective wins changing live trades.
 - Run multi-strategy-test only from auto-generate-signals; Force shadows stay outside ranking/claims/locks. Version anticipation IDs/indicators, preserving simulations; require volume, observed quotes, open market, principal limits and service-only fresh claims/leases; Telegram uses broker confirmation and result ledger; why: no replay/false results.
 - IQ reservations and stakes scope to application owners, not shared broker logins; reject principal self-copy; serialize settings saves and acknowledge only after persistence; why: preserve independent client limits and amounts.
-- Anchor reversal submission and expiry to the candidate's own minute, submitting right after the fourth candle confirms within the purchase window; why: another minute trades a different candle and stale candidates must never roll forward.
+- Anchor reversal submission and expiry to the candidate's own minute, submitting right after the fourth candle confirms within the purchase window; why: another minute trades a different candle; stale candidates never roll forward.
 - Reuse broker sessions only for service-authenticated same-account reversals/Demo; never log/store secrets.
 - Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy keeps explicit client IDs; why: client connection updates must not redirect master entries.
 - Demo prepares before :00: parallel reads, closed candles, deferred charts; reconcile previous PRACTICE IDs on that session before selection; retries use a separate strategy, unchanged stake; why: no stale triggers or recursive retries.

@@ -11,7 +11,7 @@ import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recen
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { takashiKotegawa, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
-import { demo226StrategyAllowed } from '../_shared/demo-226-policy.ts';
+import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY } from '../_shared/demo-226-policy.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
@@ -450,15 +450,23 @@ Deno.serve(async (req) => {
   // User (Oct 25 2026 17:11 UTC): add Takashi to the displayed 2,26 cohort.
   void winScores; void demoEntryReason; void demoWinningPatternMatch; void chartFeatures;
   const demoEligible = demoPool.flatMap(c => {
-    if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
-    if(!demo226StrategyAllowed(c.entry_strategy)){reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];}
-    return [{...c,_preferredPatternDistance:Infinity,_patternMatch:null}];
+    const cohort=demoCohort(c._score,c.entry_strategy);
+    if(!cohort){
+      if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
+      reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];
+    }
+    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null}];
   });
+  // User (Oct 25 2026 19:02 UTC): alternate Demo slots between Takashi and displayed-2.26 entries.
+  const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
+    .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
+  const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
   const demoWinner = demoEligible.sort((a,b)=>{
     const ranks=priority??[];
     const rank=(score:number)=>{const i=ranks.indexOf(Math.round(score*100));return i<0?ranks.length:i;};
-    return Number(demoDisplayedTargetScore(b._score))-Number(demoDisplayedTargetScore(a._score))||rank(a._score)-rank(b._score)||a._preferredPatternDistance-b._preferredPatternDistance||b._score-a._score||a.signal_id.localeCompare(b.signal_id);
+    return Number(b._cohort===preferred)-Number(a._cohort===preferred)||rank(a._score)-rank(b._score)||b._score-a._score||a.signal_id.localeCompare(b.signal_id);
   })[0]??null;
+  console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
   console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));
   for(const c of demoEligible){
     const reason:RejectionReason|null=demoWinner&&demoWinner.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:demoWinner.signal_id}}:null;
@@ -490,7 +498,7 @@ Deno.serve(async (req) => {
       // A selected Trend may independently authorize a principal order; no Demo stake/history reuse.
       // Real principal entries paused (user, Oct 24 2026): only a super-selected Demo winner (high learned score) opens real.
       if ((DEMO_PRINCIPAL_ENABLED && selectedDemoPrincipal({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now()))
-        || isSuperSelected(demoWinner._score)) {
+        || (isSuperSelected(demoWinner._score) && demoWinner.entry_strategy !== TAKASHI_STRATEGY)) {
         const principalTask = supabase.functions.invoke('selected-demo-trend', {
           body: { candidate: demoWinner.signal_id, brokerSession: { ssid, configId: cfg.id } },
         }).then(async ({ data, error }) => {

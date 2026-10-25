@@ -37,8 +37,8 @@ export function formatIQResult(op: IQResult, strategy: string | null): string {
 // prevent concurrent cron/browser invocations from normally sending duplicates.
 export async function dispatchIQResults(db: SupabaseClient, request: typeof fetch = fetch): Promise<number> {
   if (!telegramTradingEnabled(TAKASHI_AFTER_226)) return 0;
-  const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-  const telegramKey = Deno.env.get('TELEGRAM_API_KEY');
+  const lovableKey = typeof Deno === 'undefined' ? undefined : Deno.env.get('LOVABLE_API_KEY');
+  const telegramKey = typeof Deno === 'undefined' ? undefined : Deno.env.get('TELEGRAM_API_KEY');
   if (!lovableKey || !telegramKey) return 0;
   const stale = new Date(Date.now() - 120000).toISOString();
   const { data: deliveries, error } = await db.from('telegram_iq_deliveries')

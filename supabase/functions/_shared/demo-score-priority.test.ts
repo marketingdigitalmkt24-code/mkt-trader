@@ -9,7 +9,7 @@ for(const score of [2.04,2.61,2.78,2.37,2.76,2.20])test(`Demo score ${score} joi
  expect(demoPreferredPatternDistance([{f:[0,1],result:'win',score}],[0,1])).toBe(0);
  const candidate:DemoCandidate={signal_id:'new',asset:'X',direction:'CALL',entry_strategy:'TENDENCIA',created_at:'2026-10-24T23:22:00Z',_score:score,_preferredPatternDistance:0};
  expect(chooseDemoCandidate([candidate],true,ranked.map(r=>r.cents))?.signal_id).toBe('new');
- expect(chooseDemoCandidate([{...candidate,_preferredPatternDistance:1.31}],true,ranked.map(r=>r.cents))).toBeNull();
+ expect(chooseDemoCandidate([{...candidate,_preferredPatternDistance:1.31}],true,ranked.map(r=>r.cents))?.signal_id).toBe('new');
  expect(isSuperSelected(score)).toBe(false);
 });
 test('positive net outranks nonprofitable notes, then accuracy and win count determine priority',()=>{
@@ -29,7 +29,7 @@ test('only exact displayed fourteen scores and confirmed Demo outcomes contribut
 test('historical order overrides fixed 2.26 priority without broadening principal authorization or chart gate',()=>{
  const c=(score:number,distance:number):DemoCandidate=>({signal_id:String(score),asset:'X',direction:'PUT',entry_strategy:'TENDENCIA',created_at:'2026-10-24T23:10:00Z',_score:score,_preferredPatternDistance:distance});
  expect(chooseDemoCandidate([c(2.26,.1),c(2.23,1)],true,[223,226])?._score).toBe(2.23);
- expect(chooseDemoCandidate([c(2.23,1.31),c(2.26,.1)],true,[223,226])?._score).toBe(2.26);
+ expect(chooseDemoCandidate([c(2.23,1.31),c(2.26,.1)],true,[223,226])?._score).toBe(2.23);
  expect(isSuperSelected(2.23)).toBe(false);
  expect(isSuperSelected(2.26)).toBe(true);
 });

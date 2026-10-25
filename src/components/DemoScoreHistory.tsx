@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from './ui/chart';
 import { DemoScoreOperations } from './DemoScoreOperations';
 import { DemoRejectedOperations } from './DemoRejectedOperations';
+import { demoStrategyNames } from './DemoTestOperations';
 
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' });
 const percent = (value: number) => `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
@@ -25,6 +26,7 @@ export function DemoScoreHistory() {
  const { user } = useAuth();
  const [period, setPeriod] = useState('all');
  const [score, setScore] = useState('all');
+ const [strategy, setStrategy] = useState('all');
  const [sort, setSort] = useState('profit');
  const [page, setPage] = useState(0);
  const query = useQuery({
@@ -32,7 +34,7 @@ export function DemoScoreHistory() {
   refetchInterval: 30000,
   queryFn: () => readDemoScoreHistory(async (from, to) => {
    const {data,error} = await supabase.from('iq_demo_test_orders')
-    .select('id,signal_id,entry_minute,settled_at,status,result,profit,iq_option_id')
+    .select('id,signal_id,entry_strategy,entry_minute,settled_at,status,result,profit,iq_option_id')
     .eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null)
     .order('entry_minute',{ascending:true}).order('id').range(from,to);
    if (error) throw error;
@@ -43,10 +45,12 @@ export function DemoScoreHistory() {
    return data ?? [];
   }),
  });
- const rows = useMemo(() => filterScoreHistory(query.data ?? [],period,score),[query.data,period,score]);
+ const base = useMemo(() => (query.data ?? []).filter(r => strategy === 'all' || r.entry_strategy === strategy),[query.data,strategy]);
+ const strategies = useMemo(() => [...new Set((query.data ?? []).map(r => r.entry_strategy).filter((v): v is string => !!v))].sort(),[query.data]);
+ const rows = useMemo(() => filterScoreHistory(base,period,score),[base,period,score]);
  const history = useMemo(() => scoreHistory(rows),[rows]);
- const options = useMemo(() => scoreHistory(filterScoreHistory(query.data ?? [],period,'all')).byScore
-  .sort((a,b) => a.score === 'unscored' ? 1 : b.score === 'unscored' ? -1 : Number(a.score)-Number(b.score)),[query.data,period]);
+ const options = useMemo(() => scoreHistory(filterScoreHistory(base,period,'all')).byScore
+  .sort((a,b) => a.score === 'unscored' ? 1 : b.score === 'unscored' ? -1 : Number(a.score)-Number(b.score)),[base,period]);
  const sorted = useMemo(() => [...history.byScore].sort((a,b) => {
   if (sort === 'accuracy') return b.accuracy-a.accuracy || b.wins+b.losses-a.wins-a.losses;
   if (sort === 'count') return b.orders-a.orders;
@@ -65,6 +69,7 @@ export function DemoScoreHistory() {
   <div className="flex flex-wrap gap-3">
    <div className="space-y-1"><label className="text-xs text-muted-foreground" htmlFor="score-history-period">Período</label><Select value={period} onValueChange={v=>{setPeriod(v);setScore('all');setPage(0);}}><SelectTrigger id="score-history-period" className="w-44"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todo o histórico</SelectItem><SelectItem value="today">Hoje · Brasília</SelectItem><SelectItem value="7d">Últimos 7 dias</SelectItem></SelectContent></Select></div>
    <div className="space-y-1"><label className="text-xs text-muted-foreground" htmlFor="score-history-score">Nota</label><Select value={score} onValueChange={v=>{setScore(v);setPage(0);}}><SelectTrigger id="score-history-score" className="w-48"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todas as notas</SelectItem>{options.map(row=><SelectItem key={row.score} value={row.score}>{scoreLabel(row.score)}</SelectItem>)}</SelectContent></Select></div>
+   <div className="space-y-1"><label className="text-xs text-muted-foreground" htmlFor="score-history-strategy">Estratégia</label><Select value={strategy} onValueChange={v=>{setStrategy(v);setScore('all');setPage(0);}}><SelectTrigger id="score-history-strategy" className="w-52"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todas as estratégias</SelectItem>{strategies.map(s=><SelectItem key={s} value={s}>{demoStrategyNames[s] ?? s}</SelectItem>)}</SelectContent></Select></div>
    <div className="space-y-1"><label className="text-xs text-muted-foreground" htmlFor="score-history-sort">Ordenar por</label><Select value={sort} onValueChange={v=>{setSort(v);setPage(0);}}><SelectTrigger id="score-history-sort" className="w-44"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="profit">Maior saldo</SelectItem><SelectItem value="accuracy">Maior acerto</SelectItem><SelectItem value="count">Mais operações</SelectItem><SelectItem value="score">Nota crescente</SelectItem></SelectContent></Select></div>
   </div>
   {query.isPending ? <p role="status" className="py-10 text-sm text-muted-foreground">Carregando histórico por nota…</p> : query.isError ? <p role="alert" className="py-6 text-sm text-destructive">Não foi possível atualizar o histórico por nota. Tente novamente.</p> : <>
@@ -81,7 +86,7 @@ export function DemoScoreHistory() {
     </div>
     <div><h3 className="mb-3 text-sm font-medium">Resultados por nota</h3><div className="overflow-x-auto"><table className="w-full text-left text-xs sm:text-sm"><thead className="border-y border-border text-muted-foreground"><tr>{['Nota','Ordens','WIN','LOSS','Empates','Abertas','Acerto','Saldo'].map(label=><th key={label} className="whitespace-nowrap px-3 py-3 font-medium first:pl-0">{label}</th>)}</tr></thead><tbody>{sorted.slice(currentPage*20,currentPage*20+20).map(row=><tr key={row.score} className="border-b border-border/60"><td className="whitespace-nowrap py-3 pr-3 font-mono font-semibold">{scoreLabel(row.score)}</td><td className="px-3 py-3 font-mono">{row.orders}</td><td className="px-3 py-3 font-mono text-call">{row.wins}</td><td className="px-3 py-3 font-mono text-put">{row.losses}</td><td className="px-3 py-3 font-mono">{row.ties}</td><td className="px-3 py-3 font-mono">{row.pending}</td><td className="whitespace-nowrap px-3 py-3 font-mono">{row.wins+row.losses ? percent(row.accuracy):'—'}</td><td className={`whitespace-nowrap px-3 py-3 font-mono ${row.profit<0?'text-put':'text-call'}`}>{money(row.profit)}</td></tr>)}</tbody></table></div>
     {pageCount>1 && <div className="mt-3 flex items-center justify-between"><Button variant="outline" size="sm" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>Anterior</Button><span className="text-xs text-muted-foreground">{currentPage+1} / {pageCount}</span><Button variant="outline" size="sm" disabled={currentPage+1>=pageCount} onClick={()=>setPage(currentPage+1)}>Próxima</Button></div>}</div>
-    {score !== 'all' && score !== 'unscored' && <DemoScoreOperations key={`${period}-${score}`} score={score} ids={[...rows].sort((a,b)=>Date.parse(b.entry_minute)-Date.parse(a.entry_minute)||b.id.localeCompare(a.id)).map(row=>row.id)}/>}
+    {(strategy !== 'all' || (score !== 'all' && score !== 'unscored')) && <DemoScoreOperations key={`${period}-${score}-${strategy}`} score={score} strategy={strategy} ids={[...rows].sort((a,b)=>Date.parse(b.entry_minute)-Date.parse(a.entry_minute)||b.id.localeCompare(a.id)).map(row=>row.id)}/>}
    </>}
    <p className="text-xs text-muted-foreground">Atualizado às {new Date(query.dataUpdatedAt).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'})} · Resultado financeiro Demo, não saldo da conta principal.</p>
   </>}

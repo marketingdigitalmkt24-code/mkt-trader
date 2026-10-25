@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'bun:test';
 import { clientCopyResults, clientDayStart, clientSignalsPage } from '../../../src/lib/client-copy-results';
+import { shouldRefreshClientIQResults } from '../../../src/lib/iq-results-events';
 
 const now = new Date('2026-10-17T21:54:00Z');
 const row = { id: 'copy', signal_id: 'copy-client-a-master', asset: 'JUP/USD-OTC', direction: 'CALL', result: 'win', profit: 82, iq_option_id: '14364506418', timeframe: 'M1', created_at: '2026-10-17T15:14:05Z' };
 describe('client dashboard isolation', () => {
+  it('refreshes results and history after DELETE even without the old signal ID', () => {
+    expect(shouldRefreshClientIQResults({ eventType: 'DELETE', new: {}, old: {} }, 'client-a')).toBe(true);
+    expect(shouldRefreshClientIQResults({ eventType: 'UPDATE', new: { signal_id: 'copy-client-b-master' } }, 'client-a')).toBe(false);
+  });
+  it('zeros today client results when IQ entries are removed', () => {
+    expect(clientCopyResults([row], 'client-a', now).profit).toBe(82);
+    const afterDelete = clientCopyResults([], 'client-a', now);
+    expect(afterDelete).toMatchObject({ operations: [], wins: 0, losses: 0, profit: 0, trades: 0 });
+  });
   it('shows only the client’s confirmed open copies without adding them to profit', () => {
     const pending = { ...row, id: 'pending', result: 'pending', profit: 0 };
     const result = clientCopyResults([pending, row,

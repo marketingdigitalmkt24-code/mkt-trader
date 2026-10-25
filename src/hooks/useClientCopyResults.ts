@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { clientCopyResults, clientDayStart, type ClientCopyOperation } from '@/lib/client-copy-results';
-import { afterIQReset, combineCutoffs, getIQResultsReset } from '@/lib/iq-results-reset';
+import { afterIQReset, combineCutoffs, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { shouldRefreshClientIQResults } from '@/lib/iq-results-events';
 import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
 
 export function useClientCopyResults() {
@@ -37,15 +38,16 @@ export function useClientCopyResults() {
 
   useEffect(() => {
     if (!userId) return;
+    const reload = () => {
+      void queryClient.invalidateQueries({ queryKey: ['client-copy-results', userId] });
+      void queryClient.invalidateQueries({ queryKey: ['client-copy-history', userId] });
+    };
+    window.addEventListener(IQ_RESULTS_RESET_EVENT, reload);
     const channel = supabase.channel(`client-copy-results-${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results' }, payload => {
-        const row = payload.new as { signal_id?: string };
-        if (row.signal_id?.startsWith(`copy-${userId}-`)) {
-          void queryClient.invalidateQueries({ queryKey: ['client-copy-results', userId] });
-          void queryClient.invalidateQueries({ queryKey: ['client-copy-history', userId] });
-        }
+        if (shouldRefreshClientIQResults(payload, userId)) reload();
       }).subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => { window.removeEventListener(IQ_RESULTS_RESET_EVENT, reload); void supabase.removeChannel(channel); };
   }, [userId, queryClient]);
 
   const cutoff = combineCutoffs(getIQResultsReset(userId), globalCutoff);

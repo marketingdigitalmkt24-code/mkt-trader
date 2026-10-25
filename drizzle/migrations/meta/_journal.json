@@ -365,6 +365,13 @@
       "when": 1792961757191,
       "tag": "0051_pause_all_principal_iq_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1792962159090,
+      "tag": "0052_clear_iq_today_entries_and_results",
+      "breakpoints": true
     }
   ]
 }

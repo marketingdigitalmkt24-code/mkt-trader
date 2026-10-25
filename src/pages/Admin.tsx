@@ -98,7 +98,7 @@ const Admin = () => {
       <main className="container px-4 py-4 sm:py-6 max-w-7xl">
         <Tabs value={tab} onValueChange={setTab} className="space-y-4">
           <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetContent side="right" className="w-64">
+            <SheetContent side="left" className="w-64 max-w-[80vw]">
               <SheetHeader><SheetTitle>Menu</SheetTitle></SheetHeader>
               <nav className="mt-4 flex flex-col gap-1">
                 {MENU.map(({ value, label, icon: Icon }) => (

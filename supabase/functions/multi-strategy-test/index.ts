@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
   }).then(data=>({data,error:null})).catch(error=>({data:null,error}));
   const chartPromise = (async()=>{
     const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,asset,entry_minute,direction,candles,score')
-      .not('candles','is',null).gte('entry_minute',demoSince)
+      .neq('entry_strategy',DEMO_MID_CANDLE).not('candles','is',null).gte('entry_minute',demoSince)
       .lt('entry_minute',new Date(Math.floor(Date.now()/60000)*60000-60000).toISOString())
       .order('entry_minute',{ascending:false}).limit(1000);
     const ids=(chartRead.data||[]).map(r=>r.signal_id);

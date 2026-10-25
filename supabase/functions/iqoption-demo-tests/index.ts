@@ -29,7 +29,7 @@ Deno.serve(async req => {
  const db = createClient(url,key);
  const winScoreEvidence=(score:unknown)=>verifyDemoWinScore(score,async(value,from,to)=>{
    const {data,error}=await db.from('iq_demo_test_candidates').select('signal_id,score')
-     .eq('score',value).order('signal_id').range(from,to);
+     .neq('entry_strategy',DEMO_MID_CANDLE).eq('score',value).order('signal_id').range(from,to);
    if(error)throw error;return data||[];
  },async ids=>{
    const {data,error}=await db.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result')

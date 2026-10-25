@@ -1,4 +1,5 @@
-import { ArrowLeft, Settings, Bot, TrendingUp, BarChart3, LogOut, Users, Zap, LayoutDashboard, Copy } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Settings, Bot, TrendingUp, BarChart3, LogOut, Users, Zap, LayoutDashboard, Copy, Menu } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TradingDashboard } from '@/components/TradingDashboard';
 import { AutoTradingCard } from '@/components/AutoTradingCard';
@@ -14,11 +15,24 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+
+const MENU = [
+  { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { value: 'trading', label: 'Auto Trading', icon: Bot },
+  { value: 'brokers', label: 'Corretoras', icon: Zap },
+  { value: 'copy', label: 'Copy Trading', icon: Copy },
+  { value: 'users', label: 'Usuários', icon: Users },
+  { value: 'score-history', label: 'Histórico por nota', icon: BarChart3 },
+  { value: 'winning-patterns', label: 'Padrões vencedores', icon: TrendingUp },
+];
 
 const Admin = () => {
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const [tab, setTab] = useState('dashboard');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const {
     config: autoTradingConfig,
@@ -37,10 +51,6 @@ const Admin = () => {
 
   const balance = iqBalance?.balance ?? 0;
   const dailyProfit = dailyStats?.dailyProfit ?? 0;
-  const todayTrades = dailyStats?.todayTrades ?? 0;
-  const wins = dailyStats?.wins ?? 0;
-  const losses = dailyStats?.losses ?? 0;
-  const winRate = todayTrades > 0 ? Math.round((wins / todayTrades) * 100) : 0;
 
   const handleLogout = async () => {
     await signOut();
@@ -77,59 +87,33 @@ const Admin = () => {
               <Button variant="ghost" size="sm" onClick={handleLogout} className="text-destructive hover:text-destructive px-2">
                 <LogOut className="w-4 h-4" />
               </Button>
+              <Button variant="ghost" size="sm" onClick={() => setMenuOpen(true)} className="px-2" aria-label="Abrir menu">
+                <Menu className="w-5 h-5" />
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
       <main className="container px-4 py-4 sm:py-6 max-w-7xl">
-        {/* Quick Stats - Compact */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 sm:mb-6">
-          <div className="p-2.5 rounded-lg bg-gradient-to-br from-call/10 to-call/5 border border-call/20 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Lucro</p>
-            <p className="text-sm sm:text-lg font-bold text-call">${dailyProfit?.toFixed(0) || '0'}</p>
-          </div>
-          <div className="p-2.5 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Trades</p>
-            <p className="text-sm sm:text-lg font-bold text-foreground">{todayTrades || 0}</p>
-          </div>
-          <div className="p-2.5 rounded-lg bg-gradient-to-br from-call/10 to-call/5 border border-call/20 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Win Rate</p>
-            <p className="text-sm sm:text-lg font-bold text-call">{winRate}%</p>
-          </div>
-          <div className="p-2.5 rounded-lg bg-gradient-to-br from-put/10 to-put/5 border border-put/20 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">W/L</p>
-            <p className="text-sm sm:text-lg font-bold">
-              <span className="text-call">{wins}</span>
-              <span className="text-muted-foreground">/</span>
-              <span className="text-put">{losses}</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Tabbed Layout */}
-        <Tabs defaultValue="dashboard" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 h-auto gap-1">
-            <TabsTrigger value="dashboard" className="text-xs sm:text-sm py-2 gap-1"><LayoutDashboard className="w-3.5 h-3.5" />Dashboard</TabsTrigger>
-            <TabsTrigger value="trading" className="text-xs sm:text-sm py-2 gap-1">
-              <Bot className="w-3.5 h-3.5" />
-              <span>Auto Trading</span>
-            </TabsTrigger>
-            <TabsTrigger value="brokers" className="text-xs sm:text-sm py-2 gap-1">
-              <Zap className="w-3.5 h-3.5" />
-              <span>Corretoras</span>
-            </TabsTrigger>
-            <TabsTrigger value="copy" className="text-xs sm:text-sm py-2 gap-1">
-              <Copy className="w-3.5 h-3.5" />
-              <span>Copy Trading</span>
-            </TabsTrigger>
-            <TabsTrigger value="users" className="text-xs sm:text-sm py-2 gap-1">
-              <Users className="w-3.5 h-3.5" />
-              Usuários
-            </TabsTrigger>
-            <TabsTrigger value="score-history" className="text-xs sm:text-sm py-2 gap-1"><BarChart3 className="w-3.5 h-3.5"/>Histórico por nota</TabsTrigger>
-            <TabsTrigger value="winning-patterns" className="text-xs sm:text-sm py-2 gap-1"><TrendingUp className="w-3.5 h-3.5"/>Padrões vencedores</TabsTrigger>
-          </TabsList>
+        <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+            <SheetContent side="right" className="w-64">
+              <SheetHeader><SheetTitle>Menu</SheetTitle></SheetHeader>
+              <nav className="mt-4 flex flex-col gap-1">
+                {MENU.map(({ value, label, icon: Icon }) => (
+                  <Button
+                    key={value}
+                    variant={tab === value ? 'secondary' : 'ghost'}
+                    className="justify-start gap-2"
+                    onClick={() => { setTab(value); setMenuOpen(false); }}
+                  >
+                    <Icon className="w-4 h-4" />{label}
+                  </Button>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
 
           <TabsContent value="dashboard"><TradingDashboard /></TabsContent>
           <TabsContent value="score-history"><DemoScoreHistory /></TabsContent>

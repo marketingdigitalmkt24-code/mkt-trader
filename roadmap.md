@@ -1,7 +1,7 @@
 # Prioridade :00 admin e cliente (25/10/2026)
-- [ ] Verificar horários e valores das entradas confirmadas do admin e dos clientes.
-- [ ] Reduzir esperas independentes sem antecipar velas ou copiar antes da confirmação principal; testar e publicar executores.
-- [ ] Conferir nova entrada autorizada após ajuste, sem forçar operação ou alterar histórico.
+- [x] Conferidas 59 entradas por conta hoje: admin US$10, registro médio :02,667; cliente US$100, :04,128 (horários de registro, não fill exato). Admin conferido no painel; sessão disponível na área cliente é do admin, não do cliente ativo.
+- [x] Disponibilidade Demo preparada antes de :00, leitura principal/config em paralelo e login do cliente durante reservas/metas; 28 testes aprovados, três executores publicados e build OK. Valores, gates e histórico preservados.
+- [ ] Conferir nova principal/cópia após ajuste — aguarda candidato 2,26 autorizado e corretora; nenhuma ordem forçada. Sessão cliente distinta não disponível para conferência visual.
 
 # Mudança de workspace e inversão de sinais
 - [x] Telegram revinculado no workspace atual: conexão "Agência's Telegram" (gateway), bot @Ricardobilionario_bot administrador do canal AGÊNCIA MKT TRADER com direito de publicar; seis funções que enviam sinais/resultados republicadas para usarem a nova chave.

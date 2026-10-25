@@ -1,3 +1,7 @@
+# Limpeza admin e resultados automáticos (25/10/2026)
+- [ ] Apagar entradas IQ restantes do admin e verificar resultados zerados nas duas fontes.
+- [ ] Garantir que a limpeza de entradas atualize automaticamente Resultado de Hoje do admin/cliente; preservar Demo e pausa.
+
 # Limpeza cliente e pausa IQ/Telegram (25/10/2026)
 - [x] Apagadas 82 entradas IQ dos clientes; consulta confirmou zero entradas e lucro de hoje zero. Preservadas 80 entradas admin, 886 ordens Demo e saldo da corretora.
 - [x] Claims/reservas principais bloqueados no banco, Auto Trading/cópias desligados, sete funções publicadas com pausa compartilhada IQ/Telegram; chamadas principal/copy recusadas 410, 12 testes aprovados e build OK. Conciliação e Demo separada preservadas.

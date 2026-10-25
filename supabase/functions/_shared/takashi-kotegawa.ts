@@ -28,9 +28,9 @@ export function takashiKotegawa(candles: Candle[], entry: number) {
   }
   const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
   const stretch = Math.abs(deviation) / avgBody;
-  // Panic dislocation: price at least 3x the average candle body away from the mean.
-  if (stretch < 3) return null;
-  if (deviation < 0 && rsi < 30) return { direction: 'CALL' as const, deviation, rsi, stretch };
-  if (deviation > 0 && rsi > 70) return { direction: 'PUT' as const, deviation, rsi, stretch };
+  // Panic dislocation: price at least 5x the average candle body away from the mean.
+  if (stretch < 5) return null;
+  if (deviation < 0 && rsi < 20) return { direction: 'CALL' as const, deviation, rsi, stretch };
+  if (deviation > 0 && rsi > 80) return { direction: 'PUT' as const, deviation, rsi, stretch };
   return null;
 }

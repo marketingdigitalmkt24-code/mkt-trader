@@ -1,4 +1,5 @@
 # Histórico de acertos por nota
+- [ ] Tela Perdas Demo com paginação, filtros, gráficos, nota integral, velas e evidências sem causas inventadas; validar com sessão admin.
 - [x] Igualdade sem arredondamento nas 14 notas liberadas Demo e 2,26 principal publicada; migração 0049 verificada, 90 testes aprovados, build OK. Ciclo 00:55 UTC recusou GOO/GLE 2,029310 como 2,03; sem ordem forçada, histórico preservado.
 - [x] Bloqueio GEV retirado; correspondência com qualquer WIN confirmado da amostra aceita além das 14 notas, com limites preservados. Origem persistida e selo prospectivo Padrão vencedor implementado; 40 testes aprovados, build OK e rotina nova confirmada às 23:30/23:31 UTC.
 - [ ] Conferir selo em nova ordem Demo confirmada — depende de candidato elegível; nenhum correspondente às 23:31 UTC, sem entrada forçada ou selo retroativo.

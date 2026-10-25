@@ -1,4 +1,5 @@
 # Histórico de acertos por nota
+- [ ] Ampliar autorização Demo para notas calculadas exatas de todos os WIN confirmados, incluindo novos resultados; verificar funcionamento e resultados registrados do padrão vencedor, sem forçar ordens.
 - [x] Congeladas 59 notas WIN e oito LOSS anteriores a 24/10 21:01 BRT com precisão IEEE-754; seleção e envio Demo sem arredondamento/fallback, principal preservada. 78 testes aprovados, funções publicadas, build OK e ciclo 01:08 UTC recusando notas fora da lista; nenhuma ordem forçada.
 - [x] Tela Perdas Demo: 354 LOSS confirmados paginados, filtros por período/ativo/estratégia, nota integral, gráfico e tabela de velas, evidências e limitações históricas. Nove testes aprovados, build OK; TESLA e página 2 conferidas com sessão admin, celular sem overflow e sem erros.
 - [x] Igualdade sem arredondamento nas 14 notas liberadas Demo e 2,26 principal publicada; migração 0049 verificada, 90 testes aprovados, build OK. Ciclo 00:55 UTC recusou GOO/GLE 2,029310 como 2,03; sem ordem forçada, histórico preservado.

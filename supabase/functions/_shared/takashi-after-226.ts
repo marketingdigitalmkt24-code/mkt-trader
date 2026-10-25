@@ -14,6 +14,7 @@ export function takashiAfter226Direction(
   now: number,
 ): 'call' | 'put' | null {
   if (!current || !previous || current.entry_strategy !== 'TAKASHI_BNF_V1'
+    || !Number.isFinite(current.score) || Math.round(current.score * 100) === 0
     || !['CALL', 'PUT'].includes(current.direction)
     || !freshSelectedTrend(Date.parse(current.entry_minute), now)
     || Date.parse(previous.entry_minute) !== Date.parse(current.entry_minute) - 60000

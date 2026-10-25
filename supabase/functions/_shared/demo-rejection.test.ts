@@ -12,4 +12,5 @@ describe('Demo rejection reasons preserve selection boundaries', () => {
 for(const score of [2.26,2.23,2.18,2.64,2.88,2.03,2.69,2.91,2.04,2.61,2.78,2.37,2.76,2.20])it(`releases exact note ${score} but preserves unavailable priorities`,()=>{
  expect(demoRejectionReason({score,learned:-1,patternDistance:Infinity})).toBeNull();
  expect(demoRejectionReason({score,patternDistance:Infinity,priorityAvailable:false})?.code).toBe('priority_unavailable');
+ for(const neighbor of [score-0.001,score+0.001]) expect(demoRejectionReason({score:neighbor,patternDistance:0})?.code).toBe('released_score_not_exact');
 });

@@ -393,7 +393,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'exact-notes-or-pattern-v3',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'unrounded-exact-notes-or-pattern-v4',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
       chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
       c.entry_strategy,c.asset,curMin*1000);
     const reason=demoRejectionReason({learned:learn,score:demoFinalScore(c._score,learn,c.entry_strategy)});
-    if(reason?.code==='learned_history'){reject({...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)},reason);return[];}
+    if(reason?.code==='learned_history'||reason?.code==='released_score_not_exact'){reject({...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)},reason);return[];}
     return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);
@@ -412,7 +412,7 @@ Deno.serve(async (req) => {
   if(retry && series.has(retry.asset))demoPool.push({signal_id:`queda-win-retry-v1-${retry.asset}-${curMin}`,
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1});
-  // Exact fourteen displayed scores qualify independently; other scores still require a WIN chart match.
+  // Fourteen unrounded exact scores qualify independently; rounded neighbors never qualify.
   const demoEligible = demoPool.flatMap(c => {
     const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
     const match=demoWinningPatternMatch(chartSamples,f);

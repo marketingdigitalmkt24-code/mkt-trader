@@ -9,7 +9,7 @@ const candidate = (score: number, distance = Infinity): DemoCandidate => ({
 test('preferred Demo scores are exactly the eight user-selected displayed notes', () => {
   for (const score of [2.26,2.23,2.18,2.64,2.88,2.03,2.69,2.91]) expect(demoPreferredScore(score)).toBe(true);
   for (const score of [2.25,2.27,2.65,2.9,4.2,NaN]) expect(demoPreferredScore(score)).toBe(false);
-  expect(demoPreferredScore(2.264)).toBe(true);
+  expect(demoPreferredScore(2.264)).toBe(false);
 });
 test('exact 2.26 keeps first priority and only that score authorizes principal', () => {
   expect(chooseDemoCandidate([candidate(2.23,0),candidate(2.26,1)],true)?._score).toBe(2.26);
@@ -53,6 +53,10 @@ test('exact note can outrank a matched nonselected note', () => {
   expect(chooseDemoCandidate([candidate(2.26),candidate(3.18,0.8)],true)?._score).toBe(2.26);
   expect(chooseDemoCandidate([],true)).toBeNull();
 });
-for(const score of [2.26,2.23,2.18,2.64,2.88,2.03,2.69,2.91,2.04,2.61,2.78,2.37,2.76,2.20])test(`exact displayed ${score} qualifies without a winning pattern`,()=>{
+for(const score of [2.26,2.23,2.18,2.64,2.88,2.03,2.69,2.91,2.04,2.61,2.78,2.37,2.76,2.20])test(`raw exact ${score} qualifies but rounded neighbors never qualify`,()=>{
  expect(chooseDemoCandidate([candidate(score)],true,[Math.round(score*100)])?._score).toBe(score);
+ for (const neighbor of [score-0.001,score+0.001]) {
+  expect(demoPreferredScore(neighbor)).toBe(false);
+  expect(chooseDemoCandidate([candidate(neighbor,0)],true,[Math.round(score*100)])).toBeNull();
+ }
 });

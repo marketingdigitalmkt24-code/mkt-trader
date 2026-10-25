@@ -379,6 +379,13 @@
       "when": 1792962638799,
       "tag": "0053_authorize_takashi_after_226_only",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1792964496876,
+      "tag": "0054_takashi_after_226_block_zero_score",
+      "breakpoints": true
     }
   ]
 }

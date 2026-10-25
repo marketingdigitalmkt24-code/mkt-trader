@@ -1,5 +1,6 @@
 # Reduzir atraso da cópia (25/10/2026)
-- [ ] Preparar login dos clientes enquanto a principal é preparada; só copiar após confirmação da corretora e autorização atual, preservando conta, valor, limites e resultado real USD/VND.
+- [x] Login dos clientes preparado em paralelo à principal na mesma execução de cópia, aguardando ID/queue confirmados antes da reserva; conexão/copy rechecados, sem guardar sessões ou alterar LOSS USD/VND. 28 testes passaram; dois executores publicados, navegador recusado 401 e build OK.
+- [ ] Medir horário da próxima sequência autorizada com cópia: depende de novo sinal fresco e confirmação da corretora; nenhum replay ou ordem forçada. Horário/preço idênticos não garantidos.
 
 # Padrões vencedores em lista (25/10/2026)
 - [x] Removidas notas e comparação fixa; todas as ordens Demo confirmadas e rejeições registradas acessíveis em linhas paginadas, com filtros ganhos/perdas/rejeitadas e gráficos ao passar o mouse. Painel autenticado conferido com dados reais e segunda página, sem erros; 13 testes passaram e build OK. Execução preservada.

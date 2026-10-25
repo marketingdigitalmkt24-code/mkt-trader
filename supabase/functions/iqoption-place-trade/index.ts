@@ -15,6 +15,7 @@ import { canNotifyAnticipation } from '../_shared/anticipation-telegram.ts';
 import { selectedTrendCopyRequest } from '../_shared/selected-trend-copy.ts';
 import { isNormalPrincipalTrend } from '../_shared/normal-trend.ts';
 import { isDemoValidatedPrincipal } from '../_shared/demo-validated.ts';
+import { principalIQEnabled } from '../_shared/principal-pause.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -139,6 +140,7 @@ async function mirrorCopyTrades(
   master: Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>,
   principal: { user_id: string; email: string; account_type: string },
 ) {
+  if (!principalIQEnabled()) return;
   try {
     if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
     const { data: copies } = await supabase
@@ -248,6 +250,7 @@ async function placeTradeFireAndForget(
   trade: TradeRequest,
   gate?: Promise<boolean>,
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
+  if (!principalIQEnabled()) return { success: false, error: 'Principal IQ and copies paused by user' };
   return new Promise((resolve) => {
     // Copies follow the confirmed principal's minute, never a new future candle.
     const anchoredCopy = !!gate;
@@ -638,6 +641,7 @@ serve(async (req) => {
   }
 
   try {
+    if (!principalIQEnabled()) return Response.json({ success: false, error: 'Principal IQ and copies paused by user' }, { status: 410, headers: corsHeaders });
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !supabaseKey) return Response.json({ error: 'Service unavailable' }, { status: 503, headers: corsHeaders });

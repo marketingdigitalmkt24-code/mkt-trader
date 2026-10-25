@@ -1,3 +1,4 @@
+import { telegramTradingEnabled } from './principal-pause.ts';
 const TELEGRAM_GATEWAY = 'https://connector-gateway.lovable.dev/telegram';
 // Verified channel identity; avoids an upstream username lookup for each alert.
 const TELEGRAM_CHANNEL = '-1001743286485';
@@ -42,6 +43,7 @@ export async function sendIQAlert(
   credentials: { lovableKey: string; telegramKey: string },
   request: typeof fetch = fetch,
 ): Promise<number | undefined> {
+  if (!telegramTradingEnabled()) return;
   if (!alert.signalId || alert.timeframe === 'TEST' || alert.timeframe === 'MT5') return;
   if (!credentials.lovableKey || !credentials.telegramKey) throw new Error('Telegram não configurado');
   for (let attempt = 0; attempt < 3; attempt++) {

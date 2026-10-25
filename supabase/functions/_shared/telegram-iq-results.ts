@@ -1,4 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { telegramTradingEnabled } from './principal-pause.ts';
 
 interface IQResult {
   signal_id: string;
@@ -34,6 +35,7 @@ export function formatIQResult(op: IQResult, strategy: string | null): string {
 // Only persisted successful signal deliveries are eligible. Conditional leases
 // prevent concurrent cron/browser invocations from normally sending duplicates.
 export async function dispatchIQResults(db: SupabaseClient, request: typeof fetch = fetch): Promise<number> {
+  if (!telegramTradingEnabled()) return 0;
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
   const telegramKey = Deno.env.get('TELEGRAM_API_KEY');
   if (!lovableKey || !telegramKey) return 0;

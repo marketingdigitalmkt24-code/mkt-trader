@@ -3,6 +3,7 @@
 // e resolvida pelas velas reais da IQ Option. Telegram: só o resultado WIN da Tendência (mesmo em teste).
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
+import { telegramTradingEnabled } from '../_shared/principal-pause.ts';
 import { nextReversalMinute } from '../_shared/four-win-reversal.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
@@ -114,6 +115,7 @@ export function detect(cs: K[]): [string, 'CALL' | 'PUT'][] {
 }
 
 async function sendTelegram(text: string) {
+  if (!telegramTradingEnabled()) return;
   const lk = Deno.env.get('LOVABLE_API_KEY'), tk = Deno.env.get('TELEGRAM_API_KEY');
   if (!lk || !tk) { console.error('Telegram não configurado'); return; }
   const r = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {

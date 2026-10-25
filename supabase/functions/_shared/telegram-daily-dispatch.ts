@@ -1,7 +1,9 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.89.0';
+import { telegramTradingEnabled } from './principal-pause.ts';
 import { IQ_TELEGRAM_CHANNEL } from './telegram-iq-alert.ts';
 import { formatDailyReport, reportClock, type ReportRow } from './telegram-daily-report.ts';
 export async function dispatchDailyReport(db: SupabaseClient, now = new Date(), request: typeof fetch = fetch) {
+  if (!telegramTradingEnabled()) return 'paused';
   const clock = reportClock(now);
   if (!clock.due) return 'not-due';
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');

@@ -56,6 +56,17 @@ Deno.serve(async req => {
     if (!takashiAfter226Direction(candidate, previous && previousCandidate ? { ...previous, score: previousCandidate.score } : null, Date.now()))
       return reply({ skipped: 'No fresh Takashi after confirmed 2.26 in the previous minute' });
     if (!cfg || !cfg.last_connected_at || !['PRACTICE', 'REAL'].includes(cfg.account_type)) return reply({ skipped: 'Principal connection unavailable' });
+    // Prepare each client's own login concurrently; this invocation never sends a client order.
+    // The copy executor waits for our exact confirmed order and executed queue before reserving/placing.
+    const copyTask = fetch(`${url}/functions/v1/iqoption-place-trade`, {
+      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prepareCopyCandidate: candidate.signal_id }), signal: AbortSignal.timeout(90000),
+    }).then(async response => {
+      if (!response.ok) console.error('Selected Trend copy preparation:', response.status);
+      else console.log('Selected Trend copy dispatch:', await response.text());
+    }).catch(error => console.error('Selected Trend copy preparation failed:', String(error)));
+    // @ts-ignore Hosted background runtime
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
     let ssid: string | null = reusableDemoSession(true, cfg.id, parsed.data.brokerSession);
     for (const endpoint of ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login']) {
       if (ssid || !freshTrendPut(entryAt, Date.now())) break;
@@ -163,17 +174,9 @@ Deno.serve(async req => {
       db.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', leaseScope).eq('signal_id', queued.signal_id),
     ]);
     if (executedError || releaseError) throw executedError || releaseError;
-    // Only the additional confirmed principal order is copied, never the Demo TEST ledger.
-    const copyTask = fetch(`${url}/functions/v1/iqoption-place-trade`, {
-      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ copyPrincipalSignalId: queued.signal_id }), signal: AbortSignal.timeout(90000),
-    }).then(async response => {
-      if (!response.ok) console.error('Selected Trend copy dispatch:', response.status);
-      else console.log('Selected Trend copy dispatch:', await response.text());
-    }).catch(error => console.error('Selected Trend copy dispatch failed:', String(error)));
+    // No second copy request: the already-prepared invocation now observes this confirmation.
     // @ts-ignore Hosted background runtime
-    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
-    else await copyTask;
+    if (typeof EdgeRuntime === 'undefined') await copyTask;
     const background = async () => {
       if (notifyTrendPut(outcome, entryAt, Date.now())) {
         try {

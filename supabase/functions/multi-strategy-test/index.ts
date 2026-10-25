@@ -23,6 +23,7 @@ import { readDemoScoreHistory } from '../_shared/demo-score-priority.ts';
 import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
 import { demoWinningPatternMatch } from '../_shared/demo-continuation.ts';
 import { demoWinScoreAllowed, demoWinScoreReason } from '../_shared/demo-win-scores.ts';
+import { readDemoWinningReferences } from '../_shared/demo-winning-reference-history.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -174,6 +175,20 @@ Deno.serve(async (req) => {
     return (chartRead.data||[]).flatMap(r=>{const res=outcome.get(r.signal_id);
       const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res,score:r.score,signal_id:r.signal_id,asset:r.asset,entry_minute:r.entry_minute}]:[];});
   })();
+  const winningChartsPromise = readDemoWinningReferences(async (from,to) => {
+    const {data,error}=await supabase.from('iq_demo_test_orders')
+      .select('signal_id,status,account_type,iq_option_id,result').eq('status','confirmed')
+      .eq('account_type','PRACTICE').eq('result','win').not('iq_option_id','is',null)
+      .order('entry_minute',{ascending:false}).order('id').range(from,to);
+    if(error)throw error;return data||[];
+  },async ids=>{
+    const {data,error}=await supabase.from('iq_demo_test_candidates')
+      .select('signal_id,asset,entry_minute,direction,candles,score').in('signal_id',ids);
+    if(error)throw error;return data||[];
+  }).then(rows=>rows.flatMap(r=>{
+    const f=Array.isArray(r.candles)?chartFeatures(r.candles as K[],Date.parse(r.entry_minute)/1000,r.direction):null;
+    return f?[{f,result:'win',score:r.score,signal_id:r.signal_id,asset:r.asset,entry_minute:r.entry_minute}]:[];
+  })).catch(()=>{console.error('Demo winning chart references unavailable');return [];});
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
@@ -392,6 +407,8 @@ Deno.serve(async (req) => {
   const priorityRead = await scorePriorityPromise;
   if(priorityRead.error)console.error('Demo WIN score history unavailable: selection blocked');
   const winScores=priorityRead.data?.winScores??new Set<number>();
+  const winningCharts=await winningChartsPromise;
+  console.log('Demo all-history winning chart references:',winningCharts.length);
   const priority=priorityRead.data?.priorities.map(row=>row.cents);
   if(priorityRead.data)console.log('Demo all-history WIN score references:',JSON.stringify({exact_scores:winScores.size,priorities:priorityRead.data.priorities}));
   // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
@@ -421,7 +438,7 @@ Deno.serve(async (req) => {
   // All confirmed WIN raw scores authorize Demo; pattern correspondence is independently recorded.
   const demoEligible = demoPool.flatMap(c => {
     const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
-    const match=demoWinningPatternMatch(chartSamples,f);
+    const match=demoWinningPatternMatch(winningCharts,f);
     const distance=match?.distance??Infinity;
     const reason=demoWinScoreReason(c._score,winScores);
     if(reason){reject(c,reason);return[];}

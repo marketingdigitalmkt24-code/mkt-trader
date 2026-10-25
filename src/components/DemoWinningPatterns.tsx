@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { winningPatterns,preEntryCandles,patternDistance,DEMO_VISIBLE_PATTERN_SCORES,DEMO_ANALYSIS_SCORE_CENTS } from '@/lib/demo-winning-patterns';
-import { DEMO_PREFERRED_SCORE_CENTS,DEMO_REFERENCE_MAX_DISTANCE } from '../../supabase/functions/_shared/demo-continuation';
+import { winningPatterns,preEntryCandles,patternDistance } from '@/lib/demo-winning-patterns';
+import { DEMO_REFERENCE_MAX_DISTANCE } from '../../supabase/functions/_shared/demo-continuation';
+import { readDemoWinningReferences } from '../../supabase/functions/_shared/demo-winning-reference-history';
 import { DemoPatternChart } from './DemoPatternChart';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -13,7 +14,7 @@ const time=(v:string)=>new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao
 export function DemoWinningPatterns(){
  const {user}=useAuth();
  const queryClient=useQueryClient();
- const [score,setScore]=useState('226');
+ const [score,setScore]=useState('all');
  const [page,setPage]=useState(0);
  const [reference,setReference]=useState<string|null>(null);
  const [comparison,setComparison]=useState('');
@@ -31,23 +32,24 @@ export function DemoWinningPatterns(){
   return()=>{if(timer)clearTimeout(timer);void supabase.removeChannel(channel);};
  },[user?.id,queryClient]);
  const query=useQuery({queryKey:['demo-winning-patterns',user?.id],enabled:!!user,refetchInterval:10000,refetchIntervalInBackground:true,refetchOnWindowFocus:'always',queryFn:async()=>{
-  const now=Date.now();
-  const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,asset,entry_strategy,score,candles')
-   .not('candles','is',null).gte('entry_minute',new Date(now-14*86400000).toISOString())
-   .lt('entry_minute',new Date(Math.floor(now/60000)*60000).toISOString()).order('entry_minute',{ascending:false}).limit(1000);
-  if(error)throw error;
-  const outcomes: {signal_id:string;result:string;status:string;iq_option_id:string|null}[]=[];
-  for(let i=0;i<(data??[]).length;i+=200){
-   const {data:orders,error:orderError}=await supabase.from('iq_demo_test_orders').select('signal_id,result,status,iq_option_id').in('signal_id',(data??[]).slice(i,i+200).map(c=>c.signal_id)).eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss']);
-   if(orderError)throw orderError;outcomes.push(...orders??[]);
-  }
-  return winningPatterns(data??[],outcomes,DEMO_VISIBLE_PATTERN_SCORES);
+  const data=await readDemoWinningReferences(async(from,to)=>{
+   const {data,error}=await supabase.from('iq_demo_test_orders').select('signal_id,result,status,account_type,iq_option_id')
+    .eq('status','confirmed').eq('account_type','PRACTICE').eq('result','win').not('iq_option_id','is',null)
+    .order('entry_minute',{ascending:false}).order('id').range(from,to);
+   if(error)throw error;return data??[];
+  },async ids=>{
+   const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,asset,entry_strategy,score,candles').in('signal_id',ids);
+   if(error)throw error;return data??[];
+  });
+  return winningPatterns(data,data.map(c=>({signal_id:c.signal_id,result:'win',status:'confirmed',iq_option_id:'confirmed'})))
+   .sort((a,b)=>Date.parse(b.entry_minute)-Date.parse(a.entry_minute)||a.signal_id.localeCompare(b.signal_id));
  }});
  const recent=useQuery({queryKey:['demo-pattern-comparison',user?.id],enabled:!!user,refetchInterval:10000,queryFn:async()=>{
   const {data,error}=await supabase.from('demo_selection_rejections').select('id,asset,direction,entry_minute,entry_strategy,score,candles').order('entry_minute',{ascending:false}).order('id').limit(100);
   if(error)throw error;return data??[];
  }});
- const rows=(query.data??[]).filter(c=>Math.round(c.score*100)===Number(score));
+ const notes=[...new Set((query.data??[]).map(c=>Math.round(c.score*100)))].sort((a,b)=>a-b);
+ const rows=(query.data??[]).filter(c=>score==='all'||Math.round(c.score*100)===Number(score));
  const pages=Math.max(1,Math.ceil(rows.length/6));
  const current=Math.min(page,pages-1);
  const selected=rows.find(r=>r.signal_id===reference)??rows[0];
@@ -57,11 +59,11 @@ export function DemoWinningPatterns(){
  return <section aria-label="Padrões vencedores" className="space-y-5">
   <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Padrões vencedores por nota</h2><p className="mt-1 text-xs text-muted-foreground">WIN confirmado · Referências disponíveis para a próxima escolha · Brasília</p></div><Button variant="outline" size="sm" disabled={query.isFetching} onClick={()=>{query.refetch();recent.refetch();}}>Atualizar padrões</Button></div>
   <p className="text-xs text-muted-foreground" aria-live="polite">{query.dataUpdatedAt?`Atualizado às ${new Date(query.dataUpdatedAt).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'})}`:'Aguardando atualização'}{query.isFetching?' · Atualizando…':''}</p>
-  {[{label:'Notas da regra',scores:DEMO_PREFERRED_SCORE_CENTS},{label:'Notas em análise',scores:DEMO_ANALYSIS_SCORE_CENTS}].filter(group=>group.scores.length>0).map(group=><div key={group.label} className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">{group.label}</h3><div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" role="group" aria-label={group.label}>{group.scores.map(c=><Button key={c} variant={score===String(c)?'default':'outline'} className="h-auto min-h-12 flex-col gap-1 py-2" aria-pressed={score===String(c)} onClick={()=>{setScore(String(c));setPage(0);setReference(null);}}><span className="font-mono">{(c/100).toFixed(2).replace('.',',')}</span><span className="text-xs">{(query.data??[]).filter(r=>Math.round(r.score*100)===c).length} WIN</span></Button>)}</div></div>)}
+  <Select value={score} onValueChange={v=>{setScore(v);setPage(0);setReference(null);}}><SelectTrigger className="w-full max-w-sm" aria-label="Nota dos padrões vencedores"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todas as notas · {query.data?.length??0} WIN</SelectItem>{notes.map(c=><SelectItem key={c} value={String(c)}>{(c/100).toFixed(2).replace('.',',')} · {(query.data??[]).filter(r=>Math.round(r.score*100)===c).length} WIN</SelectItem>)}</SelectContent></Select>
   {query.isError&&query.data&&<p role="alert" className="text-sm text-destructive">Atualização indisponível. Os últimos gráficos permanecem visíveis; uma nova tentativa será feita automaticamente.</p>}
   {query.isPending?<p role="status" className="text-sm text-muted-foreground">Carregando gráficos vencedores…</p>:query.isError&&!query.data?<p role="alert" className="text-sm text-destructive">Não foi possível carregar os padrões.</p>:<>
-   <div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">Nota {(Number(score)/100).toFixed(2).replace('.',',')}</h3><Badge variant="outline">{rows.length} gráficos WIN</Badge><span className="text-xs text-muted-foreground">Somente velas anteriores à entrada</span></div>
-   {!rows.length?<p className="text-sm text-muted-foreground">Nenhum gráfico vencedor válido desta nota na janela atual da regra.</p>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{rows.slice(current*6,current*6+6).map(row=><article key={row.signal_id} className={`min-w-0 rounded-lg border bg-card p-4 ${selected?.signal_id===row.signal_id?'border-primary':'border-border'}`}>
+   <div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">{score==='all'?'Todo o histórico':`Nota ${(Number(score)/100).toFixed(2).replace('.',',')}`}</h3><Badge variant="outline">{rows.length} gráficos WIN</Badge><span className="text-xs text-muted-foreground">Somente velas anteriores à entrada</span></div>
+   {!rows.length?<p className="text-sm text-muted-foreground">Nenhum gráfico vencedor válido desta nota.</p>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{rows.slice(current*6,current*6+6).map(row=><article key={row.signal_id} className={`min-w-0 rounded-lg border bg-card p-4 ${selected?.signal_id===row.signal_id?'border-primary':'border-border'}`}>
     <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">{row.asset}</h4><Badge variant="outline" className="text-call">WIN</Badge></div><p className="my-2 text-xs text-muted-foreground">{time(row.entry_minute)} · {row.entry_strategy}</p><DemoPatternChart candles={row.candles} direction={row.direction}/><Button variant="outline" size="sm" className="mt-3 w-full" onClick={()=>setReference(row.signal_id)}>{selected?.signal_id===row.signal_id?'Referência selecionada':'Comparar com este padrão'}</Button>
    </article>)}</div>}
    {pages>1&&<div className="flex items-center justify-between"><Button variant="outline" size="sm" disabled={current===0} onClick={()=>setPage(current-1)}>Anterior</Button><span className="text-xs text-muted-foreground">{current+1} / {pages}</span><Button variant="outline" size="sm" disabled={current+1>=pages} onClick={()=>setPage(current+1)}>Próxima</Button></div>}

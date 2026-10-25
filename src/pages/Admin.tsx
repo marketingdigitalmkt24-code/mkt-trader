@@ -64,6 +64,9 @@ const Admin = () => {
         <div className="container px-4 py-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
+              <Button variant="ghost" size="sm" onClick={() => setMenuOpen(true)} className="px-2 shrink-0" aria-label="Abrir menu">
+                <Menu className="w-5 h-5" />
+              </Button>
               <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
                 <ArrowLeft className="w-4 h-4" />
               </Link>
@@ -86,9 +89,6 @@ const Admin = () => {
               )}
               <Button variant="ghost" size="sm" onClick={handleLogout} className="text-destructive hover:text-destructive px-2">
                 <LogOut className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setMenuOpen(true)} className="px-2" aria-label="Abrir menu">
-                <Menu className="w-5 h-5" />
               </Button>
             </div>
           </div>

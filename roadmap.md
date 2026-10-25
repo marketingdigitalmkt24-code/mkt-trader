@@ -1,5 +1,5 @@
 # Reduzir atraso da cópia (25/10/2026)
-- [ ] Reduzir intervalo de detecção da confirmação de 100ms para 25ms, testar e publicar; preservar confirmação exata, limite de 30s e resultados da corretora.
+- [x] Intervalo de detecção reduzido de 100ms para 25ms, limitado à janela original de 30s; 30 testes passaram, executor publicado e build OK. Ainda depende de nova sequência fresca para medir atraso total na corretora.
 - [x] Pedido repetido de substituir LOSS USD/VND pelo WIN do admin: resultado confirmado da conta cliente preservado para não fabricar saldo; nenhuma ordem nova após 21:58 UTC na consulta desta conferência.
 - [x] Login dos clientes preparado em paralelo à principal na mesma execução de cópia, aguardando ID/queue confirmados antes da reserva; conexão/copy rechecados, sem guardar sessões ou alterar LOSS USD/VND. 28 testes passaram; dois executores publicados, navegador recusado 401 e build OK.
 - [ ] Medir horário da próxima sequência autorizada com cópia: depende de novo sinal fresco e confirmação da corretora; nenhum replay ou ordem forçada. Horário/preço idênticos não garantidos.

@@ -1,5 +1,6 @@
 # Histórico de acertos por nota
-- [ ] Publicar ajuste Demo nota exibida 2,26: recuperadas referências exatas WIN e PADRAO_MEIO_V1; exceção aplicada na seleção e executor, principal exata e uma/minuto preservadas. Validar testes, publicar e conferir rotina prospectiva; não forçar ordens.
+- [x] Ajuste Demo exibida 2,26 publicado em multi-strategy-test e iqoption-demo-tests; 45 testes aprovados, referências WIN e PADRAO_MEIO_V1 recuperadas, principal exata e uma/minuto preservadas. Publicação do site solicitada, URL respondeu 200 e build OK.
+- [ ] Confirmar primeira ordem Demo da nota exibida 2,26: depende de candidato fresco elegível e confirmação da corretora; nenhuma ordem forçada. Painel autenticado abriu, mas dados ainda carregando; execução end-to-end não verificada.
 - [x] Bloqueio GEV retirado; correspondência com qualquer WIN confirmado da amostra aceita além das 14 notas, com limites preservados. Origem persistida e selo prospectivo Padrão vencedor implementado; 40 testes aprovados, build OK e rotina nova confirmada às 23:30/23:31 UTC.
 - [ ] Conferir selo em nova ordem Demo confirmada — depende de candidato elegível; nenhum correspondente às 23:31 UTC, sem entrada forçada ou selo retroativo.
 - [x] Seis notas incorporadas às 14 referências e prioridades Demo; 42 testes aprovados, build OK e painel conferido. Rotina publicada e leitura das 14 notas confirmada às 23:25 UTC; principal/Telegram/copy só 2,26, bloqueios preservados.

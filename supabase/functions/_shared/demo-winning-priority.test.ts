@@ -41,14 +41,18 @@ test('result and following candles cannot change the matching features', () => {
   expect(f).not.toBeNull();
   expect(chartFeatures([...closed,{t:entry,o:99,c:500,h:500,l:1}],entry,'PUT')).toEqual(f);
 });
-test('blocks every candidate without eight-score chart correspondence, even exact 2.26', () => {
-  expect(chooseDemoCandidate([candidate(2.26),candidate(2.23,1.31),candidate(5.19),candidate(3.18,NaN)],true)).toBeNull();
+test('selected notes qualify without chart correspondence; unselected notes still require it', () => {
+  expect(chooseDemoCandidate([candidate(2.26),candidate(2.23,1.31),candidate(5.19),candidate(3.18,NaN)],true)?._score).toBe(2.26);
+  expect(chooseDemoCandidate([candidate(5.19),candidate(3.18,NaN)],true)).toBeNull();
   expect(demoPreferredPatternAllowed(undefined)).toBe(false);
   expect(demoPreferredPatternAllowed(Infinity)).toBe(false);
   expect(demoPreferredPatternAllowed(-1)).toBe(false);
   expect(demoPreferredPatternAllowed(1.3)).toBe(true);
 });
-test('retains a matched candidate but never falls back to an unmatched exact note', () => {
-  expect(chooseDemoCandidate([candidate(2.26),candidate(3.18,0.8)],true)?._score).toBe(3.18);
+test('exact note can outrank a matched nonselected note', () => {
+  expect(chooseDemoCandidate([candidate(2.26),candidate(3.18,0.8)],true)?._score).toBe(2.26);
   expect(chooseDemoCandidate([],true)).toBeNull();
+});
+for(const score of [2.26,2.23,2.18,2.64,2.88,2.03,2.69,2.91,2.04,2.61,2.78,2.37,2.76,2.20])test(`exact displayed ${score} qualifies without a winning pattern`,()=>{
+ expect(chooseDemoCandidate([candidate(score)],true,[Math.round(score*100)])?._score).toBe(score);
 });

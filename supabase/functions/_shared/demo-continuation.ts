@@ -46,7 +46,7 @@ export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningSc
     return matched ? 3 : 4;
   };
   return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0
-    && (!preferWinningScores || demoPreferredPatternAllowed(c._preferredPatternDistance)))
+    && (!preferWinningScores || demoPreferredScore(c._score) || demoPreferredPatternAllowed(c._preferredPatternDistance)))
     .sort((a,b) => tier(a)-tier(b)
       || (preferWinningScores ? (a._preferredPatternDistance ?? Infinity) - (b._preferredPatternDistance ?? Infinity) : 0)
       || scoreDistance(a._score)-scoreDistance(b._score) || b._score-a._score || a.signal_id.localeCompare(b.signal_id))[0] ?? null;

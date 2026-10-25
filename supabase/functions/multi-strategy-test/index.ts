@@ -393,7 +393,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'win-pattern-v2',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'exact-notes-or-pattern-v3',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -412,7 +412,7 @@ Deno.serve(async (req) => {
   if(retry && series.has(retry.asset))demoPool.push({signal_id:`queda-win-retry-v1-${retry.asset}-${curMin}`,
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1});
-  // Any confirmed WIN pre-entry pattern may qualify; exact selected scores retain historical priority.
+  // Exact fourteen displayed scores qualify independently; other scores still require a WIN chart match.
   const demoEligible = demoPool.flatMap(c => {
     const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
     const match=demoWinningPatternMatch(chartSamples,f);
@@ -441,7 +441,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo blocked: no eligible candidate matches confirmed winning patterns');
+  if (!demoWinner) console.log('Demo blocked: no eligible exact selected note or confirmed winning pattern');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,

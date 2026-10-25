@@ -10,6 +10,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
+import { takashiKotegawa, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
@@ -36,6 +37,7 @@ export const LABELS: Record<string, string> = {
   TENDENCIA: 'Tendência', REVERSAO_RSI: 'Reversão RSI', VELA_FORCA: 'Vela de força', ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21', KDJ: 'KDJ', ICHIMOKU: 'Ichimoku',
   [FORCE_FIRST_TEST]: 'Força sem rompimento · primeira vela (TESTE)',
+  [TAKASHI_BNF]: 'Takashi Kotegawa',
 };
 
 async function login(email: string, password: string): Promise<string | null> {
@@ -193,7 +195,7 @@ Deno.serve(async (req) => {
   const historyPromise = supabase.from('operation_results')
     .select('asset, direction, entry_strategy, result, created_at')
     .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
-    .neq('entry_strategy', FORCE_FIRST_TEST)
+    .neq('entry_strategy', FORCE_FIRST_TEST).neq('entry_strategy', TAKASHI_BNF)
     .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
     .order('created_at', { ascending: false }).limit(500)
     .abortSignal(AbortSignal.timeout(1500)).then(result => result);
@@ -225,9 +227,9 @@ Deno.serve(async (req) => {
         .eq('id', o.id).eq('result', OPEN).select('id');
       if (!upd?.length) continue;
       resolved++;
-      if (o.entry_strategy !== FORCE_FIRST_TEST) newlySettled.push({ asset: o.asset, direction: o.direction, entry_strategy: o.entry_strategy,
+      if (o.entry_strategy !== FORCE_FIRST_TEST && o.entry_strategy !== TAKASHI_BNF) newlySettled.push({ asset: o.asset, direction: o.direction, entry_strategy: o.entry_strategy,
         result: outcome.result, created_at: o.created_at });
-      if (o.telegram_sent && o.entry_strategy !== FORCE_FIRST_TEST) {
+      if (o.telegram_sent && o.entry_strategy !== FORCE_FIRST_TEST && o.entry_strategy !== TAKASHI_BNF) {
         const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
         const head = outcome.result === 'win' ? '✅ RESULTADO: WIN' : outcome.result === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
         const delivery = sendTelegram([head + ' — AGÊNCIA MKT TRADER', `💱 Ativo: ${o.asset}`, `🎯 Estratégia: ${LABELS[o.entry_strategy] || o.entry_strategy}`,
@@ -510,7 +512,7 @@ Deno.serve(async (req) => {
     // Independent reads run together after closed-candle confirmation.
     const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
       supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id)),
-      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').neq('entry_strategy', FORCE_FIRST_TEST).limit(1),
+      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').neq('entry_strategy', FORCE_FIRST_TEST).neq('entry_strategy', TAKASHI_BNF).limit(1),
       supabase.from('operation_results').select('entry_strategy, result, created_at')
         .eq('timeframe', 'TEST').like('signal_id', 't7-%')
         .lt('created_at', new Date(curMin * 1000).toISOString())

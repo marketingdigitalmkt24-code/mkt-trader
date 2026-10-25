@@ -1,4 +1,5 @@
 import { DEMO_PREFERRED_SCORE_CENTS } from './demo-continuation.ts';
+import { demoWinScores } from './demo-win-scores.ts';
 export type ScoreOutcome = {signal_id:string;status:string;account_type:string;iq_option_id:string|null;result:string;profit:number|string};
 export type ScorePriority = {cents:number;wins:number;losses:number;profit:number;accuracy:number};
 const cohort = DEMO_PREFERRED_SCORE_CENTS;
@@ -20,9 +21,15 @@ export async function readDemoScorePriorities(
  readPage:(from:number,to:number)=>Promise<ScoreOutcome[]>,
  readScores:(ids:string[])=>Promise<{signal_id:string;score:number}[]>,
 ){
+ return (await readDemoScoreHistory(readPage,readScores)).priorities;
+}
+export async function readDemoScoreHistory(
+ readPage:(from:number,to:number)=>Promise<ScoreOutcome[]>,
+ readScores:(ids:string[])=>Promise<{signal_id:string;score:number}[]>,
+){
  const rows:ScoreOutcome[]=[];
  for(let from=0;;from+=1000){const page=await readPage(from,from+999);rows.push(...page);if(page.length<1000)break;}
  const ids=[...new Set(rows.map(r=>r.signal_id))],scores=new Map<string,number>();
  for(let from=0;from<ids.length;from+=200){for(const row of await readScores(ids.slice(from,from+200)))scores.set(row.signal_id,row.score);}
- return rankDemoScores(rows,scores);
+ return {priorities:rankDemoScores(rows,scores),winScores:demoWinScores(rows,scores)};
 }

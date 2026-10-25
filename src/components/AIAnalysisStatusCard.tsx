@@ -17,6 +17,7 @@ interface SignalEntry {
 
 const strategyLabels: Record<string, string> = {
   PADRAO_VENCEDOR: 'Padrão vencedor',
+  PADRAO_MEIO_V1:'Padrão meio · :30',
   TENDENCIA: 'Tendência',
   CONTINUACAO_QUEDA_V1: 'Queda',
   TETO_V1: 'Teto',

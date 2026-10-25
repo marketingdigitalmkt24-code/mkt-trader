@@ -23,6 +23,7 @@ import { readDemoScoreHistory } from '../_shared/demo-score-priority.ts';
 import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
 import { demoWinningPatternMatch } from '../_shared/demo-continuation.ts';
 import { demoEntryReason } from '../_shared/demo-entry-authorization.ts';
+import { DEMO_MID_CANDLE } from '../_shared/demo-mid-candle.ts';
 import { readDemoWinningReferences } from '../_shared/demo-winning-reference-history.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
@@ -143,7 +144,7 @@ Deno.serve(async (req) => {
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Fetch independent Demo learning inputs while broker login/candles are in flight.
   const demoSince = new Date(Date.now()-14*86400000).toISOString();
-  const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit,asset,direction')
+  const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit,asset,direction').neq('entry_strategy',DEMO_MID_CANDLE)
     .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
     .gte('entry_minute',demoSince).order('entry_minute',{ascending:false}).limit(1000).then(r=>r);
   // Real principal IQ entries and their confirmed results also teach the scorer (heavier weight).
@@ -156,7 +157,7 @@ Deno.serve(async (req) => {
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
   const scorePriorityPromise = readDemoScoreHistory(async(from,to)=>{
     const {data,error}=await supabase.from('iq_demo_test_orders')
-      .select('signal_id,status,account_type,iq_option_id,result,profit')
+      .select('signal_id,status,account_type,iq_option_id,result,profit').neq('entry_strategy',DEMO_MID_CANDLE)
       .eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null)
       .order('entry_minute',{ascending:true}).order('id').range(from,to);
     if(error)throw error;return data||[];
@@ -177,7 +178,7 @@ Deno.serve(async (req) => {
   })();
   const winningChartsPromise = readDemoWinningReferences(async (from,to) => {
     const {data,error}=await supabase.from('iq_demo_test_orders')
-      .select('signal_id,status,account_type,iq_option_id,result').eq('status','confirmed')
+      .select('signal_id,status,account_type,iq_option_id,result').neq('entry_strategy',DEMO_MID_CANDLE).eq('status','confirmed')
       .eq('account_type','PRACTICE').eq('result','win').not('iq_option_id','is',null)
       .order('entry_minute',{ascending:false}).order('id').range(from,to);
     if(error)throw error;return data||[];
@@ -395,7 +396,7 @@ Deno.serve(async (req) => {
     .lt('entry_minute',new Date(curMin*1000).toISOString());
   await Promise.all((recentDemo.data || []).map(async row => {
     if (!Array.isArray(row.candles)) return;
-    const candles = extendDemoChart(row.candles as K[],series.get(row.asset) || [],Date.parse(row.entry_minute)/1000,curMin);
+    const candles = extendDemoChart(row.candles as K[],series.get(row.asset) || [],Math.floor(Date.parse(row.entry_minute)/60000)*60,curMin);
     if (JSON.stringify(candles) === JSON.stringify(row.candles)) return;
     const {error}=await supabase.from('iq_demo_test_candidates').update({candles}).eq('entry_minute',row.entry_minute);
     if (error) console.error('Demo result candle write failed:',error.code);
@@ -493,6 +494,12 @@ Deno.serve(async (req) => {
         .then(({error})=>{if(error)console.error('Demo TEST dispatch failed');});
       // @ts-ignore Hosted background runtime
       if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(demoTask);else await demoTask;
+      if(demoWinner._patternMatch){
+        const midTask=supabase.functions.invoke('iqoption-demo-tests',{body:{mode:'mid',candidate:demoWinner.signal_id,brokerSession:{ssid,configId:cfg.id}}})
+          .then(({error})=>{if(error)console.error('Mid-candle Demo dispatch unavailable');});
+        // @ts-ignore Hosted background runtime: never delay the normal :00 order.
+        if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(midTask);else await midTask;
+      }
     }
   }
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));

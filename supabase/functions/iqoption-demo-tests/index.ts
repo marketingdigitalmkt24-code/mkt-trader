@@ -8,7 +8,8 @@ import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { verifyDemoWinScore } from '../_shared/demo-win-scores.ts';
 import { verifyDemoWinningPattern } from '../_shared/demo-entry-authorization.ts';
-const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
+import { DEMO_MID_CANDLE, midCandleSignal, midCandleTime, freshMidCandle, midCandleExpiry } from '../_shared/demo-mid-candle.ts';
+const schema = z.object({ candidate: z.string().max(200).optional(), mode:z.literal('mid').optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
 const reply = (body: unknown, status = 200) => {
  console.log('Demo test response:', JSON.stringify({ status, ...body as Record<string, unknown> }));
  return Response.json(body, { status, headers: corsHeaders });
@@ -46,6 +47,9 @@ Deno.serve(async req => {
  if (!authorized) return reply({ error: 'Unauthorized' },401);
  const parsed = schema.safeParse(await req.json().catch(() => null));
  if (!parsed.success) return reply({ error: 'Invalid parameters' },400);
+ const mid=parsed.data.mode==='mid';
+ if(mid && (!serviceAuthorized || !parsed.data.candidate || parsed.data.inspect))return reply({error:'Invalid mid-candle dispatch'},400);
+ const isFresh=(row:any)=>mid?freshMidCandle(row,Date.now()):freshDemoCandidate(row,Date.now());
  // Start independent ledger/settings reads before broker authentication.
  const pendingRead = db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000).then(r=>r);
  const settingRead = parsed.data.candidate ? db.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r) : null;
@@ -77,19 +81,27 @@ Deno.serve(async req => {
      const {data:orders,error}=await db.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result').in('signal_id',ids);
      if(error)throw error;return orders||[];
    });
-   if(patternEvidence || await winScoreEvidence(data.score)) candidate=data;
+   if(mid ? patternEvidence && data.signal_id===parsed.data.candidate : patternEvidence || await winScoreEvidence(data.score)) candidate=data;
  }
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
  let reserved: string | null = null;
  let testAmount = DEMO_TEST_AMOUNT;
+ if(mid && candidate){
+   const source=candidate,target=midCandleTime(source.entry_minute);
+   if(Date.now()>target+2000)return reply({error:'Mid-candle window expired'},409);
+   candidate={...source,signal_id:midCandleSignal(source.signal_id),entry_strategy:DEMO_MID_CANDLE,entry_minute:new Date(target).toISOString(),created_at:new Date(target).toISOString(),pattern_match:{...source.pattern_match,source_signal_id:source.signal_id,source_strategy:source.entry_strategy,entry_offset_seconds:30}};
+   const {error}=await db.from('iq_demo_test_candidates').insert({signal_id:candidate.signal_id,entry_minute:candidate.entry_minute,asset:candidate.asset,direction:candidate.direction,entry_strategy:candidate.entry_strategy,score:candidate.score,candles:candidate.candles,pattern_match:candidate.pattern_match});
+   if(error)return reply({error:'Mid-candle slot already reserved'},409);
+ }
+
  if (candidate) {
  const setting = await settingRead;
  if(!setting)return reply({error:'Demo test amount unavailable'},503);
  if(setting.error)return reply({error:'Demo test amount unavailable'},503);
  testAmount = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
  if(!validDemoTestAmount(testAmount))return reply({error:'Invalid demo test amount'},409);
- const { data, error } = await db.from('iq_demo_test_orders').insert({ signal_id:candidate.signal_id,entry_minute:candidate.created_at,asset:candidate.asset,direction:candidate.direction,amount:testAmount,entry_strategy:candidate.entry_strategy || 'UNKNOWN',expiration_time:new Date(Date.parse(candidate.created_at)+60000).toISOString() }).select('id').single();
+ const { data, error } = await db.from('iq_demo_test_orders').insert({ signal_id:candidate.signal_id,entry_minute:candidate.created_at,asset:candidate.asset,direction:candidate.direction,amount:testAmount,entry_strategy:candidate.entry_strategy || 'UNKNOWN',expiration_time:new Date(mid?midCandleExpiry(candidate.created_at)*1000:Date.parse(candidate.created_at)+60000).toISOString() }).select('id').single();
  if (!error && data) reserved=data.id;
  else console.log('Demo reservation rejected:',error?.code);
  }
@@ -102,7 +114,7 @@ Deno.serve(async req => {
  let balanceId=0, finished=false, initialized=false, histories=0, profileReceived=false;
  const historyResponses = new Set<string>();
  const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);ws.close();resolve();};
- const timer=setTimeout(finish,25000);
+ const timer=setTimeout(finish,mid?55000:25000);
  const send=(name:string,version:string,body:unknown,request_id?:string)=>ws.send(JSON.stringify({name:'sendMessage',request_id,msg:{name,version,body}}));
  let historyRequested=false;
  const requestHistory=()=>{
@@ -136,10 +148,12 @@ Deno.serve(async req => {
  }
  if(d.name==='initialization-data' && !initialized && reserved && candidate) {
  initialized=true;
- const expiry=Date.parse(candidate.created_at)/1000+60;
+ if(mid)await new Promise(resolve=>setTimeout(resolve,Math.max(0,Date.parse(candidate.created_at)-Date.now())));
+ if(finished)return;
+ const expiry=mid?midCandleExpiry(candidate.created_at):Date.parse(candidate.created_at)/1000+60;
  const found=Object.entries<any>(d.msg?.turbo?.actives || {}).find(([,a])=>symbol(a.name || '')===candidate.asset && iqMarketOpen(a,Math.floor(Date.now()/1000),expiry));
  // Exact WIN score or recomputed confirmed winning pattern checked before reservation; recheck freshness.
- if(!found || !freshDemoCandidate(candidate,Date.now())) {
+ if(!found || !isFresh(candidate)) {
  requestHistory();
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).then(()=>{}));
  if(!pending?.length) finish();return;

@@ -19,7 +19,7 @@ Deno.test('Panic drop far below SMA25 with oversold RSI fires CALL', () => {
   for (let i = 0; i < 60; i++) values.push(100 - i * 0.5); // closes 100 → 70.5
   const out = takashiKotegawa(series(values), entry);
   assertEquals(out?.direction, 'CALL');
-  assertEquals(out!.rsi < 30, true);
+  assertEquals(out!.rsi < 20, true);
 });
 
 Deno.test('Panic rally far above SMA25 with overbought RSI fires PUT', () => {
@@ -27,7 +27,7 @@ Deno.test('Panic rally far above SMA25 with overbought RSI fires PUT', () => {
   for (let i = 0; i < 60; i++) values.push(100 + i * 0.5);
   const out = takashiKotegawa(series(values), entry);
   assertEquals(out?.direction, 'PUT');
-  assertEquals(out!.rsi > 70, true);
+  assertEquals(out!.rsi > 80, true);
 });
 
 Deno.test('Sideways market near the mean stays out', () => {

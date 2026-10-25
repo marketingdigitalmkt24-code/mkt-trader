@@ -5,3 +5,7 @@ export function demoTargetMinute(now: number, scheduled: boolean): number {
 export function demoCandleRequestTime(now: number, target: number): number | null {
   return now >= target && now < target + 30000 ? Math.floor(now / 1000) : null;
 }
+// Fetch availability during preparation; only the candle request waits for :00.
+export function demoBoundaryDelay(now: number, target: number): number {
+  return Math.max(0, target - now);
+}

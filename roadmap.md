@@ -1,3 +1,6 @@
+# Padrões vencedores em lista (25/10/2026)
+- [ ] Remover notas e comparação fixa; listar ordens Demo e rejeições registradas com paginação e gráficos ao passar o mouse, sem alterar execução.
+
 # Takashi invertida após 2,26 (25/10/2026)
 - [x] Criada autorização exclusiva por sequência Demo confirmada 2,26 → Takashi no minuto seguinte, qualquer resultado/ativo, direção invertida e nota Takashi intacta; claim só serviço, demais claims pausados.
 - [x] Principal, Telegram vinculado e cópias habilitados só para nova estratégia, US$10 configurados do admin e valores/metas próprios dos clientes; Auto Trading admin reativado, clientes mantidos desligados até ativação própria. Seis funções publicadas.

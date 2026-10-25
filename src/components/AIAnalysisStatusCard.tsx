@@ -31,6 +31,7 @@ const strategyLabels: Record<string, string> = {
   REVERSAO_RSI: 'Reversão RSI',
   VELA_FORCA: 'Vela de força',
   FORCA_SEM_ROMPIMENTO_PRIMEIRA: 'forca sem',
+  TAKASHI_BNF_V1: 'Takashi Kotegawa',
   FORCA_INVERTIDA: 'Força Invertida',
   ROMPIMENTO: 'Rompimento',
   RECUO_EMA21: 'Recuo na média 21',

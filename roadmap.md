@@ -1,5 +1,5 @@
 # Padrões vencedores em lista (25/10/2026)
-- [ ] Remover notas e comparação fixa; listar ordens Demo e rejeições registradas com paginação e gráficos ao passar o mouse, sem alterar execução.
+- [x] Removidas notas e comparação fixa; todas as ordens Demo confirmadas e rejeições registradas acessíveis em linhas paginadas, com filtros ganhos/perdas/rejeitadas e gráficos ao passar o mouse. Painel autenticado conferido com dados reais e segunda página, sem erros; 13 testes passaram e build OK. Execução preservada.
 
 # Takashi invertida após 2,26 (25/10/2026)
 - [x] Criada autorização exclusiva por sequência Demo confirmada 2,26 → Takashi no minuto seguinte, qualquer resultado/ativo, direção invertida e nota Takashi intacta; claim só serviço, demais claims pausados.

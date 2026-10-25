@@ -10,11 +10,13 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { resetIQResults } from '@/lib/iq-results-reset';
+import { IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
+import { useQueryClient } from '@tanstack/react-query';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 
 export function BankManagementCard() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const [isRefilling, setIsRefilling] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -58,12 +60,13 @@ export function BankManagementCard() {
     if (!user) return;
     setIsResetting(true);
     try {
-      resetIQResults(user.id);
-      const { error: globalError } = await supabase
-        .from('iq_display_reset')
-        .upsert({ id: 1, cutoff: new Date().toISOString(), updated_at: new Date().toISOString() });
-      if (globalError) throw globalError;
-      toast({ title: 'Resultados de hoje zerados', description: 'Entradas de hoje ocultadas no admin e no cliente até este momento. Dias anteriores e Operações em Tempo Real preservados.' });
+      const { error } = await supabase.rpc('clear_iq_today_entries');
+      if (error) throw error;
+      window.dispatchEvent(new Event(IQ_RESULTS_RESET_EVENT));
+      await Promise.all(['master-iq-results', 'client-copy-results', 'client-copy-history'].map(
+        key => queryClient.invalidateQueries({ queryKey: [key] }),
+      ));
+      toast({ title: 'Entradas e resultados de hoje apagados', description: 'Admin e clientes zerados. Dias anteriores, Demo separada e saldo da corretora preservados.' });
     } catch (error) {
       console.error('Error resetting stats:', error);
       toast({ title: 'Erro', description: 'Não foi possível resetar.', variant: 'destructive' });

@@ -22,7 +22,7 @@ import { demoBalance } from '../_shared/demo-balance.ts';
 import { readDemoScoreHistory } from '../_shared/demo-score-priority.ts';
 import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
 import { demoWinningPatternMatch } from '../_shared/demo-continuation.ts';
-import { demoWinScoreAllowed, demoWinScoreReason } from '../_shared/demo-win-scores.ts';
+import { demoEntryReason } from '../_shared/demo-entry-authorization.ts';
 import { readDemoWinningReferences } from '../_shared/demo-winning-reference-history.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
@@ -405,7 +405,7 @@ Deno.serve(async (req) => {
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
   if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
   const priorityRead = await scorePriorityPromise;
-  if(priorityRead.error)console.error('Demo WIN score history unavailable: selection blocked');
+  if(priorityRead.error)console.error('Demo WIN score history unavailable: pattern authorization remains independent');
   const winScores=priorityRead.data?.winScores??new Set<number>();
   const winningCharts=await winningChartsPromise;
   console.log('Demo all-history winning chart references:',winningCharts.length);
@@ -416,40 +416,39 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'all-confirmed-win-exact-v6',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'confirmed-win-score-or-pattern-v7',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
     const learn=combinedLearnedScore(demoHist.data||[],realHist.data||[],
       chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
       c.entry_strategy,c.asset,curMin*1000);
-    const reason=demoWinScoreReason(demoFinalScore(c._score,learn,c.entry_strategy),winScores);
-    if(reason){reject({...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)},reason);return[];}
-    return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)}];});
+    return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy),_learned:learn}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);
   if (qw && series.has(qw.asset)) demoPool.push({ signal_id: `queda-win-call-v1-${qw.asset}-${curMin}`,
     asset: qw.asset, direction: qw.direction, entry_strategy: QUEDA_WIN_CALL,
-    created_at: new Date(curMin * 1000).toISOString(), _score: 1 });
+    created_at: new Date(curMin * 1000).toISOString(), _score: 1, _learned: 0 });
   const retry = quedaWinRetry(previousDemo.data || [], curMin);
   if(retry && series.has(retry.asset))demoPool.push({signal_id:`queda-win-retry-v1-${retry.asset}-${curMin}`,
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
-    created_at:new Date(curMin*1000).toISOString(),_score:1});
-  // All confirmed WIN raw scores authorize Demo; pattern correspondence is independently recorded.
+    created_at:new Date(curMin*1000).toISOString(),_score:1,_learned:0});
+  // Exact WIN scores OR analyzed winning chart correspondence authorize Demo independently.
   const demoEligible = demoPool.flatMap(c => {
     const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
-    const match=demoWinningPatternMatch(winningCharts,f);
+    const match=demoWinningPatternMatch(winningCharts.filter(r=>Date.parse(r.entry_minute??'')<curMin*1000),f);
     const distance=match?.distance??Infinity;
-    const reason=demoWinScoreReason(c._score,winScores);
+    const reason=demoEntryReason(c._score,winScores,match,c._learned);
     if(reason){reject(c,reason);return[];}
-    return [{...c,_preferredPatternDistance:distance,_patternMatch:match}];
+    return [{...c,_preferredPatternDistance:distance,_patternMatch:match?{...match,learned:c._learned}:null}];
   });
-  const demoWinner = priority ? demoEligible.filter(c=>demoWinScoreAllowed(c._score,winScores)).sort((a,b)=>{
-    const rank=(score:number)=>{const i=priority.indexOf(Math.round(score*100));return i<0?priority.length:i;};
+  const demoWinner = demoEligible.sort((a,b)=>{
+    const ranks=priority??[];
+    const rank=(score:number)=>{const i=ranks.indexOf(Math.round(score*100));return i<0?ranks.length:i;};
     return rank(a._score)-rank(b._score)||a._preferredPatternDistance-b._preferredPatternDistance||b._score-a._score||a.signal_id.localeCompare(b.signal_id);
-  })[0]??null : null;
+  })[0]??null;
   for(const c of demoEligible){
-    const reason:RejectionReason|null=!priority?{code:'priority_unavailable',details:{}}:demoWinner&&demoWinner.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:demoWinner.signal_id}}:null;
+    const reason:RejectionReason|null=demoWinner&&demoWinner.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:demoWinner.signal_id}}:null;
     if(reason)reject(c,reason);
   }
   // Audit is independent of execution: never delay an eligible entry for its rejected competitors.
@@ -463,7 +462,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo blocked: no exact score from all confirmed WIN references');
+  if (!demoWinner) console.log('Demo blocked: no authorized exact WIN score or analyzed winning pattern');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,

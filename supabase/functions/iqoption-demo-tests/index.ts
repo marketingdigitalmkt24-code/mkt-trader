@@ -7,6 +7,7 @@ import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount 
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { verifyDemoWinScore } from '../_shared/demo-win-scores.ts';
+import { verifyDemoWinningPattern } from '../_shared/demo-entry-authorization.ts';
 const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
 const reply = (body: unknown, status = 200) => {
  console.log('Demo test response:', JSON.stringify({ status, ...body as Record<string, unknown> }));
@@ -48,7 +49,7 @@ Deno.serve(async req => {
  // Start independent ledger/settings reads before broker authentication.
  const pendingRead = db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000).then(r=>r);
  const settingRead = parsed.data.candidate ? db.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r) : null;
- const selectedRead = parsed.data.candidate ? db.from('iq_demo_test_candidates').select('signal_id,asset,direction,entry_minute,entry_strategy,score')
+ const selectedRead = parsed.data.candidate ? db.from('iq_demo_test_candidates').select('signal_id,asset,direction,entry_minute,entry_strategy,score,candles,pattern_match')
    .eq('entry_minute',new Date(Math.floor(Date.now()/60000)*60000).toISOString()).maybeSingle().then(r=>r) : null;
  const { data: cfg } = await readMasterIQConfig(db);
  if (!cfg) return reply({ error: 'Principal connection unavailable' },409);
@@ -68,7 +69,16 @@ Deno.serve(async req => {
  const selected = selectedResult?.data;
  const error = selectedResult?.error;
  const data = selected ? {...selected,created_at:selected.entry_minute,timeframe:'TEST'} : null;
- if (data && freshDemoCandidate(data,Date.now()) && await winScoreEvidence(data.score)) candidate=data;
+ if (data && freshDemoCandidate(data,Date.now())) {
+   const patternEvidence=await verifyDemoWinningPattern(data,async id=>{
+     const {data:reference,error}=await db.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles,score').eq('signal_id',id).maybeSingle();
+     if(error)throw error;return reference;
+   },async ids=>{
+     const {data:orders,error}=await db.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result').in('signal_id',ids);
+     if(error)throw error;return orders||[];
+   });
+   if(patternEvidence || await winScoreEvidence(data.score)) candidate=data;
+ }
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
  let reserved: string | null = null;
@@ -128,7 +138,7 @@ Deno.serve(async req => {
  initialized=true;
  const expiry=Date.parse(candidate.created_at)/1000+60;
  const found=Object.entries<any>(d.msg?.turbo?.actives || {}).find(([,a])=>symbol(a.name || '')===candidate.asset && iqMarketOpen(a,Math.floor(Date.now()/1000),expiry));
- // Exact confirmed-WIN evidence was checked before reservation; recheck freshness at submission.
+ // Exact WIN score or recomputed confirmed winning pattern checked before reservation; recheck freshness.
  if(!found || !freshDemoCandidate(candidate,Date.now())) {
  requestHistory();
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).then(()=>{}));

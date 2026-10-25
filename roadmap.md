@@ -1,5 +1,5 @@
 # Histórico de acertos por nota
-- [ ] Autorizar nota exibida 2,26 na Demo para medir assertividade, preservar precisão e principal; testar e publicar rotina.
+- [ ] Ajuste Demo nota exibida 2,26 preparado e 33 testes aprovados, sem alterar principal nem limite de uma/minuto. Publicação bloqueada: código local anterior à rotina ativa (faltam referências exatas WIN e PADRAO_MEIO_V1); recuperar versão publicada antes de substituir gerador/executor. Nenhuma nova entrada desta regra verificada.
 - [x] Bloqueio GEV retirado; correspondência com qualquer WIN confirmado da amostra aceita além das 14 notas, com limites preservados. Origem persistida e selo prospectivo Padrão vencedor implementado; 40 testes aprovados, build OK e rotina nova confirmada às 23:30/23:31 UTC.
 - [ ] Conferir selo em nova ordem Demo confirmada — depende de candidato elegível; nenhum correspondente às 23:31 UTC, sem entrada forçada ou selo retroativo.
 - [x] Seis notas incorporadas às 14 referências e prioridades Demo; 42 testes aprovados, build OK e painel conferido. Rotina publicada e leitura das 14 notas confirmada às 23:25 UTC; principal/Telegram/copy só 2,26, bloqueios preservados.

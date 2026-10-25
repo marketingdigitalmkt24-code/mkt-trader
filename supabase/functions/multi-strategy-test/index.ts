@@ -21,7 +21,7 @@ import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
 import { readDemoScorePriorities } from '../_shared/demo-score-priority.ts';
 import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
-import { demoWinningPatternMatch } from '../_shared/demo-continuation.ts';
+import { demoWinningPatternMatch, demoDisplayedTargetScore } from '../_shared/demo-continuation.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
       chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
       c.entry_strategy,c.asset,curMin*1000);
     const reason=demoRejectionReason({learned:learn,score:demoFinalScore(c._score,learn,c.entry_strategy)});
-    if(reason?.code==='learned_history'){reject({...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)},reason);return[];}
+    if(reason?.code==='learned_history' && !demoDisplayedTargetScore(demoFinalScore(c._score,learn,c.entry_strategy))){reject({...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)},reason);return[];}
     return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy)}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);
@@ -418,16 +418,16 @@ Deno.serve(async (req) => {
     const match=demoWinningPatternMatch(chartSamples,f);
     const distance=match?.distance??Infinity;
     const reason=demoRejectionReason({score:c._score,patternDistance:distance});
-    if(reason){reject(c,reason);return[];}
+    if(reason && !demoDisplayedTargetScore(c._score)){reject(c,reason);return[];}
     return [{...c,_preferredPatternDistance:distance,_patternMatch:match}];
   });
   const priorityRead = await scorePriorityPromise;
   if(priorityRead.error)console.error('Demo score priorities unavailable: selection blocked');
   const priority = priorityRead.data?.map(row=>row.cents);
   if(priorityRead.data)console.log('Demo historical score priorities:',JSON.stringify(priorityRead.data));
-  const demoWinner = priority ? chooseDemoCandidate(demoEligible, true, priority) : null;
+  const demoWinner = chooseDemoCandidate(priority ? demoEligible : demoEligible.filter(c=>demoDisplayedTargetScore(c._score)), true, priority, true);
   for(const c of demoEligible){
-    const reason=demoRejectionReason({score:c._score,priorityAvailable:!!priority,winner:demoWinner?.signal_id,signalId:c.signal_id});
+    const reason=demoRejectionReason({score:c._score,priorityAvailable:!!priority || demoDisplayedTargetScore(c._score),winner:demoWinner?.signal_id,signalId:c.signal_id});
     if(reason)reject(c,reason);
   }
   // Audit is independent of execution: never delay an eligible entry for its rejected competitors.

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { telegramTradingEnabled } from './principal-pause.ts';
+import { TAKASHI_AFTER_226, isTakashiAfter226Signal } from './takashi-after-226.ts';
 
 interface IQResult {
   signal_id: string;
@@ -35,7 +36,7 @@ export function formatIQResult(op: IQResult, strategy: string | null): string {
 // Only persisted successful signal deliveries are eligible. Conditional leases
 // prevent concurrent cron/browser invocations from normally sending duplicates.
 export async function dispatchIQResults(db: SupabaseClient, request: typeof fetch = fetch): Promise<number> {
-  if (!telegramTradingEnabled()) return 0;
+  if (!telegramTradingEnabled(TAKASHI_AFTER_226)) return 0;
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
   const telegramKey = Deno.env.get('TELEGRAM_API_KEY');
   if (!lovableKey || !telegramKey) return 0;
@@ -47,6 +48,7 @@ export async function dispatchIQResults(db: SupabaseClient, request: typeof fetc
   if (error) throw error;
   let sent = 0;
   for (const delivery of deliveries || []) {
+    if (!isTakashiAfter226Signal(delivery.signal_id)) continue;
     const { data: op, error: opError } = await db.from('operation_results')
       .select('signal_id, asset, direction, result, profit, created_at, timeframe, iq_option_id')
       .eq('signal_id', delivery.signal_id).in('result', ['win', 'loss', 'tie'])

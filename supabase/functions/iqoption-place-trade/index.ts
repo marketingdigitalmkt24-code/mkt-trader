@@ -140,7 +140,7 @@ async function mirrorCopyTrades(
   master: Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>,
   principal: { user_id: string; email: string; account_type: string },
 ) {
-  if (!principalIQEnabled()) return;
+  if (!principalIQEnabled(tradeRequest.entryStrategy)) return;
   try {
     if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
     const { data: copies } = await supabase
@@ -250,7 +250,7 @@ async function placeTradeFireAndForget(
   trade: TradeRequest,
   gate?: Promise<boolean>,
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
-  if (!principalIQEnabled()) return { success: false, error: 'Principal IQ and copies paused by user' };
+  if (!principalIQEnabled(trade.entryStrategy)) return { success: false, error: 'Principal IQ and copies paused by user' };
   return new Promise((resolve) => {
     // Copies follow the confirmed principal's minute, never a new future candle.
     const anchoredCopy = !!gate;
@@ -641,7 +641,6 @@ serve(async (req) => {
   }
 
   try {
-    if (!principalIQEnabled()) return Response.json({ success: false, error: 'Principal IQ and copies paused by user' }, { status: 410, headers: corsHeaders });
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !supabaseKey) return Response.json({ error: 'Service unavailable' }, { status: 503, headers: corsHeaders });
@@ -658,6 +657,7 @@ serve(async (req) => {
         .select('signal_id,asset,direction,iq_option_id,entry_strategy,timeframe,expiration_time,entry_price')
         .eq('signal_id', body.copyPrincipalSignalId).maybeSingle();
       if (error) throw error;
+      if (!principalIQEnabled(order?.entry_strategy)) return Response.json({ skipped: 'Principal strategy paused' }, { status: 410, headers: corsHeaders });
       const copyRequest = selectedTrendCopyRequest(order, Date.now());
       if (!copyRequest) return Response.json({ skipped: 'No fresh confirmed principal order' }, { headers: corsHeaders });
       const [{ data: principal }, { data: queued }] = await Promise.all([
@@ -671,6 +671,8 @@ serve(async (req) => {
       return Response.json({ success: true, signalId: copyRequest.signalId }, { headers: corsHeaders });
     }
     const tradeRequest: TradeRequest = body;
+    // This endpoint is copy-only while legacy principals are paused; the sequence uses its own atomic claimant.
+    return Response.json({ success: false, error: 'Direct principal strategies paused' }, { status: 410, headers: corsHeaders });
     if ((tradeRequest.signalId || '').startsWith('forca_antecipada-') && !isAnticipation(tradeRequest.entryStrategy)) {
       return Response.json({ error: 'Invalid anticipation strategy' }, { status: 400, headers: corsHeaders });
     }

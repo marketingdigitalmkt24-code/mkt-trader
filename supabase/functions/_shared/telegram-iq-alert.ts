@@ -12,6 +12,7 @@ export interface IQAlert {
   signalId: string;
   timeframe: string;
   strategy?: string;
+  entryStrategy?: string;
   brokerOrderId?: string;
   accountType?: string;
 }
@@ -43,7 +44,7 @@ export async function sendIQAlert(
   credentials: { lovableKey: string; telegramKey: string },
   request: typeof fetch = fetch,
 ): Promise<number | undefined> {
-  if (!telegramTradingEnabled()) return;
+  if (!telegramTradingEnabled(alert.entryStrategy)) return;
   if (!alert.signalId || alert.timeframe === 'TEST' || alert.timeframe === 'MT5') return;
   if (!credentials.lovableKey || !credentials.telegramKey) throw new Error('Telegram não configurado');
   for (let attempt = 0; attempt < 3; attempt++) {

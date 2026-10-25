@@ -1,5 +1,6 @@
-// User Oct 25 2026: no principal IQ placements, copies or Telegram sends.
-// Isolated Demo testing and broker result reconciliation remain independent.
+import { TAKASHI_AFTER_226 } from './takashi-after-226.ts';
+// All legacy principal strategies and daily reports remain paused.
+// Only the prospectively claimed Takashi-after-2.26 sequence is enabled.
 export const PRINCIPAL_IQ_PAUSED = true;
-export function principalIQEnabled(): boolean { return !PRINCIPAL_IQ_PAUSED; }
-export function telegramTradingEnabled(): boolean { return !PRINCIPAL_IQ_PAUSED; }
+export function principalIQEnabled(strategy?: string): boolean { return strategy === TAKASHI_AFTER_226; }
+export function telegramTradingEnabled(strategy?: string): boolean { return strategy === TAKASHI_AFTER_226; }

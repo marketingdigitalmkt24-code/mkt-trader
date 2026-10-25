@@ -15,3 +15,8 @@ test('read all pages, not just visible Demo orders',async()=>{
  const rows=await allDemoStrategyRows(async(from)=>from===0?Array(1000).fill(base):[{...base,result:'loss'}]);
  expect(demoStrategyStats(rows)).toEqual([{strategy:'TENDENCIA',wins:1000,losses:1}]);
 });
+test('winning-pattern entries remain counted under their original strategy',()=>{
+ const matched={...base,pattern_match:{signal_id:'reference-win',distance:0.5}};
+ expect(demoStrategyStats([matched,{...matched,result:'loss'}]))
+ .toEqual([{strategy:'TENDENCIA',wins:1,losses:1}]);
+});

@@ -1,4 +1,5 @@
 # Edge functions rules
+- Mid-candle Demo uses a separate half-minute timestamp and strategy in the existing unique ledgers, revalidates the source winning pattern, waits on a prepared PRACTICE session and never rolls same-candle expiry; exclude experimental outcomes from standard scoring/reference reads, because an additional timing test must not redirect normal or principal execution.
 
 - Demo prepares before :00: parallel reads, closed candles, deferred charts; reconcile previous PRACTICE IDs on that session before selection; retries use a separate strategy, unchanged stake; why: no stale triggers or recursive retries.
 - Demo TEST: isolated, one/minute, no copy; singleton admin-only stake settings snapshot amount per order, unique minute/type-4 USD, exact-ID reconciliation across portfolio/legacy pages. Principal orders use shared copy with own account/stake/limits/expiry; selected Demo claim validates outcome triggers atomically, returned direction/strategy drive IQ/results/Telegram; why: no amount mixing, rewrites, replay or competing orders.

@@ -28,3 +28,27 @@ test('unconfirmed or unrelated principal cannot authorize prepared copy before e
  expect(result.ok).toBe(false);
  expect(clock).toBe(at + 30000);
 });
+test('confirmation arriving after the first read is detected on the 25ms retry without an extra pause', async () => {
+ let clock = at, calls = 0;
+ const delays: number[] = [];
+ const result = await waitForConfirmedCopy(order.signal_id, at, async () => {
+  calls++;
+  return { order, executed: clock >= at + 1 };
+ }, () => clock, async delayMs => { delays.push(delayMs); clock += delayMs; });
+ expect(result.ok).toBe(true);
+ expect(calls).toBe(2);
+ expect(delays).toEqual([25]);
+ expect(clock).toBe(at + 25);
+});
+test('confirmation polling stops at the original 30-second boundary', async () => {
+ let clock = at + 29990, calls = 0;
+ const delays: number[] = [];
+ const result = await waitForConfirmedCopy(order.signal_id, at, async () => {
+  calls++;
+  return { order, executed: false };
+ }, () => clock, async delayMs => { delays.push(delayMs); clock += delayMs; });
+ expect(result.ok).toBe(false);
+ expect(calls).toBe(1);
+ expect(delays).toEqual([10]);
+ expect(clock).toBe(at + 30000);
+});

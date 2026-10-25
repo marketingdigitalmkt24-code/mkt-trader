@@ -14,17 +14,20 @@ export function prepareTakashiCopy(candidate: {
 }
 
 type PrincipalOrder = Parameters<typeof selectedTrendCopyRequest>[0];
+export const COPY_CONFIRMATION_POLL_MS = 25;
 export async function waitForConfirmedCopy(
  signalId: string, entryAt: number,
  read: () => Promise<{ order: PrincipalOrder; executed: boolean }>,
  now: () => number = Date.now,
- pause: () => Promise<void> = () => new Promise(resolve => setTimeout(resolve, 100)),
+ pause: (delayMs: number) => Promise<void> = delayMs => new Promise(resolve => setTimeout(resolve, delayMs)),
 ) {
  while (now() < entryAt + 30000) {
   const { order, executed } = await read();
   if (executed && order?.signal_id === signalId && selectedTrendCopyRequest(order, now()))
    return { ok: true, timeframe: order.timeframe, expirationIso: order.expiration_time };
-  await pause();
+  const remainingMs = entryAt + 30000 - now();
+  if (remainingMs <= 0) break;
+  await pause(Math.min(COPY_CONFIRMATION_POLL_MS, remainingMs));
  }
  return { ok: false, timeframe: 'M1', expirationIso: null };
 }

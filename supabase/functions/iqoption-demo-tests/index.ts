@@ -49,6 +49,10 @@ Deno.serve(async req => {
  if (!parsed.success) return reply({ error: 'Invalid parameters' },400);
  const mid=parsed.data.mode==='mid';
  if(mid && (!serviceAuthorized || !parsed.data.candidate || parsed.data.inspect))return reply({error:'Invalid mid-candle dispatch'},400);
+ if(mid){
+   const {data:uncertain,error}=await db.from('iq_demo_test_orders').select('id').eq('entry_strategy',DEMO_MID_CANDLE).eq('status','unknown').limit(1);
+   if(error || uncertain?.length)return reply({error:'Mid-candle test paused: unresolved broker confirmation'},409);
+ }
  const isFresh=(row:any)=>mid?freshMidCandle(row,Date.now()):freshDemoCandidate(row,Date.now());
  // Start independent ledger/settings reads before broker authentication.
  const pendingRead = db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000).then(r=>r);
@@ -171,6 +175,7 @@ Deno.serve(async req => {
  if(!pending?.length || histories>=6) finish();
  }
  if((d.name==='error' || d.name==='result') && d.request_id==='demo-test' && !confirmed && reserved) {
+ console.log('Demo broker refusal:',JSON.stringify({mid,message:d.msg?.message??d.msg?.error??null}));
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Broker refused demo order'}).eq('id',reserved).then(()=>{}));
  if(!pending?.length || histories>=6) finish();
  }

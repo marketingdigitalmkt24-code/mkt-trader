@@ -435,9 +435,12 @@ Deno.serve(async (req) => {
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1,_learned:0});
   // User (Oct 25 2026 02:09 UTC): only displayed score 2,26 authorizes Demo; no pattern/other-score path.
+  // User (Oct 25 2026 02:51 UTC): score 2,26 enters only on Vela de Força and Tendência.
+  const DEMO_226_STRATEGIES = new Set(['VELA_FORCA','TENDENCIA']);
   void winScores; void demoEntryReason; void demoWinningPatternMatch; void chartFeatures;
   const demoEligible = demoPool.flatMap(c => {
     if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
+    if(!DEMO_226_STRATEGIES.has(c.entry_strategy)){reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];}
     return [{...c,_preferredPatternDistance:Infinity,_patternMatch:null}];
   });
   const demoWinner = demoEligible.sort((a,b)=>{

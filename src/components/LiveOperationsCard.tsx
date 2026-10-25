@@ -238,6 +238,7 @@ export function LiveOperationsCard() {
 
         {/* Últimas operações · Demo */}
         <DemoTestOperations />
+        <DemoTestOperations mid />
 
       </CardContent>
     </Card>

@@ -672,7 +672,7 @@ serve(async (req) => {
     }
     const tradeRequest: TradeRequest = body;
     // This endpoint is copy-only while legacy principals are paused; the sequence uses its own atomic claimant.
-    return Response.json({ success: false, error: 'Direct principal strategies paused' }, { status: 410, headers: corsHeaders });
+    if (!principalIQEnabled()) return Response.json({ success: false, error: 'Direct principal strategies paused' }, { status: 410, headers: corsHeaders });
     if ((tradeRequest.signalId || '').startsWith('forca_antecipada-') && !isAnticipation(tradeRequest.entryStrategy)) {
       return Response.json({ error: 'Invalid anticipation strategy' }, { status: 400, headers: corsHeaders });
     }

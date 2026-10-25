@@ -337,6 +337,13 @@
       "when": 1792884472220,
       "tag": "0047_demo_winning_pattern_origin",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792889236076,
+      "tag": "0048_iq_entry_display_exact_score",
+      "breakpoints": true
     }
   ]
 }

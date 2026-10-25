@@ -8,17 +8,22 @@ import { copyResultRates } from '@/lib/admin-copy-results';
 import { clientDayStart } from '@/lib/client-copy-results';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { brtDayKey, dayLabel } from '@/components/dayLabel';
+import { useIQEntryDisplayIds } from '@/hooks/useIQEntryDisplayIds';
 
 const PAGE_SIZE = 12;
 const SETTLED = ['win', 'loss', 'draw', 'tie'];
 
 // Histórico do cliente no mesmo formato do card "Entradas na IQ Option" do admin; nunca exibe a estratégia.
 export function ClientResultsCard() {
-  const { operations, isLoading, isError } = useClientCopyHistory();
+  const { operations:allOperations, isLoading:historyLoading, isError:historyError } = useClientCopyHistory();
   const [page, setPage] = useState(0);
   const [showOpen, setShowOpen] = useState(true);
   const liveResults = useClientCopyResults();
-  const openOperations = liveResults.operations.filter(op => ['pending', 'open'].includes(op.result));
+  const displayIds=useIQEntryDisplayIds([...new Set([...allOperations,...liveResults.operations].map(row=>row.id))]);
+  const operations=allOperations.filter(row=>displayIds.data?.has(row.id));
+  const isLoading=historyLoading||displayIds.isLoading;
+  const isError=historyError||displayIds.isError;
+  const openOperations = liveResults.operations.filter(op => displayIds.data?.has(op.id)&&['pending', 'open'].includes(op.result));
   const settledOperations = operations.filter(op => SETTLED.includes(op.result));
 
   const todayStart = clientDayStart();
@@ -62,7 +67,7 @@ export function ClientResultsCard() {
         </Button>
         {showOpen && <div id="client-open-operations" className="space-y-2 py-2">
           {liveResults.isLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-            : liveResults.isError ? <p className="text-xs text-destructive text-center">Não foi possível atualizar as operações abertas.</p>
+            : liveResults.isError||displayIds.isError ? <p className="text-xs text-destructive text-center">Não foi possível atualizar as operações abertas.</p>
             : openOperations.length === 0 ? <p className="text-xs text-muted-foreground text-center">Nenhuma operação aberta.</p>
             : openOperations.map(op => <div key={op.id} className="flex items-center gap-2 text-xs border-b border-border/50 pb-2">
               <span className="text-muted-foreground font-mono">{new Date(op.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}</span>

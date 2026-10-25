@@ -6,13 +6,17 @@ import { dayLabel, brtDayKey } from './dayLabel';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 import { clientDayStart } from '@/lib/client-copy-results';
 import type { MasterIQOperation as Op } from '@/lib/master-iq-results';
+import { useIQEntryDisplayIds } from '@/hooks/useIQEntryDisplayIds';
 
 type Row = Op & { origin: string };
 
 const PAGE_SIZE = 12;
 
 export const IQEntriesTodayCard = () => {
-  const { operations, isError } = useMasterIQResults();
+  const { operations: allOperations, isError: historyError } = useMasterIQResults();
+  const displayIds=useIQEntryDisplayIds(allOperations.map(row=>row.id));
+  const operations=allOperations.filter(row=>displayIds.data?.has(row.id));
+  const isError=historyError||displayIds.isError;
   const [page, setPage] = useState(0);
   const ops: Row[] = useMemo(() => operations.filter(r => r.entry_strategy !== 'FORCE_LOSS_WIN' && r.entry_strategy !== 'FORCA_INVERTIDA').map((r) => {
         const base = r.entry_strategy === 'RETOMADA' ? '📐 Retomada' : r.entry_strategy === 'VELA_FORCA' ? '🕯️ Vela de Força' : r.entry_strategy === 'FORCA_INVERTIDA' ? '🔄 Força Invertida' : r.entry_strategy === 'THREE_FORCE' ? '🕯️ Após 3 Velas de Força' : r.entry_strategy === 'FOUR_WIN_REVERSAL' ? '🔄 Após 4 ganhos' : r.entry_strategy === 'TENDENCIA' ? 'Tendência' : r.entry_strategy === 'TENDENCIA_V1' ? '📐 Tendência V1' : r.entry_strategy === 'HISTORICO' ? '📜 Histórico bom' : r.entry_strategy === 'EMPATE' ? '🤝 Empate' : r.entry_strategy === 'REVERSAO_RSI' ? '🔄 Reversão RSI' : 'Não identificada';
@@ -55,6 +59,8 @@ export const IQEntriesTodayCard = () => {
       </div>
       {isError ? (
         <p className="text-xs text-destructive py-4 text-center">Não foi possível atualizar as entradas.</p>
+      ) : displayIds.isLoading ? (
+        <p className="text-xs text-muted-foreground py-4 text-center">Carregando entradas…</p>
       ) : ops.length === 0 ? (
         <p className="text-xs text-muted-foreground py-4 text-center">Nenhuma entrada real nos últimos 30 dias</p>
       ) : (

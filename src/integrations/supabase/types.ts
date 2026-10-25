@@ -1050,6 +1050,12 @@ export type Database = {
         }
         Returns: boolean
       }
+      iq_entry_display_ids: {
+        Args: { p_ids: string[] }
+        Returns: {
+          operation_id: string
+        }[]
+      }
       reserve_iq_entry: {
         Args: { p_client: string; p_signal: string }
         Returns: number

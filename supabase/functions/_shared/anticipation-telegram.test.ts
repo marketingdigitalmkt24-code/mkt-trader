@@ -15,7 +15,7 @@ test('anticipation Telegram rejects future and expired signals', () => {
   assert.equal(canNotifyAnticipation(order, entryAt - 1), false);
   assert.equal(canNotifyAnticipation(order, entryAt + 60000), false);
 });
-test('confirmed anticipation sends through existing channel and returns message ID for broker result linkage', async () => {
+test('confirmed anticipation is suppressed during the user Telegram pause', async () => {
   const now = Math.floor(Date.now() / 60000) * 60000;
   let calls = 0;
   const id = await sendIQAlert({ asset: 'TRON-OTC', direction: 'put', expiration: 1, entryAt: now,
@@ -25,6 +25,6 @@ test('confirmed anticipation sends through existing channel and returns message 
     assert.equal(JSON.parse(String(init?.body)).chat_id, '-1001743286485');
     return new Response(JSON.stringify({ ok: true, result: { message_id: 123 } }), { status: 200 });
   });
-  assert.equal(calls, 1);
-  assert.equal(id, 123);
+  assert.equal(calls, 0);
+  assert.equal(id, undefined);
 });

@@ -1,4 +1,5 @@
 # Edge functions rules
+- All principal placement/copy and Telegram boundaries use the shared principal pause; database principal claims/reservations fail closed while paused. Keep isolated Demo and settlement outside this gate; why: a generator or client toggle must not bypass a user-wide execution stop.
 
 - Demo prepares before :00: parallel reads, closed candles, deferred charts; reconcile previous PRACTICE IDs on that session before selection; retries use a separate strategy, unchanged stake; why: no stale triggers or recursive retries.
 - Demo TEST: isolated, one/minute, no copy; singleton admin-only stake settings snapshot amount per order, unique minute/type-4 USD, exact-ID reconciliation across portfolio/legacy pages. Principal orders use shared copy with own account/stake/limits/expiry; selected Demo claim validates outcome triggers atomically, returned direction/strategy drive IQ/results/Telegram; why: no amount mixing, rewrites, replay or competing orders.

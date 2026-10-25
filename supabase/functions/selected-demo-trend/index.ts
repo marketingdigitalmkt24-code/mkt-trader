@@ -11,6 +11,7 @@ import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { isSuperSelected, SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
 import { demo226StrategyAllowed } from '../_shared/demo-226-policy.ts';
+import { principalIQEnabled } from '../_shared/principal-pause.ts';
 const freshTrendPut = freshSelectedTrend;
 const notifyTrendPut = notifySelectedTrend;
 
@@ -27,6 +28,7 @@ const symbolOf = (raw: string) => {
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return reply({});
   if (req.method !== 'POST') return reply({ error: 'Method not allowed' }, 405);
+  if (!principalIQEnabled()) return reply({ skipped: 'Principal IQ and copies paused by user' }, 410);
   const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
   const db = createClient(url, key);

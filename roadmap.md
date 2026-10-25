@@ -15,7 +15,8 @@
 - [x] Aba admin somente leitura criada com notas exatas, saldo acumulado, taxa de acerto, filtros de período/nota e ordenação; oito testes aprovados, build OK, 718 ordens Demo conferidas com sessão admin, filtro 2,26 e Hoje funcionando, sem erros nem rolagem horizontal no celular. Prioridades de execução preservadas.
 
 # Takashi com nota 2,26
-- [ ] Incluir Takashi na seleção Demo e autorização IQ/Telegram/cópias apenas com nota calculada exibida 2,26; testar e publicar funções, sem replay.
+- [x] Takashi incluída na seleção e execução Demo com nota calculada exibida 2,26, autorizada pelo fluxo principal IQ/Telegram/cópias; três funções publicadas, migração 0049 aplicada, 26 testes aprovados e build OK. Claims continuam serviço-only, valores/limites e observações antigas preservados.
+- [ ] Conferir primeira Takashi 2,26 confirmada na corretora e Telegram/cópias — depende de novo candidato elegível e contas/limites disponíveis; nenhuma ordem forçada ou histórica reexecutada.
 
 # Prioridade Demo por notas vencedoras
 - [x] Oito notas reordenadas dinamicamente por saldo positivo, acerto, ganhos e saldo no histórico completo; 42 testes aprovados, rotina publicada e leitura real confirmada às 23:13 UTC: 2,26 → 2,23 → 2,18 → 2,64 → 2,88 → 2,69 → 2,91 → 2,03. Painel autenticado e build OK; sem candidato correspondente no minuto, bloqueio preservado e autorização principal inalterada.

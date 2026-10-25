@@ -351,6 +351,13 @@
       "when": 1792948407890,
       "tag": "0049_takashi_displayed_226_cohort",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792950754959,
+      "tag": "0050_takashi_removed_from_226",
+      "breakpoints": true
     }
   ]
 }

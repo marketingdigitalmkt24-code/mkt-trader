@@ -1,11 +1,12 @@
 export const TAKASHI_BNF = 'TAKASHI_BNF_V1';
 type Candle = { t: number; o: number; c: number; h: number; l: number };
 
-// Takashi Kotegawa (BNF) mean reversion, TESTE only (user request 25/10/2026).
+// Takashi Kotegawa (BNF) mean reversion, independent observations plus selected Demo cohort.
 // The original rule bought stocks 20–35% below the 25-day moving average after panic selling;
 // on M1 charts the same dislocation is measured against the asset's own recent amplitude
 // (not the raw daily percentage). CALL when price closes far below its 25-candle SMA with
-// RSI(14) oversold; PUT mirrored. Never a principal order, Demo, copy or Telegram.
+// RSI(14) oversold; PUT mirrored. Only selected candidates with displayed score 2.26
+// may use the shared Demo/principal authorization; this detector never places orders.
 export function takashiKotegawa(candles: Candle[], entry: number) {
   if (!Number.isFinite(entry) || entry % 60 !== 0) return null;
   const cs = candles.filter(k => k.t < entry).slice(-60);

@@ -47,3 +47,12 @@ test('only fresh selected TEST in own minute can place, no historical replay', (
  expect(freshDemoTest(row, at + 60000)).toBe(false);
  expect(freshDemoTest({ ...row, signal_id: 'anticipation-pavio-1' }, at)).toBe(false);
 });
+test('Takashi requires its own strategy, CALL or PUT, and the fresh original minute', () => {
+ const row = { signal_id: 'takashi-bnf-v1-APPLE-OTC-1', timeframe: 'TEST', direction: 'CALL', entry_strategy: 'TAKASHI_BNF_V1', created_at: '2026-10-25T17:11:00Z' };
+ const at = Date.parse(row.created_at);
+ expect(freshDemoCandidate(row, at + 1000)).toBe(true);
+ expect(freshDemoCandidate({...row, direction:'PUT'}, at + 1000)).toBe(true);
+ expect(freshDemoCandidate(row, at + 60000)).toBe(false);
+ expect(freshDemoCandidate({...row, entry_strategy:'TENDENCIA'}, at)).toBe(false);
+ expect(freshDemoCandidate({...row, timeframe:'M1'}, at)).toBe(false);
+});

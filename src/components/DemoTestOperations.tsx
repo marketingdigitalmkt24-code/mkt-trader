@@ -14,6 +14,7 @@ const demoStrategyNames: Record<string, string> = {
  QUEDA_WIN_RETRY_V1: 'Queda win +1', FORCA_PADRAO_V1: 'Força padrão',
  TENDENCIA_WIN_INVERTIDA: 'Tendência invertida', ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
  KDJ_RSI: 'KDJ + Reversão RSI', TREND_WIN_LOSS_FORCE_LOSS: 'Retomada',
+ TAKASHI_BNF_V1: 'Takashi Kotegawa',
 };
 
 export function DemoTestOperations() {

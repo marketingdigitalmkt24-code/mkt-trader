@@ -7,6 +7,7 @@ import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount 
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { demoDisplayedTargetScore } from '../_shared/demo-continuation.ts';
+import { demo226Authorized } from '../_shared/demo-226-policy.ts';
 import { verifyDemoWinScore } from '../_shared/demo-win-scores.ts';
 import { verifyDemoWinningPattern } from '../_shared/demo-entry-authorization.ts';
 import { DEMO_MID_CANDLE, midCandleSignal, midCandleTime, freshMidCandle, midCandleExpiry } from '../_shared/demo-mid-candle.ts';
@@ -79,7 +80,7 @@ Deno.serve(async req => {
  const error = selectedResult?.error;
  const data = selected ? {...selected,created_at:selected.entry_minute,timeframe:'TEST'} : null;
  if (data && freshDemoCandidate(data,Date.now())) {
-   const displayedAuthorized=!mid && demoDisplayedTargetScore(data.score);
+    const displayedAuthorized=!mid && demo226Authorized(data.score, data.entry_strategy);
    const patternEvidence=displayedAuthorized ? false : await verifyDemoWinningPattern(data,async id=>{
      const {data:reference,error}=await db.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles,score').eq('signal_id',id).maybeSingle();
      if(error)throw error;return reference;
@@ -87,7 +88,7 @@ Deno.serve(async req => {
      const {data:orders,error}=await db.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result').in('signal_id',ids);
      if(error)throw error;return orders||[];
    });
-   if(mid ? patternEvidence && data.signal_id===parsed.data.candidate : displayedAuthorized || patternEvidence || await winScoreEvidence(data.score)) candidate=data;
+    if(mid ? patternEvidence && data.signal_id===parsed.data.candidate : displayedAuthorized) candidate=data;
  }
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }

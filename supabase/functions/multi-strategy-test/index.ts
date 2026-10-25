@@ -11,6 +11,7 @@ import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recen
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { takashiKotegawa, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
+import { demo226StrategyAllowed } from '../_shared/demo-226-policy.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
@@ -361,6 +362,15 @@ Deno.serve(async (req) => {
     // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
     // Keep legacy indicator warmup unchanged despite the larger Demo candle window.
     const fired = detect(cs.slice(-90).filter(k => k.t + 60 <= curMin));
+    const takashi = takashiKotegawa(cs, curMin);
+    if (takashi) demoPatterns.push({
+      signal_id: `takashi-bnf-v1-${asset}-${curMin}`, asset, direction: takashi.direction,
+      entry_strategy: TAKASHI_BNF, created_at: new Date(curMin * 1000).toISOString(),
+      // Same confluence/body base as other indicators; never assign the target score.
+      _score: fired.filter(([, direction]) => direction === takashi.direction).length
+        + Math.min(0.99, 100 * Math.abs(closed[closed.length - 1].c - closed[closed.length - 1].o) / closed[closed.length - 1].o)
+        + recentLearningAdjustment(history, { asset, direction: takashi.direction, entry_strategy: TAKASHI_BNF }, curMin * 1000),
+    });
     const pattern = demoContinuation(cs,curMin);
     if (pattern) demoPatterns.push({signal_id:`demo-continuation-v1-${asset}-${curMin}`,asset,direction:'PUT',
       entry_strategy:DEMO_CONTINUATION,created_at:new Date(curMin*1000).toISOString(),
@@ -419,7 +429,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'confirmed-win-or-pattern-displayed226-v8',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'displayed226-takashi-v10',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -437,12 +447,11 @@ Deno.serve(async (req) => {
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1,_learned:0});
   // User (Oct 25 2026 02:09 UTC): only displayed score 2,26 authorizes Demo; no pattern/other-score path.
-  // User (Oct 25 2026 02:51 UTC): score 2,26 enters only on Vela de Força and Tendência.
-  const DEMO_226_STRATEGIES = new Set(['VELA_FORCA','TENDENCIA']);
+  // User (Oct 25 2026 17:11 UTC): add Takashi to the displayed 2,26 cohort.
   void winScores; void demoEntryReason; void demoWinningPatternMatch; void chartFeatures;
   const demoEligible = demoPool.flatMap(c => {
     if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
-    if(!DEMO_226_STRATEGIES.has(c.entry_strategy)){reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];}
+    if(!demo226StrategyAllowed(c.entry_strategy)){reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];}
     return [{...c,_preferredPatternDistance:Infinity,_patternMatch:null}];
   });
   const demoWinner = demoEligible.sort((a,b)=>{
@@ -466,7 +475,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo blocked: no authorized exact WIN score or analyzed winning pattern');
+  if (!demoWinner) console.log('Demo blocked: no allowed strategy with displayed score 2.26');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
@@ -585,8 +594,8 @@ Deno.serve(async (req) => {
     // Other entries remain TEST, but no longer generate new Telegram signals.
     // Previously notified tests still receive their final result above.
   }
-  // Takashi Kotegawa (BNF) mean reversion, TESTE only (user, 25/10/2026): independent rows on
-  // every open asset, never ranking, Demo, principal, copy or Telegram.
+  // Preserve independent Takashi observations; only the selected 2.26 candidate above
+  // can authorize separate Demo/principal orders. Observations never send Telegram or copy.
   const takashiRows: any[] = [];
   for (const [asset, cs] of series) {
     const closed = cs.filter(k => k.t + 60 <= curMin);

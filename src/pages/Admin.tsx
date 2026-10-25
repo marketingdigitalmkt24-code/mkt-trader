@@ -51,10 +51,6 @@ const Admin = () => {
 
   const balance = iqBalance?.balance ?? 0;
   const dailyProfit = dailyStats?.dailyProfit ?? 0;
-  const todayTrades = dailyStats?.todayTrades ?? 0;
-  const wins = dailyStats?.wins ?? 0;
-  const losses = dailyStats?.losses ?? 0;
-  const winRate = todayTrades > 0 ? Math.round((wins / todayTrades) * 100) : 0;
 
   const handleLogout = async () => {
     await signOut();

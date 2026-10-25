@@ -6,7 +6,7 @@ import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount } from './policy.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
-import { demoReleasedScoreMismatch } from '../_shared/demo-continuation.ts';
+import { demoFrozenWinAllowed } from '../_shared/demo-frozen-win-scores.ts';
 const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
 const reply = (body: unknown, status = 200) => {
  console.log('Demo test response:', JSON.stringify({ status, ...body as Record<string, unknown> }));
@@ -58,7 +58,7 @@ Deno.serve(async req => {
  const selected = selectedResult?.data;
  const error = selectedResult?.error;
  const data = selected ? {...selected,created_at:selected.entry_minute,timeframe:'TEST'} : null;
- if (data && !demoReleasedScoreMismatch(data.score) && freshDemoCandidate(data,Date.now())) candidate=data;
+ if (data && demoFrozenWinAllowed(data.score) && freshDemoCandidate(data,Date.now())) candidate=data;
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
  let reserved: string | null = null;
@@ -118,7 +118,7 @@ Deno.serve(async req => {
  initialized=true;
  const expiry=Date.parse(candidate.created_at)/1000+60;
  const found=Object.entries<any>(d.msg?.turbo?.actives || {}).find(([,a])=>symbol(a.name || '')===candidate.asset && iqMarketOpen(a,Math.floor(Date.now()/1000),expiry));
- if(!found || demoReleasedScoreMismatch(candidate.score) || !freshDemoCandidate(candidate,Date.now())) {
+ if(!found || !demoFrozenWinAllowed(candidate.score) || !freshDemoCandidate(candidate,Date.now())) {
  requestHistory();
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).then(()=>{}));
  if(!pending?.length) finish();return;

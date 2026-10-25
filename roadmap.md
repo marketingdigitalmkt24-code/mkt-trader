@@ -1,3 +1,7 @@
+# Limpeza cliente e pausa IQ/Telegram (25/10/2026)
+- [ ] Apagar permanentemente entradas IQ dos clientes e zerar seus resultados de hoje, preservando admin/Demo/saldo da corretora.
+- [ ] Bloquear novas principais, cópias e envios Telegram; verificar bloqueios e dados restantes.
+
 # Prioridade :00 admin e cliente (25/10/2026)
 - [x] Conferidas 59 entradas por conta hoje: admin US$10, registro médio :02,667; cliente US$100, :04,128 (horários de registro, não fill exato). Admin conferido no painel; sessão disponível na área cliente é do admin, não do cliente ativo.
 - [x] Disponibilidade Demo preparada antes de :00, leitura principal/config em paralelo e login do cliente durante reservas/metas; 28 testes aprovados, três executores publicados e build OK. Valores, gates e histórico preservados.

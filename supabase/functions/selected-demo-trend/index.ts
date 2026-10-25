@@ -10,6 +10,7 @@ import { TREND_WIN_INVERTED } from '../_shared/trend-win-inverted.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { isSuperSelected, SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
+import { demo226StrategyAllowed } from '../_shared/demo-226-policy.ts';
 const freshTrendPut = freshSelectedTrend;
 const notifyTrendPut = notifySelectedTrend;
 
@@ -39,7 +40,7 @@ Deno.serve(async req => {
     const { data: candidate, error: candidateError } = await db.from('iq_demo_test_candidates')
       .select('signal_id,asset,entry_minute,entry_strategy,direction,score').eq('signal_id', parsed.data.candidate).maybeSingle();
     if (candidateError) throw candidateError;
-    const superSelected = isSuperSelected(candidate?.score);
+    const superSelected = isSuperSelected(candidate?.score) && demo226StrategyAllowed(candidate?.entry_strategy);
     if (!superSelected && !selectedDemoPrincipal(candidate, Date.now())) return reply({ skipped: 'No fresh authorized selected signal' });
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);

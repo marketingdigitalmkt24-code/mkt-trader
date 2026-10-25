@@ -1,15 +1,15 @@
 # Limpeza cliente e pausa IQ/Telegram (25/10/2026)
-- [ ] Apagar permanentemente entradas IQ dos clientes e zerar seus resultados de hoje, preservando admin/Demo/saldo da corretora.
-- [ ] Bloquear novas principais, cópias e envios Telegram; verificar bloqueios e dados restantes.
+- [x] Apagadas 82 entradas IQ dos clientes; consulta confirmou zero entradas e lucro de hoje zero. Preservadas 80 entradas admin, 886 ordens Demo e saldo da corretora.
+- [x] Claims/reservas principais bloqueados no banco, Auto Trading/cópias desligados, sete funções publicadas com pausa compartilhada IQ/Telegram; chamadas principal/copy recusadas 410, 12 testes aprovados e build OK. Conciliação e Demo separada preservadas.
 
 # Prioridade :00 admin e cliente (25/10/2026)
 - [x] Conferidas 59 entradas por conta hoje: admin US$10, registro médio :02,667; cliente US$100, :04,128 (horários de registro, não fill exato). Admin conferido no painel; sessão disponível na área cliente é do admin, não do cliente ativo.
 - [x] Disponibilidade Demo preparada antes de :00, leitura principal/config em paralelo e login do cliente durante reservas/metas; 28 testes aprovados, três executores publicados e build OK. Valores, gates e histórico preservados.
-- [ ] Conferir nova principal/cópia após ajuste — aguarda candidato 2,26 autorizado e corretora; nenhuma ordem forçada. Sessão cliente distinta não disponível para conferência visual.
+- [x] Conferência de nova principal/cópia cancelada pelo pedido de pausa total em 25/10 20:54 UTC.
 
 # Mudança de workspace e inversão de sinais
 - [x] Telegram revinculado no workspace atual: conexão "Agência's Telegram" (gateway), bot @Ricardobilionario_bot administrador do canal AGÊNCIA MKT TRADER com direito de publicar; seis funções que enviam sinais/resultados republicadas para usarem a nova chave.
-- [ ] Inverter compra/venda na IQ Option, Telegram e cópias para as entradas Super selecionada 2,26 — depende de aplicar e publicar a inversão; investigação apontou inverter uma única vez dentro do claim_super_selected (a direção retornada alimenta fila, corretora, registros, Telegram e copy). Nada aplicado ainda.
+- [x] Inversão não aplicada: substituída pelo pedido de pausa total IQ/Telegram em 25/10 20:54 UTC.
 
 # Histórico de acertos por nota
 - [x] Ajuste Demo exibida 2,26 publicado em multi-strategy-test e iqoption-demo-tests; 45 testes aprovados, referências WIN e PADRAO_MEIO_V1 recuperadas, principal exata e uma/minuto preservadas. Publicação do site solicitada, URL respondeu 200 e build OK.
@@ -25,7 +25,7 @@
 
 # Takashi com nota 2,26
 - [x] Takashi incluída na seleção e execução Demo com nota calculada exibida 2,26, autorizada pelo fluxo principal IQ/Telegram/cópias; três funções publicadas, migração 0049 aplicada, 26 testes aprovados e build OK. Claims continuam serviço-only, valores/limites e observações antigas preservados.
-- [ ] Conferir primeira Takashi 2,26 confirmada na corretora e Telegram/cópias — depende de novo candidato elegível e contas/limites disponíveis; nenhuma ordem forçada ou histórica reexecutada.
+- [x] Conferência Takashi principal cancelada: Takashi retirada da autorização 2,26 e principais pausadas.
 
 # Prioridade Demo por notas vencedoras
 - [x] Oito notas reordenadas dinamicamente por saldo positivo, acerto, ganhos e saldo no histórico completo; 42 testes aprovados, rotina publicada e leitura real confirmada às 23:13 UTC: 2,26 → 2,23 → 2,18 → 2,64 → 2,88 → 2,69 → 2,91 → 2,03. Painel autenticado e build OK; sem candidato correspondente no minuto, bloqueio preservado e autorização principal inalterada.
@@ -36,7 +36,7 @@
 
 # Autorização adicional da nota Demo 2,26
 - [x] Liberada exatamente nota exibida 2,26 nos filtros e claim, preservando faixa 4,0–<4,5, limites, Telegram e copy; migração 0044 aplicada, três executores publicados, 18 testes aprovados e build OK.
-- [ ] Conferir primeira execução prospectiva completa — depende de nova Demo elegível e contas/limites disponíveis, sem replay.
+- [x] Conferência principal cancelada pela pausa total IQ/Telegram de 25/10.
 
 # Retirar e desativar Tendência normal IQ
 - [x] Bloqueada principal normal e cópias, retirada do histórico admin/cliente; Demo e estratégias invertida/3 perdas, registros financeiros e conciliação preservados.
@@ -45,7 +45,7 @@
 # Exclusão permanente do histórico IQ Option
 - [x] Ampliada e publicada cópia das novas entradas confirmadas do admin, incluindo Antecipação e Tendência 3 perdas; mantém controles/limites dos clientes, minuto/expiração originais e isolamento TESTE. 42 testes aprovados, build OK e painel autenticado conferido.
 - [x] Restaurada e publicada cópia da Tendência principal confirmada pelo executor existente; preserva conta/valor/limites do cliente e minuto original, sem TESTE/replay. 35 testes aprovados, build OK, painel admin autenticado conferido; um cliente conectado com copy ativo identificado.
-- [ ] Conferir primeira cópia principal no cliente após ampliação — depende de nova ordem autorizada e janela disponível; nenhuma nova principal no intervalo observado, sem replay ou negociação forçada.
+- [x] Conferência de copy cancelada pela pausa total IQ/Telegram de 25/10.
 - [x] Autorização Tendência selecionada → ordem principal adicional implementada e publicada com claim atômico, conta/valor principal, limites e ativo M1; Telegram após confirmação IQ, sem copy/replay. 22 testes aprovados, chamada com sessão navegador recusada 401. Configuração atual PRACTICE/US$10; Demo TESTE preservada.
 - [x] Resultado Tendência principal USD/CHF-OTC 22:20 BRT confirmado LOSS −US$10 no registro e painel autenticado; alerta de entrada Telegram previamente confirmado.
 - [x] Excluídos permanentemente 1.001 registros principais e 831 cópias; consulta confirmou zero entradas IQ restantes de qualquer dia/cliente, 18.848 TESTES simulados e 164 ordens Demo preservados. Painel admin autenticado conferido sem entradas e com resultado zerado; histórico cliente confirmado pela fonte compartilhada, sem sessão cliente distinta. Saldo/configuração da corretora intactos.
@@ -53,9 +53,9 @@
 # Testes executados na Demo
 - [x] Queda win +1 selecionada autorizada adicionalmente na principal/Telegram/copy: claim exige LOSS confirmado Queda win CALL no mesmo ativo/minuto anterior, stake/limites principais atuais. Migração 0040 e três funções publicadas; 37 testes aprovados, build OK e acesso serviço-only conferido. Original Queda win continua Demo-only.
 - [x] Tendência WIN Demo → próximo Tendência selecionado invertido implementada no claim principal atômico (prioridade sobre principal normal, sem duplicar). Direção retornada usada na IQ, registros, Telegram e copy; valor/limites atuais e ativo aberto preservados. Migração 0039 aplicada, três funções publicadas, 34 testes aprovados, grants serviço-only conferidos, build OK e painel autenticado sem erros.
-- [ ] Conferir primeira Tendência invertida e Telegram/copy — depende de WIN Demo + novo Tendência imediatamente seguinte, janela aberta e limites livres; nenhuma ordem anterior reexecutada e nenhuma inversão confirmada no intervalo.
+- [x] Conferência principal Tendência invertida cancelada pela pausa total IQ/Telegram de 25/10.
 - [x] Queda win verificada sem ordens anteriores; corrigida leitura antecipada dos resultados com conciliação por ID na sessão existente. Queda win +1 candidata CALL somente no minuto após LOSS original, mesmo ativo/valor, sem repetição recursiva; filtro/slot preservados. Duas funções publicadas, 31 testes aprovados e build OK.
-- [ ] Conferir primeira Queda win +1 Demo/principal, Telegram e copy no painel — depende de nova Queda win LOSS confirmada e seleção dentro da janela; ainda sem ordens Queda win/+1 confirmadas, sem replay.
+- [x] Conferência principal Queda win +1 cancelada pela pausa total IQ/Telegram de 25/10; Demo separada preservada.
 - [x] Preparação Demo publicada: login/WebSocket antes do próximo minuto, leituras independentes paralelas e histórico enviado depois da ordem. 28 testes aprovados. Execução real observada USD/CHF-OTC 22:20 BRT: velas :00.282, candidato :00.761, envio :03.153, confirmação :03.255; entrada lida no painel autenticado, build OK. Não garante :00 exato.
 - [x] Publicadas otimizações pendentes da entrada Demo: sessão de serviço reaproveitada, leituras em paralelo e gráficos fora do envio; testes de sessão/seleção aprovados, :00 exato não garantido.
 - [x] Incluir a próxima vela fechada no gráfico Demo; sete testes aprovados, rotina publicada e painel conferido; coleta automática não força ordens.
@@ -82,16 +82,16 @@
 # Tendência 3 perdas → venda
 - [x] Criar autorização prospectiva após três perdas Tendência em minutos consecutivos, PUT no próximo candidato, IQ + Telegram; preservar TESTE, limites e demais estratégias. Função separada acionada por sinal original/fechamento, sem republicar geradores divergentes; mercado M1 confirmado antes de reservar.
 - [x] 20 testes aprovados, função publicada, claim só serviço, acesso usuário recusado; painel autenticado sem erros e build OK.
-- [ ] Confirmar primeira ordem e Telegram — depende de sequência nova elegível, ativo aberto e limites livres; nenhuma ordem forçada ou histórica.
+- [x] Conferência Tendência 3 perdas cancelada: estratégia aposentada e principais pausadas.
 
 # Antecipação de Força — execução IQ autorizada
 - [x] Comparar 2.689 Força encerradas em 218 ativos, 2.530 cobertas/159 lacunas; 2 pendentes excluídas. Todos os minutos anteriores vencem por seleção retrospectiva, não vantagem: v3 sem volume 151 casos, rejeição pequena387/sequência27. Relatório/CSV entregues; 10 testes e build OK. Nenhuma entrada alterada; validação preditiva exige todos os minutos, não só Força.
 - [x] Publicar v3: corpo até 65% amplitude/85% média20, RSI CALL40–75/PUT25–60, volume reportado ≥0,5×média20; alinhamento preservado. 34 testes aprovados. Referência descritiva de 32 sinais PENGU/RAYDIUM (18W/14L), sem volume histórico: não valida acerto/retorno da antecipação. Comparação v2/v3 registrada na rotina; envio prospectivo depende de ordem fresca confirmada.
 - [x] Habilitar Telegram após confirmação IQ da antecipação fresca e vincular resultado pelo ledger, sem TESTE/copy; 19 testes aprovados e função publicada.
-- [ ] Confirmar primeiro envio prospectivo de antecipação ao Telegram — ainda não há ordem IQ elegível registrada; não reenviar histórico ou forçar sinal.
+- [x] Conferência Telegram Antecipação cancelada pela pausa total de 25/10.
 - [x] Habilitar execução principal na conta configurada, sinal fresco, ativo aberto, reserva, valor/limites atuais e confirmação IQ; TESTES separados, sem copy/Telegram. Atual conta PRACTICE, valor 10; metas percentuais bloqueiam sem saldo verificado.
 - [x] 36 testes, build OK, painel autenticado conferido; rotina 16:07 solicitou velas em :00.082, 122 ativos, nenhum sinal elegível.
-- [ ] Confirmar primeira ordem da Antecipação e resultado no painel — depende de novo sinal elegível em mercado aberto; nenhum sinal forçado ou histórico reexecutado.
+- [x] Conferência principal Antecipação cancelada pela pausa total de 25/10.
 - [x] Preparar conexão antes do próximo :00 e preservar horário/preço observados; acesso automático corrigido com credencial privada, 23 testes e build OK. Rotina alvo 15:59:00 concluída 15:59:01, 120 ativos consultados, sem sinal elegível; :00 exato não garantido, sem alterar reais.
 - [x] PUT espelhado, liquidação por direção e rótulo correto; 20 testes aprovados, rotina publicada, build OK e primeiro PUT UK100:N 15:49:12 registrado e lido no painel autenticado; sem alterar reais/copy/Telegram.
 - [x] Exigir sessão IQ cobrindo análise/expiração M1 e suspensão confirmada; JAPAN225:N fica bloqueado por divergência entre API habilitada e tela do usuário. Não interpretar option.start_time como abertura de mercado. Testes e execução autenticada conferidos; registros antigos preservados.

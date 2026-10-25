@@ -7,7 +7,7 @@ import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount 
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { demoDisplayedTargetScore } from '../_shared/demo-continuation.ts';
-import { demo226Authorized } from '../_shared/demo-226-policy.ts';
+import { demoAlternationAuthorized } from '../_shared/demo-226-policy.ts';
 import { verifyDemoWinScore } from '../_shared/demo-win-scores.ts';
 import { verifyDemoWinningPattern } from '../_shared/demo-entry-authorization.ts';
 import { DEMO_MID_CANDLE, midCandleSignal, midCandleTime, freshMidCandle, midCandleExpiry } from '../_shared/demo-mid-candle.ts';
@@ -80,7 +80,7 @@ Deno.serve(async req => {
  const error = selectedResult?.error;
  const data = selected ? {...selected,created_at:selected.entry_minute,timeframe:'TEST'} : null;
  if (data && freshDemoCandidate(data,Date.now())) {
-    const displayedAuthorized=!mid && demo226Authorized(data.score, data.entry_strategy);
+    const displayedAuthorized=!mid && demoAlternationAuthorized(data.score, data.entry_strategy);
    const patternEvidence=displayedAuthorized ? false : await verifyDemoWinningPattern(data,async id=>{
      const {data:reference,error}=await db.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles,score').eq('signal_id',id).maybeSingle();
      if(error)throw error;return reference;

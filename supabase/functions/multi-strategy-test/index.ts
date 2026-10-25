@@ -498,7 +498,7 @@ Deno.serve(async (req) => {
       // A selected Trend may independently authorize a principal order; no Demo stake/history reuse.
       // Real principal entries paused (user, Oct 24 2026): only a super-selected Demo winner (high learned score) opens real.
       if ((DEMO_PRINCIPAL_ENABLED && selectedDemoPrincipal({ ...demoWinner, entry_minute: demoWinner.created_at }, Date.now()))
-        || isSuperSelected(demoWinner._score)) {
+        || (isSuperSelected(demoWinner._score) && demoWinner.entry_strategy !== TAKASHI_STRATEGY)) {
         const principalTask = supabase.functions.invoke('selected-demo-trend', {
           body: { candidate: demoWinner.signal_id, brokerSession: { ssid, configId: cfg.id } },
         }).then(async ({ data, error }) => {

@@ -1,3 +1,7 @@
+# Mudança de workspace e inversão de sinais
+- [x] Telegram revinculado no workspace atual: conexão "Agência's Telegram" (gateway), bot @Ricardobilionario_bot administrador do canal AGÊNCIA MKT TRADER com direito de publicar; seis funções que enviam sinais/resultados republicadas para usarem a nova chave.
+- [ ] Inverter compra/venda na IQ Option, Telegram e cópias para as entradas Super selecionada 2,26 — depende de aplicar e publicar a inversão; investigação apontou inverter uma única vez dentro do claim_super_selected (a direção retornada alimenta fila, corretora, registros, Telegram e copy). Nada aplicado ainda.
+
 # Histórico de acertos por nota
 - [x] Ajuste Demo exibida 2,26 publicado em multi-strategy-test e iqoption-demo-tests; 45 testes aprovados, referências WIN e PADRAO_MEIO_V1 recuperadas, principal exata e uma/minuto preservadas. Publicação do site solicitada, URL respondeu 200 e build OK.
 - [ ] Confirmar primeira ordem Demo da nota exibida 2,26: depende de candidato fresco elegível e confirmação da corretora; nenhuma ordem forçada. Painel autenticado abriu, mas dados ainda carregando; execução end-to-end não verificada.

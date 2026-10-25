@@ -585,5 +585,30 @@ Deno.serve(async (req) => {
     // Other entries remain TEST, but no longer generate new Telegram signals.
     // Previously notified tests still receive their final result above.
   }
+  // Takashi Kotegawa (BNF) mean reversion, TESTE only (user, 25/10/2026): independent rows on
+  // every open asset, never ranking, Demo, principal, copy or Telegram.
+  const takashiRows: any[] = [];
+  for (const [asset, cs] of series) {
+    const closed = cs.filter(k => k.t + 60 <= curMin);
+    if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
+    const sig = takashiKotegawa(cs, curMin);
+    if (!sig) continue;
+    takashiRows.push({
+      signal_id: `takashi-bnf-v1-${asset}-${curMin}`, asset, direction: sig.direction,
+      entry_price: closed[closed.length - 1].c, result: OPEN, profit: 0,
+      created_at: new Date(curMin * 1000).toISOString(),
+      expiration_time: new Date((curMin + 60) * 1000).toISOString(),
+      is_auto_trade: false, is_ai_analyzed: false, timeframe: 'TEST', entry_strategy: TAKASHI_BNF,
+      telegram_sent: false, test_inverted_strategy: null, test_sequence_strategy: null,
+    });
+  }
+  if (takashiRows.length) {
+    const takashiTask = supabase.from('operation_results')
+      .upsert(takashiRows, { onConflict: 'signal_id', ignoreDuplicates: true })
+      .then(({ error }) => { if (error) console.error('Takashi TEST insert:', error.message); });
+    // Never delay the main minute analysis for a study row.
+    // @ts-ignore Hosted background runtime
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(takashiTask); else await takashiTask;
+  }
   return Response.json({ success: true, assets: series.size, inserted, resolved }, { headers: cors });
 });

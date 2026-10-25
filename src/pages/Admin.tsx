@@ -7,7 +7,6 @@ import { UserManagementCard } from '@/components/UserManagementCard';
 import { CopyTradingCard } from '@/components/CopyTradingCard';
 import { DemoScoreHistory } from '@/components/DemoScoreHistory';
 import { DemoWinningPatterns } from '@/components/DemoWinningPatterns';
-import { DemoLossReview } from '@/components/DemoLossReview';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
@@ -130,13 +129,11 @@ const Admin = () => {
             </TabsTrigger>
             <TabsTrigger value="score-history" className="text-xs sm:text-sm py-2 gap-1"><BarChart3 className="w-3.5 h-3.5"/>Histórico por nota</TabsTrigger>
             <TabsTrigger value="winning-patterns" className="text-xs sm:text-sm py-2 gap-1"><TrendingUp className="w-3.5 h-3.5"/>Padrões vencedores</TabsTrigger>
-            <TabsTrigger value="demo-losses" className="text-xs sm:text-sm py-2 gap-1"><BarChart3 className="w-3.5 h-3.5"/>Perdas Demo</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard"><TradingDashboard /></TabsContent>
           <TabsContent value="score-history"><DemoScoreHistory /></TabsContent>
           <TabsContent value="winning-patterns"><DemoWinningPatterns /></TabsContent>
-          <TabsContent value="demo-losses"><DemoLossReview /></TabsContent>
 
           {/* Auto Trading Tab */}
           <TabsContent value="trading" className="space-y-4">

@@ -14,9 +14,9 @@ describe('isDemoValidatedPrincipal', () => {
   });
 });
 describe('isSuperSelected', () => {
- it('accepts only raw score 2.26, never rounded neighbors', () => {
-  expect(isSuperSelected(2.26)).toBe(true);
-  for (const score of [2.259, 2.259004451962, 2.255, 2.2599, 2.2649, 2.260000000001, 2.25, 2.2549, 2.265, 2.27, 2.5, 3.7, Infinity, -Infinity]) expect(isSuperSelected(score)).toBe(false);
+ it('additionally accepts displayed score exactly 2.26, not a new minimum', () => {
+  for (const score of [2.26, 2.255, 2.2599, 2.2649]) expect(isSuperSelected(score)).toBe(true);
+  for (const score of [2.25, 2.2549, 2.265, 2.27, 2.5, 3.7, Infinity, -Infinity]) expect(isSuperSelected(score)).toBe(false);
  });
  it('no longer accepts the retired 4.0-4.5 band', () => {
   expect(isSuperSelected(4.0)).toBe(false);

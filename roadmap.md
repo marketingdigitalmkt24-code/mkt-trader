@@ -1,3 +1,9 @@
+# Takashi invertida após 2,26 (25/10/2026)
+- [x] Criada autorização exclusiva por sequência Demo confirmada 2,26 → Takashi no minuto seguinte, qualquer resultado/ativo, direção invertida e nota Takashi intacta; claim só serviço, demais claims pausados.
+- [x] Principal, Telegram vinculado e cópias habilitados só para nova estratégia, US$10 configurados do admin e valores/metas próprios dos clientes; Auto Trading admin reativado, clientes mantidos desligados até ativação própria. Seis funções publicadas.
+- [x] Regras e copy testados; card autenticado abre e navegador não pode autorizar claim (42501), build OK.
+- [ ] Confirmar nova ordem → Telegram → cópia no histórico: depende de sequência fresca 2,26/Takashi e cliente com copy ligado; nenhum replay/ordem forçada, zero novas principais durante conferência.
+
 # Limpeza admin e resultados automáticos (25/10/2026)
 - [x] Apagadas 80 entradas IQ restantes do admin; consulta confirmou zero entradas IQ e lucro de hoje zero, preservando 24.387 TESTES e 891 ordens Demo.
 - [x] Reset do admin agora apaga permanentemente entradas IQ do dia BRT e seus resultados nas duas contas por função autorizada; DELETE atualiza cache cliente mesmo sem signal_id. 18 testes aprovados, ação no painel confirmada, admin/área cliente exibem zero e build OK. Área cliente conferida com sessão do admin; fonte de todas as cópias zerada no banco. Demo e pausa preservadas.

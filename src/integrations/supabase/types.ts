@@ -1014,6 +1014,10 @@ export type Database = {
         Args: { p_balance: number; p_candidate: string; p_config: string }
         Returns: Json
       }
+      claim_takashi_after_226: {
+        Args: { p_balance: number; p_candidate: string; p_config: string }
+        Returns: Json
+      }
       claim_test_strategy_entry: {
         Args: { p_candidate: string }
         Returns: Json

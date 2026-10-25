@@ -4,7 +4,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 import { isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
-import { copyDayStart, copyTargetReached } from '../_shared/copy-target.ts';
+import { copyDayStart, copyTargetReached, copyProfileTargetBlocked } from '../_shared/copy-target.ts';
 import { readCopyAccount } from '../_shared/copy-account.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { entrySubmissionDelay } from '../_shared/entry-schedule.ts';
@@ -140,7 +140,7 @@ async function mirrorCopyTrades(
   master: Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>,
   principal: { user_id: string; email: string; account_type: string },
 ) {
-  if (!principalIQEnabled()) return;
+  if (!principalIQEnabled(tradeRequest.entryStrategy)) return;
   try {
     if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
     const { data: copies } = await supabase
@@ -199,13 +199,25 @@ async function mirrorCopyTrades(
         // confirmação da principal, então as tentativas correm em paralelo à espera.
         const ssid = await loginPreparation;
         if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou após 3 tentativas`); return; }
+        let copiedProfit = 0;
+        for (let offset = 0; ; offset += 1000) {
+          const { data, error } = await supabase.from('operation_results').select('profit')
+            .like('signal_id', `copy-${copy.user_id}-%`).gte('created_at', dayStartIso)
+            .not('iq_option_id', 'is', null).not('timeframe', 'in', '(TEST,MT5)')
+            .order('id').range(offset, offset + 999);
+          if (error) return;
+          copiedProfit += (data || []).reduce((sum: number, row: { profit: number }) => sum + Number(row.profit || 0), 0);
+          if (!data || data.length < 1000) break;
+        }
 
         // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.
         // Unknown broker outcomes fail closed; never expire a possibly submitted order.
         await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
         const confirmed = await master;
         const entryAt = confirmed.expirationIso ? Date.parse(confirmed.expirationIso) - tradeRequest.expiration * 60000 : tradeRequest.entryAt;
-        const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount, entryAt }, Promise.resolve(confirmed.ok));
+        const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount, entryAt }, Promise.resolve(confirmed.ok),
+          { profit: copiedProfit, value: Number(settings?.profit_target_value), type: settings?.profit_target_type || 'value' });
+        if (res.error === 'Copy profit target reached') await supabase.from('copy_trading_configs').update({ enabled: false }).eq('user_id', copy.user_id);
         const { timeframe, expirationIso } = await master;
         if (res.success && res.tradeId) {
           const { error: saveError } = await supabase.from('operation_results').insert({
@@ -249,8 +261,9 @@ async function placeTradeFireAndForget(
   accountType: string,
   trade: TradeRequest,
   gate?: Promise<boolean>,
+  copyTarget?: { profit: number; value: number; type: string },
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
-  if (!principalIQEnabled()) return { success: false, error: 'Principal IQ and copies paused by user' };
+  if (!principalIQEnabled(trade.entryStrategy)) return { success: false, error: 'Principal IQ and copies paused by user' };
   return new Promise((resolve) => {
     // Copies follow the confirmed principal's minute, never a new future candle.
     const anchoredCopy = !!gate;
@@ -291,6 +304,12 @@ async function placeTradeFireAndForget(
           console.log('✅ Authenticated, getting assets...');
           
           const balances = data.msg.balances || [];
+          const ownBalance = balances.find((balance: { type: number; amount: number }) => balance.type === (accountType === 'PRACTICE' ? 4 : 1));
+          if (copyTarget && copyProfileTargetBlocked(copyTarget.profit, copyTarget.value, copyTarget.type, Number(ownBalance?.amount))) {
+            clearTimeout(timeout); ws.close();
+            resolve({ success: false, error: 'Copy profit target reached' });
+            return;
+          }
           for (const balance of balances) {
             if (accountType === 'PRACTICE' && balance.type === 4) {
               balanceId = balance.id; break;
@@ -641,7 +660,6 @@ serve(async (req) => {
   }
 
   try {
-    if (!principalIQEnabled()) return Response.json({ success: false, error: 'Principal IQ and copies paused by user' }, { status: 410, headers: corsHeaders });
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !supabaseKey) return Response.json({ error: 'Service unavailable' }, { status: 503, headers: corsHeaders });
@@ -658,6 +676,7 @@ serve(async (req) => {
         .select('signal_id,asset,direction,iq_option_id,entry_strategy,timeframe,expiration_time,entry_price')
         .eq('signal_id', body.copyPrincipalSignalId).maybeSingle();
       if (error) throw error;
+      if (!principalIQEnabled(order?.entry_strategy)) return Response.json({ skipped: 'Principal strategy paused' }, { status: 410, headers: corsHeaders });
       const copyRequest = selectedTrendCopyRequest(order, Date.now());
       if (!copyRequest) return Response.json({ skipped: 'No fresh confirmed principal order' }, { headers: corsHeaders });
       const [{ data: principal }, { data: queued }] = await Promise.all([
@@ -671,6 +690,8 @@ serve(async (req) => {
       return Response.json({ success: true, signalId: copyRequest.signalId }, { headers: corsHeaders });
     }
     const tradeRequest: TradeRequest = body;
+    // This endpoint is copy-only while legacy principals are paused; the sequence uses its own atomic claimant.
+    if (!principalIQEnabled()) return Response.json({ success: false, error: 'Direct principal strategies paused' }, { status: 410, headers: corsHeaders });
     if ((tradeRequest.signalId || '').startsWith('forca_antecipada-') && !isAnticipation(tradeRequest.entryStrategy)) {
       return Response.json({ error: 'Invalid anticipation strategy' }, { status: 400, headers: corsHeaders });
     }

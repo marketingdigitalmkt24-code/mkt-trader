@@ -9,8 +9,8 @@ import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { TREND_WIN_INVERTED } from '../_shared/trend-win-inverted.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
-import { isSuperSelected, SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
-import { demo226StrategyAllowed } from '../_shared/demo-226-policy.ts';
+import { SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
+import { TAKASHI_AFTER_226, TAKASHI_AFTER_226_LABEL, takashiAfter226Direction } from '../_shared/takashi-after-226.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
 const freshTrendPut = freshSelectedTrend;
 const notifyTrendPut = notifySelectedTrend;
@@ -28,7 +28,7 @@ const symbolOf = (raw: string) => {
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return reply({});
   if (req.method !== 'POST') return reply({ error: 'Method not allowed' }, 405);
-  if (!principalIQEnabled()) return reply({ skipped: 'Principal IQ and copies paused by user' }, 410);
+  if (!principalIQEnabled(TAKASHI_AFTER_226)) return reply({ skipped: 'Principal IQ and copies paused by user' }, 410);
   const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
   const db = createClient(url, key);
@@ -45,10 +45,16 @@ Deno.serve(async req => {
       readMasterIQConfig(db),
     ]);
     if (candidateError) throw candidateError;
-    const superSelected = isSuperSelected(candidate?.score) && demo226StrategyAllowed(candidate?.entry_strategy);
-    if (!superSelected && !selectedDemoPrincipal(candidate, Date.now())) return reply({ skipped: 'No fresh authorized selected signal' });
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);
+    const { data: previous } = await db.from('iq_demo_test_orders')
+      .select('entry_minute,entry_strategy,direction,status,iq_option_id,signal_id')
+      .eq('entry_minute', new Date(entryAt - 60000).toISOString()).eq('status', 'confirmed')
+      .not('iq_option_id', 'is', null).not('signal_id', 'like', 'demo-mid-%').limit(1).maybeSingle();
+    const { data: previousCandidate } = previous ? await db.from('iq_demo_test_candidates')
+      .select('score').eq('signal_id', previous.signal_id).maybeSingle() : { data: null };
+    if (!takashiAfter226Direction(candidate, previous && previousCandidate ? { ...previous, score: previousCandidate.score } : null, Date.now()))
+      return reply({ skipped: 'No fresh Takashi after confirmed 2.26 in the previous minute' });
     if (!cfg || !cfg.last_connected_at || !['PRACTICE', 'REAL'].includes(cfg.account_type)) return reply({ skipped: 'Principal connection unavailable' });
     let ssid: string | null = reusableDemoSession(true, cfg.id, parsed.data.brokerSession);
     for (const endpoint of ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login']) {
@@ -96,13 +102,13 @@ Deno.serve(async req => {
             }
             const activeId = Number(instrument[0]);
             if (!Number.isSafeInteger(activeId) || activeId <= 0) { finish({ success: false, error: 'Invalid instrument; no order sent' }); return; }
-            const { data: order, error } = await db.rpc(superSelected ? 'claim_super_selected' : 'claim_selected_demo_trend', { p_candidate: candidate.signal_id, p_config: cfg.id, p_balance: balanceAmount });
+            const { data: order, error } = await db.rpc('claim_takashi_after_226', { p_candidate: candidate.signal_id, p_config: cfg.id, p_balance: balanceAmount });
             if (error) throw error;
             if (!order) { finish({ success: false, error: 'Sequence, limits or reservation rejected; no order sent' }); return; }
             state.claimed = order;
             leaseScope = `master:${String(order.entryStrategy).toLowerCase()}`;
             if (order.configId !== cfg.id || !['call','put'].includes(order.direction)
-              || ![TREND_WIN_INVERTED,QUEDA_WIN_RETRY,SUPER_SELECIONADA].includes(order.entryStrategy)
+              || order.entryStrategy !== TAKASHI_AFTER_226
               || !freshTrendPut(order.entryAt, Date.now()) || done) {
               finish({ success: false, error: 'Configuration changed or entry window closed; no order sent' }); return;
             }
@@ -138,7 +144,7 @@ Deno.serve(async req => {
     if (!owned) return reply({ skipped: outcome.error || 'No authorized order' });
     const queued = { signal_id: owned.signalId, amount: owned.amount };
     const direction = owned.direction.toUpperCase();
-    const strategyLabel = owned.entryStrategy === SUPER_SELECIONADA ? 'Super selecionada' : owned.entryStrategy === QUEDA_WIN_RETRY ? 'Queda win +1' : owned.entryStrategy === TREND_WIN_INVERTED ? 'Tendência invertida' : 'Tendência';
+    const strategyLabel = TAKASHI_AFTER_226_LABEL;
     if (!outcome.success || !outcome.tradeId) {
       console.error('Selected Trend failed:', outcome.error);
       await db.from('trade_queue').update({ status: 'failed', error: outcome.error || 'Broker confirmation unknown' }).eq('signal_id', queued.signal_id);
@@ -172,7 +178,7 @@ Deno.serve(async req => {
       if (notifyTrendPut(outcome, entryAt, Date.now())) {
         try {
           const messageId = await sendIQAlert({ asset: candidate.asset, direction: direction === 'CALL' ? 'call' : 'put', expiration: 1, entryAt,
-            signalId: queued.signal_id, timeframe: 'M1', strategy: strategyLabel, brokerOrderId: outcome.tradeId, accountType: cfg.account_type,
+            signalId: queued.signal_id, timeframe: 'M1', strategy: strategyLabel, entryStrategy: owned.entryStrategy, brokerOrderId: outcome.tradeId, accountType: cfg.account_type,
           }, { lovableKey: Deno.env.get('LOVABLE_API_KEY') || '', telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '' });
           if (messageId !== undefined) {
             const { error } = await db.from('telegram_iq_deliveries').upsert({ signal_id: queued.signal_id, chat_id: IQ_TELEGRAM_CHANNEL,

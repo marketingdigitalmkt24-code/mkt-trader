@@ -6,6 +6,12 @@ export const DEMO_STRATEGY_CUTOFF = '2026-10-23T18:59:00Z'; // 15:59 BRT, first 
 export interface DemoStrategyRow extends DemoOutcomeRow {
  entry_strategy: string;
  entry_minute: string;
+ pattern_match?: unknown;
+}
+// Supplementary cohort, not an extra broker order or a replacement strategy.
+export function demoWinningPatternStats(rows:DemoStrategyRow[],cutoff=DEMO_STRATEGY_CUTOFF):StrategyStat {
+ const stats=demoStrategyStats(rows.filter(row=>row.pattern_match!=null),cutoff);
+ return {strategy:'PADRAO_VENCEDOR',wins:stats.reduce((sum,s)=>sum+s.wins,0),losses:stats.reduce((sum,s)=>sum+s.losses,0)};
 }
 export async function allDemoStrategyRows(readPage: (from:number,to:number)=>Promise<DemoStrategyRow[]>) {
  const rows:DemoStrategyRow[]=[];

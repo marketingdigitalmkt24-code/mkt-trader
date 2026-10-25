@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { StrategyStat } from '@/lib/strategy-stats';
-import { allDemoStrategyRows, demoStrategyStats, DEMO_STRATEGY_CUTOFF } from '@/lib/demo-strategy-stats';
+import { allDemoStrategyRows, demoStrategyStats, demoWinningPatternStats, DEMO_STRATEGY_CUTOFF } from '@/lib/demo-strategy-stats';
 
 interface SignalEntry {
   id: string;
@@ -16,6 +16,7 @@ interface SignalEntry {
 }
 
 const strategyLabels: Record<string, string> = {
+  PADRAO_VENCEDOR: 'Padrão vencedor',
   TENDENCIA: 'Tendência',
   CONTINUACAO_QUEDA_V1: 'Queda',
   TETO_V1: 'Teto',
@@ -56,15 +57,24 @@ export function AIAnalysisStatusCard() {
     try {
       const rows = await allDemoStrategyRows(async (from, to) => {
         const { data, error } = await supabase.from('iq_demo_test_orders')
-          .select('entry_strategy,result,status,profit,iq_option_id,entry_minute')
+          .select('signal_id,entry_strategy,result,status,profit,iq_option_id,entry_minute')
           .eq('status','confirmed').not('iq_option_id','is',null)
           .order('created_at', { ascending: true }).order('id', { ascending: true })
           .range(from, to);
         if (error) throw error;
-        return data ?? [];
+        const orders=data??[];
+        const ids=orders.map(row=>row.signal_id);
+        const patterns=new Map<string,unknown>();
+        for(let i=0;i<ids.length;i+=100){
+          const {data:candidates,error:patternError}=await supabase.from('iq_demo_test_candidates')
+            .select('signal_id,pattern_match').in('signal_id',ids.slice(i,i+100));
+          if(patternError)throw patternError;
+          for(const candidate of candidates??[])patterns.set(candidate.signal_id,candidate.pattern_match);
+        }
+        return orders.map(row=>({...row,pattern_match:patterns.get(row.signal_id)}));
       });
       if (mounted.current) {
-        setStrategyStats(demoStrategyStats(rows));
+        setStrategyStats([demoWinningPatternStats(rows),...demoStrategyStats(rows)]);
       }
     } catch {
       // silent
@@ -129,6 +139,9 @@ export function AIAnalysisStatusCard() {
         fetchSignals();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'iq_demo_test_orders' }, () => {
+        void fetchStrategyStats();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'iq_demo_test_candidates' }, () => {
         void fetchStrategyStats();
       })
       .subscribe(status => { if (status === 'SUBSCRIBED') void fetchStrategyStats(); });

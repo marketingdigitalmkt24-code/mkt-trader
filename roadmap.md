@@ -1,6 +1,6 @@
 # Limpeza admin e resultados automáticos (25/10/2026)
 - [x] Apagadas 80 entradas IQ restantes do admin; consulta confirmou zero entradas IQ e lucro de hoje zero, preservando 24.387 TESTES e 891 ordens Demo.
-- [ ] Garantir que a limpeza de entradas atualize automaticamente Resultado de Hoje do admin/cliente; preservar Demo e pausa.
+- [x] Reset do admin agora apaga permanentemente entradas IQ do dia BRT e seus resultados nas duas contas por função autorizada; DELETE atualiza cache cliente mesmo sem signal_id. 18 testes aprovados, ação no painel confirmada, admin/área cliente exibem zero e build OK. Área cliente conferida com sessão do admin; fonte de todas as cópias zerada no banco. Demo e pausa preservadas.
 
 # Limpeza cliente e pausa IQ/Telegram (25/10/2026)
 - [x] Apagadas 82 entradas IQ dos clientes; consulta confirmou zero entradas e lucro de hoje zero. Preservadas 80 entradas admin, 886 ordens Demo e saldo da corretora.

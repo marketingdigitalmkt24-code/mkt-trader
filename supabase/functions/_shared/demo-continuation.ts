@@ -26,17 +26,21 @@ export function demoContinuation(candles: Candle[], entry: number) {
 // and its pre-entry chart shapes, without changing the calculated score or eligibility gates.
 export const DEMO_PREFERRED_SCORE_CENTS = [226, 223, 218, 264, 288, 203, 269, 291, 204, 261, 278, 237, 276, 220] as const;
 export function demoPreferredScore(score: number) {
-  return Number.isFinite(score) && DEMO_PREFERRED_SCORE_CENTS.some(c => c === Math.round(score * 100));
+  return Number.isFinite(score) && DEMO_PREFERRED_SCORE_CENTS.some(c => score === c / 100);
+}
+export function demoReleasedScoreMismatch(score: number) {
+  return Number.isFinite(score) && !demoPreferredScore(score)
+    && DEMO_PREFERRED_SCORE_CENTS.some(c => c === Math.round(score * 100));
 }
 const DEMO_TARGET_SCORE_CENTS = 226;
-const scoreDistance = (s: number) => Math.abs(Math.round(s * 100) - DEMO_TARGET_SCORE_CENTS);
+const scoreDistance = (s: number) => Math.abs(s - DEMO_TARGET_SCORE_CENTS / 100);
 export function demoPreferredPatternAllowed(distance: number | undefined) {
   return typeof distance === 'number' && Number.isFinite(distance) && distance >= 0 && distance <= DEMO_REFERENCE_MAX_DISTANCE;
 }
 export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningScores = false, scorePriority?: number[]) {
   const tier = (c: DemoCandidate) => {
     if (scorePriority && preferWinningScores) {
-      const rank = scorePriority.indexOf(Math.round(c._score * 100));
+      const rank = demoPreferredScore(c._score) ? scorePriority.findIndex(cents => c._score === cents / 100) : -1;
       return rank >= 0 ? rank : scorePriority.length;
     }
     if (scoreDistance(c._score) === 0) return 0;
@@ -45,7 +49,7 @@ export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningSc
     if (demoPreferredScore(c._score)) return matched ? 1 : 2;
     return matched ? 3 : 4;
   };
-  return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0
+  return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0 && !demoReleasedScoreMismatch(c._score)
     && (!preferWinningScores || demoPreferredScore(c._score) || demoPreferredPatternAllowed(c._preferredPatternDistance)))
     .sort((a,b) => tier(a)-tier(b)
       || (preferWinningScores ? (a._preferredPatternDistance ?? Infinity) - (b._preferredPatternDistance ?? Infinity) : 0)

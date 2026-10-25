@@ -1,8 +1,9 @@
-import { DEMO_LEARNED_REJECT, DEMO_MIN_SCORE, DEMO_REFERENCE_MAX_DISTANCE, demoLearnedReject, demoScoreAllowed, demoPreferredPatternAllowed, demoPreferredScore } from './demo-continuation.ts';
+import { DEMO_LEARNED_REJECT, DEMO_MIN_SCORE, DEMO_REFERENCE_MAX_DISTANCE, demoLearnedReject, demoScoreAllowed, demoPreferredPatternAllowed, demoPreferredScore, demoReleasedScoreMismatch } from './demo-continuation.ts';
 
 export type RejectionReason = { code: string; details: Record<string, number | string | null> };
 export function demoRejectionReason(input: { learned?: number; score: number; referenceMatch?: boolean; patternDistance?: number; priorityAvailable?: boolean; winner?: string | null; signalId?: string }): RejectionReason | null {
   const exactNote=demoPreferredScore(input.score);
+  if (demoReleasedScoreMismatch(input.score)) return { code: 'released_score_not_exact', details: { score: input.score, required_score: Math.round(input.score * 100) / 100 } };
   if (!exactNote && input.learned !== undefined && demoLearnedReject(input.learned)) return { code: 'learned_history', details: { learned: input.learned, maximum: DEMO_LEARNED_REJECT } };
   if (!demoScoreAllowed(input.score)) return { code: 'score_floor', details: { score: Number.isFinite(input.score) ? input.score : null, minimum: DEMO_MIN_SCORE } };
   // GEV is retired as a gate; a confirmed WIN match alone provides chart eligibility.

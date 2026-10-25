@@ -1,3 +1,6 @@
+# Reduzir atraso da cópia (25/10/2026)
+- [ ] Preparar login dos clientes enquanto a principal é preparada; só copiar após confirmação da corretora e autorização atual, preservando conta, valor, limites e resultado real USD/VND.
+
 # Padrões vencedores em lista (25/10/2026)
 - [x] Removidas notas e comparação fixa; todas as ordens Demo confirmadas e rejeições registradas acessíveis em linhas paginadas, com filtros ganhos/perdas/rejeitadas e gráficos ao passar o mouse. Painel autenticado conferido com dados reais e segunda página, sem erros; 13 testes passaram e build OK. Execução preservada.
 

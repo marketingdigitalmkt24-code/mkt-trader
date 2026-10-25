@@ -1023,6 +1023,7 @@ export type Database = {
         Args: { p_candidate: string }
         Returns: Json
       }
+      clear_iq_today_entries: { Args: never; Returns: number }
       get_master_iq_config: {
         Args: never
         Returns: {

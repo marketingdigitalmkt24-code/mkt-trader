@@ -29,12 +29,17 @@ export function demoPreferredScore(score: number) {
   return Number.isFinite(score) && DEMO_PREFERRED_SCORE_CENTS.some(c => c === Math.round(score * 100));
 }
 const DEMO_TARGET_SCORE_CENTS = 226;
+// Demo-only displayed-score experiment; retain the original calculated value.
+export function demoDisplayedTargetScore(score: number) {
+  return Number.isFinite(score) && Math.round(score * 100) === DEMO_TARGET_SCORE_CENTS;
+}
 const scoreDistance = (s: number) => Math.abs(Math.round(s * 100) - DEMO_TARGET_SCORE_CENTS);
 export function demoPreferredPatternAllowed(distance: number | undefined) {
   return typeof distance === 'number' && Number.isFinite(distance) && distance >= 0 && distance <= DEMO_REFERENCE_MAX_DISTANCE;
 }
-export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningScores = false, scorePriority?: number[]) {
+export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningScores = false, scorePriority?: number[], displayedTargetTest = false) {
   const tier = (c: DemoCandidate) => {
+    if (displayedTargetTest && demoDisplayedTargetScore(c._score)) return -1;
     if (scorePriority && preferWinningScores) {
       const rank = scorePriority.indexOf(Math.round(c._score * 100));
       return rank >= 0 ? rank : scorePriority.length;
@@ -46,7 +51,7 @@ export function chooseDemoCandidate(candidates: DemoCandidate[], preferWinningSc
     return matched ? 3 : 4;
   };
   return candidates.filter(c => Number.isFinite(c._score) && c._score >= 0
-    && (!preferWinningScores || demoPreferredPatternAllowed(c._preferredPatternDistance)))
+    && (!preferWinningScores || (displayedTargetTest && demoDisplayedTargetScore(c._score)) || demoPreferredPatternAllowed(c._preferredPatternDistance)))
     .sort((a,b) => tier(a)-tier(b)
       || (preferWinningScores ? (a._preferredPatternDistance ?? Infinity) - (b._preferredPatternDistance ?? Infinity) : 0)
       || scoreDistance(a._score)-scoreDistance(b._score) || b._score-a._score || a.signal_id.localeCompare(b.signal_id))[0] ?? null;

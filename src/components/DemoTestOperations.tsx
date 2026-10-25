@@ -8,6 +8,14 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
 import { allDemoOutcomes, demoTestStats } from '@/lib/demo-test-stats';
 import { demoChartComparison } from '@/lib/demo-chart-comparison';
 
+const demoStrategyNames: Record<string, string> = {
+ TENDENCIA: 'Tendência', VELA_FORCA: 'Vela de força', REVERSAO_RSI: 'Reversão RSI',
+ CONTINUACAO_QUEDA_V1: 'Queda', TETO_V1: 'Teto', QUEDA_WIN_CALL_V1: 'Queda win',
+ QUEDA_WIN_RETRY_V1: 'Queda win +1', FORCA_PADRAO_V1: 'Força padrão',
+ TENDENCIA_WIN_INVERTIDA: 'Tendência invertida', ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
+ KDJ_RSI: 'KDJ + Reversão RSI', TREND_WIN_LOSS_FORCE_LOSS: 'Retomada',
+};
+
 export function DemoTestOperations() {
  const [page,setPage]=useState(0);
  const stats = useQuery({queryKey:['demo-test-totals'],refetchInterval:10000,queryFn:async()=>demoTestStats(await allDemoOutcomes(async(from,to)=>{
@@ -35,8 +43,8 @@ export function DemoTestOperations() {
  </div>}
  {isLoading?<p className="text-xs text-muted-foreground">Carregando ordens Demo…</p>:isError?<p role="alert" className="text-xs text-destructive">Não foi possível carregar as ordens Demo.</p>:!data?.rows.length?<p className="text-xs text-muted-foreground">Aguardando primeira ordem Demo confirmada.</p>:<div className="space-y-1">{data.rows.map(row=><HoverCard key={row.id} openDelay={150}><HoverCardTrigger asChild><div tabIndex={0} className="flex cursor-default flex-wrap items-center gap-2 rounded-md bg-secondary/30 p-2 text-xs hover:bg-secondary/60">
  <span className="font-medium">{row.asset}</span>{(()=>{const s=data.scores.get(row.signal_id);const v=s==null||Number.isNaN(s)?null:s;const cls=v==null?'border-border bg-secondary text-muted-foreground':v>=4?'border-call/40 bg-call/10 text-call':v>=2.5?'border-accent/40 bg-accent/10 text-accent':'border-border bg-secondary/60 text-foreground';return <span className={`rounded border px-1.5 py-0.5 font-mono text-sm font-bold leading-none ${cls}`} title="Nota do aprendizado da IA">nota {v==null?'—':v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>;})()}
- <span className={row.direction==='CALL'?'text-call':'text-put'}>{row.direction}</span><span className="text-muted-foreground">{row.entry_strategy==='CONTINUACAO_QUEDA_V1'?'Queda':row.entry_strategy==='TETO_V1'?'Teto':row.entry_strategy==='QUEDA_WIN_CALL_V1'?'Queda win':row.entry_strategy==='QUEDA_WIN_RETRY_V1'?'Queda win +1':row.entry_strategy==='FORCA_PADRAO_V1'?'Força padrão':row.entry_strategy}</span>
- {data.patterns.has(row.signal_id)&&<Badge variant="outline" className="text-call" title="Correspondência registrada com o gráfico anterior de uma operação WIN confirmada">Padrão vencedor</Badge>}
+ <span className={row.direction==='CALL'?'text-call':'text-put'}>{row.direction}</span>
+ {data.patterns.has(row.signal_id)?<Badge variant="outline" className="text-call" title="Correspondência registrada com o gráfico anterior de uma operação WIN confirmada">{demoStrategyNames[row.entry_strategy]??row.entry_strategy}</Badge>:<span className="text-muted-foreground">{demoStrategyNames[row.entry_strategy]??row.entry_strategy}</span>}
  <span className="text-muted-foreground font-mono text-[10px]">{Number(row.amount).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</span>
  <span className="ml-auto font-mono">{row.status==='confirmed'?(row.result==='pending'?'ABERTA':`${row.result.toUpperCase()} · ${Number(row.profit).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}`):row.status==='failed'?'NÃO ENVIADA':row.status==='unknown'?'SEM CONFIRMAÇÃO':'AGUARDANDO'}</span>
   </div></HoverCardTrigger><HoverCardContent className="w-80 max-w-[calc(100vw-2rem)]"><p className="mb-1 text-xs font-medium">{row.asset} · previsão × fechamento</p><MiniChart candles={data.charts.get(row.signal_id)} direction={row.direction} entry={Date.parse(row.entry_minute)/1000}/><p className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">Entrada: {new Date(row.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</p><p className="text-xs text-muted-foreground">IQ Option: {row.result==='pending'?'aguardando resultado':row.result.toUpperCase()}</p></HoverCardContent></HoverCard>)}</div>}

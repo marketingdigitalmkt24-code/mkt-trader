@@ -6,7 +6,7 @@ import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount } from './policy.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
-import { demoFrozenWinAllowed } from '../_shared/demo-frozen-win-scores.ts';
+import { verifyDemoWinScore } from '../_shared/demo-win-scores.ts';
 const schema = z.object({ candidate: z.string().max(200).optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
 const reply = (body: unknown, status = 200) => {
  console.log('Demo test response:', JSON.stringify({ status, ...body as Record<string, unknown> }));
@@ -25,6 +25,16 @@ Deno.serve(async req => {
  const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
  if (!url || !key) return reply({ error: 'Service unavailable' },503);
  const db = createClient(url,key);
+ const winScoreEvidence=(score:unknown)=>verifyDemoWinScore(score,async(value,from,to)=>{
+   const {data,error}=await db.from('iq_demo_test_candidates').select('signal_id,score')
+     .eq('score',value).order('signal_id').range(from,to);
+   if(error)throw error;return data||[];
+ },async ids=>{
+   const {data,error}=await db.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result')
+     .in('signal_id',ids).eq('status','confirmed').eq('account_type','PRACTICE')
+     .eq('result','win').not('iq_option_id','is',null);
+   if(error)throw error;return data||[];
+ });
  const scheduler = req.headers.get('x-scheduler-token');
  const serviceAuthorized = req.headers.get('Authorization') === `Bearer ${key}`;
  let authorized = serviceAuthorized;
@@ -58,7 +68,7 @@ Deno.serve(async req => {
  const selected = selectedResult?.data;
  const error = selectedResult?.error;
  const data = selected ? {...selected,created_at:selected.entry_minute,timeframe:'TEST'} : null;
- if (data && demoFrozenWinAllowed(data.score) && freshDemoCandidate(data,Date.now())) candidate=data;
+ if (data && freshDemoCandidate(data,Date.now()) && await winScoreEvidence(data.score)) candidate=data;
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
  let reserved: string | null = null;
@@ -118,7 +128,8 @@ Deno.serve(async req => {
  initialized=true;
  const expiry=Date.parse(candidate.created_at)/1000+60;
  const found=Object.entries<any>(d.msg?.turbo?.actives || {}).find(([,a])=>symbol(a.name || '')===candidate.asset && iqMarketOpen(a,Math.floor(Date.now()/1000),expiry));
- if(!found || !demoFrozenWinAllowed(candidate.score) || !freshDemoCandidate(candidate,Date.now())) {
+ // Exact confirmed-WIN evidence was checked before reservation; recheck freshness at submission.
+ if(!found || !freshDemoCandidate(candidate,Date.now())) {
  requestHistory();
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).then(()=>{}));
  if(!pending?.length) finish();return;

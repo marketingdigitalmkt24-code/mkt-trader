@@ -434,14 +434,11 @@ Deno.serve(async (req) => {
   if(retry && series.has(retry.asset))demoPool.push({signal_id:`queda-win-retry-v1-${retry.asset}-${curMin}`,
     asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
     created_at:new Date(curMin*1000).toISOString(),_score:1,_learned:0});
-  // Exact WIN scores OR analyzed winning chart correspondence authorize Demo independently.
+  // User (Oct 25 2026 02:09 UTC): only displayed score 2,26 authorizes Demo; no pattern/other-score path.
+  void winScores; void demoEntryReason; void demoWinningPatternMatch; void chartFeatures;
   const demoEligible = demoPool.flatMap(c => {
-    const f = chartFeatures(series.get(c.asset)||[],curMin,c.direction);
-    const match=demoWinningPatternMatch(winningCharts.filter(r=>Date.parse(r.entry_minute??'')<curMin*1000),f);
-    const distance=match?.distance??Infinity;
-    const reason=demoEntryReason(c._score,winScores,match,c._learned);
-    if(reason){reject(c,reason);return[];}
-    return [{...c,_preferredPatternDistance:distance,_patternMatch:match?{...match,learned:c._learned}:null}];
+    if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
+    return [{...c,_preferredPatternDistance:Infinity,_patternMatch:null}];
   });
   const demoWinner = demoEligible.sort((a,b)=>{
     const ranks=priority??[];

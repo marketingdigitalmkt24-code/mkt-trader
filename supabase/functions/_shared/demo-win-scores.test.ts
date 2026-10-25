@@ -3,6 +3,17 @@ import {demoWinScores,demoWinScoreAllowed,verifyDemoWinScore} from './demo-win-s
 import {readDemoScoreHistory} from './demo-score-priority.ts';
 const win=(signal_id:string)=>({signal_id,status:'confirmed',account_type:'PRACTICE',iq_option_id:'123',result:'win',profit:1});
 describe('all confirmed Demo WIN exact scores',()=>{
+ it('uses the complete BIDU WIN score rather than its rounded 2.26 label',async()=>{
+  const score=2.26032894533026;
+  const signal_id='t7-BIDU-OTC-TENDENCIA-1792889040';
+  const allowed=demoWinScores([win(signal_id)],new Map([[signal_id,score]]));
+  expect(demoWinScoreAllowed(2.26032894533026,allowed)).toBe(true);
+  expect(demoWinScoreAllowed(2.26,allowed)).toBe(false);
+  expect(demoWinScoreAllowed(2.26032894533027,allowed)).toBe(false);
+  const read=async()=>[{signal_id,score}];
+  expect(await verifyDemoWinScore(2.26032894533026,read,async()=>[win(signal_id)])).toBe(true);
+  expect(await verifyDemoWinScore(2.26,read,async()=>[win(signal_id)])).toBe(false);
+ });
  it('includes WIN scores outside the former 59 cohort and retains raw precision',()=>{
   const allowed=demoWinScores([win('old'),win('new')],new Map([['old',6.123456789012345],['new',2.259004451962]]));
   expect(demoWinScoreAllowed(6.123456789012345,allowed)).toBe(true);

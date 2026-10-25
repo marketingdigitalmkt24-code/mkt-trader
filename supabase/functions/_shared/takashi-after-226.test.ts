@@ -48,3 +48,11 @@ test('client percentage target uses its own confirmed broker balance and blocks 
   expect(copyProfileTargetBlocked(0, 10, 'percentage', NaN)).toBe(true);
   expect(copyProfileTargetBlocked(100, 100, 'value', 1000)).toBe(true);
 });
+test('Takashi scored 0,00 never authorizes the inverted entry', () => {
+  const at = Date.parse('2026-10-25T21:40:00Z');
+  const prev = { entry_minute: new Date(at - 60000).toISOString(), entry_strategy: 'VELA_FORCA', direction: 'PUT', score: 2.26, status: 'confirmed', iq_option_id: '123' };
+  const cur = (score: number) => ({ entry_minute: new Date(at).toISOString(), entry_strategy: 'TAKASHI_BNF_V1', direction: 'PUT', score });
+  expect(takashiAfter226Direction(cur(0), prev, at + 1000)).toBeNull();
+  expect(takashiAfter226Direction(cur(0.004), prev, at + 1000)).toBeNull();
+  expect(takashiAfter226Direction(cur(0.94), prev, at + 1000)).toBe('call');
+});

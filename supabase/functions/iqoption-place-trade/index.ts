@@ -16,6 +16,7 @@ import { selectedTrendCopyRequest } from '../_shared/selected-trend-copy.ts';
 import { isNormalPrincipalTrend } from '../_shared/normal-trend.ts';
 import { isDemoValidatedPrincipal } from '../_shared/demo-validated.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
+import { prepareTakashiCopy, waitForConfirmedCopy } from '../_shared/copy-preparation.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -155,7 +156,7 @@ async function mirrorCopyTrades(
     await Promise.allSettled(copies.map(async (copy: any) => {
       try {
         const [{ data: cfg }, { data: settings }] = await Promise.all([
-          supabase.from('iqoption_config').select('email, password, account_type')
+          supabase.from('iqoption_config').select('id, updated_at, email, password, account_type')
             .eq('user_id', copy.user_id).eq('is_active', true).limit(1).maybeSingle(),
           supabase.from('user_trading_settings').select('trade_amount, profit_target_type, profit_target_value')
             .eq('user_id', copy.user_id).maybeSingle(),
@@ -177,6 +178,15 @@ async function mirrorCopyTrades(
           }
           return preparedSession;
         })();
+        // Login overlaps principal preparation, but no client reservation or placement precedes confirmation.
+        const confirmed = await master;
+        if (!confirmed.ok) return;
+        const [{ data: currentConfig }, { data: currentCopy }] = await Promise.all([
+          supabase.from('iqoption_config').select('id, updated_at, account_type').eq('user_id', copy.user_id).eq('is_active', true).limit(1).maybeSingle(),
+          supabase.from('copy_trading_configs').select('enabled').eq('user_id', copy.user_id).maybeSingle(),
+        ]);
+        if (!currentCopy?.enabled || currentConfig?.id !== cfg.id || currentConfig?.updated_at !== cfg.updated_at
+          || readCopyAccount(currentConfig) !== accountType) return;
         const copySignal = `copy-${copy.user_id}-${masterSignalId}`;
         const { data: reservedAmount, error: reserveError } = await supabase.rpc('reserve_iq_entry', { p_client: copy.user_id, p_signal: copySignal });
         const amount = configuredEntryAmount(reservedAmount);
@@ -213,7 +223,6 @@ async function mirrorCopyTrades(
         // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.
         // Unknown broker outcomes fail closed; never expire a possibly submitted order.
         await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
-        const confirmed = await master;
         const entryAt = confirmed.expirationIso ? Date.parse(confirmed.expirationIso) - tradeRequest.expiration * 60000 : tradeRequest.entryAt;
         const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount, entryAt }, Promise.resolve(confirmed.ok),
           { profit: copiedProfit, value: Number(settings?.profit_target_value), type: settings?.profit_target_type || 'value' });
@@ -666,6 +675,33 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
+    if (body?.prepareCopyCandidate !== undefined) {
+      if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`)
+        return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+      if (typeof body.prepareCopyCandidate !== 'string' || body.prepareCopyCandidate.length > 255 || Object.keys(body).length !== 1)
+        return Response.json({ error: 'Invalid preparation request' }, { status: 400, headers: corsHeaders });
+      const [{ data: candidate }, { data: principal }] = await Promise.all([
+        supabase.from('iq_demo_test_candidates').select('signal_id,asset,direction,entry_strategy,entry_minute,score').eq('signal_id', body.prepareCopyCandidate).maybeSingle(),
+        readMasterIQConfig(supabase),
+      ]);
+      const copyRequest = prepareTakashiCopy(candidate, Date.now());
+      if (!principal || !copyRequest || !principalIQEnabled(copyRequest.entryStrategy))
+        return Response.json({ skipped: 'No fresh authorized copy preparation' }, { headers: corsHeaders });
+      // The same invocation owns prepared client sessions and waits for persisted broker confirmation.
+      const master = waitForConfirmedCopy(copyRequest.signalId, copyRequest.entryAt, async () => {
+        const [{ data: order, error: orderError }, { data: queued, error: queueError }] = await Promise.all([
+          supabase.from('operation_results').select('signal_id,asset,direction,iq_option_id,entry_strategy,timeframe,expiration_time,entry_price').eq('signal_id', copyRequest.signalId).maybeSingle(),
+          supabase.from('trade_queue').select('iq_option_id').eq('signal_id', copyRequest.signalId).eq('status', 'executed').maybeSingle(),
+        ]);
+        if (orderError || queueError) throw orderError || queueError;
+        return { order, executed: Boolean(queued?.iq_option_id && queued.iq_option_id === order?.iq_option_id
+          && order?.entry_strategy === copyRequest.entryStrategy && order?.asset === copyRequest.asset
+          && order?.direction === copyRequest.direction.toUpperCase()) };
+      });
+      const task = mirrorCopyTrades(supabase, copyRequest, copyRequest.signalId, master, principal);
+      await Promise.allSettled([task, master]);
+      return Response.json({ success: true, signalId: copyRequest.signalId }, { headers: corsHeaders });
+    }
     if (body?.copyPrincipalSignalId !== undefined) {
       if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`) {
         return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });

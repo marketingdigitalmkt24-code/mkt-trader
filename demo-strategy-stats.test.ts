@@ -1,10 +1,19 @@
 import {test,expect} from 'bun:test';
-import {demoStrategyStats,allDemoStrategyRows,DEMO_STRATEGY_CUTOFF,type DemoStrategyRow} from './src/lib/demo-strategy-stats';
+import {demoStrategyStats,demoWinningPatternStats,allDemoStrategyRows,DEMO_STRATEGY_CUTOFF,type DemoStrategyRow} from './src/lib/demo-strategy-stats';
 const base:DemoStrategyRow={status:'confirmed',iq_option_id:'123',entry_strategy:'TENDENCIA',result:'win',profit:0.82,entry_minute:'2026-10-23T19:34:00Z'};
 test('cutoff counts from first Demo order at 15:59 BRT',()=>{
  expect(demoStrategyStats([{...base,entry_minute:'2026-10-23T18:58:00Z'}])).toEqual([{strategy:'TENDENCIA',wins:0,losses:0}]);
  expect(demoStrategyStats([{...base,entry_minute:'2026-10-23T18:59:00Z'}])).toEqual([{strategy:'TENDENCIA',wins:1,losses:0}]);
  expect(DEMO_STRATEGY_CUTOFF).toBe('2026-10-23T18:59:00Z');
+});
+test('pattern cohort counts only linked confirmed wins and losses without changing original strategy totals',()=>{
+ const matched={...base,pattern_match:{signal_id:'reference-win',distance:0.5}};
+ const rows=[matched,{...matched,result:'loss'},base,{...matched,result:'pending'},
+  {...matched,result:'tie'},{...matched,status:'failed'},{...matched,iq_option_id:'not-broker'},
+  {...matched,entry_minute:'2026-10-23T18:58:00Z'}];
+ expect(demoWinningPatternStats(rows)).toEqual({strategy:'PADRAO_VENCEDOR',wins:1,losses:1});
+ expect(demoStrategyStats(rows)).toEqual([{strategy:'TENDENCIA',wins:2,losses:1}]);
+ expect(demoWinningPatternStats([base])).toEqual({strategy:'PADRAO_VENCEDOR',wins:0,losses:0});
 });
 test('counts only confirmed Demo broker outcomes separately per sent strategy',()=>{
  expect(demoStrategyStats([base,{...base,entry_strategy:'CONTINUACAO_QUEDA_V1',result:'loss'},

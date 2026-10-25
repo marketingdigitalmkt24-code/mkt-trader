@@ -1,3 +1,8 @@
+# Prioridade :00 admin e cliente (25/10/2026)
+- [x] Conferidas 59 entradas por conta hoje: admin US$10, registro médio :02,667; cliente US$100, :04,128 (horários de registro, não fill exato). Admin conferido no painel; sessão disponível na área cliente é do admin, não do cliente ativo.
+- [x] Disponibilidade Demo preparada antes de :00, leitura principal/config em paralelo e login do cliente durante reservas/metas; 28 testes aprovados, três executores publicados e build OK. Valores, gates e histórico preservados.
+- [ ] Conferir nova principal/cópia após ajuste — aguarda candidato 2,26 autorizado e corretora; nenhuma ordem forçada. Sessão cliente distinta não disponível para conferência visual.
+
 # Mudança de workspace e inversão de sinais
 - [x] Telegram revinculado no workspace atual: conexão "Agência's Telegram" (gateway), bot @Ricardobilionario_bot administrador do canal AGÊNCIA MKT TRADER com direito de publicar; seis funções que enviam sinais/resultados republicadas para usarem a nova chave.
 - [ ] Inverter compra/venda na IQ Option, Telegram e cópias para as entradas Super selecionada 2,26 — depende de aplicar e publicar a inversão; investigação apontou inverter uma única vez dentro do claim_super_selected (a direção retornada alimenta fila, corretora, registros, Telegram e copy). Nada aplicado ainda.

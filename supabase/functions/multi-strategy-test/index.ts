@@ -17,7 +17,7 @@ import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validat
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
-import { demoTargetMinute, demoCandleRequestTime } from '../_shared/demo-timing.ts';
+import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay } from '../_shared/demo-timing.ts';
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
@@ -271,13 +271,13 @@ Deno.serve(async (req) => {
         demoBalanceId = demoBalance(d.msg?.balances || [])?.id || 0;
         // Connection is already authenticated; only fresh closed candles are requested at :00.
         console.log('Demo timing broker ready:', new Date().toISOString());
-        if (Date.now() < targetMs) boundaryTimer = setTimeout(requestInitialization, targetMs - Date.now());
-        else requestInitialization();
+        requestInitialization();
       }
       if (d.name === 'initialization-data' && !initialized) {
+        initialized = true;
+        const requestCandles = async () => {
         const requestTime = demoCandleRequestTime(Date.now(), targetMs);
         if (requestTime === null) { clearTimeout(timer); finish(); return; }
-        initialized = true;
         nowSec = requestTime;
         console.log('Demo timing candles requested:', new Date().toISOString());
         if(previousPending.length && demoBalanceId) {
@@ -301,6 +301,10 @@ Deno.serve(async (req) => {
           const rid = `m${id}`; byReq.set(rid, s);
           ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to: nowSec, count: 101 } } }));
         });
+        };
+        const delay = demoBoundaryDelay(Date.now(), targetMs);
+        if (delay > 0) boundaryTimer = setTimeout(() => { void requestCandles(); }, delay);
+        else await requestCandles();
       }
       if (d.name === 'candles' && byReq.has(d.request_id)) {
         const s = byReq.get(d.request_id); byReq.delete(d.request_id);

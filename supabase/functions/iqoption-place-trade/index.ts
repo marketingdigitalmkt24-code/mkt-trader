@@ -164,6 +164,17 @@ async function mirrorCopyTrades(
         if (!accountType) return;
 
         if (!configuredEntryAmount(settings?.trade_amount)) return;
+        // Authentication is read-only preparation; reservations/targets still gate every placement.
+        const loginPreparation = (async () => {
+          let preparedSession: string | null = null;
+          for (let attempt = 1; attempt <= 3 && !preparedSession; attempt++) {
+            if (tradeRequest.entryAt && Date.now() >= tradeRequest.entryAt + 30000) break;
+            const login = await loginToIQOption(cfg.email, cfg.password);
+            preparedSession = login.ssid;
+            if (!preparedSession && attempt < 3) await new Promise(r => setTimeout(r, 800));
+          }
+          return preparedSession;
+        })();
         const copySignal = `copy-${copy.user_id}-${masterSignalId}`;
         const { data: reservedAmount, error: reserveError } = await supabase.rpc('reserve_iq_entry', { p_client: copy.user_id, p_signal: copySignal });
         const amount = configuredEntryAmount(reservedAmount);
@@ -184,15 +195,7 @@ async function mirrorCopyTrades(
         // Retentativa de login: instabilidade/bloqueio temporário da corretora
         // não pode derrubar o copy do cliente. A ordem só dispara após a
         // confirmação da principal, então as tentativas correm em paralelo à espera.
-        let ssid: string | null = null;
-        for (let attempt = 1; attempt <= 3 && !ssid; attempt++) {
-          const login = await loginToIQOption(cfg.email, cfg.password);
-          ssid = login.ssid;
-          if (!ssid && attempt < 3) {
-            console.log(`🔁 Copy ${copy.user_id}: login falhou (tentativa ${attempt}/3), tentando novamente`);
-            await new Promise(r => setTimeout(r, 800));
-          }
-        }
+        const ssid = await loginPreparation;
         if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou após 3 tentativas`); return; }
 
         // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.

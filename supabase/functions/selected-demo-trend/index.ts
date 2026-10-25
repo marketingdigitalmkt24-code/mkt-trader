@@ -37,14 +37,16 @@ Deno.serve(async req => {
     if (req.headers.get('Authorization') !== `Bearer ${key}`) return reply({ error: 'Unauthorized' }, 401);
     const parsed = schema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return reply({ error: 'Invalid candidate' }, 400);
-    const { data: candidate, error: candidateError } = await db.from('iq_demo_test_candidates')
-      .select('signal_id,asset,entry_minute,entry_strategy,direction,score').eq('signal_id', parsed.data.candidate).maybeSingle();
+    const [{ data: candidate, error: candidateError }, { data: cfg }] = await Promise.all([
+      db.from('iq_demo_test_candidates').select('signal_id,asset,entry_minute,entry_strategy,direction,score')
+        .eq('signal_id', parsed.data.candidate).maybeSingle(),
+      readMasterIQConfig(db),
+    ]);
     if (candidateError) throw candidateError;
     const superSelected = isSuperSelected(candidate?.score) && demo226StrategyAllowed(candidate?.entry_strategy);
     if (!superSelected && !selectedDemoPrincipal(candidate, Date.now())) return reply({ skipped: 'No fresh authorized selected signal' });
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);
-    const { data: cfg } = await readMasterIQConfig(db);
     if (!cfg || !cfg.last_connected_at || !['PRACTICE', 'REAL'].includes(cfg.account_type)) return reply({ skipped: 'Principal connection unavailable' });
     let ssid: string | null = reusableDemoSession(true, cfg.id, parsed.data.brokerSession);
     for (const endpoint of ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login']) {
@@ -113,6 +115,7 @@ Deno.serve(async req => {
             if (reserveError) throw reserveError;
             if (done || !freshTrendPut(entryAt, Date.now())) { finish({ success: false, error: 'Entry window closed; no order sent' }); return; }
             submitted = true;
+            console.log('Principal timing submitted:', JSON.stringify({ signalId: order.signalId, offsetMs: Date.now() - entryAt }));
             ws.send(JSON.stringify({ name: 'sendMessage', request_id: 'trend-put', msg: { name: 'binary-options.open-option', version: '1.0', body: {
               user_balance_id: balanceId, active_id: activeId, option_type_id: 3, direction: order.direction,
               expired: entryAt / 1000 + 60, price: order.amount, profit_percent: 0,
@@ -147,8 +150,11 @@ Deno.serve(async req => {
       timeframe: 'M1', created_at: new Date().toISOString(), expiration_time: new Date(entryAt + 60000).toISOString(),
     });
     if (saveError) throw saveError;
-    await db.from('trade_queue').update({ status: 'executed', iq_option_id: outcome.tradeId, executed_at: new Date().toISOString(), error: null }).eq('signal_id', queued.signal_id);
-    await db.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', leaseScope).eq('signal_id', queued.signal_id);
+    const [{ error: executedError }, { error: releaseError }] = await Promise.all([
+      db.from('trade_queue').update({ status: 'executed', iq_option_id: outcome.tradeId, executed_at: new Date().toISOString(), error: null }).eq('signal_id', queued.signal_id),
+      db.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', leaseScope).eq('signal_id', queued.signal_id),
+    ]);
+    if (executedError || releaseError) throw executedError || releaseError;
     // Only the additional confirmed principal order is copied, never the Demo TEST ledger.
     const copyTask = fetch(`${url}/functions/v1/iqoption-place-trade`, {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },

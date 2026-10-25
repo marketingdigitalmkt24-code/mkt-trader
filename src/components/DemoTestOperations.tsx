@@ -8,7 +8,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
 import { allDemoOutcomes, demoTestStats } from '@/lib/demo-test-stats';
 import { demoChartComparison } from '@/lib/demo-chart-comparison';
 
-const demoStrategyNames: Record<string, string> = {
+export const demoStrategyNames: Record<string, string> = {
  TENDENCIA: 'Tendência', VELA_FORCA: 'Vela de força', REVERSAO_RSI: 'Reversão RSI',
  CONTINUACAO_QUEDA_V1: 'Queda', TETO_V1: 'Teto', QUEDA_WIN_CALL_V1: 'Queda win',
  QUEDA_WIN_RETRY_V1: 'Queda win +1', FORCA_PADRAO_V1: 'Força padrão',

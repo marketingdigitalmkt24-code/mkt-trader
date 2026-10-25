@@ -6,6 +6,7 @@ export interface DemoScoreOrder extends DemoOutcomeRow {
  entry_minute: string;
  settled_at: string | null;
  score: number | null;
+ entry_strategy?: string | null;
 }
 export function displayedDemoScore(score: number | null): string {
  return score != null && Number.isFinite(score) ? score.toFixed(2) : 'unscored';

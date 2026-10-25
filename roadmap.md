@@ -1,7 +1,8 @@
 # Takashi invertida após 2,26 (25/10/2026)
-- [ ] Criar autorização exclusiva por sequência Demo em minutos consecutivos, sem exigir WIN e sem alterar a Demo original.
-- [ ] Executar na principal/Telegram/cópias com limites e valores atuais; demais estratégias continuam pausadas.
-- [ ] Testar regras, publicar funções e verificar o fluxo disponível sem replay.
+- [x] Criada autorização exclusiva por sequência Demo confirmada 2,26 → Takashi no minuto seguinte, qualquer resultado/ativo, direção invertida e nota Takashi intacta; claim só serviço, demais claims pausados.
+- [x] Principal, Telegram vinculado e cópias habilitados só para nova estratégia, US$10 configurados do admin e valores/metas próprios dos clientes; Auto Trading admin reativado, clientes mantidos desligados até ativação própria. Seis funções publicadas.
+- [x] Regras e copy testados; card autenticado abre e navegador não pode autorizar claim (42501), build OK.
+- [ ] Confirmar nova ordem → Telegram → cópia no histórico: depende de sequência fresca 2,26/Takashi e cliente com copy ligado; nenhum replay/ordem forçada, zero novas principais durante conferência.
 
 # Limpeza admin e resultados automáticos (25/10/2026)
 - [x] Apagadas 80 entradas IQ restantes do admin; consulta confirmou zero entradas IQ e lucro de hoje zero, preservando 24.387 TESTES e 891 ordens Demo.

@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 const PAGE = 10;
 const time = (value: string) => new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' });
-type Operation = { id: string; signal_id: string; asset: string; direction: string; entry_strategy: string; entry_minute: string; result: string; amount: number | null; profit: number | null; rejected: boolean; candles?: PatternCandle[] | null };
+type Operation = { id: string; signal_id: string; asset: string; direction: string; entry_strategy: string; entry_minute: string; result: string; amount: number | null; profit: number | null; rejected: boolean; testResult?: string; candles?: PatternCandle[] | null };
 function chartCandles(value: unknown): PatternCandle[] | null {
  if (!Array.isArray(value)) return null;
  const valid = value.filter((c): c is PatternCandle => c != null && typeof c === 'object' && ['t','o','c','h','l'].every(key => typeof c[key] === 'number' && Number.isFinite(c[key])));
@@ -80,15 +80,18 @@ export function DemoWinningPatterns() {
    const rows = [...orders.rows, ...rejections.rows].sort((a, b) => Date.parse(b.entry_minute) - Date.parse(a.entry_minute) || b.id.localeCompare(a.id)).slice(page * PAGE, limit);
    const executed = rows.filter(row => !row.rejected).map(row => row.signal_id);
    const rejected = rows.filter(row => row.rejected).map(row => row.id);
-   const [charts, rejectedCharts] = await Promise.all([
+   const rejectedSignals = rows.filter(row => row.rejected).map(row => row.signal_id);
+   const [charts, rejectedCharts, testResults] = await Promise.all([
     executed.length ? supabase.from('iq_demo_test_candidates').select('signal_id,candles').in('signal_id', executed) : Promise.resolve({ data: [], error: null }),
     rejected.length ? supabase.from('demo_selection_rejections').select('id,candles').in('id', rejected) : Promise.resolve({ data: [], error: null }),
+    rejectedSignals.length ? supabase.from('operation_results').select('signal_id,result').eq('timeframe', 'TEST').in('signal_id', rejectedSignals) : Promise.resolve({ data: [], error: null }),
    ]);
    if (charts.error) throw charts.error;
    if (rejectedCharts.error) throw rejectedCharts.error;
    const snapshots = new Map((charts.data ?? []).map(row => [row.signal_id, chartCandles(row.candles)]));
    const rejectionSnapshots = new Map((rejectedCharts.data ?? []).map(row => [row.id, chartCandles(row.candles)]));
-   return { count: orders.count + rejections.count, rows: rows.map(row => ({ ...row, candles: row.rejected ? rejectionSnapshots.get(row.id) : snapshots.get(row.signal_id) })) };
+   const testOutcome = new Map((testResults.data ?? []).map(row => [row.signal_id, String(row.result).toLowerCase()]));
+   return { count: orders.count + rejections.count, rows: rows.map(row => ({ ...row, testResult: row.rejected ? testOutcome.get(row.signal_id) : undefined, candles: row.rejected ? rejectionSnapshots.get(row.id) : snapshots.get(row.signal_id) })) };
   },
  });
  const pages = Math.max(1, Math.ceil((query.data?.count ?? 0) / PAGE));
@@ -108,7 +111,7 @@ export function DemoWinningPatterns() {
    <span className={row.direction === 'CALL' ? 'text-call' : 'text-put'}>{row.direction}</span>
    <span className="text-muted-foreground">{demoStrategyNames[row.entry_strategy] ?? row.entry_strategy}</span>
    {row.amount != null && <span className="font-mono text-[10px] text-muted-foreground">{money(Number(row.amount))}</span>}
-   <span className={`ml-auto font-mono ${row.result === 'win' ? 'text-call' : row.result === 'loss' ? 'text-put' : 'text-muted-foreground'}`}>{row.rejected ? 'REJEITADA' : row.result === 'pending' ? 'ABERTA' : `${row.result.toUpperCase()} · ${money(Number(row.profit))}`}</span>
+   <span className={`ml-auto font-mono ${(row.rejected ? row.testResult : row.result) === 'win' ? 'text-call' : (row.rejected ? row.testResult : row.result) === 'loss' ? 'text-put' : 'text-muted-foreground'}`}>{row.rejected ? (row.testResult === 'win' || row.testResult === 'loss' || row.testResult === 'tie' ? `REJEITADA · ${row.testResult === 'tie' ? 'EMPATE' : row.testResult.toUpperCase()} (teste)` : 'REJEITADA · sem resultado') : row.result === 'pending' ? 'ABERTA' : `${row.result.toUpperCase()} · ${money(Number(row.profit))}`}</span>
   </div></HoverCardTrigger><HoverCardContent className="w-80 max-w-[calc(100vw-2rem)]"><p className="mb-2 text-xs font-medium">{row.asset} · {demoStrategyNames[row.entry_strategy] ?? row.entry_strategy}</p>
    {row.rejected ? <DemoPatternChart candles={preEntryCandles(row.candles, row.entry_minute)} direction={row.direction} /> : <MiniChart candles={row.candles} direction={row.direction} entry={Date.parse(row.entry_minute) / 1000} />}
    <p className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">{time(row.entry_minute)} · {row.rejected ? 'REJEITADA · Não enviada à IQ Option' : row.result === 'pending' ? 'ABERTA' : row.result.toUpperCase()}</p>

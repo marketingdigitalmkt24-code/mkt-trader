@@ -178,17 +178,18 @@ async function buildDeepLearningProfile(supabase: any) {
   return profile;
 }
 
-// ============= LOVABLE AI — FAST PROFIT STRATEGIST =============
+// ============= GROQ AI — FAST PROFIT STRATEGIST =============
 async function aiAdaptiveStrategy(
   signals: SignalData[],
   profile: any,
   currentHour: number
 ): Promise<any[] | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.log('⚠️ LOVABLE_API_KEY não configurada');
+  const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
+  if (!GROQ_API_KEY) {
+    console.log('⚠️ GROQ_API_KEY não configurada');
     return null;
   }
+
   try {
     const signalSummaries = signals.map(s => {
       const ap = profile.assetProfiles[s.asset];
@@ -257,73 +258,60 @@ PULLBACK + PAVIO (setup prioritário): campo pullback_wick = true significa que 
 CONFIANÇA: 55-65 = boa entrada a favor da tendência; 66-80 = tendência + pavio/S&R; 80+ = tudo alinhado.
 Sempre informe best_direction CALL ou PUT (nunca NONE) e uma confiança realista.`;
 
-    const schema = {
-      type: 'object', additionalProperties: false, required: ['analysis', 'decisions'],
-      properties: {
-        analysis: { type: 'string' },
-        decisions: { type: 'array', items: {
-          type: 'object', additionalProperties: false,
-          required: ['asset', 'execute', 'best_direction', 'confidence', 'strategy', 'reason'],
-          properties: {
-            asset: { type: 'string' }, execute: { type: 'boolean' },
-            best_direction: { type: 'string', enum: ['CALL', 'PUT'] },
-            confidence: { type: 'number' }, strategy: { type: 'string' }, reason: { type: 'string' },
-          },
-        } },
-      },
-    };
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/responses', {
+    let response: Response | null = null;
+    let usedModel = '';
+    const attempts: { model: string; json: boolean }[] = [
+      { model: 'llama-3.3-70b-versatile', json: true },
+      { model: 'llama-3.3-70b-versatile', json: false },
+      // Llama bloqueado na conta Groq (model_not_found) — usa GPT-OSS 120B da própria Groq até liberar
+      { model: 'openai/gpt-oss-120b', json: true },
+    ];
+    for (const att of attempts) {
+    const body: any = {
+        model: att.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Analise estes ${signals.length} sinais para operações de 1 MINUTO (M1) A FAVOR DA TENDÊNCIA:\n\n${JSON.stringify(signalSummaries)}\n\nResponda APENAS com um objeto JSON válido (sem texto fora do JSON) no formato: {"analysis":"...","decisions":[{"asset":"...","execute":true,"best_direction":"CALL","confidence":0,"strategy":"MOMENTUM","reason":"..."}]}. Uma decisão por ativo. Razões curtas (máx 20 palavras).` },
+        ],
+        temperature: 0.1,
+        max_tokens: 3000,
+      };
+    if (att.json) body.response_format = { type: 'json_object' };
+    response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Lovable-API-Key': LOVABLE_API_KEY,
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'X-Lovable-AIG-SDK': 'fetch',
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: 'openai/gpt-6-astra',
-        stream: true,
-        store: false,
-        reasoning: { effort: 'low' },
-        max_output_tokens: 3000,
-        instructions: systemPrompt,
-        input: `Analise estes ${signals.length} sinais para operações de 1 MINUTO (M1) A FAVOR DA TENDÊNCIA:\n\n${JSON.stringify(signalSummaries)}\n\nUma decisão por ativo. Razões curtas (máx 20 palavras).`,
-        text: { format: { type: 'json_schema', name: 'decisions', strict: true, schema } },
-      }),
+      body: JSON.stringify(body),
     });
-    if (!response.ok || !response.body) {
+    usedModel = att.model;
+    if (response.ok || response.status === 429 || response.status >= 500) break;
+    const errBody = await response.text();
+    console.log(`⚠️ Groq ${att.model} (json=${att.json}) [${response.status}]: ${errBody.slice(0, 300)}`);
+    response = null;
+    }
+    if (!response) return null;
+
+    if (!response.ok) {
       const errText = await response.text();
-      console.error(`❌ Lovable AI [${response.status}]: ${errText.slice(0, 300)}`);
+      if (response.status === 429) {
+        console.log('⚠️ Groq rate limit, usando fallback local');
+      } else {
+        console.error(`❌ Groq API [${response.status}]: ${errText}`);
+      }
       return null;
     }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '', content = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, idx).trim(); buf = buf.slice(idx + 1);
-        if (!line.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        try {
-          const ev = JSON.parse(payload);
-          if (ev.type === 'response.output_text.delta') content += ev.delta || '';
-          else if (ev.type === 'response.failed' || ev.type === 'error') {
-            console.error(`❌ Lovable AI stream: ${JSON.stringify(ev).slice(0, 300)}`);
-            return null;
-          }
-        } catch { /* partial */ }
-      }
-    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
     if (content) {
-      const parsed = JSON.parse(content);
-      console.log(`🧠 Lovable AI gpt-6-astra OK`);
-      console.log(`🧠 IA Análise: ${parsed.analysis}`);
-      console.log(`🧠 IA Decisões: ${JSON.stringify(parsed.decisions)}`);
+      const match = String(content).match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(match ? match[0] : content);
+      console.log(`🧠 Groq ${usedModel} OK`);
+
+      console.log(`🧠 Groq Análise: ${parsed.analysis}`);
+      console.log(`🧠 Groq Decisões: ${JSON.stringify(parsed.decisions)}`);
       return parsed.decisions || null;
     }
   } catch (e) {
@@ -501,7 +489,7 @@ serve(async (req) => {
     });
 
     const approved = analyzedSignals.filter(a => a.recommendation === 'EXECUTE');
-    console.log(`🎯 FAST PROFIT: ${approved.length}/${signals.length} aprovados (Engine: ${aiDecisions ? 'LOVABLE_AI' : 'LOCAL'})`);
+    console.log(`🎯 FAST PROFIT: ${approved.length}/${signals.length} aprovados (Engine: ${aiDecisions ? 'GROQ_AI' : 'LOCAL'})`);
 
     return new Response(
       JSON.stringify({
@@ -509,7 +497,7 @@ serve(async (req) => {
         analyzedSignals,
         marketSentiment: 'FAST_PROFIT',
         bestSignal: approved.sort((a, b) => b.confidence - a.confidence)[0]?.asset || null,
-        engine: aiDecisions ? 'LOVABLE_AI_FAST_PROFIT' : 'LOCAL_FAST_PROFIT',
+        engine: aiDecisions ? 'GROQ_AI_FAST_PROFIT' : 'LOCAL_FAST_PROFIT',
         learningProfile: {
           totalTrades: profile.totalTrades,
           winRate: profile.overallWinRate,

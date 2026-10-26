@@ -159,6 +159,20 @@ Deno.serve(async (req) => {
     .not('iq_option_id','is',null).not('iq_option_id','like','mt5-%').not('iq_option_id','ilike','test%')
     .gte('created_at',demoSince).order('created_at',{ascending:false}).limit(1000)
     .then(r=>({...r,data:(r.data||[]).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:x.result==='win'?1:-1,asset:x.asset}))}));
+  // Rejected Demo candidates whose live-price TEST outcome is known also teach the scorer (half weight).
+  const rejectedHistPromise = (async()=>{
+    const {data,error}=await supabase.from('operation_results').select('signal_id,entry_strategy,asset,result,profit,created_at')
+      .eq('timeframe','TEST').in('result',['win','loss']).gte('created_at',demoSince)
+      .order('created_at',{ascending:false}).limit(1000);
+    if(error||!data?.length)return [];
+    const ids=new Set<string>();
+    for(let i=0;i<data.length;i+=200){
+      const r=await supabase.from('demo_selection_rejections').select('signal_id').in('signal_id',data.slice(i,i+200).map(x=>x.signal_id));
+      if(r.error)return [];
+      for(const x of r.data||[])ids.add(x.signal_id);
+    }
+    return data.filter(x=>ids.has(x.signal_id)).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:Number(x.profit)||0,asset:x.asset}));
+  })().catch(()=>[]);
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
   const scorePriorityPromise = readDemoScoreHistory(async(from,to)=>{
     const {data,error}=await supabase.from('iq_demo_test_orders')
@@ -420,9 +434,10 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  const [demoHist,chartSamples,refRow,realHist] = await Promise.all([demoHistPromise,chartPromise,refPromise,realHistPromise]);
+  const [demoHist,chartSamples,refRow,realHist,rejectedHist] = await Promise.all([demoHistPromise,chartPromise,refPromise,realHistPromise,rejectedHistPromise]);
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
   if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
+  console.log('Rejected TEST outcomes in learning:',rejectedHist.length);
   const priorityRead = await scorePriorityPromise;
   if(priorityRead.error)console.error('Demo WIN score history unavailable: pattern authorization remains independent');
   const winScores=priorityRead.data?.winScores??new Set<number>();
@@ -441,7 +456,7 @@ Deno.serve(async (req) => {
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
     const learn=combinedLearnedScore(demoHist.data||[],realHist.data||[],
       chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
-      c.entry_strategy,c.asset,curMin*1000);
+      c.entry_strategy,c.asset,curMin*1000,rejectedHist);
     return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy),_learned:learn}];});
   // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
   const qw = quedaWinCall(previousDemo.data || [], curMin);

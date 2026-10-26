@@ -1,3 +1,7 @@
+# Análise Takashi Demo (26/10/2026)
+- [ ] Comparar gráficos pré-entrada de WIN e LOSS confirmados, com validação temporal e resultados financeiros.
+- [ ] Aplicar somente ajustes Demo sustentados pela amostra, testar e verificar rotina; manter regras principais e registros reais.
+
 # Reduzir atraso da cópia (25/10/2026)
 - [x] Intervalo de detecção reduzido de 100ms para 25ms, limitado à janela original de 30s; 30 testes passaram, executor publicado e build OK. Ainda depende de nova sequência fresca para medir atraso total na corretora.
 - [x] Pedido repetido de substituir LOSS USD/VND pelo WIN do admin: resultado confirmado da conta cliente preservado para não fabricar saldo; nenhuma ordem nova após 21:58 UTC na consulta desta conferência.

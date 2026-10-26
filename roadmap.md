@@ -1,6 +1,7 @@
 # Análise Takashi Demo (26/10/2026)
-- [ ] Comparar gráficos pré-entrada de WIN e LOSS confirmados, com validação temporal e resultados financeiros.
-- [ ] Aplicar somente ajustes Demo sustentados pela amostra, testar e verificar rotina; manter regras principais e registros reais.
+- [x] Comparadas 494 ordens PRACTICE confirmadas por signal_id/minuto exatos, todas com 20 velas pré-entrada contíguas: 256 WIN/238 LOSS, 51,82%, −US$124,25 (5 empates excluídos). Último WIN da amostra 26/10 14:07 UTC; snapshots posteriores excluídos das features.
+- [x] Validação cronológica: treino 329 ordens (47,72%), holdout 165 (60%, +16,85 unidades de entrada). Vizinhos lucrativos k=7/15/25 só usam resultados liquidados antes da entrada; holdout filtrado 55,81%/47,92%/51,61%, abaixo do baseline. Pavios ≥20%, corpo ≤50%, direção de entrada e corpo decrescente não mostraram vantagem lucrativa consistente entre treino e holdout.
+- [x] Nenhum ajuste de execução aplicado: evidência não sustenta melhora e filtros por WIN isolados pioraram a validação. Demo, principal, Telegram, cópia, notas e histórico preservados; build existente OK. Melhora futura precisa de evidência prospectiva, não foi alegada.
 
 # Reduzir atraso da cópia (25/10/2026)
 - [x] Intervalo de detecção reduzido de 100ms para 25ms, limitado à janela original de 30s; 30 testes passaram, executor publicado e build OK. Ainda depende de nova sequência fresca para medir atraso total na corretora.

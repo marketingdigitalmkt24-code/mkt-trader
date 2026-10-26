@@ -12,7 +12,7 @@ import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recen
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { takashiKotegawa, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
-import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY } from '../_shared/demo-226-policy.ts';
+import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE } from '../_shared/demo-226-policy.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
@@ -478,11 +478,18 @@ Deno.serve(async (req) => {
   const demoEligible = demoPool.flatMap(c => {
     const cohort=demoCohort(c._score,c.entry_strategy);
     if(!cohort){
+      if(c.entry_strategy===TAKASHI_STRATEGY){reject(c,{code:'takashi_demo_score',details:{score:Number.isFinite(c._score)?c._score:null,minimum:TAKASHI_DEMO_MIN_SCORE}});return[];}
       if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
       reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];
     }
     return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null}];
   });
+  // User (Oct 26 2026): Takashi Demo entries require a learned score above 4. A score-gated
+  // Takashi still feeds the inverted principal sequence (any nonzero score) but never places
+  // a Demo order, so it is only persisted when the minute has no Demo winner.
+  const sequenceTakashi=demoPool
+    .filter(c=>c.entry_strategy===TAKASHI_STRATEGY&&Number.isFinite(c._score)&&Math.round(c._score*100)!==0&&!demoEligible.some(e=>e.signal_id===c.signal_id))
+    .sort((a,b)=>b._score-a._score||a.signal_id.localeCompare(b.signal_id))[0]??null;
   // User (Oct 25 2026 19:02 UTC): alternate Demo slots between Takashi and displayed-2.26 entries.
   const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
     .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();

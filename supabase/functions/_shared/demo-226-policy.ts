@@ -10,12 +10,18 @@ export function demo226Authorized(score: number, strategy: unknown): boolean {
 }
 
 // Oct 25 2026 19:02 UTC: Demo alternates Takashi entries with displayed-2.26 entries.
+// Oct 26 2026 (user): Takashi only enters the Demo with a learned score above 4.
+// The inverted principal sequence keeps its own authorization (any nonzero score).
 export const TAKASHI_STRATEGY = 'TAKASHI_BNF_V1';
+export const TAKASHI_DEMO_MIN_SCORE = 4;
+export function takashiDemoAuthorized(score: number): boolean {
+  return Number.isFinite(score) && score > TAKASHI_DEMO_MIN_SCORE;
+}
 // Oct 26 2026: Demo-only "Força antecipada" joins the rotation (never principal/Telegram/copy).
 export const FORCA_ANTECIPADA_STRATEGY = 'FORCA_ANTECIPADA_V1';
 export type DemoCohort = 'takashi' | 'score226' | 'antecipada';
 export function demoCohort(score: number, strategy: unknown): DemoCohort | null {
-  if (strategy === TAKASHI_STRATEGY) return 'takashi';
+  if (strategy === TAKASHI_STRATEGY) return takashiDemoAuthorized(score) ? 'takashi' : null;
   if (strategy === FORCA_ANTECIPADA_STRATEGY) return 'antecipada';
   return demo226Authorized(score, strategy) ? 'score226' : null;
 }

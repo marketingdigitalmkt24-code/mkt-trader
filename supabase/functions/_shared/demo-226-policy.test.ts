@@ -22,5 +22,6 @@ test('Demo accepts Takashi at any score and 2.26 Force/Trend', () => {
 });
 test('Demo alternates after each slot', () => {
   expect(preferredDemoCohort('TAKASHI_BNF_V1')).toBe('score226');
-  expect(preferredDemoCohort('VELA_FORCA')).toBe('takashi');
+  expect(preferredDemoCohort('VELA_FORCA')).toBe('antecipada');
+  expect(preferredDemoCohort('FORCA_ANTECIPADA_V1')).toBe('takashi');
 });

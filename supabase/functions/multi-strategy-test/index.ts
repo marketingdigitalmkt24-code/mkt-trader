@@ -516,7 +516,28 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo blocked: no allowed strategy with displayed score 2.26');
+  if (!demoWinner && sequenceTakashi) {
+    // Principal-only minute: the score-gated Takashi cannot place a Demo order, but the
+    // inverted sequence keeps its own authorization, so persist the candidate for the claim.
+    const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:sequenceTakashi.created_at,
+      signal_id:sequenceTakashi.signal_id,asset:sequenceTakashi.asset,direction:sequenceTakashi.direction,
+      entry_strategy:sequenceTakashi.entry_strategy,score:sequenceTakashi._score,
+      candles:(series.get(sequenceTakashi.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
+    if (error) console.error('Principal Takashi candidate write failed:',error.code);
+    else {
+      console.log('Principal-only Takashi candidate persisted:', sequenceTakashi.signal_id, 'score', sequenceTakashi._score);
+      const principalTask = supabase.functions.invoke('selected-demo-trend', {
+        body: { candidate: sequenceTakashi.signal_id, brokerSession: { ssid, configId: cfg.id } },
+      }).then(async ({ data, error }) => {
+        if (error) {
+          const details = 'context' in error && error.context instanceof Response ? await error.context.text() : error.message;
+          console.error('Selected Trend principal dispatch failed:', details);
+        } else console.log('Selected Trend principal outcome:', JSON.stringify(data));
+      }).catch(error => console.error('Selected Trend dispatch failed:', String(error)));
+      // @ts-ignore Hosted background runtime
+      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(principalTask); else await principalTask;
+    }
+  } else if (!demoWinner) console.log('Demo blocked: no allowed strategy with displayed score 2.26 or Takashi above 4');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,

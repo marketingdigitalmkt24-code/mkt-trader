@@ -16,6 +16,7 @@ import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY } from '../_shared/de
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
+import { forcaAntecipada, FORCA_ANTECIPADA } from '../_shared/forca-antecipada.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay } from '../_shared/demo-timing.ts';
@@ -403,6 +404,10 @@ Deno.serve(async (req) => {
     if (forcaPadrao) demoPatterns.push({signal_id:`forca-padrao-v1-${asset}-${curMin}`,asset,direction:forcaPadrao.direction,
       entry_strategy:FORCA_PADRAO,created_at:new Date(curMin*1000).toISOString(),
       _score:fired.filter(([,direction])=>direction===forcaPadrao.direction).length+0.99*forcaPadrao.bodyRatio});
+    const antecipada = forcaAntecipada(cs,curMin);
+    if (antecipada) demoPatterns.push({signal_id:`forca-antecipada-v1-${asset}-${curMin}`,asset,direction:antecipada.direction,
+      entry_strategy:FORCA_ANTECIPADA,created_at:new Date(curMin*1000).toISOString(),
+      _score:fired.filter(([,direction])=>direction===antecipada.direction).length+Math.min(0.99,antecipada.expansion/3)});
     // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
     const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
     const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];

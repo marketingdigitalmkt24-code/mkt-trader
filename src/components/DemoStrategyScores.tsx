@@ -11,6 +11,7 @@ export function DemoStrategyScores() {
  const { user } = useAuth();
  const [strategy, setStrategy] = useState('all');
  const [period, setPeriod] = useState('all');
+ const [order, setOrder] = useState('desc');
  const [page, setPage] = useState(0);
  const queryClient = useQueryClient();
  useEffect(() => {

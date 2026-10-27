@@ -11,6 +11,16 @@ test('rejected TEST losses veto a cohort and rejected WIN counts remain separate
 test('unknown notes and ties never become winning score cohorts', () => {
  expect(winningStrategyScores([row('a', 'VELA_FORCA', null), row('b', 'TENDENCIA', 2.26, 'tie')])).toEqual([]);
 });
+test('a new LOSS removes a previously winning score without deleting its observations', () => {
+ const observations = [row('win')];
+ expect(winningStrategyScores(observations).length).toBe(1);
+ observations.push(row('loss', 'VELA_FORCA', 2.26, 'loss'));
+ expect(winningStrategyScores(observations)).toEqual([]);
+ expect(observations.length).toBe(2);
+});
+test('older LOSS keeps a score excluded when selecting today', () => {
+ expect(winningStrategyScores([row('today'), { ...row('old', 'VELA_FORCA', 2.26, 'loss'), entry_minute: '2026-10-25T03:00:00Z' }], 'today', Date.parse('2026-10-27T05:05:00Z'))).toEqual([]);
+});
 test('today starts at Brasília midnight', () => {
  expect(filterStrategyScorePeriod([row('a'), { ...row('b'), entry_minute: '2026-10-27T02:59:59Z' }], 'today', Date.parse('2026-10-27T04:59:00Z')).map(r => r.signal_id)).toEqual(['a']);
 });

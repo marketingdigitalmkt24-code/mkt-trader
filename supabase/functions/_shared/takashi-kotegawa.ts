@@ -1,6 +1,13 @@
 export const TAKASHI_BNF = 'TAKASHI_BNF_V1';
 type Candle = { t: number; o: number; c: number; h: number; l: number };
 
+// Keep raw confluence/body evidence separate from outcome learning; never assign a target note.
+export function takashiBaseScore(candle: Candle, confluenceCount: number): number {
+  if (!Number.isFinite(confluenceCount) || confluenceCount < 0 || !Number.isFinite(candle.o)
+    || !Number.isFinite(candle.c) || candle.o <= 0) return NaN;
+  return confluenceCount + Math.min(0.99, 100 * Math.abs(candle.c - candle.o) / candle.o);
+}
+
 // Takashi Kotegawa (BNF) mean reversion, independent observations plus selected Demo cohort.
 // The original rule bought stocks 20–35% below the 25-day moving average after panic selling;
 // on M1 charts the same dislocation is measured against the asset's own recent amplitude

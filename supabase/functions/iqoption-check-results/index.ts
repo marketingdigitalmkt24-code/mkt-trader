@@ -25,8 +25,8 @@ interface PositionResult {
 }
 
 // Configuration
-const MAX_RETRIES = 4;
-const LOGIN_TIMEOUT_MS = 20000; // more resilient in unstable networks
+const MAX_RETRIES = 1;
+const LOGIN_TIMEOUT_MS = 5000; // Three endpoints stay within a bounded 15s login budget.
 const RETRY_BASE_DELAY_MS = 1200; // base delay for backoff
 
 // Multiple IQ Option API endpoints to try (some regions block intermittently)
@@ -138,7 +138,7 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
             ws.close();
             resolve({ positions, authenticated, usedWsUrl: wsUrl });
           }
-        }, 25000);
+        }, 10000);
 
         const finish = () => {
           if (resolved) return;
@@ -363,10 +363,7 @@ async function getClosedPositions(auth: WsAuthMode, accountType: string): Promis
 
         ws.onclose = () => {
           console.log('WebSocket closed, found', positions.length, 'positions');
-          if (!resolved) {
-            clearTimeout(timeout);
-            resolve({ positions, authenticated, usedWsUrl: wsUrl });
-          }
+          finish();
         };
       });
 
@@ -401,6 +398,18 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Demo has its own exact-ID reconciler. Do not log in just to scan empty principal history.
+    const { data: pendingOperations, error: pendingError } = await supabase
+      .from('operation_results')
+      .select('id, iq_option_id, signal_id, created_at, result, asset, direction, timeframe')
+      .or('result.eq.pending,result.eq.tie').not('timeframe','in','(TEST,MT5)')
+      .not('iq_option_id','is',null).order('created_at',{ascending:false}).limit(200)
+      .abortSignal(AbortSignal.timeout(5000));
+    if (pendingError) throw pendingError;
+    if (!pendingOperations?.length && !debugIqOptionIds.length) {
+      return Response.json({ success:true,pendingChecked:0,stillPending:0,closedPositions:0,updatedResults:0 }, {headers:corsHeaders});
+    }
 
     // Get IQ Option credentials from database
     const { data: configData, error: configError } = await readMasterIQConfig(supabase);
@@ -455,17 +464,6 @@ serve(async (req) => {
 
     // Get ALL pending operations AND ALL tie results (which should be verified)
     // TIE results are often temporary placeholders - we should always verify them
-    const { data: pendingOperations, error: pendingError } = await supabase
-      .from('operation_results')
-      .select('id, iq_option_id, signal_id, created_at, result, asset, direction, timeframe')
-      .or('result.eq.pending,result.eq.tie')
-      .order('created_at', { ascending: false })
-      .limit(200);
-
-    if (pendingError) {
-      console.error('Error fetching pending operations:', pendingError);
-    }
-
     const pendingCount = pendingOperations?.filter((p) => p.result === 'pending').length || 0;
     const tieCount = pendingOperations?.filter((p) => p.result === 'tie').length || 0;
     console.log(`Found ${pendingCount} pending + ${tieCount} recent tie operations to check`);

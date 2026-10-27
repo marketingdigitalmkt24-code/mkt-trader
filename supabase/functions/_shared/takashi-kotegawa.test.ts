@@ -1,4 +1,5 @@
-import { assertEquals } from 'jsr:@std/assert@1';
+import { expect, test } from 'bun:test';
+const assertEquals = (actual: unknown, expected: unknown) => expect(actual).toEqual(expected);
 import { takashiKotegawa, TAKASHI_BNF } from './takashi-kotegawa.ts';
 
 const entry = 1_700_000_000 - (1_700_000_000 % 60);
@@ -10,33 +11,33 @@ function series(values: number[]): { t: number; o: number; c: number; h: number;
   });
 }
 
-Deno.test('Takashi Kotegawa labels constant', () => {
+test('Takashi Kotegawa labels constant', () => {
   assertEquals(TAKASHI_BNF, 'TAKASHI_BNF_V1');
 });
 
-Deno.test('Panic drop far below SMA25 with oversold RSI fires CALL', () => {
+test('Panic drop far below SMA25 with oversold RSI fires CALL', () => {
   const values: number[] = [];
   for (let i = 0; i < 60; i++) values.push(100 - i * 0.5); // closes 100 → 70.5
   const out = takashiKotegawa(series(values), entry);
   assertEquals(out?.direction, 'CALL');
-  assertEquals(out!.rsi < 20, true);
+  assertEquals(out ? out.rsi < 20 : false, true);
 });
 
-Deno.test('Panic rally far above SMA25 with overbought RSI fires PUT', () => {
+test('Panic rally far above SMA25 with overbought RSI fires PUT', () => {
   const values: number[] = [];
   for (let i = 0; i < 60; i++) values.push(100 + i * 0.5);
   const out = takashiKotegawa(series(values), entry);
   assertEquals(out?.direction, 'PUT');
-  assertEquals(out!.rsi > 80, true);
+  assertEquals(out ? out.rsi > 80 : false, true);
 });
 
-Deno.test('Sideways market near the mean stays out', () => {
+test('Sideways market near the mean stays out', () => {
   const values: number[] = [];
   for (let i = 0; i < 60; i++) values.push(100 + Math.sin(i) * 0.2);
   assertEquals(takashiKotegawa(series(values), entry), null);
 });
 
-Deno.test('Entry minute must be aligned to :00', () => {
+test('Entry minute must be aligned to :00', () => {
   const values: number[] = [];
   for (let i = 0; i < 60; i++) values.push(100 - i * 0.5);
   assertEquals(takashiKotegawa(series(values), entry + 30), null);

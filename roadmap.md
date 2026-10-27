@@ -1,5 +1,8 @@
+# Tempo limite no painel (27/10/2026)
+- [x] Consulta de resultados retorna imediatamente sem ordens principais pendentes; login limitado a uma rodada de três endpoints (5s cada), WebSockets 10s e consulta do navegador sem sobreposição com cancelamento. Executor publicado respondeu 200; 13 testes passaram; admin autenticado sob 504 simulado continuou visível sem erros, com Takashi 1,51 WIN +US$0,82 e nova nota 1,03. Build OK.
+
 # Takashi exclusiva Demo (27/10/2026)
-- [ ] Selecionar/executar apenas Takashi na Demo, verificar notas e rotina por minuto, mantendo bloqueio principal/Telegram/clientes.
+- [x] Somente Takashi na Demo com qualquer nota finita, sem principal/mid-candle/observações extras; rotina privada por minuto ativa e dois executores publicados. 27 testes aprovados; primeiro ATOMUSD-OTC CALL PRACTICE US$1 confirmado às 21:11 UTC, nota bruta 1,50818880024869 exibida 1,51 no admin. Fila principal, resultados principais/TEST, Telegram e cópias ativos zerados. Aprendizado sem histórico contribui zero, sem inventar resultados.
 
 # Interrupção das estratégias principais (27/10/2026)
 - [x] Todas as entradas principais IQ Option, cópias e avisos Telegram bloqueados nos executores; configurações automáticas/cópias desligadas, sete funções publicadas, 17 testes aprovados e principal publicada recusou 410. Demo/histórico preservados.

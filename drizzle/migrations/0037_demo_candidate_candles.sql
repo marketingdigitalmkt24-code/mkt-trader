@@ -1,0 +1,1 @@
+ALTER TABLE public.iq_demo_test_candidates ADD COLUMN IF NOT EXISTS candles jsonb;

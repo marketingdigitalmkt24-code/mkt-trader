@@ -1,5 +1,426 @@
 {
   "version": "7",
   "dialect": "postgresql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1792022569510,
+      "tag": "0000_add_entry_strategy",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792029266385,
+      "tag": "0001_telegram_iq_delivery_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792093136610,
+      "tag": "0002_chart_study",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792093250272,
+      "tag": "0003_schedule_chart_study",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792192100492,
+      "tag": "0004_four_win_reversal_claim",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792192227252,
+      "tag": "0005_four_win_safety_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792197952034,
+      "tag": "0006_force_loss_win_claim",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792210564320,
+      "tag": "0007_four_win_skip_double_force",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792210604110,
+      "tag": "0008_four_win_skip_adjacent_force",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792211881809,
+      "tag": "0009_create_copy_trading_configs",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792214334362,
+      "tag": "0010_allow_clients_create_own_copy_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792214978159,
+      "tag": "0011_invalidate_copy_on_iq_account_change",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792219928108,
+      "tag": "0012_master_iq_admin_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792221176315,
+      "tag": "0013_three_force_claim",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792278598477,
+      "tag": "0014_add_test_sequence_observation",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792288800020,
+      "tag": "0015_telegram_daily_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792289581352,
+      "tag": "0016_force_inverted_test_observation",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792289940324,
+      "tag": "0017_retire_force_loss_win",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792303450649,
+      "tag": "0018_swap_real_strategies",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792332021366,
+      "tag": "0019_remove_asset_loss_pause",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792340215034,
+      "tag": "0020_allow_simultaneous_real_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792465441067,
+      "tag": "0021_remove_forca_invertida_claim",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792465605078,
+      "tag": "0022_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792472995200,
+      "tag": "0023_iq_single_order_and_exact_stakes",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792473512103,
+      "tag": "0024_prevent_principal_self_copy",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792473702501,
+      "tag": "0025_independent_shared_broker_client_reservations",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792607189817,
+      "tag": "0026_iq_display_reset_cutoff",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792607752821,
+      "tag": "0027_force_anticipation_test",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792608519918,
+      "tag": "0028_force_anticipation_put",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792609032765,
+      "tag": "0029_anticipation_scheduler_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792609445885,
+      "tag": "0030_authorize_force_anticipation_iq",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792647358819,
+      "tag": "0031_trend_three_loss_put",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792692394994,
+      "tag": "0032_release_copy_lease_when_master_failed",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792781271672,
+      "tag": "0033_isolated_iq_demo_test_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792781340537,
+      "tag": "0034_schedule_isolated_demo_tests",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792782903663,
+      "tag": "0035_configurable_demo_test_stake",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792783715379,
+      "tag": "0036_demo_minute_candidate_selection",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792785410895,
+      "tag": "0037_demo_candidate_candles",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792804395364,
+      "tag": "0038_authorize_selected_demo_trend_principal",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792812233578,
+      "tag": "0039_trend_win_next_minute_inverted",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792812475237,
+      "tag": "0040_authorize_queda_win_retry_principal",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792812735569,
+      "tag": "0041_disable_normal_trend_principal",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1792820761176,
+      "tag": "0042_super_selected_score_band",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1792820962642,
+      "tag": "0043_retire_trend_three_loss_put_principal",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792826173530,
+      "tag": "0044_authorize_exact_demo_score_226",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792875418746,
+      "tag": "0045_super_selected_only_226",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1792883665709,
+      "tag": "0046_demo_selection_rejections",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792884472220,
+      "tag": "0047_demo_winning_pattern_origin",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792896929555,
+      "tag": "0048_super_selected_displayed_226",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792948407890,
+      "tag": "0049_takashi_displayed_226_cohort",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792950754959,
+      "tag": "0050_takashi_removed_from_226",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1792961757191,
+      "tag": "0051_pause_all_principal_iq_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1792962159090,
+      "tag": "0052_clear_iq_today_entries_and_results",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1792962638799,
+      "tag": "0053_authorize_takashi_after_226_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1792964496876,
+      "tag": "0054_takashi_after_226_block_zero_score",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1793077617528,
+      "tag": "0055_admin_winning_strategy_score_summary",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1793078676263,
+      "tag": "0056_admin_strategy_score_chart_dates",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1793078952033,
+      "tag": "0057_strategy_scores_demo_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1793079240185,
+      "tag": "0058_strategy_score_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793080084433,
+      "tag": "0059_strategy_scores_realtime",
+      "breakpoints": true
+    }
+  ]
 }

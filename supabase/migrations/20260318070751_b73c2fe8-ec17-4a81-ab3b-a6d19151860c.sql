@@ -1,0 +1,1 @@
+UPDATE operation_results SET result = 'expired', profit = 0 WHERE id = 'bbd4789e-8c82-46bf-8417-5b8f8542e1c9' AND result = 'pending'

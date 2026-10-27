@@ -1,0 +1,1 @@
+DELETE FROM operation_results WHERE result = 'pending' AND iq_option_id LIKE 'pending_%';

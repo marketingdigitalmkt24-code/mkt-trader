@@ -15,22 +15,20 @@ export function demo226Authorized(score: number, strategy: unknown): boolean {
 export const TAKASHI_STRATEGY = 'TAKASHI_BNF_V1';
 export const TAKASHI_DEMO_MIN_SCORE = 4;
 export function takashiDemoAuthorized(score: number): boolean {
-  return Number.isFinite(score) && score > TAKASHI_DEMO_MIN_SCORE;
+  return Number.isFinite(score);
 }
 // Oct 26 2026: Demo-only "Força antecipada" joins the rotation (never principal/Telegram/copy).
 export const FORCA_ANTECIPADA_STRATEGY = 'FORCA_ANTECIPADA_V1';
 export type DemoCohort = 'takashi' | 'score226' | 'antecipada';
 export function demoCohort(score: number, strategy: unknown): DemoCohort | null {
   if (strategy === TAKASHI_STRATEGY) return takashiDemoAuthorized(score) ? 'takashi' : null;
-  if (strategy === FORCA_ANTECIPADA_STRATEGY) return 'antecipada';
-  return demo226Authorized(score, strategy) ? 'score226' : null;
+  return null;
 }
 export function demoAlternationAuthorized(score: number, strategy: unknown): boolean {
   return demoCohort(score, strategy) !== null;
 }
 // Rotate Takashi -> 2,26 -> Força antecipada; fall back so a minute is never wasted.
 export function preferredDemoCohort(previousStrategy: unknown): DemoCohort {
-  if (previousStrategy === TAKASHI_STRATEGY) return 'score226';
-  if (previousStrategy === FORCA_ANTECIPADA_STRATEGY) return 'takashi';
-  return 'antecipada';
+  void previousStrategy;
+  return 'takashi';
 }

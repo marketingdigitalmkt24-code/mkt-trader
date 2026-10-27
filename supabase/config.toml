@@ -21,6 +21,12 @@ verify_jwt = false
 [functions.auto-generate-signals]
 verify_jwt = false
 
+[functions.multi-strategy-test]
+verify_jwt = false
+
+[functions.iqoption-demo-tests]
+verify_jwt = false
+
 [functions.metaapi-place-trade]
 verify_jwt = false
 

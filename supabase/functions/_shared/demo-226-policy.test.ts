@@ -14,21 +14,22 @@ test('Force and Trend remain authorized; other strategies cannot use 2.26', () =
 });
 
 import { demoAlternationAuthorized, preferredDemoCohort, demoCohort, takashiDemoAuthorized, TAKASHI_DEMO_MIN_SCORE } from './demo-226-policy';
-test('Takashi only enters Demo with a learned score above 4 (user, Oct 26 2026)', () => {
+test('Takashi Demo accepts any finite score including zero and below four', () => {
   expect(demoAlternationAuthorized(4.01, 'TAKASHI_BNF_V1')).toBe(true);
-  expect(demoAlternationAuthorized(4, 'TAKASHI_BNF_V1')).toBe(false);
-  expect(demoAlternationAuthorized(3.99, 'TAKASHI_BNF_V1')).toBe(false);
+  expect(demoAlternationAuthorized(4, 'TAKASHI_BNF_V1')).toBe(true);
+  expect(demoAlternationAuthorized(3.99, 'TAKASHI_BNF_V1')).toBe(true);
+  expect(demoAlternationAuthorized(0, 'TAKASHI_BNF_V1')).toBe(true);
   expect(demoCohort(4.5, 'TAKASHI_BNF_V1')).toBe('takashi');
-  expect(demoCohort(TAKASHI_DEMO_MIN_SCORE, 'TAKASHI_BNF_V1')).toBeNull();
+  expect(demoCohort(TAKASHI_DEMO_MIN_SCORE, 'TAKASHI_BNF_V1')).toBe('takashi');
   expect(takashiDemoAuthorized(4.01)).toBe(true);
   expect(takashiDemoAuthorized(Number.NaN)).toBe(false);
 });
-test('Demo still accepts 2.26 Force/Trend beside the gated Takashi', () => {
-  expect(demoAlternationAuthorized(2.26, 'TENDENCIA')).toBe(true);
-  expect(demoAlternationAuthorized(2.3, 'TENDENCIA')).toBe(false);
+test('Demo rejects every non-Takashi strategy regardless of score', () => {
+  for (const strategy of ['TENDENCIA','VELA_FORCA','FORCA_ANTECIPADA_V1','PADRAO_MEIO_V1','REVERSAO_RSI'])
+    for (const score of [0,2.26,5]) expect(demoAlternationAuthorized(score,strategy)).toBe(false);
 });
-test('Demo alternates after each slot', () => {
-  expect(preferredDemoCohort('TAKASHI_BNF_V1')).toBe('score226');
-  expect(preferredDemoCohort('VELA_FORCA')).toBe('antecipada');
+test('Demo always prefers Takashi', () => {
+  expect(preferredDemoCohort('TAKASHI_BNF_V1')).toBe('takashi');
+  expect(preferredDemoCohort('VELA_FORCA')).toBe('takashi');
   expect(preferredDemoCohort('FORCA_ANTECIPADA_V1')).toBe('takashi');
 });

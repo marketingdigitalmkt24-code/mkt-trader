@@ -50,6 +50,7 @@ Deno.serve(async req => {
  const parsed = schema.safeParse(await req.json().catch(() => null));
  if (!parsed.success) return reply({ error: 'Invalid parameters' },400);
  const mid=parsed.data.mode==='mid';
+ if(mid)return reply({error:'Only normal-minute Takashi Demo is enabled'},410);
  if(mid && (!serviceAuthorized || !parsed.data.candidate || parsed.data.inspect))return reply({error:'Invalid mid-candle dispatch'},400);
  if(mid){
    const {data:uncertain,error}=await db.from('iq_demo_test_orders').select('id').eq('entry_strategy',DEMO_MID_CANDLE).eq('status','unknown').limit(1);

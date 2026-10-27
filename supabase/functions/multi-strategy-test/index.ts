@@ -377,10 +377,7 @@ Deno.serve(async (req) => {
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
   const historyRead = await historyPromise;
   if (historyRead.error) console.error('Recent learning history unavailable:', historyRead.error.message);
-  // Takashi learns from its own confirmed Demo orders (asset+direction, recent first).
-  const ownTakashi = ((await demoHistPromise).data || []).filter(r => r.entry_strategy === TAKASHI_BNF)
-    .map(r => ({ asset: r.asset, direction: r.direction, entry_strategy: r.entry_strategy, result: r.result, created_at: r.entry_minute }));
-  const history = [...newlySettled, ...ownTakashi, ...(historyRead.data || [])]
+  const history = [...newlySettled, ...(historyRead.data || [])]
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
     .filter((row, index, all) => all.findIndex(other => other.asset === row.asset
       && other.created_at === row.created_at && other.entry_strategy === row.entry_strategy) === index);

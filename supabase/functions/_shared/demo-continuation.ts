@@ -187,7 +187,5 @@ export function demoFinalScore(base: number, learn: number, strategy: string) {
     const s = Math.max(0, base + QUEDA_HISTORY_WEIGHT * learn);
     return learn < 0 ? Math.min(s, DEMO_MIN_SCORE - 0.01) : s;
   }
-  // Takashi keeps negative notes so a losing phase still ranks candidates instead of flattening to 0.00.
-  if (strategy === 'TAKASHI_BNF_V1') return base + 2 * learn;
   return Math.max(0, base + 2 * learn);
 }

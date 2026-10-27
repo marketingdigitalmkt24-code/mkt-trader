@@ -39,7 +39,7 @@ export function DemoStrategyScores() {
   refetchInterval: 10000, staleTime: 5000, refetchOnWindowFocus: 'always',
   queryFn: async () => {
    const { data, error } = await supabase.rpc('admin_winning_strategy_score_chart',
-    period === 'custom' ? { p_period, p_from: customFrom, p_to: customTo } : { p_period });
+    period === 'custom' ? { p_period: period, p_from: customFrom, p_to: customTo } : { p_period: period });
    if (error) throw error;
    return (data ?? []).map(row => ({ strategy: row.strategy, score: row.score, demoWins: Number(row.demo_wins), losses: Number(row.losses), firstWinAt: row.first_win_at, lastWinAt: row.last_win_at, historyFirstWinAt: row.history_first_win_at }));
   },

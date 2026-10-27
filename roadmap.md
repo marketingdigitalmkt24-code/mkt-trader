@@ -1,7 +1,11 @@
+# Aprendizado recente Takashi (27/10/2026)
+- [x] Ajuste recente da nota usa até 500 resultados próprios confirmados PRACTICE dos últimos 14 dias, paginados e deduplicados, incluindo os recém-liquidados; WIN favorece e LOSS penaliza. 390 testes passaram, sem mudança dos demais ajustes ou da elegibilidade por nota finita.
+- [x] Publicado e confirmado na rotina 21:58 UTC: 24 resultados próprios lidos (11 WIN/13 LOSS). Painel autenticado conferido com notas/ordens reais; principais/Telegram/cópias zerados e build OK.
+
 # Resultado SUGAR e entrada Demo :00 (27/10/2026)
 - [x] SUGAR #14395548093 confirmou WIN +US$0,82 e foi conferida no painel; recuperação publicada consulta pendências Demo expiradas de qualquer minuto, por ID exato, mesmo sem candidato.
 - [x] Envio Demo publicado na conexão PRACTICE já preparada, com reserva única, velas fechadas, mercado/valor/frescor rechecados; 386 testes passaram. Principais/Telegram/cópias seguem zerados.
-- [ ] Medir próximo envio Demo confirmado após otimização: depende de novo candidato Takashi com mercado M1 disponível e login da corretora; TESLA 21:52 não autorizada pelo mercado, e tentativas seguintes não completaram login. Nenhuma ordem forçada.
+- [x] Envio natural após otimização confirmado: SUGAR 21:56 enviada :00,665 e confirmada :00,840; :00 exato continua sem garantia.
 
 # Título da lista de notas (27/10/2026)
 - [x] Cabeçalho da aba Estratégias passou de "Notas com WIN e nenhum LOSS" para "Notas | Mais WIN"; painel autenticado confirmou "Notas | Mais WIN · 2" com notas 1,51 e 0,00 (1 WIN, 0 LOSS), 17 testes passaram, build OK.

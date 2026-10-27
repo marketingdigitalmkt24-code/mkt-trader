@@ -31,6 +31,7 @@ import { DEMO_MID_CANDLE } from '../_shared/demo-mid-candle.ts';
 import { readDemoWinningReferences } from '../_shared/demo-winning-reference-history.ts';
 import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
+import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -151,12 +152,23 @@ Deno.serve(async (req) => {
   }
   const targetMs = demoTargetMinute(Date.now(), input.scheduled === true);
   const previousDemoRead = supabase.from('iq_demo_test_orders')
-    .select('id,entry_strategy,entry_minute,result,profit,asset,direction,status,iq_option_id')
+    .select('id,signal_id,entry_strategy,entry_minute,result,profit,asset,direction,status,account_type,iq_option_id,settled_at')
     .eq('status','confirmed').not('iq_option_id','is',null)
     .eq('account_type','PRACTICE').eq('result','pending')
     .lte('expiration_time',new Date(targetMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
   const amountRead = supabase.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r);
+  // Own recent broker evidence loads during preparation, not after the :00 candle request.
+  const takashiRecentRead = readTakashiRecentOrders(async(from,to)=>{
+    const {data,error}=await supabase.from('iq_demo_test_orders')
+      .select('signal_id,entry_strategy,asset,direction,entry_minute,settled_at,status,account_type,iq_option_id,result')
+      .eq('entry_strategy',TAKASHI_BNF).eq('status','confirmed').eq('account_type','PRACTICE')
+      .not('iq_option_id','is',null).in('result',['win','loss'])
+      .gte('entry_minute',new Date(targetMs-14*86400000).toISOString())
+      .lt('entry_minute',new Date(targetMs).toISOString())
+      .order('entry_minute',{ascending:false}).order('id').range(from,to);
+    if(error)throw error;return data||[];
+  }).then(data=>({data,error:null})).catch(()=>({data:[],error:'unavailable'}));
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Fetch independent Demo learning inputs while broker login/candles are in flight.
   const demoSince = new Date(Date.now()-14*86400000).toISOString();
@@ -361,7 +373,7 @@ Deno.serve(async (req) => {
           demoSettlements.push(supabase.from('iq_demo_test_orders')
             .update({result:outcome.result,profit:outcome.profit,settled_at:new Date().toISOString()})
             .eq('id',match.id).eq('result','pending').select('id').then(({data,error})=>{
-              if(!error && data?.length){match.result=outcome.result;match.profit=outcome.profit;}
+              if(!error && data?.length){match.result=outcome.result;match.profit=outcome.profit;match.settled_at=new Date().toISOString();}
             }));
         }
         demoHistoryPending=Math.max(0,demoHistoryPending-1);
@@ -391,6 +403,12 @@ Deno.serve(async (req) => {
       && other.created_at === row.created_at && other.entry_strategy === row.entry_strategy) === index);
   const rows: any[] = [];
   const demoPatterns: DemoCandidate[] = [];
+  const recentTakashi = await takashiRecentRead;
+  if(recentTakashi.error)console.error('Takashi recent learning unavailable');
+  const learningObservedMs=Date.now();
+  const takashiHistory=[...previousPending,...recentTakashi.data];
+  const ownEvidence=takashiRecentEvidence(takashiHistory,targetMs,learningObservedMs);
+  console.log('Takashi recent learning:',JSON.stringify({samples:ownEvidence.length,wins:ownEvidence.filter(r=>r.result==='win').length,losses:ownEvidence.filter(r=>r.result==='loss').length}));
   for (const [asset, cs] of series) {
     const closed = cs.filter(k => k.t + 60 <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
@@ -403,7 +421,7 @@ Deno.serve(async (req) => {
       entry_strategy: TAKASHI_BNF, created_at: new Date(curMin * 1000).toISOString(),
       // Same confluence/body base as other indicators; never assign the target score.
       _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, direction]) => direction === takashi.direction).length)
-        + recentLearningAdjustment(history, { asset, direction: takashi.direction, entry_strategy: TAKASHI_BNF }, curMin * 1000),
+        + takashiRecentAdjustment(takashiHistory, { asset, direction: takashi.direction }, targetMs, learningObservedMs),
     });
   }
   let inserted = 0;

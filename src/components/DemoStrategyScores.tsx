@@ -7,6 +7,7 @@ import { demoStrategyNames } from './DemoTestOperations';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { orderStrategyScores } from '@/lib/demo-strategy-scores';
+import { DemoStrategyScoreChart } from './DemoStrategyScoreChart';
 
 export function DemoStrategyScores() {
  const { user } = useAuth();
@@ -33,9 +34,9 @@ export function DemoStrategyScores() {
   queryKey: ['demo-strategy-scores', user?.id, period], enabled: !!user,
   refetchInterval: 10000, staleTime: 5000, refetchOnWindowFocus: 'always',
   queryFn: async () => {
-   const { data, error } = await supabase.rpc('admin_winning_strategy_scores', { p_period: period });
+   const { data, error } = await supabase.rpc('admin_winning_strategy_score_chart', { p_period: period });
    if (error) throw error;
-   return (data ?? []).map(row => ({ strategy: row.strategy, score: row.score, demoWins: Number(row.demo_wins), rejectedWins: Number(row.rejected_wins), losses: Number(row.losses) }));
+   return (data ?? []).map(row => ({ strategy: row.strategy, score: row.score, demoWins: Number(row.demo_wins), rejectedWins: Number(row.rejected_wins), losses: Number(row.losses), firstWinAt: row.first_win_at, lastWinAt: row.last_win_at, historyFirstWinAt: row.history_first_win_at }));
   },
  });
  const strategies = useMemo(() => [...new Set((query.data ?? []).map(row => row.strategy))].sort(), [query.data]);
@@ -49,6 +50,7 @@ export function DemoStrategyScores() {
    <Select value={period} onValueChange={value => { setPeriod(value); setPage(0); }}><SelectTrigger className="w-48 max-w-full" aria-label="Período"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todo o histórico</SelectItem><SelectItem value="today">Hoje · Brasília</SelectItem><SelectItem value="7d">Últimos 7 dias</SelectItem></SelectContent></Select>
    <Select value={order} onValueChange={value => { setOrder(value); setPage(0); }}><SelectTrigger className="w-56 max-w-full" aria-label="Ordem das notas"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="desc">Mais WIN primeiro</SelectItem><SelectItem value="asc">Menos WIN primeiro</SelectItem></SelectContent></Select>
   </div>
+  {!query.isPending && !query.isError && <DemoStrategyScoreChart rows={groups} />}
   <h3 className="text-sm font-medium">Notas com WIN e nenhum LOSS · {groups.length}</h3>
   {query.isError && <p role="alert" className="text-sm text-destructive">Não foi possível atualizar as notas por estratégia.</p>}
   {query.isPending ? <p role="status" className="text-sm text-muted-foreground">Carregando notas por estratégia…</p> : !query.isError && !groups.length ? <p className="text-sm text-muted-foreground">Nenhuma nota com WIN e zero LOSS neste período.</p> : <div className="space-y-1" aria-label="Notas por estratégia">{groups.slice(current * 20, current * 20 + 20).map(row => <div key={`${row.strategy}-${row.score}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md bg-secondary/30 p-3 text-xs">

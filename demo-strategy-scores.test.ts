@@ -1,6 +1,14 @@
 import { test, expect } from 'bun:test';
-import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
+import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, topWinningStrategyScores, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
 const row = (signal_id: string, entry_strategy = 'VELA_FORCA', score: number | null = 2.26, result = 'win', source: StrategyScoreOutcome['source'] = 'demo'): StrategyScoreOutcome => ({ signal_id, entry_strategy, score, result, source, entry_minute: '2026-10-27T03:00:00Z' });
+test('chart keeps exactly ten highest total WIN cohorts, not the highest numerical scores', () => {
+ const groups = Array.from({ length: 12 }, (_, i) => ({ strategy: 'VELA_FORCA', score: String(12 - i), demoWins: i, rejectedWins: i * 2, firstWinAt: '2026-10-24T03:00:00Z' }));
+ const top = topWinningStrategyScores(groups);
+ expect(top).toHaveLength(10);
+ expect(top.map(g => g.demoWins + g.rejectedWins)).toEqual([33, 30, 27, 24, 21, 18, 15, 12, 9, 6]);
+ expect(top[0].firstWinAt).toBe('2026-10-24T03:00:00Z');
+ expect(groups[0].score).toBe('12');
+});
 test('order filter sorts by total WIN of each note, descending first, and can be switched to ascending', () => {
  const groups = [
   { strategy: 'TENDENCIA', score: '4.50', demoWins: 2, rejectedWins: 2 }, { strategy: 'VELA_FORCA', score: '2.26', demoWins: 5, rejectedWins: 0 }, { strategy: 'TAKASHI', score: '9.10', demoWins: 1, rejectedWins: 2 },

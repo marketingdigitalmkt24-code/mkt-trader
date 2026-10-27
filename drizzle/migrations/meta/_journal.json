@@ -393,6 +393,13 @@
       "when": 1793077617528,
       "tag": "0055_admin_winning_strategy_score_summary",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1793078676263,
+      "tag": "0056_admin_strategy_score_chart_dates",
+      "breakpoints": true
     }
   ]
 }

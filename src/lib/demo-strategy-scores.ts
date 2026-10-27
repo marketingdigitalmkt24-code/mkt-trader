@@ -1,5 +1,14 @@
 import { displayedDemoScore } from './demo-score-history';
 
+export type StrategyScoreSummary = {
+ strategy: string; score: string; demoWins: number; rejectedWins: number; losses: number;
+ firstWinAt: string; lastWinAt: string; historyFirstWinAt: string;
+};
+
+export function topWinningStrategyScores<T extends { strategy: string; score: string; demoWins: number; rejectedWins: number }>(rows: T[]): T[] {
+ return orderStrategyScores(rows, 'desc').slice(0, 10);
+}
+
 export type StrategyScoreOutcome = {
  signal_id: string; entry_strategy: string; entry_minute: string;
  score: number | null; result: string; source: 'demo' | 'rejected';

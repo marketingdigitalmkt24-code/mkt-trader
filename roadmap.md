@@ -1,3 +1,7 @@
+# Aprendizado recente Takashi (27/10/2026)
+- [ ] Integrar ganhos/perdas recentes confirmados da própria Takashi ao ajuste recente da nota e testar isolamento/tempo.
+- [ ] Publicar e verificar leitura real, sem reativar principal/Telegram/clientes.
+
 # Resultado SUGAR e entrada Demo :00 (27/10/2026)
 - [x] SUGAR #14395548093 confirmou WIN +US$0,82 e foi conferida no painel; recuperação publicada consulta pendências Demo expiradas de qualquer minuto, por ID exato, mesmo sem candidato.
 - [x] Envio Demo publicado na conexão PRACTICE já preparada, com reserva única, velas fechadas, mercado/valor/frescor rechecados; 386 testes passaram. Principais/Telegram/cópias seguem zerados.

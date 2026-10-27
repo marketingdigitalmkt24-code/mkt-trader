@@ -22,7 +22,7 @@ test('confirmed anticipation is suppressed during the user Telegram pause', asyn
     signalId: 'forca_antecipada-example', timeframe: 'M1', strategy: 'Antecipação de Força',
     brokerOrderId: '14372665294', accountType: 'PRACTICE' }, { lovableKey: 'fixture', telegramKey: 'fixture' }, async (_url, init) => {
     calls++;
-    assert.equal(JSON.parse(String(init?.body)).chat_id, '-1001743286485');
+    assert.equal(JSON.parse(String(init?.body)).chat_id, '-1003669008671');
     return new Response(JSON.stringify({ ok: true, result: { message_id: 123 } }), { status: 200 });
   });
   assert.equal(calls, 0);

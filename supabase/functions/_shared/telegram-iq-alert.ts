@@ -1,7 +1,7 @@
 import { telegramTradingEnabled } from './principal-pause.ts';
 const TELEGRAM_GATEWAY = 'https://connector-gateway.lovable.dev/telegram';
 // Verified channel identity; avoids an upstream username lookup for each alert.
-const TELEGRAM_CHANNEL = '-1001743286485';
+const TELEGRAM_CHANNEL = '-1003669008671';
 export const IQ_TELEGRAM_CHANNEL = TELEGRAM_CHANNEL;
 
 export interface IQAlert {

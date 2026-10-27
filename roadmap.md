@@ -1,3 +1,7 @@
+# Movimento diário das notas (27/10/2026)
+- [ ] Gráfico de linha de 30 dias: notas que entraram/saíram da lista por dia BRT, apenas Demo confirmada.
+- [ ] Ordenar lista por mais WIN e verificar gráfico/lista no admin.
+
 # Lista de operações por nota (27/10/2026)
 - [x] Retirado gráfico top 10; notas agrupadas e ordenadas da maior para a menor, estratégias somente no histórico aberto. Lista Demo reutilizada com datas BRT e gráficos no hover; admin autenticado confirmou nota 7,37/ALIBABA-OTC com WIN e gráfico, 14 testes passaram, sem erros na tela.
 

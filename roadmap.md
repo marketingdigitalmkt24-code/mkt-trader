@@ -1,5 +1,5 @@
 # Card de análise IA (27/10/2026)
-- [ ] Mostrar Analisando e os ativos registrados na rotina Demo, sem habilitar operações principais, Telegram ou clientes.
+- [x] Card mostra IA Analisando e lê candidatos/rejeições Takashi Demo com notas e horários BRT; admin autenticado confirmou 3 ativos registrados e análise recente, sem STANDBY. Nove testes passaram, build OK; principal, Telegram e clientes preservados. Lista representa registros, não todos os mercados consultados.
 
 # Tempo limite no painel (27/10/2026)
 - [x] Consulta de resultados retorna imediatamente sem ordens principais pendentes; login limitado a uma rodada de três endpoints (5s cada), WebSockets 10s e consulta do navegador sem sobreposição com cancelamento. Executor publicado respondeu 200; 13 testes passaram; admin autenticado sob 504 simulado continuou visível sem erros, com Takashi 1,51 WIN +US$0,82 e nova nota 1,03. Build OK.

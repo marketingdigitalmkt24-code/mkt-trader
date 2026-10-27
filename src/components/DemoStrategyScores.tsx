@@ -5,8 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { aggregateScoresByNote, sortScoresByNote } from '@/lib/demo-strategy-scores';
+import { aggregateScoresByNote, orderStrategyScores } from '@/lib/demo-strategy-scores';
 import { DemoWinningScoreOperations } from './DemoWinningScoreOperations';
+import { DemoNoteMovementChart } from './DemoNoteMovementChart';
 
 export function DemoStrategyScores() {
  const { user } = useAuth();
@@ -22,7 +23,10 @@ export function DemoStrategyScores() {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const refresh = () => {
    if (timer) clearTimeout(timer);
-   timer = setTimeout(() => { void queryClient.invalidateQueries({ queryKey: ['demo-strategy-scores', user.id] }); }, 150);
+   timer = setTimeout(() => {
+    void queryClient.invalidateQueries({ queryKey: ['demo-strategy-scores', user.id] });
+    void queryClient.invalidateQueries({ queryKey: ['demo-note-movement', user.id] });
+   }, 150);
   };
   const channel = supabase.channel(`strategy-score-outcomes-${user.id}`)
    .on('postgres_changes', { event: '*', schema: 'public', table: 'iq_demo_test_orders' }, refresh)
@@ -44,11 +48,12 @@ export function DemoStrategyScores() {
    return (data ?? []).map(row => ({ strategy: row.strategy, score: row.score, demoWins: Number(row.demo_wins), losses: Number(row.losses), firstWinAt: row.first_win_at, lastWinAt: row.last_win_at, historyFirstWinAt: row.history_first_win_at }));
   },
  });
- const groups = useMemo(() => sortScoresByNote(aggregateScoresByNote(query.data ?? [])), [query.data]);
+ const groups = useMemo(() => orderStrategyScores(aggregateScoresByNote(query.data ?? []), 'desc'), [query.data]);
  const pages = Math.max(1, Math.ceil(groups.length / 20));
  const current = Math.min(page, pages - 1);
  return <section aria-label="Estratégias" className="space-y-5">
-  <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Estratégias</h2><Button variant="outline" size="sm" disabled={query.isFetching} onClick={() => query.refetch()} className="gap-2"><RefreshCw className={`h-4 w-4 ${query.isFetching ? 'animate-spin' : ''}`} />Atualizar</Button></div>
+  <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Estratégias</h2><Button variant="outline" size="sm" disabled={query.isFetching} onClick={() => { void query.refetch(); void queryClient.invalidateQueries({ queryKey: ['demo-note-movement', user?.id] }); }} className="gap-2"><RefreshCw className={`h-4 w-4 ${query.isFetching ? 'animate-spin' : ''}`} />Atualizar</Button></div>
+  {user && <DemoNoteMovementChart userId={user.id} />}
   <div className="flex flex-wrap gap-3">
    <Select value={period} onValueChange={value => { setPeriod(value); setPage(0); setSelectedScore(null); }}><SelectTrigger className="w-48 max-w-full" aria-label="Período"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todo o histórico</SelectItem><SelectItem value="today">Hoje · Brasília</SelectItem><SelectItem value="yesterday">Ontem · Brasília</SelectItem><SelectItem value="7d">Últimos 7 dias</SelectItem><SelectItem value="15d">Últimos 15 dias</SelectItem><SelectItem value="custom">Personalizado</SelectItem></SelectContent></Select>
    {period === 'custom' && <>

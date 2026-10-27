@@ -37,6 +37,49 @@ export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'al
 
 export type NoteScoreSummary = StrategyScoreSummary & { strategies: string[] };
 
+export type NoteMovementOutcome = StrategyScoreOutcome & { settled_at?: string | null };
+export function winningNoteDailyMovement(rows: NoteMovementOutcome[], now = Date.now()) {
+ const cohorts = new Map<string, { score: string; start: number; end: number }>();
+ const seen = new Set<string>();
+ for (const row of rows) {
+  const score = displayedDemoScore(row.score);
+  const result = row.result.toLowerCase();
+  const at = Date.parse(row.settled_at ?? row.entry_minute);
+  if (row.source !== 'demo' || score === 'unscored' || !['win', 'loss'].includes(result) || !Number.isFinite(at)) continue;
+  const identity = `${row.signal_id}:${result}`;
+  if (seen.has(identity)) continue;
+  seen.add(identity);
+  const key = `${row.entry_strategy}:${score}`;
+  const cohort = cohorts.get(key) ?? { score, start: Infinity, end: Infinity };
+  if (result === 'win') cohort.start = Math.min(cohort.start, at);
+  else cohort.end = Math.min(cohort.end, at);
+  cohorts.set(key, cohort);
+ }
+ const events = new Map<string, Map<number, number>>();
+ for (const cohort of cohorts.values()) {
+  if (!Number.isFinite(cohort.start) || cohort.start >= cohort.end) continue;
+  const noteEvents = events.get(cohort.score) ?? new Map<number, number>();
+  noteEvents.set(cohort.start, (noteEvents.get(cohort.start) ?? 0) + 1);
+  if (Number.isFinite(cohort.end)) noteEvents.set(cohort.end, (noteEvents.get(cohort.end) ?? 0) - 1);
+  events.set(cohort.score, noteEvents);
+ }
+ const brtDay = (at: number) => new Date(at - 3 * 3600000).toISOString().slice(0, 10);
+ const days = Array.from({ length: 30 }, (_, index) => ({ day: brtDay(now - (29 - index) * 86400000), entered: 0, exited: 0 }));
+ const byDay = new Map(days.map(day => [day.day, day]));
+ for (const noteEvents of events.values()) {
+  let active = 0;
+  for (const [at, delta] of [...noteEvents].sort((a, b) => a[0] - b[0])) {
+   const previous = active;
+   active += delta;
+   const day = byDay.get(brtDay(at));
+   if (!day) continue;
+   if (previous === 0 && active > 0) day.entered++;
+   if (previous > 0 && active === 0) day.exited++;
+  }
+ }
+ return days;
+}
+
 export function sortScoresByNote<T extends { score: string }>(rows: T[]): T[] {
  return [...rows].sort((a, b) => Number(b.score) - Number(a.score));
 }

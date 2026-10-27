@@ -1,5 +1,5 @@
 # Takashi exclusiva Demo (27/10/2026)
-- [ ] Selecionar/executar apenas Takashi na Demo, verificar notas e rotina por minuto, mantendo bloqueio principal/Telegram/clientes.
+- [x] Somente Takashi na Demo com qualquer nota finita, sem principal/mid-candle/observações extras; rotina privada por minuto ativa e dois executores publicados. 27 testes aprovados; primeiro ATOMUSD-OTC CALL PRACTICE US$1 confirmado às 21:11 UTC, nota bruta 1,50818880024869 exibida 1,51 no admin. Fila principal, resultados principais/TEST, Telegram e cópias ativos zerados. Aprendizado sem histórico contribui zero, sem inventar resultados.
 
 # Interrupção das estratégias principais (27/10/2026)
 - [x] Todas as entradas principais IQ Option, cópias e avisos Telegram bloqueados nos executores; configurações automáticas/cópias desligadas, sete funções publicadas, 17 testes aprovados e principal publicada recusou 410. Demo/histórico preservados.

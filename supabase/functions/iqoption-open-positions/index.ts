@@ -211,6 +211,10 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (new URL(req.url).searchParams.get('debug') === '1') {
+      return json({ success: true, debugInfo, appOrders: [...appOrders.values()].slice(0, 30), positions, skipped: foreignIds.length });
+    }
+
     return json({
       success: true,
       positions: positions.filter(p => !toClose.includes(p.id)),
@@ -218,6 +222,7 @@ Deno.serve(async (req) => {
       skipped: foreignIds.length,
       timestamp: new Date().toISOString(),
     });
+
   } catch (e) {
     return json({ success: false, error: e instanceof Error ? e.message : 'erro', positions: [] });
   }

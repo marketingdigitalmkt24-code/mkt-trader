@@ -30,7 +30,7 @@ import { demoEntryReason } from '../_shared/demo-entry-authorization.ts';
 import { DEMO_MID_CANDLE } from '../_shared/demo-mid-candle.ts';
 import { readDemoWinningReferences } from '../_shared/demo-winning-reference-history.ts';
 import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
-import { DEMO_TEST_AMOUNT } from '../iqoption-demo-tests/policy.ts';
+import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];

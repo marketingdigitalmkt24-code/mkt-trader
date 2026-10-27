@@ -1,4 +1,4 @@
-import { freshDemoCandidate, validDemoTestAmount } from '../iqoption-demo-tests/policy.ts';
+import { freshDemoCandidate, validDemoTestAmount } from './demo-test-policy.ts';
 import { demoAlternationAuthorized } from './demo-226-policy.ts';
 import { iqMarketOpen, type IQMarketAsset } from './iq-market-open.ts';
 

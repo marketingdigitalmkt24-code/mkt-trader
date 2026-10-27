@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { matchAppOpenOrder, type AppOpenOrder } from '../_shared/open-positions-filter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,11 +34,9 @@ const fmtAsset = (raw: string) => {
 };
 
 /** Ordens abertas por este app na IQ Option: id da corretora + dados do próprio registro. */
-interface AppOrder { id: string; asset: string; direction: string; invest: number; cohort: 'demo' | 'principal'; }
-
-async function loadAppOrders(supabase: ReturnType<typeof createClient>): Promise<Map<string, AppOrder>> {
-  const out = new Map<string, AppOrder>();
-  const add = (id: unknown, asset: unknown, direction: unknown, invest: unknown, cohort: AppOrder['cohort']) => {
+async function loadAppOrders(supabase: ReturnType<typeof createClient>): Promise<Map<string, AppOpenOrder>> {
+  const out = new Map<string, AppOpenOrder>();
+  const add = (id: unknown, asset: unknown, direction: unknown, invest: unknown, cohort: AppOpenOrder['cohort']) => {
     if (id === null || id === undefined || id === '') return;
     const key = String(id).trim();
     if (!key) return;
@@ -84,15 +83,6 @@ async function loadAppOrders(supabase: ReturnType<typeof createClient>): Promise
   }
 
   return out;
-}
-
-/** Coleta identificadores primitivos de uma posição da corretora para comparar com os ids deste app. */
-function collectPrimitives(value: unknown, out: Set<string>, depth = 0): void {
-  if (depth > 6 || out.size > 400 || value === null || value === undefined) return;
-  if (typeof value === 'number') { if (Number.isFinite(value)) out.add(String(value)); return; }
-  if (typeof value === 'string') { if (value.length <= 64) out.add(value); return; }
-  if (Array.isArray(value)) { for (const v of value) collectPrimitives(v, out, depth + 1); return; }
-  if (typeof value === 'object') { for (const v of Object.values(value as Record<string, unknown>)) collectPrimitives(v, out, depth + 1); }
 }
 
 Deno.serve(async (req) => {
@@ -155,10 +145,7 @@ Deno.serve(async (req) => {
               const brokerId = String(p.id ?? p.external_id);
 
               // Vínculo exato: a posição só aparece se este app abriu aquela ordem na corretora.
-              const posIds = new Set<string>();
-              collectPrimitives(p, posIds);
-              const app = appOrders.get(brokerId) || [...appOrders.values()].find((o) => posIds.has(o.id));
-
+              const app = matchAppOpenOrder(p, appOrders);
               if (!app) {
                 skipped += 1;
                 continue;

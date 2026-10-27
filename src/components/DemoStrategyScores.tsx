@@ -38,7 +38,8 @@ export function DemoStrategyScores() {
   },
  });
  const strategies = useMemo(() => [...new Set((query.data ?? []).map(row => row.strategy))].sort(), [query.data]);
- const groups = useMemo(() => (query.data ?? []).filter(row => strategy === 'all' || row.strategy === strategy), [query.data, strategy]);
+ const groups = useMemo(() => (query.data ?? []).filter(row => strategy === 'all' || row.strategy === strategy)
+  .sort((a, b) => order === 'desc' ? Number(b.score) - Number(a.score) || a.strategy.localeCompare(b.strategy) : Number(a.score) - Number(b.score) || a.strategy.localeCompare(b.strategy)), [query.data, strategy, order]);
  const pages = Math.max(1, Math.ceil(groups.length / 20));
  const current = Math.min(page, pages - 1);
  return <section aria-label="Estratégias" className="space-y-5">

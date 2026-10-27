@@ -1,4 +1,5 @@
 # Estratégias e notas rejeitadas (27/10/2026)
+- [ ] Reduzir carregamento substituindo transferência do histórico completo por resumo; retirar notas após LOSS por eventos e atualização periódica, preservando registros.
 - [x] Criar aba Estratégias com notas por estratégia com WIN e zero LOSS, incluindo rejeitadas com resultado TEST separado; histórico completo paginado, filtros de estratégia/período, nenhuma alteração na execução.
 - [x] Mostrar nota registrada nas rejeitadas em Padrões vencedores; painel autenticado confirmou 279 grupos e notas em 10 rejeitadas, gráficos preservados, sem erros. 14 testes passaram e build OK.
 

@@ -28,10 +28,11 @@ export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'al
   .sort((a, b) => b.demoWins + b.rejectedWins - a.demoWins - a.rejectedWins || a.strategy.localeCompare(b.strategy) || Number(a.score) - Number(b.score));
 }
 
-export function orderStrategyScores<T extends { strategy: string; score: string }>(rows: T[], order: string): T[] {
+export function orderStrategyScores<T extends { strategy: string; score: string; demoWins: number; rejectedWins: number }>(rows: T[], order: string): T[] {
  return [...rows].sort((a, b) => {
-  const byScore = order === 'asc' ? Number(a.score) - Number(b.score) : Number(b.score) - Number(a.score);
-  return byScore || a.strategy.localeCompare(b.strategy);
+  const wins = (g: T) => g.demoWins + g.rejectedWins;
+  const byWins = order === 'asc' ? wins(a) - wins(b) : wins(b) - wins(a);
+  return byWins || Number(b.score) - Number(a.score) || a.strategy.localeCompare(b.strategy);
  });
 }
 

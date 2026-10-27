@@ -47,7 +47,7 @@ export function DemoStrategyScores() {
   <div className="flex flex-wrap gap-3">
    <Select value={strategy} onValueChange={value => { setStrategy(value); setPage(0); }}><SelectTrigger className="w-60 max-w-full" aria-label="Estratégia"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas as estratégias</SelectItem>{strategies.map(value => <SelectItem key={value} value={value}>{demoStrategyNames[value] ?? value}</SelectItem>)}</SelectContent></Select>
    <Select value={period} onValueChange={value => { setPeriod(value); setPage(0); }}><SelectTrigger className="w-48 max-w-full" aria-label="Período"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todo o histórico</SelectItem><SelectItem value="today">Hoje · Brasília</SelectItem><SelectItem value="7d">Últimos 7 dias</SelectItem></SelectContent></Select>
-   <Select value={order} onValueChange={value => { setOrder(value); setPage(0); }}><SelectTrigger className="w-56 max-w-full" aria-label="Ordem das notas"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="desc">Maior nota primeiro</SelectItem><SelectItem value="asc">Menor nota primeiro</SelectItem></SelectContent></Select>
+   <Select value={order} onValueChange={value => { setOrder(value); setPage(0); }}><SelectTrigger className="w-56 max-w-full" aria-label="Ordem das notas"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="desc">Mais WIN primeiro</SelectItem><SelectItem value="asc">Menos WIN primeiro</SelectItem></SelectContent></Select>
   </div>
   <h3 className="text-sm font-medium">Notas com WIN e nenhum LOSS · {groups.length}</h3>
   {query.isError && <p role="alert" className="text-sm text-destructive">Não foi possível atualizar as notas por estratégia.</p>}

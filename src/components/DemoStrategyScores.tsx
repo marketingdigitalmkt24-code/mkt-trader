@@ -36,7 +36,7 @@ export function DemoStrategyScores() {
   queryFn: async () => {
    const { data, error } = await supabase.rpc('admin_winning_strategy_score_chart', { p_period: period });
    if (error) throw error;
-   return (data ?? []).map(row => ({ strategy: row.strategy, score: row.score, demoWins: Number(row.demo_wins), rejectedWins: Number(row.rejected_wins), losses: Number(row.losses), firstWinAt: row.first_win_at, lastWinAt: row.last_win_at, historyFirstWinAt: row.history_first_win_at }));
+   return (data ?? []).map(row => ({ strategy: row.strategy, score: row.score, demoWins: Number(row.demo_wins), losses: Number(row.losses), firstWinAt: row.first_win_at, lastWinAt: row.last_win_at, historyFirstWinAt: row.history_first_win_at }));
   },
  });
  const strategies = useMemo(() => [...new Set((query.data ?? []).map(row => row.strategy))].sort(), [query.data]);
@@ -55,10 +55,10 @@ export function DemoStrategyScores() {
   {query.isError && <p role="alert" className="text-sm text-destructive">Não foi possível atualizar as notas por estratégia.</p>}
   {query.isPending ? <p role="status" className="text-sm text-muted-foreground">Carregando notas por estratégia…</p> : !query.isError && !groups.length ? <p className="text-sm text-muted-foreground">Nenhuma nota com WIN e zero LOSS neste período.</p> : <div className="space-y-1" aria-label="Notas por estratégia">{groups.slice(current * 20, current * 20 + 20).map(row => <div key={`${row.strategy}-${row.score}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md bg-secondary/30 p-3 text-xs">
    <span className="min-w-0 font-medium">{demoStrategyNames[row.strategy] ?? row.strategy}</span><span className="font-mono">Nota {row.score.replace('.', ',')}</span>
-   <span className="text-call">Demo: {row.demoWins} WIN</span><span className="text-call">Rejeitadas: {row.rejectedWins} WIN (teste)</span><span className="ml-auto text-muted-foreground">0 LOSS</span>
+   <span className="text-call">{row.demoWins} WIN</span><span className="ml-auto text-muted-foreground">0 LOSS</span>
   </div>)}</div>}
   {pages > 1 && <div className="flex items-center justify-between gap-2"><Button variant="outline" size="sm" disabled={!current} onClick={() => setPage(current - 1)}>Anterior</Button><span className="text-xs text-muted-foreground">{current + 1} / {pages}</span><Button variant="outline" size="sm" disabled={current + 1 >= pages} onClick={() => setPage(current + 1)}>Próxima</Button></div>}
-  <p className="text-xs text-muted-foreground">Rejeitadas: resultados de teste, não ordens na corretora. Notas agrupadas em duas casas decimais. WIN no histórico não garante ganho futuro.</p>
+  <p className="text-xs text-muted-foreground">Contagem baseada apenas nas operações confirmadas de Últimas operações · Demo. Notas agrupadas em duas casas decimais. WIN no histórico não garante ganho futuro.</p>
   {query.dataUpdatedAt > 0 && <p className="text-xs text-muted-foreground">Atualizado às {new Date(query.dataUpdatedAt).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })} · Brasília</p>}
  </section>;
 }

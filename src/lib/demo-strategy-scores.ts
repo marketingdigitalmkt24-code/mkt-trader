@@ -1,11 +1,11 @@
 import { displayedDemoScore } from './demo-score-history';
 
 export type StrategyScoreSummary = {
- strategy: string; score: string; demoWins: number; rejectedWins: number; losses: number;
+ strategy: string; score: string; demoWins: number; losses: number;
  firstWinAt: string; lastWinAt: string; historyFirstWinAt: string;
 };
 
-export function topWinningStrategyScores<T extends { strategy: string; score: string; demoWins: number; rejectedWins: number }>(rows: T[]): T[] {
+export function topWinningStrategyScores<T extends { strategy: string; score: string; demoWins: number }>(rows: T[]): T[] {
  return orderStrategyScores(rows, 'desc').slice(0, 10);
 }
 
@@ -15,32 +15,29 @@ export type StrategyScoreOutcome = {
 };
 
 export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'all', now = Date.now()) {
- const groups = new Map<string, { strategy: string; score: string; demoWins: number; rejectedWins: number; losses: number }>();
+ const groups = new Map<string, { strategy: string; score: string; demoWins: number; losses: number }>();
  const seen = new Set<string>();
  for (const row of rows) {
+  if (row.source !== 'demo') continue;
   const score = displayedDemoScore(row.score);
   const result = row.result.toLowerCase();
   if (score === 'unscored' || !['win', 'loss'].includes(result)) continue;
-  const identity = `${row.source}:${row.signal_id}:${result}`;
+  const identity = `${row.signal_id}:${result}`;
   if (seen.has(identity)) continue;
   seen.add(identity);
   const key = `${row.entry_strategy}:${score}`;
-  const group = groups.get(key) ?? { strategy: row.entry_strategy, score, demoWins: 0, rejectedWins: 0, losses: 0 };
+  const group = groups.get(key) ?? { strategy: row.entry_strategy, score, demoWins: 0, losses: 0 };
   if (result === 'loss') group.losses++;
-  else if (filterStrategyScorePeriod([row], period, now).length) {
-   if (row.source === 'demo') group.demoWins++;
-   else group.rejectedWins++;
-  }
+  else if (filterStrategyScorePeriod([row], period, now).length) group.demoWins++;
   groups.set(key, group);
  }
- return [...groups.values()].filter(g => g.losses === 0 && g.demoWins + g.rejectedWins > 0)
-  .sort((a, b) => b.demoWins + b.rejectedWins - a.demoWins - a.rejectedWins || a.strategy.localeCompare(b.strategy) || Number(a.score) - Number(b.score));
+ return [...groups.values()].filter(g => g.losses === 0 && g.demoWins > 0)
+  .sort((a, b) => b.demoWins - a.demoWins || a.strategy.localeCompare(b.strategy) || Number(a.score) - Number(b.score));
 }
 
-export function orderStrategyScores<T extends { strategy: string; score: string; demoWins: number; rejectedWins: number }>(rows: T[], order: string): T[] {
+export function orderStrategyScores<T extends { strategy: string; score: string; demoWins: number }>(rows: T[], order: string): T[] {
  return [...rows].sort((a, b) => {
-  const wins = (g: T) => g.demoWins + g.rejectedWins;
-  const byWins = order === 'asc' ? wins(a) - wins(b) : wins(b) - wins(a);
+  const byWins = order === 'asc' ? a.demoWins - b.demoWins : b.demoWins - a.demoWins;
   return byWins || Number(b.score) - Number(a.score) || a.strategy.localeCompare(b.strategy);
  });
 }

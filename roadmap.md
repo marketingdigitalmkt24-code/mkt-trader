@@ -1,3 +1,6 @@
+# Interrupção das estratégias principais (27/10/2026)
+- [ ] Bloquear todas as entradas principais IQ Option, cópias e avisos Telegram; desligar configurações automáticas, preservar Demo/histórico e verificar executores publicados.
+
 # Remix setup (27/10/2026)
 - [x] Telegram connection linked and bot verified; seven notification-related functions deployed with the new connection.
 - [ ] Update GOOGLE_AI_API_KEY, GROQ_API_KEY, METAAPI_ACCOUNT_ID, METAAPI_TOKEN, ZAPI_CLIENT_TOKEN, ZAPI_INSTANCE_ID, ZAPI_PHONE_NUMBER and ZAPI_TOKEN: secure update form was declined; new values remain required.

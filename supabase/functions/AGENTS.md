@@ -1,5 +1,5 @@
 # Edge functions rules
-- Principal placement/copy and Telegram use strategy-scoped pause gates; only claim_takashi_after_226 may reserve a new principal, copies require its fresh confirmed queue/order. Legacy claims and daily reports stay paused; Demo/settlement independent; why: a new exception must not bypass the stop for other strategies.
+- Principal placement/copy and Telegram use unconditional shared pause gates; all principal claims including claim_takashi_after_226 return null. Daily reports stay paused; Demo/settlement independent; why: every executor must respect the full stop without changing confirmed history.
 
 - Demo prepares before :00: parallel reads, closed candles, deferred charts; reconcile previous PRACTICE IDs on that session before selection; retries use a separate strategy, unchanged stake; why: no stale triggers or recursive retries.
 - Demo TEST: isolated, one/minute, no copy; singleton admin-only stake settings snapshot amount per order, unique minute/type-4 USD, exact-ID reconciliation across portfolio/legacy pages. Principal orders use shared copy with own account/stake/limits/expiry; selected Demo claim validates outcome triggers atomically, returned direction/strategy drive IQ/results/Telegram; why: no amount mixing, rewrites, replay or competing orders.

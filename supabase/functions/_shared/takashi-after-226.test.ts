@@ -29,10 +29,8 @@ test('requires confirmed previous Demo order and fresh selected Takashi', () => 
   expect(takashiAfter226Direction(current, { ...previous, iq_option_id: null }, now)).toBeNull();
   expect(takashiAfter226Direction(current, previous, Date.parse('2026-10-25T21:08:30Z'))).toBeNull();
 });
-test('only new strategy permits principal and Telegram; old entries stay paused', () => {
-  expect(principalIQEnabled(TAKASHI_AFTER_226)).toBe(true);
-  expect(telegramTradingEnabled(TAKASHI_AFTER_226)).toBe(true);
-  for (const strategy of [undefined, 'SUPER_SELECIONADA', 'TAKASHI_BNF_V1', 'TENDENCIA_3_LOSS_PUT']) {
+test('all strategies including Takashi stay paused for principal and Telegram', () => {
+  for (const strategy of [TAKASHI_AFTER_226, undefined, 'SUPER_SELECIONADA', 'TAKASHI_BNF_V1', 'TENDENCIA_3_LOSS_PUT']) {
     expect(principalIQEnabled(strategy)).toBe(false);
     expect(telegramTradingEnabled(strategy)).toBe(false);
   }

@@ -21,7 +21,7 @@ test('a score requires at least one WIN and zero LOSS for that strategy', () => 
 });
 test('rejected TEST outcomes are ignored entirely, wins and losses alike', () => {
  const groups = winningStrategyScores([row('a'), row('b', 'VELA_FORCA', 2.264, 'loss', 'rejected'), row('c', 'TENDENCIA', 2.23), row('d', 'TENDENCIA', 2.23, 'win', 'rejected'), row('e', 'TENDENCIA', 2.23, 'win', 'rejected')]);
- expect(groups).toEqual([{ strategy: 'VELA_FORCA', score: '2.26', demoWins: 1, losses: 0 }, { strategy: 'TENDENCIA', score: '2.23', demoWins: 1, losses: 0 }]);
+ expect(groups).toEqual([{ strategy: 'TENDENCIA', score: '2.23', demoWins: 1, losses: 0 }, { strategy: 'VELA_FORCA', score: '2.26', demoWins: 1, losses: 0 }]);
 });
 test('unknown notes and ties never become winning score cohorts', () => {
  expect(winningStrategyScores([row('a', 'VELA_FORCA', null), row('b', 'TENDENCIA', 2.26, 'tie')])).toEqual([]);

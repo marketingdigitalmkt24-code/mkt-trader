@@ -1,3 +1,8 @@
+# Confirmação rápida e busca contínua Demo (27/10/2026)
+- [x] Pendências relidas após :00 com histórico repetido :01/:03/:06/:10/:15 na sessão preparada, separado da análise/envio; tentativa adicional de login só na preparação. 393 testes passaram, publicado e build OK.
+- [x] Rotina ao vivo 22:04/22:05 analisou 110 ativos e consulta :01 confirmou zero pendências; painel autenticado mostrou SUGAR WIN/LOSS reais e IA Analisando. Principais/Telegram/clientes preservados.
+- [ ] Medir atraso de fechamento de nova ordem com as novas tentativas: depende de candidato Takashi válido em mercado M1; nenhum novo envio autorizado durante conferência, sem forçar operação.
+
 # Aprendizado recente Takashi (27/10/2026)
 - [x] Ajuste recente da nota usa até 500 resultados próprios confirmados PRACTICE dos últimos 14 dias, paginados e deduplicados, incluindo os recém-liquidados; WIN favorece e LOSS penaliza. 390 testes passaram, sem mudança dos demais ajustes ou da elegibilidade por nota finita.
 - [x] Publicado e confirmado na rotina 21:58 UTC: 24 resultados próprios lidos (11 WIN/13 LOSS). Painel autenticado conferido com notas/ordens reais; principais/Telegram/cópias zerados e build OK.

@@ -1,12 +1,12 @@
 import { test, expect } from 'bun:test';
 import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
 const row = (signal_id: string, entry_strategy = 'VELA_FORCA', score: number | null = 2.26, result = 'win', source: StrategyScoreOutcome['source'] = 'demo'): StrategyScoreOutcome => ({ signal_id, entry_strategy, score, result, source, entry_minute: '2026-10-27T03:00:00Z' });
-test('order filter sorts notes descending first and can be switched to ascending', () => {
+test('order filter sorts by total WIN of each note, descending first, and can be switched to ascending', () => {
  const groups = [
-  { strategy: 'TENDENCIA', score: '4.50' }, { strategy: 'VELA_FORCA', score: '2.26' }, { strategy: 'TAKASHI', score: '9.10' },
+  { strategy: 'TENDENCIA', score: '4.50', demoWins: 2, rejectedWins: 1 }, { strategy: 'VELA_FORCA', score: '2.26', demoWins: 5, rejectedWins: 0 }, { strategy: 'TAKASHI', score: '9.10', demoWins: 1, rejectedWins: 2 },
  ];
- expect(orderStrategyScores(groups, 'desc').map(g => g.score)).toEqual(['9.10', '4.50', '2.26']);
- expect(orderStrategyScores(groups, 'asc').map(g => g.score)).toEqual(['2.26', '4.50', '9.10']);
+ expect(orderStrategyScores(groups, 'desc').map(g => g.score)).toEqual(['2.26', '4.50', '9.10']);
+ expect(orderStrategyScores(groups, 'asc').map(g => g.score)).toEqual(['9.10', '4.50', '2.26']);
 });
 test('a score requires at least one WIN and zero LOSS for that strategy', () => {
  expect(winningStrategyScores([row('a'), row('b', 'VELA_FORCA', 2.26, 'loss'), row('c', 'TENDENCIA'), row('d', 'TAKASHI', 4.5, 'pending')])).toEqual([{ strategy: 'TENDENCIA', score: '2.26', demoWins: 1, rejectedWins: 0, losses: 0 }]);

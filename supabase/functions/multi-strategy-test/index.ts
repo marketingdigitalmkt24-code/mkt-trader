@@ -33,6 +33,7 @@ import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
+import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -47,10 +48,10 @@ export const LABELS: Record<string, string> = {
   [TAKASHI_BNF]: 'Takashi Kotegawa',
 };
 
-async function login(email: string, password: string): Promise<string | null> {
+async function login(email: string, password: string, timeoutMs = 10000): Promise<string | null> {
   for (const u of AUTH_URLS) {
     try {
-      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(10000) });
+      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(Math.max(1000, Math.floor(timeoutMs / AUTH_URLS.length))) });
       const d = await r.json();
       if (d.code === 'success' && d.ssid) return d.ssid;
     } catch (_) { /* */ }
@@ -244,12 +245,8 @@ Deno.serve(async (req) => {
   const newlySettled: LearningOutcome[] = [];
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
-    let ssid=cfg ? await login(cfg.email,cfg.password) : null;
-    // One bounded retry during preparation only, never move a stale signal forward.
-    if(cfg && !ssid && Date.now()<targetMs-15000) {
-      await new Promise(resolve=>setTimeout(resolve,1000));
-      ssid=await login(cfg.email,cfg.password);
-    }
+    // Short attempts repeated until shortly before :00; never logs in after the boundary.
+    const ssid=cfg ? await loginBeforeBoundary(ms=>login(cfg.email,cfg.password,ms),targetMs) : null;
     return {cfg,ssid};
   });
   const [{ cfg, ssid }, { data: open }] = await Promise.all([

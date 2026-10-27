@@ -1,1 +1,0 @@
-ALTER TABLE public.user_trading_settings ADD COLUMN IF NOT EXISTS mt5_trade_amount numeric NOT NULL DEFAULT 1;

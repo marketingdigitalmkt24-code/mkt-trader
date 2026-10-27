@@ -1,2 +1,0 @@
-ALTER TABLE public.iq_demo_test_candidates ADD COLUMN pattern_match jsonb;
-COMMENT ON COLUMN public.iq_demo_test_candidates.pattern_match IS 'Prospective pre-entry confirmed WIN reference identity, score and distance. Null for historical candidates without recorded match.';

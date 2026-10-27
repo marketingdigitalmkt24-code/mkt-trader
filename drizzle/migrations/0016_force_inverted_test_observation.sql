@@ -1,2 +1,0 @@
-ALTER TABLE public.operation_results ADD COLUMN test_inverted_strategy text;
-COMMENT ON COLUMN public.operation_results.test_inverted_strategy IS 'Prospective TEST-only opposite-direction observation on the same base signal; never authorizes broker orders.';

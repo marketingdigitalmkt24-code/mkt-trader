@@ -1,2 +1,0 @@
-ALTER TABLE public.operation_results ADD COLUMN IF NOT EXISTS test_sequence_strategy text;
-COMMENT ON COLUMN public.operation_results.test_sequence_strategy IS 'Prospective TEST-only sequence observation; preserves entry_strategy and must never authorize broker orders, copy or Telegram.';

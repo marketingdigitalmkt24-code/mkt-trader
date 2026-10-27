@@ -1,7 +1,0 @@
-CREATE OR REPLACE FUNCTION public.claim_super_selected(p_candidate text, p_config uuid, p_balance numeric) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$ SELECT NULL::jsonb $$;
-CREATE OR REPLACE FUNCTION public.claim_selected_demo_trend(p_candidate text, p_config uuid, p_balance numeric) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$ SELECT NULL::jsonb $$;
-CREATE OR REPLACE FUNCTION public.claim_test_strategy_entry(p_candidate text) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$ SELECT NULL::jsonb $$;
-CREATE OR REPLACE FUNCTION public.claim_force_anticipation_entry(p_signal text) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$ SELECT NULL::jsonb $$;
-CREATE OR REPLACE FUNCTION public.reserve_iq_entry(p_client uuid, p_signal text) RETURNS numeric LANGUAGE sql SECURITY DEFINER SET search_path TO 'public' AS $$ SELECT NULL::numeric $$;
-REVOKE ALL ON FUNCTION public.claim_super_selected(text,uuid,numeric), public.claim_selected_demo_trend(text,uuid,numeric), public.claim_test_strategy_entry(text), public.claim_force_anticipation_entry(text), public.reserve_iq_entry(uuid,text) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.claim_super_selected(text,uuid,numeric), public.claim_selected_demo_trend(text,uuid,numeric), public.claim_test_strategy_entry(text), public.claim_force_anticipation_entry(text), public.reserve_iq_entry(uuid,text) TO service_role;

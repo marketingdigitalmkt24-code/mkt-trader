@@ -1,1 +1,0 @@
-ALTER TABLE public.operation_results ADD COLUMN IF NOT EXISTS entry_strategy text;

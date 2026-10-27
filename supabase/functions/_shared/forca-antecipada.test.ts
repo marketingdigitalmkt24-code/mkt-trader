@@ -25,9 +25,10 @@ test('rejects incomplete candle window', () => {
 test('rejects stretched RSI', () => {
   expect(forcaAntecipada(series(true), entry)).toBeNull();
 });
-test('is its own Demo cohort and rotates after 2,26', () => {
-  expect(demoCohort(0.5, FORCA_ANTECIPADA)).toBe('antecipada');
-  expect(preferredDemoCohort('VELA_FORCA')).toBe('antecipada');
+test('is retired from Demo cohorts, which stay Takashi-only', () => {
+  expect(demoCohort(0.5, FORCA_ANTECIPADA)).toBeNull();
+  expect(preferredDemoCohort('VELA_FORCA')).toBe('takashi');
   expect(preferredDemoCohort(FORCA_ANTECIPADA)).toBe('takashi');
-  expect(preferredDemoCohort('TAKASHI_BNF_V1')).toBe('score226');
+  expect(preferredDemoCohort('TAKASHI_BNF_V1')).toBe('takashi');
 });
+

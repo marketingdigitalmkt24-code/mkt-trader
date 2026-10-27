@@ -3,11 +3,15 @@ import { Button } from './ui/button';
 import { demoStrategyNames } from './DemoTestOperations';
 import { topWinningStrategyScores, type StrategyScoreSummary } from '@/lib/demo-strategy-scores';
 
+type ChartRow = StrategyScoreSummary & { strategies?: string[] };
+
+const rowName = (row: ChartRow) => (row.strategies ?? [row.strategy]).map(value => demoStrategyNames[value] ?? value).join(' · ');
+
 const brtDate = (value: string) => new Date(value).toLocaleString('pt-BR', {
  timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
 
-export function DemoStrategyScoreChart({ rows }: { rows: StrategyScoreSummary[] }) {
+export function DemoStrategyScoreChart({ rows }: { rows: ChartRow[] }) {
  const [selectedKey, setSelectedKey] = useState<string | null>(null);
  const top = topWinningStrategyScores(rows);
  const selected = top.find(row => `${row.strategy}:${row.score}` === selectedKey);

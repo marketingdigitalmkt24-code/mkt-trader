@@ -48,7 +48,11 @@ export function DemoStrategyScores() {
   },
  });
  const strategies = useMemo(() => [...new Set((query.data ?? []).map(row => row.strategy))].sort(), [query.data]);
- const groups = useMemo(() => orderStrategyScores((query.data ?? []).filter(row => strategy === 'all' || row.strategy === strategy), order), [query.data, strategy, order]);
+ const groups = useMemo(() => {
+  const filtered = (query.data ?? []).filter(row => strategy === 'all' || row.strategy === strategy);
+  const rows = groupBy === 'note' ? aggregateScoresByNote(filtered) : filtered;
+  return orderStrategyScores(rows, order);
+ }, [query.data, strategy, order, groupBy]);
  const pages = Math.max(1, Math.ceil(groups.length / 20));
  const current = Math.min(page, pages - 1);
  return <section aria-label="Estratégias" className="space-y-5">
@@ -61,6 +65,7 @@ export function DemoStrategyScores() {
     <input type="date" value={customTo} min={customFrom || undefined} max={brtDateStr()} aria-label="Até (opcional)" onChange={event => { setCustomTo(event.target.value); setPage(0); }} className="h-9 rounded-md border border-input bg-transparent px-2 text-sm" />
    </>}
    <Select value={order} onValueChange={value => { setOrder(value); setPage(0); }}><SelectTrigger className="w-56 max-w-full" aria-label="Ordem das notas"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="desc">Mais WIN primeiro</SelectItem><SelectItem value="asc">Menos WIN primeiro</SelectItem></SelectContent></Select>
+   <Select value={groupBy} onValueChange={value => { setGroupBy(value); setPage(0); }}><SelectTrigger className="w-52 max-w-full" aria-label="Agrupar"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="strategy">Por estratégia</SelectItem><SelectItem value="note">Só por nota</SelectItem></SelectContent></Select>
   </div>
   {!query.isPending && !query.isError && <DemoStrategyScoreChart rows={groups} />}
   <h3 className="text-sm font-medium">Notas com WIN e nenhum LOSS · {groups.length}</h3>

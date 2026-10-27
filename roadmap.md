@@ -1,3 +1,8 @@
+# Resultado SUGAR e entrada Demo :00 (27/10/2026)
+- [x] SUGAR #14395548093 confirmou WIN +US$0,82 e foi conferida no painel; recuperação publicada consulta pendências Demo expiradas de qualquer minuto, por ID exato, mesmo sem candidato.
+- [x] Envio Demo publicado na conexão PRACTICE já preparada, com reserva única, velas fechadas, mercado/valor/frescor rechecados; 386 testes passaram. Principais/Telegram/cópias seguem zerados.
+- [ ] Medir próximo envio Demo confirmado após otimização: depende de novo candidato Takashi com mercado M1 disponível e login da corretora; TESLA 21:52 não autorizada pelo mercado, e tentativas seguintes não completaram login. Nenhuma ordem forçada.
+
 # Título da lista de notas (27/10/2026)
 - [x] Cabeçalho da aba Estratégias passou de "Notas com WIN e nenhum LOSS" para "Notas | Mais WIN"; painel autenticado confirmou "Notas | Mais WIN · 2" com notas 1,51 e 0,00 (1 WIN, 0 LOSS), 17 testes passaram, build OK.
 

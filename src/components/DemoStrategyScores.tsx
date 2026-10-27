@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { demoStrategyNames } from './DemoTestOperations';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { orderStrategyScores } from '@/lib/demo-strategy-scores';
 
 export function DemoStrategyScores() {
  const { user } = useAuth();

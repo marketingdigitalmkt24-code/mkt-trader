@@ -1,4 +1,5 @@
 # Estratégias e notas rejeitadas (27/10/2026)
+- [x] Resumo admin somente leitura substituiu transferência do histórico completo; abertura autenticada medida em 1,74s, 278 grupos. LOSS retira nota inclusive fora do período, eventos e polling 10s; Vela de força 2,99 saiu após LOSS TEST confirmado. Registros preservados, 12 testes passaram e build OK.
 - [x] Criar aba Estratégias com notas por estratégia com WIN e zero LOSS, incluindo rejeitadas com resultado TEST separado; histórico completo paginado, filtros de estratégia/período, nenhuma alteração na execução.
 - [x] Mostrar nota registrada nas rejeitadas em Padrões vencedores; painel autenticado confirmou 279 grupos e notas em 10 rejeitadas, gráficos preservados, sem erros. 14 testes passaram e build OK.
 

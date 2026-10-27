@@ -1,10 +1,8 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { readDemoScoreHistory } from '@/lib/demo-score-history';
-import { readAllScorePages, winningStrategyScores, filterStrategyScorePeriod, type StrategyScoreOutcome } from '@/lib/demo-strategy-scores';
 import { demoStrategyNames } from './DemoTestOperations';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -14,48 +12,32 @@ export function DemoStrategyScores() {
  const [strategy, setStrategy] = useState('all');
  const [period, setPeriod] = useState('all');
  const [page, setPage] = useState(0);
+ const queryClient = useQueryClient();
+ useEffect(() => {
+  if (!user) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const refresh = () => {
+   if (timer) clearTimeout(timer);
+   timer = setTimeout(() => { void queryClient.invalidateQueries({ queryKey: ['demo-strategy-scores', user.id] }); }, 150);
+  };
+  const channel = supabase.channel(`strategy-score-outcomes-${user.id}`)
+   .on('postgres_changes', { event: '*', schema: 'public', table: 'iq_demo_test_orders' }, refresh)
+   .on('postgres_changes', { event: '*', schema: 'public', table: 'operation_results', filter: 'timeframe=eq.TEST' }, refresh)
+   .on('postgres_changes', { event: '*', schema: 'public', table: 'iq_demo_test_candidates' }, refresh)
+   .subscribe();
+  return () => { if (timer) clearTimeout(timer); void supabase.removeChannel(channel); };
+ }, [user?.id, queryClient]);
  const query = useQuery({
-  queryKey: ['demo-strategy-scores', user?.id], enabled: !!user, refetchInterval: 30000,
-  queryFn: async (): Promise<StrategyScoreOutcome[]> => {
-   const [orders, rejected, tests] = await Promise.all([
-    readDemoScoreHistory(async (from, to) => {
-     const { data, error } = await supabase.from('iq_demo_test_orders')
-      .select('id,signal_id,entry_strategy,entry_minute,settled_at,status,result,profit,iq_option_id')
-      .eq('status', 'confirmed').eq('account_type', 'PRACTICE').not('iq_option_id', 'is', null)
-      .order('entry_minute').order('id').range(from, to);
-     if (error) throw error;
-     return data ?? [];
-    }, async ids => {
-     const { data, error } = await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id', ids);
-     if (error) throw error;
-     return data ?? [];
-    }),
-    readAllScorePages(async (from, to) => {
-     const { data, error } = await supabase.from('demo_selection_rejections')
-      .select('id,signal_id,entry_strategy,entry_minute,score').order('entry_minute').order('id').range(from, to);
-     if (error) throw error;
-     return data ?? [];
-    }),
-    readAllScorePages(async (from, to) => {
-     const { data, error } = await supabase.from('operation_results').select('id,signal_id,result')
-      .eq('timeframe', 'TEST').in('result', ['win', 'loss']).order('id').range(from, to);
-     if (error) throw error;
-     return data ?? [];
-    }),
-   ]);
-   const outcomes = new Map(tests.map(row => [row.signal_id, row.result]));
-   return [
-    ...orders.filter(row => row.iq_option_id && /^\d+$/.test(row.iq_option_id)).map(row => ({ signal_id: row.signal_id, entry_strategy: row.entry_strategy ?? 'unknown', entry_minute: row.entry_minute, score: row.score, result: row.result, source: 'demo' as const })),
-    ...rejected.flatMap(row => {
-     const result = outcomes.get(row.signal_id);
-     return result ? [{ ...row, result, source: 'rejected' as const }] : [];
-    }),
-   ];
+  queryKey: ['demo-strategy-scores', user?.id, period], enabled: !!user,
+  refetchInterval: 10000, staleTime: 5000, refetchOnWindowFocus: 'always',
+  queryFn: async () => {
+   const { data, error } = await supabase.rpc('admin_winning_strategy_scores', { p_period: period });
+   if (error) throw error;
+   return (data ?? []).map(row => ({ strategy: row.strategy, score: row.score, demoWins: Number(row.demo_wins), rejectedWins: Number(row.rejected_wins), losses: Number(row.losses) }));
   },
  });
- const strategies = useMemo(() => [...new Set((query.data ?? []).map(row => row.entry_strategy))].sort(), [query.data]);
- const groups = useMemo(() => winningStrategyScores(filterStrategyScorePeriod(query.data ?? [], period))
-  .filter(row => strategy === 'all' || row.strategy === strategy), [query.data, period, strategy]);
+ const strategies = useMemo(() => [...new Set((query.data ?? []).map(row => row.strategy))].sort(), [query.data]);
+ const groups = useMemo(() => (query.data ?? []).filter(row => strategy === 'all' || row.strategy === strategy), [query.data, strategy]);
  const pages = Math.max(1, Math.ceil(groups.length / 20));
  const current = Math.min(page, pages - 1);
  return <section aria-label="Estratégias" className="space-y-5">

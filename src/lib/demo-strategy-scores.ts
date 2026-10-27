@@ -5,7 +5,7 @@ export type StrategyScoreOutcome = {
  score: number | null; result: string; source: 'demo' | 'rejected';
 };
 
-export function winningStrategyScores(rows: StrategyScoreOutcome[]) {
+export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'all', now = Date.now()) {
  const groups = new Map<string, { strategy: string; score: string; demoWins: number; rejectedWins: number; losses: number }>();
  const seen = new Set<string>();
  for (const row of rows) {
@@ -18,8 +18,10 @@ export function winningStrategyScores(rows: StrategyScoreOutcome[]) {
   const key = `${row.entry_strategy}:${score}`;
   const group = groups.get(key) ?? { strategy: row.entry_strategy, score, demoWins: 0, rejectedWins: 0, losses: 0 };
   if (result === 'loss') group.losses++;
-  else if (row.source === 'demo') group.demoWins++;
-  else group.rejectedWins++;
+  else if (filterStrategyScorePeriod([row], period, now).length) {
+   if (row.source === 'demo') group.demoWins++;
+   else group.rejectedWins++;
+  }
   groups.set(key, group);
  }
  return [...groups.values()].filter(g => g.losses === 0 && g.demoWins + g.rejectedWins > 0)

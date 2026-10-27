@@ -1000,6 +1000,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_winning_strategy_scores: {
+        Args: { p_period?: string }
+        Returns: {
+          demo_wins: number
+          losses: number
+          rejected_wins: number
+          score: string
+          strategy: string
+        }[]
+      }
       claim_force_anticipation_entry: {
         Args: { p_signal: string }
         Returns: Json

@@ -1,3 +1,7 @@
+# Resultado SUGAR e entrada Demo :00 (27/10/2026)
+- [ ] Recuperar resultado SUGAR-OTC pelo ID confirmado e corrigir recuperação de pendências mesmo sem novos sinais.
+- [ ] Reduzir atraso de entrada reaproveitando a conexão preparada, sem antecipar velas ou reativar principais/Telegram/clientes.
+
 # Título da lista de notas (27/10/2026)
 - [x] Cabeçalho da aba Estratégias passou de "Notas com WIN e nenhum LOSS" para "Notas | Mais WIN"; painel autenticado confirmou "Notas | Mais WIN · 2" com notas 1,51 e 0,00 (1 WIN, 0 LOSS), 17 testes passaram, build OK.
 

@@ -35,6 +35,28 @@ export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'al
   .sort((a, b) => b.demoWins - a.demoWins || a.strategy.localeCompare(b.strategy) || Number(a.score) - Number(b.score));
 }
 
+export type NoteScoreSummary = StrategyScoreSummary & { strategies: string[] };
+
+// Aggregates strategy+note rows into one row per note, summing WINs across all
+// strategies. Input rows already have zero losses (RPC veto), so the note keeps
+// the "WIN only" rule per strategy that produced it.
+export function aggregateScoresByNote(rows: StrategyScoreSummary[]): NoteScoreSummary[] {
+ const byNote = new Map<string, NoteScoreSummary>();
+ for (const row of rows) {
+  const existing = byNote.get(row.score);
+  if (!existing) {
+   byNote.set(row.score, { ...row, strategies: [row.strategy] });
+   continue;
+  }
+  existing.demoWins += row.demoWins;
+  existing.strategies.push(row.strategy);
+  if (row.firstWinAt && (!existing.firstWinAt || row.firstWinAt < existing.firstWinAt)) existing.firstWinAt = row.firstWinAt;
+  if (row.lastWinAt && row.lastWinAt > existing.lastWinAt) existing.lastWinAt = row.lastWinAt;
+  if (row.historyFirstWinAt && (!existing.historyFirstWinAt || row.historyFirstWinAt < existing.historyFirstWinAt)) existing.historyFirstWinAt = row.historyFirstWinAt;
+ }
+ return [...byNote.values()];
+}
+
 export function orderStrategyScores<T extends { strategy: string; score: string; demoWins: number }>(rows: T[], order: string): T[] {
  return [...rows].sort((a, b) => {
   const byWins = order === 'asc' ? a.demoWins - b.demoWins : b.demoWins - a.demoWins;

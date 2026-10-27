@@ -10,6 +10,7 @@ import { serialSettingsWriter } from '@/lib/serial-settings-writer';
 const STORAGE_KEY = 'autotrading_config';
 const IQ_CONNECTION_CHECK_INTERVAL = 60000; // Check IQ Option connection every 60s
 const MAX_TRADE_DELAY_MS = 2000; // Maximum 2 seconds delay
+let resultSyncInFlight = false;
 
 interface AutoTradingConfig {
   enabled: boolean;
@@ -321,14 +322,18 @@ export function useAutoTrading() {
   // Periodically check for pending results
   useEffect(() => {
     const checkPendingResults = async () => {
+      if (resultSyncInFlight) return;
       const now = Date.now();
       if (now - lastCheckResultsTime.current < CHECK_RESULTS_INTERVAL) return;
       
       lastCheckResultsTime.current = now;
+      resultSyncInFlight = true;
       
       try {
         console.log('🔍 Checking pending results...');
-        const { data, error } = await supabase.functions.invoke('iqoption-check-results');
+        const { data, error } = await supabase.functions.invoke('iqoption-check-results', {
+          signal: AbortSignal.timeout(95000),
+        });
         
         if (error) {
           // Silently fail - timeout errors are common
@@ -343,6 +348,8 @@ export function useAutoTrading() {
         await refreshActiveAssetTrades();
       } catch (err) {
         // Silently fail
+      } finally {
+        resultSyncInFlight = false;
       }
     };
 

@@ -1,3 +1,6 @@
+# Tempo limite no painel (27/10/2026)
+- [ ] Eliminar consultas de histórico principal vazio e limitar tentativas de login/consultas sobrepostas; verificar painel sob falha 504.
+
 # Takashi exclusiva Demo (27/10/2026)
 - [x] Somente Takashi na Demo com qualquer nota finita, sem principal/mid-candle/observações extras; rotina privada por minuto ativa e dois executores publicados. 27 testes aprovados; primeiro ATOMUSD-OTC CALL PRACTICE US$1 confirmado às 21:11 UTC, nota bruta 1,50818880024869 exibida 1,51 no admin. Fila principal, resultados principais/TEST, Telegram e cópias ativos zerados. Aprendizado sem histórico contribui zero, sem inventar resultados.
 

@@ -530,7 +530,7 @@ Deno.serve(async (req) => {
             if(!confirmed)await supabase.from('iq_demo_test_orders').update({status:refused?'failed':'unknown',error:refused?'Broker refused demo order':'No broker confirmation; never retry ambiguous order'}).eq('id',reserved).eq('status','reserved');
           } else await supabase.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).eq('status','reserved');
         }
-      } else console.error('Demo prepared market, amount or connection unavailable');
+      } else console.log('Demo prepared order skipped:',JSON.stringify({asset:demoWinner.asset,market:!!order,socketOpen:socket?.readyState===WebSocket.OPEN,settingError:!!setting.error}));
     }
   }
   closePrepared();

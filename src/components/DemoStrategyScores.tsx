@@ -48,7 +48,11 @@ export function DemoStrategyScores() {
   },
  });
  const strategies = useMemo(() => [...new Set((query.data ?? []).map(row => row.strategy))].sort(), [query.data]);
- const groups = useMemo(() => orderStrategyScores((query.data ?? []).filter(row => strategy === 'all' || row.strategy === strategy), order), [query.data, strategy, order]);
+ const groups = useMemo(() => {
+  const filtered = (query.data ?? []).filter(row => strategy === 'all' || row.strategy === strategy);
+  const rows = groupBy === 'note' ? aggregateScoresByNote(filtered) : filtered;
+  return orderStrategyScores(rows, order);
+ }, [query.data, strategy, order, groupBy]);
  const pages = Math.max(1, Math.ceil(groups.length / 20));
  const current = Math.min(page, pages - 1);
  return <section aria-label="Estratégias" className="space-y-5">
@@ -61,12 +65,13 @@ export function DemoStrategyScores() {
     <input type="date" value={customTo} min={customFrom || undefined} max={brtDateStr()} aria-label="Até (opcional)" onChange={event => { setCustomTo(event.target.value); setPage(0); }} className="h-9 rounded-md border border-input bg-transparent px-2 text-sm" />
    </>}
    <Select value={order} onValueChange={value => { setOrder(value); setPage(0); }}><SelectTrigger className="w-56 max-w-full" aria-label="Ordem das notas"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="desc">Mais WIN primeiro</SelectItem><SelectItem value="asc">Menos WIN primeiro</SelectItem></SelectContent></Select>
+   <Select value={groupBy} onValueChange={value => { setGroupBy(value); setPage(0); }}><SelectTrigger className="w-52 max-w-full" aria-label="Agrupar"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="strategy">Por estratégia</SelectItem><SelectItem value="note">Só por nota</SelectItem></SelectContent></Select>
   </div>
   {!query.isPending && !query.isError && <DemoStrategyScoreChart rows={groups} />}
   <h3 className="text-sm font-medium">Notas com WIN e nenhum LOSS · {groups.length}</h3>
   {query.isError && <p role="alert" className="text-sm text-destructive">Não foi possível atualizar as notas por estratégia.</p>}
   {period === 'custom' && !customFrom && !customTo ? <p role="status" className="text-sm text-muted-foreground">Escolha uma data para ver as notas — só a data inicial já filtra aquele dia.</p> : query.isPending ? <p role="status" className="text-sm text-muted-foreground">Carregando notas por estratégia…</p> : !query.isError && !groups.length ? <p className="text-sm text-muted-foreground">Nenhuma nota com WIN e zero LOSS neste período.</p> : <div className="space-y-1" aria-label="Notas por estratégia">{groups.slice(current * 20, current * 20 + 20).map(row => <div key={`${row.strategy}-${row.score}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md bg-secondary/30 p-3 text-xs">
-   <span className="min-w-0 font-medium">{demoStrategyNames[row.strategy] ?? row.strategy}</span><span className="font-mono">Nota {row.score.replace('.', ',')}</span>
+   <span className="min-w-0 font-medium">{'strategies' in row && Array.isArray(row.strategies) ? (row.strategies as string[]).map(value => demoStrategyNames[value] ?? value).join(' · ') : demoStrategyNames[row.strategy] ?? row.strategy}</span><span className="font-mono">Nota {row.score.replace('.', ',')}</span>
    <span className="text-call">{row.demoWins} WIN</span><span className="ml-auto text-muted-foreground">0 LOSS</span>
   </div>)}</div>}
   {pages > 1 && <div className="flex items-center justify-between gap-2"><Button variant="outline" size="sm" disabled={!current} onClick={() => setPage(current - 1)}>Anterior</Button><span className="text-xs text-muted-foreground">{current + 1} / {pages}</span><Button variant="outline" size="sm" disabled={current + 1 >= pages} onClick={() => setPage(current + 1)}>Próxima</Button></div>}

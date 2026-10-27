@@ -37,6 +37,10 @@ export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'al
 
 export type NoteScoreSummary = StrategyScoreSummary & { strategies: string[] };
 
+export function sortScoresByNote<T extends { score: string }>(rows: T[]): T[] {
+ return [...rows].sort((a, b) => Number(b.score) - Number(a.score));
+}
+
 // Aggregates strategy+note rows into one row per note, summing WINs across all
 // strategies. Input rows already have zero losses (RPC veto), so the note keeps
 // the "WIN only" rule per strategy that produced it.

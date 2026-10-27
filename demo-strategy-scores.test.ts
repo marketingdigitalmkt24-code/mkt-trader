@@ -1,6 +1,11 @@
 import { test, expect } from 'bun:test';
-import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, topWinningStrategyScores, aggregateScoresByNote, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
+import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, topWinningStrategyScores, aggregateScoresByNote, sortScoresByNote, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
 const row = (signal_id: string, entry_strategy = 'VELA_FORCA', score: number | null = 2.26, result = 'win', source: StrategyScoreOutcome['source'] = 'demo'): StrategyScoreOutcome => ({ signal_id, entry_strategy, score, result, source, entry_minute: '2026-10-27T03:00:00Z' });
+test('strategy tab always orders notes numerically instead of by WIN counts', () => {
+ const rows = [{ score: '2.26', demoWins: 100 }, { score: '10.00', demoWins: 1 }, { score: '4.50', demoWins: 5 }];
+ expect(sortScoresByNote(rows).map(row => row.score)).toEqual(['10.00', '4.50', '2.26']);
+ expect(rows[0].score).toBe('2.26');
+});
 test('chart keeps exactly ten highest total WIN cohorts, not the highest numerical scores', () => {
  const groups = Array.from({ length: 12 }, (_, i) => ({ strategy: 'VELA_FORCA', score: String(12 - i), demoWins: i, firstWinAt: '2026-10-24T03:00:00Z' }));
  const top = topWinningStrategyScores(groups);

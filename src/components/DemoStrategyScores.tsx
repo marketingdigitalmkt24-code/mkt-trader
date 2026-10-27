@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { demoStrategyNames } from './DemoTestOperations';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { orderStrategyScores } from '@/lib/demo-strategy-scores';
+import { aggregateScoresByNote, orderStrategyScores } from '@/lib/demo-strategy-scores';
 import { DemoStrategyScoreChart } from './DemoStrategyScoreChart';
 
 export function DemoStrategyScores() {
@@ -16,6 +16,7 @@ export function DemoStrategyScores() {
  const [customFrom, setCustomFrom] = useState('');
  const [customTo, setCustomTo] = useState('');
  const [order, setOrder] = useState('desc');
+ const [groupBy, setGroupBy] = useState('strategy');
  const [page, setPage] = useState(0);
  const brtDateStr = (daysAgo = 0) => new Date(Date.now() - 3 * 3600000 - daysAgo * 86400000).toISOString().slice(0, 10);
  const queryClient = useQueryClient();

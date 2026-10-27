@@ -1,3 +1,6 @@
+# Título da lista de notas (27/10/2026)
+- [x] Cabeçalho da aba Estratégias passou de "Notas com WIN e nenhum LOSS" para "Notas | Mais WIN"; painel autenticado confirmou "Notas | Mais WIN · 2" com notas 1,51 e 0,00 (1 WIN, 0 LOSS), 17 testes passaram, build OK.
+
 # Card de análise IA (27/10/2026)
 - [x] Card mostra IA Analisando e lê candidatos/rejeições Takashi Demo com notas e horários BRT; admin autenticado confirmou 3 ativos registrados e análise recente, sem STANDBY. Nove testes passaram, build OK; principal, Telegram e clientes preservados. Lista representa registros, não todos os mercados consultados.
 

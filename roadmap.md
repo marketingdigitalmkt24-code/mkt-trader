@@ -1,5 +1,5 @@
 # Lista de operações por nota (27/10/2026)
-- [ ] Retirar gráfico top 10, ordenar e agrupar sempre por nota, abrir lista Demo com dias/estratégias/gráfico no hover e conferir no admin.
+- [x] Retirado gráfico top 10; notas agrupadas e ordenadas da maior para a menor, estratégias somente no histórico aberto. Lista Demo reutilizada com datas BRT e gráficos no hover; admin autenticado confirmou nota 7,37/ALIBABA-OTC com WIN e gráfico, 14 testes passaram, sem erros na tela.
 
 # Estratégias e notas rejeitadas (27/10/2026)
 - [x] Gráfico das dez notas por estratégia com mais WIN, total Demo + rejeitadas TEST e datas reais de início/último WIN ao selecionar; filtros e exclusão por LOSS preservados. Nove testes passaram e painel autenticado confirmou dez notas e início da nota 2,34 em 23/10/2026 18:20 BRT, sem erros ou overflow.

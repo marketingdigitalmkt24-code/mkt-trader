@@ -414,6 +414,13 @@
       "when": 1793079240185,
       "tag": "0058_strategy_score_periods",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793080084433,
+      "tag": "0059_strategy_scores_realtime",
+      "breakpoints": true
     }
   ]
 }

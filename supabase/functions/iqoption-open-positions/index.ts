@@ -160,6 +160,8 @@ Deno.serve(async (req) => {
               const posIds = new Set<string>();
               collectPrimitives(p, posIds);
               const app = appOrders.get(brokerId) || [...appOrders.values()].find((o) => posIds.has(o.id));
+              debugInfo.push({ brokerId, matched: !!app, ids: [...posIds].filter((x) => /^\d{6,}$/.test(x)).slice(0, 60) });
+
 
               if (!app) {
                 foreignIds.push(brokerId);

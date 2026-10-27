@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 const PAGE = 10;
 const time = (value: string) => new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' });
-type Operation = { id: string; signal_id: string; asset: string; direction: string; entry_strategy: string; entry_minute: string; result: string; amount: number | null; profit: number | null; rejected: boolean; testResult?: string; candles?: PatternCandle[] | null };
+type Operation = { id: string; signal_id: string; asset: string; direction: string; entry_strategy: string; entry_minute: string; result: string; amount: number | null; profit: number | null; rejected: boolean; score?: number | null; testResult?: string; candles?: PatternCandle[] | null };
 function chartCandles(value: unknown): PatternCandle[] | null {
  if (!Array.isArray(value)) return null;
  const valid = value.filter((c): c is PatternCandle => c != null && typeof c === 'object' && ['t','o','c','h','l'].every(key => typeof c[key] === 'number' && Number.isFinite(c[key])));
@@ -67,7 +67,7 @@ export function DemoWinningPatterns() {
      const rows: Operation[] = []; let count = 0;
      for (let from = 0; from < limit; from += 1000) {
       const { data, error, count: total } = await supabase.from('demo_selection_rejections')
-       .select('id,signal_id,asset,direction,entry_strategy,entry_minute', { count: 'exact' })
+       .select('id,signal_id,asset,direction,entry_strategy,entry_minute,score', { count: 'exact' })
        .order('entry_minute', { ascending: false }).order('id', { ascending: false }).range(from, Math.min(from + 999, limit - 1));
       if (error) throw error;
       count = total ?? 0;
@@ -88,6 +88,7 @@ export function DemoWinningPatterns() {
    ]);
    if (charts.error) throw charts.error;
    if (rejectedCharts.error) throw rejectedCharts.error;
+   if (testResults.error) throw testResults.error;
    const snapshots = new Map((charts.data ?? []).map(row => [row.signal_id, chartCandles(row.candles)]));
    const rejectionSnapshots = new Map((rejectedCharts.data ?? []).map(row => [row.id, chartCandles(row.candles)]));
    const testOutcome = new Map((testResults.data ?? []).map(row => [row.signal_id, String(row.result).toLowerCase()]));
@@ -110,6 +111,7 @@ export function DemoWinningPatterns() {
    <span className="font-medium">{row.asset}</span>
    <span className={row.direction === 'CALL' ? 'text-call' : 'text-put'}>{row.direction}</span>
    <span className="text-muted-foreground">{demoStrategyNames[row.entry_strategy] ?? row.entry_strategy}</span>
+   {row.rejected && <span className="font-mono text-muted-foreground">{row.score != null && Number.isFinite(row.score) ? `Nota ${row.score.toFixed(2).replace('.', ',')}` : 'Sem nota registrada'}</span>}
    {row.amount != null && <span className="font-mono text-[10px] text-muted-foreground">{money(Number(row.amount))}</span>}
    <span className={`ml-auto font-mono ${(row.rejected ? row.testResult : row.result) === 'win' ? 'text-call' : (row.rejected ? row.testResult : row.result) === 'loss' ? 'text-put' : 'text-muted-foreground'}`}>{row.rejected ? (row.testResult === 'win' || row.testResult === 'loss' || row.testResult === 'tie' ? `REJEITADA · ${row.testResult === 'tie' ? 'EMPATE' : row.testResult.toUpperCase()} (teste)` : 'REJEITADA · sem resultado') : row.result === 'pending' ? 'ABERTA' : `${row.result.toUpperCase()} · ${money(Number(row.profit))}`}</span>
   </div></HoverCardTrigger><HoverCardContent className="w-80 max-w-[calc(100vw-2rem)]"><p className="mb-2 text-xs font-medium">{row.asset} · {demoStrategyNames[row.entry_strategy] ?? row.entry_strategy}</p>

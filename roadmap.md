@@ -1,3 +1,8 @@
+# Remix setup (27/10/2026)
+- [x] Telegram connection linked and bot verified; seven notification-related functions deployed with the new connection.
+- [ ] Update GOOGLE_AI_API_KEY, GROQ_API_KEY, METAAPI_ACCOUNT_ID, METAAPI_TOKEN, ZAPI_CLIENT_TOKEN, ZAPI_INSTANCE_ID, ZAPI_PHONE_NUMBER and ZAPI_TOKEN: secure update form was declined; new values remain required.
+- [ ] Clear copied Drizzle migrations and scaffold empty history: copied 60-entry migration set remains; direct journal/snapshot deletion is protected by the migration workflow and no supported remix-reset action is available.
+
 # Movimento diário das notas (27/10/2026)
 - [x] Gráfico de linha de 30 dias com entradas/saídas por dia BRT reconstruídas de Demo confirmada, sem duplicar notas entre estratégias. Leitura paginada independente; criação de RPC não aplicada por conflito preexistente nos snapshots protegidos, sem alteração no banco.
 - [x] Lista por mais WIN; 17 testes passaram. Admin autenticado confirmou duas linhas, 293 entradas/75 saídas e notas 2,23/2,18 com 7 WIN primeiro; histórico e gráfico no hover preservados, sem erros na tela.

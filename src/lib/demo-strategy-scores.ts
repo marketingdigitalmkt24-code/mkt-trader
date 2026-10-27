@@ -28,6 +28,13 @@ export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'al
   .sort((a, b) => b.demoWins + b.rejectedWins - a.demoWins - a.rejectedWins || a.strategy.localeCompare(b.strategy) || Number(a.score) - Number(b.score));
 }
 
+export function orderStrategyScores<T extends { strategy: string; score: string }>(rows: T[], order: string): T[] {
+ return [...rows].sort((a, b) => {
+  const byScore = order === 'asc' ? Number(a.score) - Number(b.score) : Number(b.score) - Number(a.score);
+  return byScore || a.strategy.localeCompare(b.strategy);
+ });
+}
+
 export function filterStrategyScorePeriod(rows: StrategyScoreOutcome[], period: string, now = Date.now()) {
  const brtDay = (at: number) => new Date(at - 3 * 3600000).toISOString().slice(0, 10);
  return rows.filter(row => period === 'today' ? brtDay(Date.parse(row.entry_minute)) === brtDay(now)

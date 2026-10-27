@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, topWinningStrategyScores, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
+import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, topWinningStrategyScores, aggregateScoresByNote, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
 const row = (signal_id: string, entry_strategy = 'VELA_FORCA', score: number | null = 2.26, result = 'win', source: StrategyScoreOutcome['source'] = 'demo'): StrategyScoreOutcome => ({ signal_id, entry_strategy, score, result, source, entry_minute: '2026-10-27T03:00:00Z' });
 test('chart keeps exactly ten highest total WIN cohorts, not the highest numerical scores', () => {
  const groups = Array.from({ length: 12 }, (_, i) => ({ strategy: 'VELA_FORCA', score: String(12 - i), demoWins: i, firstWinAt: '2026-10-24T03:00:00Z' }));
@@ -61,4 +61,19 @@ test('pagination includes losses beyond the first thousand rows', async () => {
  const rows = await readAllScorePages(async from => from === 0 ? Array.from({ length: 1000 }, (_, i) => row(String(i))) : [row('last', 'VELA_FORCA', 2.26, 'loss')]);
  expect(rows.length).toBe(1001);
  expect(winningStrategyScores(rows)).toEqual([]);
+});
+test('Só por nota sums WINs across strategies and keeps earliest and latest WIN dates', () => {
+ const rows = [
+  { strategy: 'VELA_FORCA', score: '2.26', demoWins: 5, losses: 0, firstWinAt: '2026-10-25T03:00:00Z', lastWinAt: '2026-10-26T03:00:00Z', historyFirstWinAt: '2026-10-24T03:00:00Z' },
+  { strategy: 'TENDENCIA', score: '2.26', demoWins: 3, losses: 0, firstWinAt: '2026-10-24T03:00:00Z', lastWinAt: '2026-10-27T03:00:00Z', historyFirstWinAt: '2026-10-23T03:00:00Z' },
+  { strategy: 'TAKASHI', score: '4.50', demoWins: 2, losses: 0, firstWinAt: '2026-10-26T03:00:00Z', lastWinAt: '2026-10-26T04:00:00Z', historyFirstWinAt: '2026-10-26T03:00:00Z' },
+ ];
+ const notes = aggregateScoresByNote(rows);
+ expect(notes).toHaveLength(2);
+ const n226 = notes.find(n => n.score === '2.26');
+ expect(n226.demoWins).toBe(8);
+ expect(n226.strategies).toEqual(['VELA_FORCA', 'TENDENCIA']);
+ expect(n226.firstWinAt).toBe('2026-10-24T03:00:00Z');
+ expect(n226.lastWinAt).toBe('2026-10-27T03:00:00Z');
+ expect(n226.historyFirstWinAt).toBe('2026-10-23T03:00:00Z');
 });

@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { matchAppOpenOrder, type AppOpenOrder } from '../_shared/open-positions-filter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,6 +33,58 @@ const fmtAsset = (raw: string) => {
   return otc ? `${p} OTC` : p;
 };
 
+/** Ordens abertas por este app na IQ Option: id da corretora + dados do próprio registro. */
+async function loadAppOrders(supabase: ReturnType<typeof createClient>): Promise<Map<string, AppOpenOrder>> {
+  const out = new Map<string, AppOpenOrder>();
+  const add = (id: unknown, asset: unknown, direction: unknown, invest: unknown, cohort: AppOpenOrder['cohort']) => {
+    if (id === null || id === undefined || id === '') return;
+    const key = String(id).trim();
+    if (!key) return;
+    const dir = String(direction || '').toUpperCase();
+    if (!out.has(key)) {
+      out.set(key, {
+        id: key,
+        asset: fmtAsset(String(asset ?? '')),
+        direction: dir === 'PUT' || dir === 'SELL' || dir === 'DOWN' ? 'PUT' : 'CALL',
+        invest: Number(invest ?? 0) || 0,
+        cohort,
+      });
+    }
+  };
+
+  const demo = await supabase.from('iq_demo_test_orders')
+    .select('iq_option_id, asset, direction, amount')
+    .eq('status', 'confirmed').not('iq_option_id', 'is', null)
+    .order('created_at', { ascending: false }).limit(400);
+  for (const r of demo.data || []) add(r.iq_option_id, r.asset, r.direction, r.amount, 'demo');
+
+  const res = await supabase.from('operation_results')
+    .select('iq_option_id, asset, direction, signal_id, timeframe')
+    .not('iq_option_id', 'is', null).neq('timeframe', 'TEST').neq('timeframe', 'MT5')
+    .order('created_at', { ascending: false }).limit(400);
+  for (const r of res.data || []) {
+    const sig = String(r.signal_id || '');
+    if (sig.startsWith('copy-') || sig.startsWith('sim-') || sig.startsWith('mt5-')) continue;
+    add(r.iq_option_id, r.asset, r.direction, 0, 'principal');
+  }
+
+  const queue = await supabase.from('trade_queue')
+    .select('iq_option_id, asset, direction, amount')
+    .not('iq_option_id', 'is', null)
+    .order('created_at', { ascending: false }).limit(400);
+  for (const r of queue.data || []) add(r.iq_option_id, r.asset, r.direction, r.amount, 'principal');
+
+  const stp = await supabase.from('stop_target_positions')
+    .select('iq_order_id, iq_position_id, symbol, direction, iq_amount')
+    .order('opened_at', { ascending: false }).limit(200);
+  for (const r of stp.data || []) {
+    add(r.iq_order_id, r.symbol, r.direction, r.iq_amount, 'principal');
+    add(r.iq_position_id, r.symbol, r.direction, r.iq_amount, 'principal');
+  }
+
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -42,10 +95,14 @@ Deno.serve(async (req) => {
     const ssid = await login(cfg.email, cfg.password);
     if (!ssid) return json({ success: false, error: 'Falha no login', positions: [] });
 
+    // Somente ordens abertas por este app são exibidas; o id da corretora é o vínculo exato.
+    const appOrders = await loadAppOrders(supabase);
+
     const assetNames: Record<number, string> = {};
     const positions: OpenPos[] = [];
     const closedForex: { id: string; pnl: number }[] = [];
     const toClose: string[] = [];
+    let skipped = 0;
 
     await new Promise<void>((resolve) => {
       const ws = new WebSocket('wss://iqoption.com/echo/websocket');
@@ -85,12 +142,22 @@ Deno.serve(async (req) => {
               const pnl = Number(p.pnl ?? p.pnl_net ?? 0);
               const activeId = Number(p.active_id ?? p.instrument_active_id ?? p.raw_event?.instrument_active_id ?? 0);
               const dir = String(p.direction || p.side || p.raw_event?.side || p.raw_event?.instrument_dir || '').toLowerCase();
+              const brokerId = String(p.id ?? p.external_id);
+
+              // Vínculo exato: a posição só aparece se este app abriu aquela ordem na corretora.
+              const app = matchAppOpenOrder(p, appOrders);
+              if (!app) {
+                skipped += 1;
+                continue;
+              }
+
               const pos: OpenPos = {
-                id: String(p.id ?? p.external_id),
+                id: brokerId,
                 type,
-                asset: fmtAsset(assetNames[activeId] || p.instrument_id || p.raw_event?.instrument_id || ''),
-                direction: dir.includes('buy') || dir.includes('call') ? 'CALL' : 'PUT',
-                invest, pnl,
+                asset: app.asset || fmtAsset(assetNames[activeId] || p.instrument_id || p.raw_event?.instrument_id || ''),
+                direction: app.direction || (dir.includes('buy') || dir.includes('call') ? 'CALL' : 'PUT'),
+                invest: app.invest || invest,
+                pnl,
                 openedAt: p.open_time ?? p.create_at ?? null,
                 expiresAt: p.expiration_time ?? p.raw_event?.instrument_expiration ?? null,
               };
@@ -127,7 +194,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ success: true, positions: positions.filter(p => !toClose.includes(p.id)), closed: toClose.length, timestamp: new Date().toISOString() });
+    return json({
+      success: true,
+      positions: positions.filter(p => !toClose.includes(p.id)),
+      closed: toClose.length,
+      skipped,
+      timestamp: new Date().toISOString(),
+    });
   } catch (e) {
     return json({ success: false, error: e instanceof Error ? e.message : 'erro', positions: [] });
   }

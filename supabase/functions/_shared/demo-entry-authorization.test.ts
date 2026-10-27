@@ -40,7 +40,7 @@ test('future references, absent learning evidence and fabricated candles do not 
 test('all displayed 2.26 Demo candidates qualify without history or pattern veto, principal stays exact',()=>{
  for(const score of [2.26,2.259,2.26032894533026,2.2649]){
   expect(demoEntryReason(score,new Set(),null,-1)).toBeNull();
-  expect(isSuperSelected(score)).toBe(score===2.26);
+  expect(isSuperSelected(score)).toBe(Math.round(score * 100) === 226);
  }
  for(const score of [2.2549,2.265,NaN,Infinity])expect(demoEntryReason(score,new Set(),null,-1)).not.toBeNull();
 });

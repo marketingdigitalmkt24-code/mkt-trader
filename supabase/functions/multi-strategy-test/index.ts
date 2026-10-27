@@ -32,6 +32,7 @@ import { readDemoWinningReferences } from '../_shared/demo-winning-reference-his
 import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
+import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -151,12 +152,13 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Invalid parameters' }, { status: 400, headers: cors });
   }
   const targetMs = demoTargetMinute(Date.now(), input.scheduled === true);
-  const previousDemoRead = supabase.from('iq_demo_test_orders')
+  const readPendingDemo = () => supabase.from('iq_demo_test_orders')
     .select('id,signal_id,entry_strategy,entry_minute,result,profit,asset,direction,status,account_type,iq_option_id,settled_at')
     .eq('status','confirmed').not('iq_option_id','is',null)
     .eq('account_type','PRACTICE').eq('result','pending')
     .lte('expiration_time',new Date(targetMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
+  const previousDemoRead = readPendingDemo();
   const amountRead = supabase.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r);
   // Own recent broker evidence loads during preparation, not after the :00 candle request.
   const takashiRecentRead = readTakashiRecentOrders(async(from,to)=>{
@@ -241,16 +243,25 @@ Deno.serve(async (req) => {
     .abortSignal(AbortSignal.timeout(1500)).then(result => result);
   const newlySettled: LearningOutcome[] = [];
   // Start login as soon as the master read finishes, while expired rows are still loading.
-  const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => ({
-    cfg, ssid: cfg ? await login(cfg.email, cfg.password) : null,
-  }));
+  const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
+    let ssid=cfg ? await login(cfg.email,cfg.password) : null;
+    // One bounded retry during preparation only, never move a stale signal forward.
+    if(cfg && !ssid && Date.now()<targetMs-15000) {
+      await new Promise(resolve=>setTimeout(resolve,1000));
+      ssid=await login(cfg.email,cfg.password);
+    }
+    return {cfg,ssid};
+  });
   const [{ cfg, ssid }, { data: open }] = await Promise.all([
     masterLogin,
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date(targetMs).toISOString()).limit(1000),
   ]);
   if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
-  if (!ssid) return Response.json({ success: false, error: 'login failed' }, { headers: cors });
+  if (!ssid) {
+    console.error('Demo scan unavailable: broker login failed; next scheduled minute retries');
+    return Response.json({ success: false, error: 'login failed' }, { headers: cors });
+  }
   let nowSec = Math.floor(Date.now() / 1000);
   const curMin = targetMs / 1000;
   console.log('Demo timing login ready:', new Date().toISOString());
@@ -293,20 +304,41 @@ Deno.serve(async (req) => {
   let preparedActives: Record<string, any> = {};
   let closePrepared = () => {};
   let handleOrder: ((message: any) => void) | null = null;
+  let settlementWatch: Promise<number> = Promise.resolve(0);
   await new Promise<void>((resolve) => {
     const ws = new WebSocket(WS_URL);
     preparedSocket = ws;
     let pending = 0; const byReq = new Map<string, string>();
-    let demoBalanceId = 0, demoHistoryPending = 0, candleDone = false;
+    let demoBalanceId = 0, candleDone = false;
+    let historyAttempt=0;
+    const historyResponses=new Set<string>();
     let demoHistoryTimer: ReturnType<typeof setTimeout> | undefined;
     const finish = () => { if(demoHistoryTimer)clearTimeout(demoHistoryTimer); resolve(); };
     closePrepared = () => { clearTimeout(timer); if(boundaryTimer)clearTimeout(boundaryTimer); if(demoHistoryTimer)clearTimeout(demoHistoryTimer); try{ws.close();}catch{} };
-    const finishCandles = () => { candleDone=true; if(!demoHistoryPending)finish(); };
+    const finishCandles = () => { candleDone=true; finish(); };
     const timer = setTimeout(() => { finish(); closePrepared(); }, Math.max(0, targetMs - Date.now()) + 30000);
     let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
     let initialized = false;
     const requestInitialization = () => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
+    };
+    const requestPendingHistory = async () => {
+      if(ws.readyState!==WebSocket.OPEN || !demoBalanceId)return false;
+      await Promise.all(demoSettlements);
+      const fresh=await readPendingDemo();
+      if(fresh.error){console.error('Demo pending refresh failed:',fresh.error.code);return true;}
+      for(const row of fresh.data||[]) {
+        const existing=previousPending.find(o=>o.id===row.id);
+        if(existing)Object.assign(existing,row);else previousPending.push(row);
+      }
+      const unresolved=(fresh.data||[]).length;
+      console.log('Demo settlement check:',JSON.stringify({attempt:++historyAttempt,pending:unresolved,at:new Date().toISOString()}));
+      if(!unresolved)return false;
+      for(const offset of [0,300,600])for(const [name,version] of [['portfolio.get-history-positions','2.0'],['get-history-positions','1.0']]) {
+        if(ws.readyState!==WebSocket.OPEN)return false;
+        ws.send(JSON.stringify({name:'sendMessage',request_id:`demo-trigger-${historyAttempt}-${name}-${offset}`,msg:{name,version,body:{user_balance_id:demoBalanceId,instrument_types:name.startsWith('portfolio')?['binary-option','turbo-option','digital-option']:['turbo'],limit:300,offset}}}));
+      }
+      return true;
     };
     ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
     ws.onerror = () => { finish(); closePrepared(); };
@@ -317,6 +349,9 @@ Deno.serve(async (req) => {
       if (d.name === 'profile') {
         demoBalanceId = demoBalance(d.msg?.balances || [])?.id || 0;
         preparedBalanceId = demoBalanceId;
+        // Re-read at :01 so this minute's confirmation is not missed by preflight.
+        settlementWatch=watchDemoSettlements(targetMs,requestPendingHistory)
+          .catch(error=>{console.error('Demo settlement watch failed:',String(error));return 0;});
         // Connection is already authenticated; only fresh closed candles are requested at :00.
         console.log('Demo timing broker ready:', new Date().toISOString());
         requestInitialization();
@@ -329,13 +364,6 @@ Deno.serve(async (req) => {
         if (requestTime === null) { clearTimeout(timer); finish(); return; }
         nowSec = requestTime;
         console.log('Demo timing candles requested:', new Date().toISOString());
-        if(previousPending.length && demoBalanceId) {
-          demoHistoryPending=6;
-          demoHistoryTimer=setTimeout(()=>{demoHistoryPending=0;if(candleDone)finish();},1500);
-          for(const offset of [0,300,600]) for(const [name,version] of [['portfolio.get-history-positions','2.0'],['get-history-positions','1.0']]) {
-            ws.send(JSON.stringify({name:'sendMessage',request_id:`demo-trigger-${name}-${offset}`,msg:{name,version,body:{user_balance_id:demoBalanceId,instrument_types:name.startsWith('portfolio')?['binary-option','turbo-option','digital-option']:['turbo'],limit:300,offset}}}));
-          }
-        }
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
         const cand = new Map<string, number>();
         for (const [id, a] of Object.entries<any>(all)) {
@@ -365,6 +393,8 @@ Deno.serve(async (req) => {
       }
       if(typeof d.request_id==='string' && d.request_id.startsWith('demo-trigger-')
         && ['history-positions','portfolio.get-history-positions','get-history-positions'].includes(d.name)) {
+        if(historyResponses.has(d.request_id))return;
+        historyResponses.add(d.request_id);
         const positions=d.msg?.positions || d.msg?.history || (Array.isArray(d.msg)?d.msg:[]);
         for(const pos of positions) {
           const outcome=demoHistoryOutcome(pos);if(!outcome)continue;
@@ -373,11 +403,9 @@ Deno.serve(async (req) => {
           demoSettlements.push(supabase.from('iq_demo_test_orders')
             .update({result:outcome.result,profit:outcome.profit,settled_at:new Date().toISOString()})
             .eq('id',match.id).eq('result','pending').select('id').then(({data,error})=>{
-              if(!error && data?.length){match.result=outcome.result;match.profit=outcome.profit;match.settled_at=new Date().toISOString();}
+              if(!error && data?.length){match.result=outcome.result;match.profit=outcome.profit;match.settled_at=new Date().toISOString();console.log('Demo result confirmed:',JSON.stringify({signal:match.signal_id,result:outcome.result,at:match.settled_at}));}
             }));
         }
-        demoHistoryPending=Math.max(0,demoHistoryPending-1);
-        if(!demoHistoryPending && candleDone)finish();
       }
     };
   });
@@ -551,6 +579,9 @@ Deno.serve(async (req) => {
       } else console.log('Demo prepared order skipped:',JSON.stringify({asset:demoWinner.asset,market:!!order,socketOpen:socket?.readyState===WebSocket.OPEN,settingError:!!setting.error}));
     }
   }
+  // Keep checking expired outcomes after selection; never delay the next fresh order for history.
+  await settlementWatch;
+  await new Promise(resolve=>setTimeout(resolve,500));
   closePrepared();
   await Promise.all(demoSettlements);
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));

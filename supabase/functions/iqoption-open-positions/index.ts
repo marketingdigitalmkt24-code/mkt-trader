@@ -113,6 +113,8 @@ Deno.serve(async (req) => {
     const closedForex: { id: string; pnl: number }[] = [];
     const toClose: string[] = [];
     const foreignIds: string[] = [];
+    const debugInfo: { brokerId: string; matched: boolean; ids: string[] }[] = [];
+
 
     await new Promise<void>((resolve) => {
       const ws = new WebSocket('wss://iqoption.com/echo/websocket');

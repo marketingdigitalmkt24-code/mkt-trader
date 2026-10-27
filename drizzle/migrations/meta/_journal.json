@@ -407,6 +407,13 @@
       "when": 1793078952033,
       "tag": "0057_strategy_scores_demo_only",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1793079240185,
+      "tag": "0058_strategy_score_periods",
+      "breakpoints": true
     }
   ]
 }

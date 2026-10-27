@@ -1,3 +1,6 @@
+# Takashi exclusiva Demo (27/10/2026)
+- [ ] Selecionar/executar apenas Takashi na Demo, verificar notas e rotina por minuto, mantendo bloqueio principal/Telegram/clientes.
+
 # Interrupção das estratégias principais (27/10/2026)
 - [x] Todas as entradas principais IQ Option, cópias e avisos Telegram bloqueados nos executores; configurações automáticas/cópias desligadas, sete funções publicadas, 17 testes aprovados e principal publicada recusou 410. Demo/histórico preservados.
 - [ ] Defesa adicional: substituir claim_takashi_after_226 por retorno nulo; migração não aplicada devido à colisão preexistente dos snapshots 0058/0059 protegidos. Executores publicados bloqueiam antes de chamar essa função.

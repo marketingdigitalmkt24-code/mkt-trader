@@ -39,6 +39,24 @@ test('older LOSS keeps a score excluded when selecting today', () => {
 test('today starts at Brasília midnight', () => {
  expect(filterStrategyScorePeriod([row('a'), { ...row('b'), entry_minute: '2026-10-27T02:59:59Z' }], 'today', Date.parse('2026-10-27T04:59:00Z')).map(r => r.signal_id)).toEqual(['a']);
 });
+test('yesterday follows the previous Brasília day, not midnight-UTC math', () => {
+ const now = Date.parse('2026-10-27T05:05:00Z');
+ const yesterdayEvening = { ...row('y'), entry_minute: '2026-10-27T02:00:00Z' };
+ const todayAfterMidnight = row('a');
+ expect(filterStrategyScorePeriod([todayAfterMidnight, yesterdayEvening], 'yesterday', now).map(r => r.signal_id)).toEqual(['y']);
+});
+test('15-day window includes the edge and excludes older entries', () => {
+ const now = Date.parse('2026-10-27T05:05:00Z');
+ const recent = { ...row('recent'), entry_minute: '2026-10-16T12:00:00Z' };
+ const old = { ...row('old'), entry_minute: '2026-10-06T12:00:00Z' };
+ expect(filterStrategyScorePeriod([old, recent, row('a')], '15d', now).map(r => r.signal_id)).toEqual(['recent', 'a']);
+});
+test('custom range filters by inclusive Brasília dates', () => {
+ const now = Date.parse('2026-10-27T05:05:00Z');
+ const yesterdayEvening = { ...row('y'), entry_minute: '2026-10-27T02:00:00Z' };
+ expect(filterStrategyScorePeriod([row('a'), yesterdayEvening], 'custom', now, { from: '2026-10-26', to: '2026-10-26' }).map(r => r.signal_id)).toEqual(['y']);
+ expect(filterStrategyScorePeriod([row('a')], 'custom', now, { from: '2026-10-26', to: '2026-10-26' })).toEqual([]);
+});
 test('pagination includes losses beyond the first thousand rows', async () => {
  const rows = await readAllScorePages(async from => from === 0 ? Array.from({ length: 1000 }, (_, i) => row(String(i))) : [row('last', 'VELA_FORCA', 2.26, 'loss')]);
  expect(rows.length).toBe(1001);

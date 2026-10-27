@@ -13,8 +13,11 @@ export function DemoStrategyScores() {
  const { user } = useAuth();
  const [strategy, setStrategy] = useState('all');
  const [period, setPeriod] = useState('all');
+ const [customFrom, setCustomFrom] = useState('');
+ const [customTo, setCustomTo] = useState('');
  const [order, setOrder] = useState('desc');
  const [page, setPage] = useState(0);
+ const brtDateStr = (daysAgo = 0) => new Date(Date.now() - 3 * 3600000 - daysAgo * 86400000).toISOString().slice(0, 10);
  const queryClient = useQueryClient();
  useEffect(() => {
   if (!user) return;
@@ -31,10 +34,12 @@ export function DemoStrategyScores() {
   return () => { if (timer) clearTimeout(timer); void supabase.removeChannel(channel); };
  }, [user?.id, queryClient]);
  const query = useQuery({
-  queryKey: ['demo-strategy-scores', user?.id, period], enabled: !!user,
+  queryKey: ['demo-strategy-scores', user?.id, period, customFrom, customTo],
+  enabled: !!user && (period !== 'custom' || (!!customFrom && !!customTo)),
   refetchInterval: 10000, staleTime: 5000, refetchOnWindowFocus: 'always',
   queryFn: async () => {
-   const { data, error } = await supabase.rpc('admin_winning_strategy_score_chart', { p_period: period });
+   const { data, error } = await supabase.rpc('admin_winning_strategy_score_chart',
+    period === 'custom' ? { p_period: period, p_from: customFrom, p_to: customTo } : { p_period: period });
    if (error) throw error;
    return (data ?? []).map(row => ({ strategy: row.strategy, score: row.score, demoWins: Number(row.demo_wins), losses: Number(row.losses), firstWinAt: row.first_win_at, lastWinAt: row.last_win_at, historyFirstWinAt: row.history_first_win_at }));
   },
@@ -47,7 +52,11 @@ export function DemoStrategyScores() {
   <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Estratégias</h2><Button variant="outline" size="sm" disabled={query.isFetching} onClick={() => query.refetch()} className="gap-2"><RefreshCw className={`h-4 w-4 ${query.isFetching ? 'animate-spin' : ''}`} />Atualizar</Button></div>
   <div className="flex flex-wrap gap-3">
    <Select value={strategy} onValueChange={value => { setStrategy(value); setPage(0); }}><SelectTrigger className="w-60 max-w-full" aria-label="Estratégia"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todas as estratégias</SelectItem>{strategies.map(value => <SelectItem key={value} value={value}>{demoStrategyNames[value] ?? value}</SelectItem>)}</SelectContent></Select>
-   <Select value={period} onValueChange={value => { setPeriod(value); setPage(0); }}><SelectTrigger className="w-48 max-w-full" aria-label="Período"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todo o histórico</SelectItem><SelectItem value="today">Hoje · Brasília</SelectItem><SelectItem value="7d">Últimos 7 dias</SelectItem></SelectContent></Select>
+   <Select value={period} onValueChange={value => { setPeriod(value); if (value === 'custom' && !customFrom) { setCustomFrom(brtDateStr(6)); setCustomTo(brtDateStr()); } setPage(0); }}><SelectTrigger className="w-48 max-w-full" aria-label="Período"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todo o histórico</SelectItem><SelectItem value="today">Hoje · Brasília</SelectItem><SelectItem value="yesterday">Ontem · Brasília</SelectItem><SelectItem value="7d">Últimos 7 dias</SelectItem><SelectItem value="15d">Últimos 15 dias</SelectItem><SelectItem value="custom">Personalizado</SelectItem></SelectContent></Select>
+   {period === 'custom' && <>
+    <input type="date" value={customFrom} max={customTo || undefined} aria-label="Data inicial" onChange={event => { setCustomFrom(event.target.value); setPage(0); }} className="h-9 rounded-md border border-input bg-transparent px-2 text-sm" />
+    <input type="date" value={customTo} min={customFrom || undefined} max={brtDateStr()} aria-label="Data final" onChange={event => { setCustomTo(event.target.value); setPage(0); }} className="h-9 rounded-md border border-input bg-transparent px-2 text-sm" />
+   </>}
    <Select value={order} onValueChange={value => { setOrder(value); setPage(0); }}><SelectTrigger className="w-56 max-w-full" aria-label="Ordem das notas"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="desc">Mais WIN primeiro</SelectItem><SelectItem value="asc">Menos WIN primeiro</SelectItem></SelectContent></Select>
   </div>
   {!query.isPending && !query.isError && <DemoStrategyScoreChart rows={groups} />}

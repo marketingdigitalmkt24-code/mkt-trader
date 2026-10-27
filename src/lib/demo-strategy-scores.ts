@@ -14,7 +14,7 @@ export type StrategyScoreOutcome = {
  score: number | null; result: string; source: 'demo' | 'rejected';
 };
 
-export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'all', now = Date.now()) {
+export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'all', now = Date.now(), range?: { from: string; to: string }) {
  const groups = new Map<string, { strategy: string; score: string; demoWins: number; losses: number }>();
  const seen = new Set<string>();
  for (const row of rows) {
@@ -28,7 +28,7 @@ export function winningStrategyScores(rows: StrategyScoreOutcome[], period = 'al
   const key = `${row.entry_strategy}:${score}`;
   const group = groups.get(key) ?? { strategy: row.entry_strategy, score, demoWins: 0, losses: 0 };
   if (result === 'loss') group.losses++;
-  else if (filterStrategyScorePeriod([row], period, now).length) group.demoWins++;
+  else if (filterStrategyScorePeriod([row], period, now, range).length) group.demoWins++;
   groups.set(key, group);
  }
  return [...groups.values()].filter(g => g.losses === 0 && g.demoWins > 0)
@@ -42,10 +42,17 @@ export function orderStrategyScores<T extends { strategy: string; score: string;
  });
 }
 
-export function filterStrategyScorePeriod(rows: StrategyScoreOutcome[], period: string, now = Date.now()) {
+export function filterStrategyScorePeriod(rows: StrategyScoreOutcome[], period: string, now = Date.now(), range?: { from: string; to: string }) {
  const brtDay = (at: number) => new Date(at - 3 * 3600000).toISOString().slice(0, 10);
- return rows.filter(row => period === 'today' ? brtDay(Date.parse(row.entry_minute)) === brtDay(now)
-  : period === '7d' ? Date.parse(row.entry_minute) >= now - 7 * 86400000 : true);
+ return rows.filter(row => {
+  const day = brtDay(Date.parse(row.entry_minute));
+  if (period === 'today') return day === brtDay(now);
+  if (period === 'yesterday') return day === brtDay(now - 86400000);
+  if (period === '7d') return Date.parse(row.entry_minute) >= now - 7 * 86400000;
+  if (period === '15d') return Date.parse(row.entry_minute) >= now - 15 * 86400000;
+  if (period === 'custom') return !!range && day >= range.from && day <= range.to;
+  return true;
+ });
 }
 
 export async function readAllScorePages<T>(read: (from: number, to: number) => Promise<T[]>): Promise<T[]> {

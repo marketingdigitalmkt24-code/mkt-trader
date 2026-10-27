@@ -1,3 +1,6 @@
+# Lista de operações por nota (27/10/2026)
+- [x] Retirado gráfico top 10; notas agrupadas e ordenadas da maior para a menor, estratégias somente no histórico aberto. Lista Demo reutilizada com datas BRT e gráficos no hover; admin autenticado confirmou nota 7,37/ALIBABA-OTC com WIN e gráfico, 14 testes passaram, sem erros na tela.
+
 # Estratégias e notas rejeitadas (27/10/2026)
 - [x] Gráfico das dez notas por estratégia com mais WIN, total Demo + rejeitadas TEST e datas reais de início/último WIN ao selecionar; filtros e exclusão por LOSS preservados. Nove testes passaram e painel autenticado confirmou dez notas e início da nota 2,34 em 23/10/2026 18:20 BRT, sem erros ou overflow.
 - [x] Resumo admin somente leitura substituiu transferência do histórico completo; abertura autenticada medida em 1,74s, 278 grupos. LOSS retira nota inclusive fora do período, eventos e polling 10s; Vela de força 2,99 saiu após LOSS TEST confirmado. Registros preservados, 12 testes passaram e build OK.

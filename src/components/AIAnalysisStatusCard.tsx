@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Brain, Zap, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, Target } from 'lucide-react';
+import { Brain, Zap, CheckCircle, AlertTriangle, Loader2, Target } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ interface SignalEntry {
   type: string;
   confluence_score: number;
   created_at: string;
+  selected: boolean;
 }
 
 const strategyLabels: Record<string, string> = {
@@ -49,6 +50,7 @@ export function AIAnalysisStatusCard() {
   const [strategyStats, setStrategyStats] = useState<StrategyStat[]>([]);
   const [lastSignalTime, setLastSignalTime] = useState<Date | null>(null);
   const [isActive, setIsActive] = useState(false);
+  const [analysisError, setAnalysisError] = useState(false);
   const statsBusy = useRef(false);
   const statsQueued = useRef(false);
   const mounted = useRef(true);
@@ -92,24 +94,41 @@ export function AIAnalysisStatusCard() {
   const fetchSignals = async () => {
     try {
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const { data } = await supabase
-        .from('trading_signals')
-        .select('id, asset, type, confluence_score, created_at')
-        .gte('created_at', tenMinAgo)
-        .order('created_at', { ascending: false })
-        .limit(8);
-
-      if (data && data.length > 0) {
+      const [candidates, rejections] = await Promise.all([
+        supabase.from('iq_demo_test_candidates')
+          .select('signal_id,asset,direction,score,entry_minute')
+          .eq('entry_strategy', 'TAKASHI_BNF_V1').gte('entry_minute', tenMinAgo)
+          .order('entry_minute', { ascending: false }).limit(50),
+        supabase.from('demo_selection_rejections')
+          .select('signal_id,asset,direction,score,entry_minute')
+          .eq('entry_strategy', 'TAKASHI_BNF_V1').gte('entry_minute', tenMinAgo)
+          .order('entry_minute', { ascending: false }).limit(50),
+      ]);
+      if (candidates.error || rejections.error) throw candidates.error ?? rejections.error;
+      const entries = new Map<string, SignalEntry>();
+      for (const row of rejections.data ?? []) entries.set(row.signal_id, {
+        id: row.signal_id, asset: row.asset, type: row.direction,
+        confluence_score: row.score ?? 0, created_at: row.entry_minute, selected: false,
+      });
+      for (const row of candidates.data ?? []) entries.set(row.signal_id, {
+        id: row.signal_id, asset: row.asset, type: row.direction,
+        confluence_score: row.score, created_at: row.entry_minute, selected: true,
+      });
+      const data = [...entries.values()].sort((a,b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+      if (!mounted.current) return;
+      setAnalysisError(false);
+      if (data.length > 0) {
         setRecentSignals(data);
         setLastSignalTime(new Date(data[0].created_at));
         // Active if signal was generated in last 2 minutes
         setIsActive(Date.now() - new Date(data[0].created_at).getTime() < 2 * 60 * 1000);
       } else {
         setRecentSignals([]);
+        setLastSignalTime(null);
         setIsActive(false);
       }
     } catch {
-      // silent
+      if (mounted.current) { setAnalysisError(true); setIsActive(false); }
     }
   };
 
@@ -137,13 +156,14 @@ export function AIAnalysisStatusCard() {
   useEffect(() => {
     const channel = supabase
       .channel('ai-signals')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trading_signals' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'demo_selection_rejections' }, () => {
         fetchSignals();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'iq_demo_test_orders' }, () => {
         void fetchStrategyStats();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'iq_demo_test_candidates' }, () => {
+        void fetchSignals();
         void fetchStrategyStats();
       })
       .subscribe(status => { if (status === 'SUBSCRIBED') void fetchStrategyStats(); });
@@ -155,7 +175,7 @@ export function AIAnalysisStatusCard() {
     : null;
 
   const getTimeSinceText = () => {
-    if (!timeSinceLastSignal) return 'Sem sinais recentes';
+    if (timeSinceLastSignal === null) return 'Sem análises recentes';
     if (timeSinceLastSignal < 60) return `${timeSinceLastSignal}s atrás`;
     if (timeSinceLastSignal < 3600) return `${Math.floor(timeSinceLastSignal / 60)}min atrás`;
     return `${Math.floor(timeSinceLastSignal / 3600)}h atrás`;
@@ -176,18 +196,14 @@ export function AIAnalysisStatusCard() {
               "w-8 h-8 rounded-lg flex items-center justify-center",
               isActive ? "bg-primary/20" : "bg-muted"
             )}>
-              {isActive ? (
-                <Brain className="w-4 h-4 text-primary animate-pulse" />
-              ) : (
-                <Clock className="w-4 h-4 text-muted-foreground" />
-              )}
+              <Brain className={cn('w-4 h-4', isActive ? 'text-primary animate-pulse motion-reduce:animate-none' : 'text-muted-foreground')} />
             </div>
             <div>
               <h3 className="text-sm font-semibold">
-                {isActive ? 'IA Analisando' : 'IA Aguardando'}
+                IA Analisando
               </h3>
               <p className="text-[10px] text-muted-foreground">
-                Último sinal: {getTimeSinceText()}
+                Takashi Kotegawa · Última análise: {getTimeSinceText()}
               </p>
             </div>
           </div>
@@ -197,7 +213,7 @@ export function AIAnalysisStatusCard() {
               variant={isActive ? "default" : "secondary"}
               className={cn("text-[10px]", isActive && "bg-primary text-primary-foreground")}
             >
-              {isActive ? 'ATIVA' : 'STANDBY'}
+              {analysisError ? 'INDISPONÍVEL' : isActive ? 'ANALISANDO' : 'SEM ANÁLISE RECENTE'}
             </Badge>
           </div>
         </div>
@@ -206,30 +222,32 @@ export function AIAnalysisStatusCard() {
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="bg-secondary/50 rounded-lg p-2 text-center">
             <Zap className="w-3.5 h-3.5 text-gold mx-auto mb-1" />
-            <div className="text-xs font-bold">{recentSignals.length}</div>
-            <div className="text-[10px] text-muted-foreground">Sinais (10min)</div>
+            <div className="text-xs font-bold">{new Set(recentSignals.map(s => s.asset)).size}</div>
+            <div className="text-[10px] text-muted-foreground">Ativos registrados (10min)</div>
           </div>
           <div className="bg-secondary/50 rounded-lg p-2 text-center">
             <CheckCircle className="w-3.5 h-3.5 text-call mx-auto mb-1" />
             <div className="text-xs font-bold">
-              {recentSignals.filter(s => s.confluence_score >= 85).length}
+              {recentSignals.filter(s => s.selected).length}
             </div>
-            <div className="text-[10px] text-muted-foreground">Alta Conf.</div>
+            <div className="text-[10px] text-muted-foreground">Selecionados Demo</div>
           </div>
           <div className="bg-secondary/50 rounded-lg p-2 text-center">
             <AlertTriangle className="w-3.5 h-3.5 text-gold mx-auto mb-1" />
             <div className="text-xs font-bold">
-              {recentSignals.filter(s => s.confluence_score < 85).length}
+              {recentSignals.filter(s => !s.selected).length}
             </div>
-            <div className="text-[10px] text-muted-foreground">Baixa Conf.</div>
+            <div className="text-[10px] text-muted-foreground">Não selecionados</div>
           </div>
         </div>
 
         {/* Recent signals list */}
         {recentSignals.length > 0 && (
           <div className="space-y-1">
-            {recentSignals.slice(0, 5).map(signal => (
-              <div key={signal.id} className="flex items-center justify-between p-1.5 rounded bg-secondary/30 text-xs">
+            <p className="text-[10px] text-muted-foreground">Ativos analisados · registros Takashi</p>
+            <div className="max-h-60 overflow-y-auto space-y-1">
+            {recentSignals.map(signal => (
+              <div key={signal.id} className="flex flex-wrap gap-2 items-center justify-between p-1.5 rounded bg-secondary/30 text-xs">
                 <div className="flex items-center gap-1.5">
                   {signal.type === 'CALL' ? (
                     <Badge className="bg-call/20 text-call text-[9px] px-1 py-0">CALL</Badge>
@@ -241,16 +259,17 @@ export function AIAnalysisStatusCard() {
                 <div className="flex items-center gap-1.5">
                   <span className={cn(
                     "font-mono text-[10px]",
-                    signal.confluence_score >= 85 ? "text-call" : "text-gold"
+                    signal.selected ? "text-call" : "text-muted-foreground"
                   )}>
-                    {signal.confluence_score}%
+                    nota {signal.confluence_score.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   <span className="text-muted-foreground text-[10px]">
-                    {new Date(signal.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(signal.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               </div>
             ))}
+            </div>
           </div>
         )}
 
@@ -288,7 +307,7 @@ export function AIAnalysisStatusCard() {
         {recentSignals.length === 0 && (
           <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-lg">
             <Brain className="w-5 h-5 mx-auto mb-1 opacity-30" />
-            Aguardando sinais para análise IA...
+            {analysisError ? 'Não foi possível consultar as análises.' : 'Nenhuma análise Takashi registrada nos últimos 10 minutos.'}
           </div>
         )}
       </CardContent>

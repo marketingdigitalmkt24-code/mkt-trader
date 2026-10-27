@@ -11,7 +11,7 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { takashiKotegawa, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
+import { takashiKotegawa, takashiBaseScore, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
 import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE } from '../_shared/demo-226-policy.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
@@ -131,7 +131,13 @@ Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !serviceKey) return Response.json({ error: 'Missing configuration' }, { status: 500, headers: cors });
-  if (req.method !== 'POST' || req.headers.get('Authorization') !== `Bearer ${serviceKey}`) {
+  const scheduler = req.headers.get('x-scheduler-token');
+  let authorized = req.headers.get('Authorization') === `Bearer ${serviceKey}`;
+  if (!authorized && scheduler) {
+    const { data } = await createClient(url,serviceKey).from('anticipation_scheduler_auth').select('token').eq('id',1).maybeSingle();
+    authorized = !!data?.token && data.token === scheduler;
+  }
+  if (req.method !== 'POST' || !authorized) {
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers: cors });
   }
   const supabase = createClient(url, serviceKey);
@@ -145,7 +151,7 @@ Deno.serve(async (req) => {
   const previousDemoRead = supabase.from('iq_demo_test_orders')
     .select('id,entry_strategy,entry_minute,result,profit,asset,direction,status,iq_option_id')
     .eq('status','confirmed').not('iq_option_id','is',null)
-    .in('entry_strategy',['CONTINUACAO_QUEDA_V1',QUEDA_WIN_CALL,'TENDENCIA'])
+    .eq('entry_strategy',TAKASHI_BNF)
     .eq('entry_minute',new Date(targetMs-60000).toISOString()).then(r=>r);
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Fetch independent Demo learning inputs while broker login/candles are in flight.
@@ -357,7 +363,7 @@ Deno.serve(async (req) => {
   if(previousPending.length)previousDemo = await supabase.from('iq_demo_test_orders')
     .select('id,entry_strategy,entry_minute,result,profit,asset,direction,status,iq_option_id')
     .eq('status','confirmed').not('iq_option_id','is',null)
-    .in('entry_strategy',['CONTINUACAO_QUEDA_V1',QUEDA_WIN_CALL,'TENDENCIA'])
+    .eq('entry_strategy',TAKASHI_BNF)
     .eq('entry_minute',new Date(targetMs-60000).toISOString());
   console.log('Demo timing candles settled:', new Date().toISOString(), 'assets:', series.size);
   for (const o of open || []) {
@@ -388,40 +394,9 @@ Deno.serve(async (req) => {
       signal_id: `takashi-bnf-v1-${asset}-${curMin}`, asset, direction: takashi.direction,
       entry_strategy: TAKASHI_BNF, created_at: new Date(curMin * 1000).toISOString(),
       // Same confluence/body base as other indicators; never assign the target score.
-      _score: fired.filter(([, direction]) => direction === takashi.direction).length
-        + Math.min(0.99, 100 * Math.abs(closed[closed.length - 1].c - closed[closed.length - 1].o) / closed[closed.length - 1].o)
+      _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, direction]) => direction === takashi.direction).length)
         + recentLearningAdjustment(history, { asset, direction: takashi.direction, entry_strategy: TAKASHI_BNF }, curMin * 1000),
     });
-    const pattern = demoContinuation(cs,curMin);
-    if (pattern) demoPatterns.push({signal_id:`demo-continuation-v1-${asset}-${curMin}`,asset,direction:'PUT',
-      entry_strategy:DEMO_CONTINUATION,created_at:new Date(curMin*1000).toISOString(),
-      _score:fired.filter(([,direction])=>direction==='PUT').length+0.99*pattern.bodyRatio});
-    const ceiling = demoCeiling(cs,curMin);
-    if (ceiling) demoPatterns.push({signal_id:`demo-teto-v1-${asset}-${curMin}`,asset,direction:'PUT',
-      entry_strategy:DEMO_CEILING,created_at:new Date(curMin*1000).toISOString(),
-      _score:fired.filter(([,direction])=>direction==='PUT').length+0.99*ceiling.match});
-    const forcaPadrao = demoForcaPadrao(cs,curMin);
-    if (forcaPadrao) demoPatterns.push({signal_id:`forca-padrao-v1-${asset}-${curMin}`,asset,direction:forcaPadrao.direction,
-      entry_strategy:FORCA_PADRAO,created_at:new Date(curMin*1000).toISOString(),
-      _score:fired.filter(([,direction])=>direction===forcaPadrao.direction).length+0.99*forcaPadrao.bodyRatio});
-    const antecipada = forcaAntecipada(cs,curMin);
-    if (antecipada) demoPatterns.push({signal_id:`forca-antecipada-v1-${asset}-${curMin}`,asset,direction:antecipada.direction,
-      entry_strategy:FORCA_ANTECIPADA,created_at:new Date(curMin*1000).toISOString(),
-      _score:fired.filter(([,direction])=>direction===antecipada.direction).length+Math.min(0.99,antecipada.expansion/3)});
-    // Só os melhores: exige pelo menos 2 estratégias concordando na mesma direção no gráfico IQ.
-    const calls = fired.filter(([, d]) => d === 'CALL'), puts = fired.filter(([, d]) => d === 'PUT');
-    const agree = calls.length >= 2 && !puts.length ? calls : puts.length >= 2 && !calls.length ? puts : [];
-    const pick = agree.find(([st]) => st === 'TENDENCIA') || agree[0];
-    for (const [strat, dir] of pick ? [pick] : []) {
-      rows.push({
-        signal_id: `t7-${asset}-${strat}-${curMin}`, asset, direction: dir, entry_price: closed[closed.length - 1].c,
-        result: OPEN, profit: 0, created_at: new Date(curMin * 1000).toISOString(),
-        expiration_time: new Date((curMin + 60) * 1000).toISOString(), is_auto_trade: true, is_ai_analyzed: false,
-        timeframe: 'TEST', entry_strategy: strat,
-        _score: agree.length + Math.min(0.99, 100 * Math.abs(closed[closed.length - 1].c - closed[closed.length - 1].o) / (closed[closed.length - 1].o || 1))
-          + recentLearningAdjustment(history, { asset, direction: dir, entry_strategy: strat }, curMin * 1000),
-      });
-    }
   }
   let inserted = 0;
   // Separate service ledger: new Demo patterns never enter principal TEST history/claims.
@@ -463,18 +438,6 @@ Deno.serve(async (req) => {
       chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
       c.entry_strategy,c.asset,curMin*1000,rejectedHist);
     return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy),_learned:learn}];});
-  // Queda win -> CALL: a confirmed Queda PUT win last minute authorizes a CALL on the same asset.
-  const qw = quedaWinCall(previousDemo.data || [], curMin);
-  if (qw && series.has(qw.asset)) demoPool.push({ signal_id: `queda-win-call-v1-${qw.asset}-${curMin}`,
-    asset: qw.asset, direction: qw.direction, entry_strategy: QUEDA_WIN_CALL,
-    created_at: new Date(curMin * 1000).toISOString(), _score: 1, _learned: 0 });
-  const retry = quedaWinRetry(previousDemo.data || [], curMin);
-  if(retry && series.has(retry.asset))demoPool.push({signal_id:`queda-win-retry-v1-${retry.asset}-${curMin}`,
-    asset:retry.asset,direction:retry.direction,entry_strategy:QUEDA_WIN_RETRY,
-    created_at:new Date(curMin*1000).toISOString(),_score:1,_learned:0});
-  // User (Oct 25 2026 02:09 UTC): only displayed score 2,26 authorizes Demo; no pattern/other-score path.
-  // User (Oct 25 2026 17:11 UTC): add Takashi to the displayed 2,26 cohort.
-  void winScores; void demoEntryReason; void demoWinningPatternMatch; void chartFeatures;
   const demoEligible = demoPool.flatMap(c => {
     const cohort=demoCohort(c._score,c.entry_strategy);
     if(!cohort){
@@ -484,12 +447,6 @@ Deno.serve(async (req) => {
     }
     return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null}];
   });
-  // User (Oct 26 2026): Takashi Demo entries require a learned score above 4. A score-gated
-  // Takashi still feeds the inverted principal sequence (any nonzero score) but never places
-  // a Demo order, so it is only persisted when the minute has no Demo winner.
-  const sequenceTakashi=demoPool
-    .filter(c=>c.entry_strategy===TAKASHI_STRATEGY&&Number.isFinite(c._score)&&Math.round(c._score*100)!==0&&!demoEligible.some(e=>e.signal_id===c.signal_id))
-    .sort((a,b)=>b._score-a._score||a.signal_id.localeCompare(b.signal_id))[0]??null;
   // User (Oct 25 2026 19:02 UTC): alternate Demo slots between Takashi and displayed-2.26 entries.
   const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
     .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
@@ -516,28 +473,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner && sequenceTakashi) {
-    // Principal-only minute: the score-gated Takashi cannot place a Demo order, but the
-    // inverted sequence keeps its own authorization, so persist the candidate for the claim.
-    const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:sequenceTakashi.created_at,
-      signal_id:sequenceTakashi.signal_id,asset:sequenceTakashi.asset,direction:sequenceTakashi.direction,
-      entry_strategy:sequenceTakashi.entry_strategy,score:sequenceTakashi._score,
-      candles:(series.get(sequenceTakashi.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
-    if (error) console.error('Principal Takashi candidate write failed:',error.code);
-    else {
-      console.log('Principal-only Takashi candidate persisted:', sequenceTakashi.signal_id, 'score', sequenceTakashi._score);
-      const principalTask = supabase.functions.invoke('selected-demo-trend', {
-        body: { candidate: sequenceTakashi.signal_id, brokerSession: { ssid, configId: cfg.id } },
-      }).then(async ({ data, error }) => {
-        if (error) {
-          const details = 'context' in error && error.context instanceof Response ? await error.context.text() : error.message;
-          console.error('Selected Trend principal dispatch failed:', details);
-        } else console.log('Selected Trend principal outcome:', JSON.stringify(data));
-      }).catch(error => console.error('Selected Trend dispatch failed:', String(error)));
-      // @ts-ignore Hosted background runtime
-      if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(principalTask); else await principalTask;
-    }
-  } else if (!demoWinner) console.log('Demo blocked: no allowed strategy with displayed score 2.26 or Takashi above 4');
+  if (!demoWinner) console.log('Demo: no valid Takashi candidate this minute');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
@@ -549,136 +485,14 @@ Deno.serve(async (req) => {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
       console.log('Demo winning-score priority:', JSON.stringify({score:demoWinner._score,
         preferredPatternDistance:Number.isFinite(demoWinner._preferredPatternDistance)?demoWinner._preferredPatternDistance:null}));
-      // A selected Trend may independently authorize a principal order; no Demo stake/history reuse.
-      // Real principal entries paused (user, Oct 24 2026): only a super-selected Demo winner (high learned score) opens real.
-      if (demoWinner.entry_strategy === TAKASHI_STRATEGY) {
-        const principalTask = supabase.functions.invoke('selected-demo-trend', {
-          body: { candidate: demoWinner.signal_id, brokerSession: { ssid, configId: cfg.id } },
-        }).then(async ({ data, error }) => {
-          if (error) {
-            const details = 'context' in error && error.context instanceof Response ? await error.context.text() : error.message;
-            console.error('Selected Trend principal dispatch failed:', details);
-          } else console.log('Selected Trend principal outcome:', JSON.stringify(data));
-        }).catch(error => console.error('Selected Trend dispatch failed:', String(error)));
-        // @ts-ignore Hosted background runtime
-        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(principalTask); else await principalTask;
-      }
       const demoTask=supabase.functions.invoke('iqoption-demo-tests',{body:{candidate:demoWinner.signal_id,brokerSession:{ssid,configId:cfg.id}}})
         .then(({error})=>{if(error)console.error('Demo TEST dispatch failed');});
       // @ts-ignore Hosted background runtime
       if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(demoTask);else await demoTask;
-      if(demoWinner._patternMatch){
-        const midTask=supabase.functions.invoke('iqoption-demo-tests',{body:{mode:'mid',candidate:demoWinner.signal_id,brokerSession:{ssid,configId:cfg.id}}})
-          .then(({error})=>{if(error)console.error('Mid-candle Demo dispatch unavailable');});
-        // @ts-ignore Hosted background runtime: never delay the normal :00 order.
-        if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(midTask);else await midTask;
-      }
     }
   }
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));
   // @ts-ignore Hosted background runtime: chart writes must not delay a fresh entry.
   if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(chartTask);else await chartTask;
-  if (rows.length) {
-    // Independent reads run together after closed-candle confirmation.
-    const [{ data: exist }, { data: minuteTaken }, sequenceRead] = await Promise.all([
-      supabase.from('operation_results').select('signal_id').in('signal_id', rows.map(r => r.signal_id)),
-      supabase.from('operation_results').select('id').eq('created_at', new Date(curMin * 1000).toISOString()).eq('timeframe', 'TEST').neq('entry_strategy', FORCE_FIRST_TEST).neq('entry_strategy', TAKASHI_BNF).limit(1),
-      supabase.from('operation_results').select('entry_strategy, result, created_at')
-        .eq('timeframe', 'TEST').like('signal_id', 't7-%')
-        .lt('created_at', new Date(curMin * 1000).toISOString())
-        .gte('created_at', new Date((curMin - 180) * 1000).toISOString())
-        .order('created_at', { ascending: false }).order('signal_id', { ascending: false }).limit(4),
-    ]);
-    const seen = new Set((exist || []).map((e: any) => e.signal_id));
-    // Melhor par do minuto: só UMA entrada (mais estratégias concordando, depois vela mais forte).
-    const top = rows.filter(r => !seen.has(r.signal_id)).sort((x, y) => y._score - x._score)[0];
-    const fresh = top && !minuteTaken?.length ? [top] : [];
-    // One best candidate; Telegram is reserved for the four-win reversal.
-    const best = fresh.filter(r => r._score >= 0).sort((x, y) => y._score - x._score)[0];
-    // Persist the selected TEST first: the atomic claim checks its four predecessors.
-    // Observe the same base TEST signal; never duplicate/relabel it or authorize an order.
-    const { data: sequenceHistory, error: sequenceError } = sequenceRead;
-    if (sequenceError) console.error('TEST sequence read:', sequenceError.message);
-    const clean = fresh.map(({ _score, ...r }) => ({ ...r, telegram_sent: false,
-      test_inverted_strategy: null, // Força Invertida removida (20/10/2026)
-      test_sequence_strategy: !sequenceError && matchesTrendSequence(sequenceHistory || [], r.entry_strategy, curMin * 1000)
-        ? TREND_SEQUENCE_TEST : null,
-    }));
-    if (clean.length) { const { error } = await supabase.from('operation_results').insert(clean); if (error) console.error(error.message); else inserted = clean.length; }
-    // Separate shadow: never rank or claim it, and never relabel the original Force.
-    if (inserted) {
-      const observations = clean.flatMap(base => {
-        const observation = forceFirstObservation(base, series.get(base.asset) || []);
-        return observation ? [observation] : [];
-      });
-      if (observations.length) {
-        const persist = supabase.from('operation_results').upsert(observations, { onConflict: 'signal_id', ignoreDuplicates: true })
-          .then(({ error }) => { if (error) console.error('Force first TEST:', error.message); });
-        // Never delay the original real entry for study persistence.
-        // @ts-ignore Hosted background runtime
-        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(persist);
-        else await persist;
-      }
-    }
-    if (best && inserted) {
-      // Estratégias reais ativas (20/10/2026): Reversão RSI e Retomada; Força Invertida removida.
-      const { data: trade, error: claimError } = await supabase.rpc('claim_test_strategy_entry', { p_candidate: best.signal_id });
-      if (claimError) console.error('Strategy claim:', claimError.message);
-      if (trade && typeof trade === 'object' && !Array.isArray(trade) && 'signalId' in trade) {
-        const claimedStrategy = String(trade.entryStrategy);
-        const entryAt = nextReversalMinute(curMin * 1000);
-        const task = (async () => {
-          // Reuse the session that just fetched these candles, avoiding another broker login.
-          // This secret travels server-to-server only, never to browser, storage or logs.
-          const { data, error } = await supabase.functions.invoke('iqoption-place-trade', {
-            body: { ...trade, entryAt, brokerSession: { ssid, configId: cfg.id } },
-          });
-          const details = error && 'context' in error && error.context instanceof Response
-            ? await error.context.text() : error?.message;
-          await supabase.from('trade_queue').update({
-            status: data?.success ? 'executed' : 'failed', iq_option_id: data?.tradeId || null,
-            executed_at: data?.success ? new Date().toISOString() : null,
-            error: data?.success ? null : details || data?.error || 'Placement failed',
-          }).eq('signal_id', String(trade.signalId)).eq('entry_strategy', claimedStrategy);
-        })().catch(async e => {
-          console.error('Four-win placement:', String(e));
-          await supabase.from('trade_queue').update({ status: 'failed', error: String(e) })
-            .eq('signal_id', String(trade.signalId)).eq('status', 'executing');
-        });
-        // Keep broker placement alive without blocking the minute analysis.
-        // @ts-ignore Hosted background runtime
-        if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(task);
-        else await task;
-         return Response.json({ success: true, assets: series.size, inserted, resolved, strategy: claimedStrategy }, { headers: cors });
-      }
-    }
-    // Other entries remain TEST, but no longer generate new Telegram signals.
-    // Previously notified tests still receive their final result above.
-  }
-  // Preserve independent Takashi observations; only the selected 2.26 candidate above
-  // can authorize separate Demo/principal orders. Observations never send Telegram or copy.
-  const takashiRows: any[] = [];
-  for (const [asset, cs] of series) {
-    const closed = cs.filter(k => k.t + 60 <= curMin);
-    if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
-    const sig = takashiKotegawa(cs, curMin);
-    if (!sig) continue;
-    takashiRows.push({
-      signal_id: `takashi-bnf-v1-${asset}-${curMin}`, asset, direction: sig.direction,
-      entry_price: closed[closed.length - 1].c, result: OPEN, profit: 0,
-      created_at: new Date(curMin * 1000).toISOString(),
-      expiration_time: new Date((curMin + 60) * 1000).toISOString(),
-      is_auto_trade: false, is_ai_analyzed: false, timeframe: 'TEST', entry_strategy: TAKASHI_BNF,
-      telegram_sent: false, test_inverted_strategy: null, test_sequence_strategy: null,
-    });
-  }
-  if (takashiRows.length) {
-    const takashiTask = supabase.from('operation_results')
-      .upsert(takashiRows, { onConflict: 'signal_id', ignoreDuplicates: true })
-      .then(({ error }) => { if (error) console.error('Takashi TEST insert:', error.message); });
-    // Never delay the main minute analysis for a study row.
-    // @ts-ignore Hosted background runtime
-    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(takashiTask); else await takashiTask;
-  }
-  return Response.json({ success: true, assets: series.size, inserted, resolved }, { headers: cors });
+  return Response.json({ success: true, assets: series.size, resolved, strategy: TAKASHI_BNF, selected: demoWinner?.signal_id ?? null, score: demoWinner?._score ?? null }, { headers: cors });
 });

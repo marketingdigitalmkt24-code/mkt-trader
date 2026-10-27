@@ -1,6 +1,6 @@
 # Estratégias e notas rejeitadas (27/10/2026)
-- [ ] Criar aba Estratégias com notas por estratégia com WIN e zero LOSS, incluindo rejeitadas com resultado TEST separado.
-- [ ] Mostrar nota registrada nas rejeitadas em Padrões vencedores e verificar a aba autenticada e os testes.
+- [x] Criar aba Estratégias com notas por estratégia com WIN e zero LOSS, incluindo rejeitadas com resultado TEST separado; histórico completo paginado, filtros de estratégia/período, nenhuma alteração na execução.
+- [x] Mostrar nota registrada nas rejeitadas em Padrões vencedores; painel autenticado confirmou 279 grupos e notas em 10 rejeitadas, gráficos preservados, sem erros. 14 testes passaram e build OK.
 
 # Análise Takashi Demo (26/10/2026)
 - [x] Comparadas 494 ordens PRACTICE confirmadas por signal_id/minuto exatos, todas com 20 velas pré-entrada contíguas: 256 WIN/238 LOSS, 51,82%, −US$124,25 (5 empates excluídos). Último WIN da amostra 26/10 14:07 UTC; snapshots posteriores excluídos das features.

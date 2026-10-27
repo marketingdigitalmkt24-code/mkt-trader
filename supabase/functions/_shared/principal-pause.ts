@@ -1,6 +1,5 @@
-import { TAKASHI_AFTER_226 } from './takashi-after-226.ts';
-// All legacy principal strategies and daily reports remain paused.
-// Only the prospectively claimed Takashi-after-2.26 sequence is enabled.
+// User paused every principal strategy, copy and trading notification (Oct 27 2026).
+// Demo execution and broker result reconciliation remain independent.
 export const PRINCIPAL_IQ_PAUSED = true;
-export function principalIQEnabled(strategy?: string): boolean { return strategy === TAKASHI_AFTER_226; }
-export function telegramTradingEnabled(strategy?: string): boolean { return strategy === TAKASHI_AFTER_226; }
+export function principalIQEnabled(_strategy?: string): boolean { return false; }
+export function telegramTradingEnabled(_strategy?: string): boolean { return false; }

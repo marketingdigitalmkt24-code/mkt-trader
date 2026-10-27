@@ -1,10 +1,29 @@
 import { test, expect } from 'bun:test';
-import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, topWinningStrategyScores, aggregateScoresByNote, sortScoresByNote, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
+import { winningStrategyScores, filterStrategyScorePeriod, readAllScorePages, orderStrategyScores, topWinningStrategyScores, aggregateScoresByNote, winningNoteDailyMovement, type StrategyScoreOutcome } from './src/lib/demo-strategy-scores';
 const row = (signal_id: string, entry_strategy = 'VELA_FORCA', score: number | null = 2.26, result = 'win', source: StrategyScoreOutcome['source'] = 'demo'): StrategyScoreOutcome => ({ signal_id, entry_strategy, score, result, source, entry_minute: '2026-10-27T03:00:00Z' });
-test('strategy tab always orders notes numerically instead of by WIN counts', () => {
- const rows = [{ score: '2.26', demoWins: 100 }, { score: '10.00', demoWins: 1 }, { score: '4.50', demoWins: 5 }];
- expect(sortScoresByNote(rows).map(row => row.score)).toEqual(['10.00', '4.50', '2.26']);
+test('strategy tab puts most WIN first, not the largest numerical note', () => {
+ const rows = [{ strategy: 'A', score: '2.26', demoWins: 100 }, { strategy: 'B', score: '10.00', demoWins: 1 }, { strategy: 'C', score: '4.50', demoWins: 5 }];
+ expect(orderStrategyScores(rows, 'desc').map(row => row.score)).toEqual(['2.26', '4.50', '10.00']);
  expect(rows[0].score).toBe('2.26');
+});
+test('daily chart contains exactly 30 inclusive Brasília dates and counts entry/exit once', () => {
+ const now = Date.parse('2026-10-27T06:16:00Z');
+ const days = winningNoteDailyMovement([{ ...row('a'), settled_at: '2026-10-26T02:59:59Z' }, { ...row('b'), settled_at: '2026-10-26T10:00:00Z' }, { ...row('c', 'VELA_FORCA', 2.26, 'loss'), settled_at: '2026-10-27T03:00:00Z' }], now);
+ expect(days).toHaveLength(30);
+ expect(days[0].day).toBe('2026-09-28');
+ expect(days.find(day => day.day === '2026-10-25')?.entered).toBe(1);
+ expect(days[29]).toEqual({ day: '2026-10-27', entered: 0, exited: 1 });
+});
+test('overlapping strategies with the same note do not duplicate note movements', () => {
+ const observations = [{ ...row('a', 'A'), settled_at: '2026-10-25T04:00:00Z' }, { ...row('b', 'B'), settled_at: '2026-10-25T05:00:00Z' }, { ...row('c', 'A', 2.26, 'loss'), settled_at: '2026-10-26T05:00:00Z' }, { ...row('d', 'B', 2.26, 'loss'), settled_at: '2026-10-27T05:00:00Z' }];
+ const days = winningNoteDailyMovement(observations, Date.parse('2026-10-27T06:16:00Z'));
+ expect(days.reduce((n, day) => n + day.entered, 0)).toBe(1);
+ expect(days.find(day => day.day === '2026-10-26')?.exited).toBe(0);
+ expect(days[29].exited).toBe(1);
+});
+test('older losses, rejected results and ties cannot add notes to the daily chart', () => {
+ const days = winningNoteDailyMovement([{ ...row('old', 'A', 2.26, 'loss'), entry_minute: '2026-09-01T04:00:00Z' }, row('new', 'A'), row('rejected', 'B', 3, 'win', 'rejected'), row('tie', 'C', 4, 'tie')], Date.parse('2026-10-27T06:16:00Z'));
+ expect(days.reduce((n, day) => n + day.entered + day.exited, 0)).toBe(0);
 });
 test('chart keeps exactly ten highest total WIN cohorts, not the highest numerical scores', () => {
  const groups = Array.from({ length: 12 }, (_, i) => ({ strategy: 'VELA_FORCA', score: String(12 - i), demoWins: i, firstWinAt: '2026-10-24T03:00:00Z' }));

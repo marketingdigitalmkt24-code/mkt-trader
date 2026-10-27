@@ -1,3 +1,7 @@
+# Estratégias e notas rejeitadas (27/10/2026)
+- [ ] Criar aba Estratégias com notas por estratégia com WIN e zero LOSS, incluindo rejeitadas com resultado TEST separado.
+- [ ] Mostrar nota registrada nas rejeitadas em Padrões vencedores e verificar a aba autenticada e os testes.
+
 # Análise Takashi Demo (26/10/2026)
 - [x] Comparadas 494 ordens PRACTICE confirmadas por signal_id/minuto exatos, todas com 20 velas pré-entrada contíguas: 256 WIN/238 LOSS, 51,82%, −US$124,25 (5 empates excluídos). Último WIN da amostra 26/10 14:07 UTC; snapshots posteriores excluídos das features.
 - [x] Validação cronológica: treino 329 ordens (47,72%), holdout 165 (60%, +16,85 unidades de entrada). Vizinhos lucrativos k=7/15/25 só usam resultados liquidados antes da entrada; holdout filtrado 55,81%/47,92%/51,61%, abaixo do baseline. Pavios ≥20%, corpo ≤50%, direção de entrada e corpo decrescente não mostraram vantagem lucrativa consistente entre treino e holdout.

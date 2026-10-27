@@ -1,5 +1,6 @@
 # Interrupção das estratégias principais (27/10/2026)
-- [ ] Bloquear todas as entradas principais IQ Option, cópias e avisos Telegram; desligar configurações automáticas, preservar Demo/histórico e verificar executores publicados.
+- [x] Todas as entradas principais IQ Option, cópias e avisos Telegram bloqueados nos executores; configurações automáticas/cópias desligadas, sete funções publicadas, 17 testes aprovados e principal publicada recusou 410. Demo/histórico preservados.
+- [ ] Defesa adicional: substituir claim_takashi_after_226 por retorno nulo; migração não aplicada devido à colisão preexistente dos snapshots 0058/0059 protegidos. Executores publicados bloqueiam antes de chamar essa função.
 
 # Remix setup (27/10/2026)
 - [x] Telegram connection linked and bot verified; seven notification-related functions deployed with the new connection.

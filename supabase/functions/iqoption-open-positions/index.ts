@@ -32,7 +32,7 @@ const fmtAsset = (raw: string) => {
   return otc ? `${p} OTC` : p;
 };
 
-/** Ordens abertas por este app na IQ Option: id da corretora + dados próprios do registro. */
+/** Ordens abertas por este app na IQ Option: id da corretora + dados do próprio registro. */
 interface AppOrder { id: string; asset: string; direction: string; invest: number; cohort: 'demo' | 'principal'; }
 
 async function loadAppOrders(supabase: ReturnType<typeof createClient>): Promise<Map<string, AppOrder>> {
@@ -86,7 +86,7 @@ async function loadAppOrders(supabase: ReturnType<typeof createClient>): Promise
   return out;
 }
 
-/** Coleta ids primitivos de um objeto da corretora para comparar com os ids deste app. */
+/** Coleta identificadores primitivos de uma posição da corretora para comparar com os ids deste app. */
 function collectPrimitives(value: unknown, out: Set<string>, depth = 0): void {
   if (depth > 6 || out.size > 400 || value === null || value === undefined) return;
   if (typeof value === 'number') { if (Number.isFinite(value)) out.add(String(value)); return; }
@@ -112,9 +112,7 @@ Deno.serve(async (req) => {
     const positions: OpenPos[] = [];
     const closedForex: { id: string; pnl: number }[] = [];
     const toClose: string[] = [];
-    const foreignIds: string[] = [];
-    const debugInfo: { brokerId: string; matched: boolean; ids: string[] }[] = [];
-
+    let skipped = 0;
 
     await new Promise<void>((resolve) => {
       const ws = new WebSocket('wss://iqoption.com/echo/websocket');
@@ -160,11 +158,9 @@ Deno.serve(async (req) => {
               const posIds = new Set<string>();
               collectPrimitives(p, posIds);
               const app = appOrders.get(brokerId) || [...appOrders.values()].find((o) => posIds.has(o.id));
-              debugInfo.push({ brokerId, matched: !!app, ids: [...posIds].filter((x) => /^\d{6,}$/.test(x)).slice(0, 60) });
-
 
               if (!app) {
-                foreignIds.push(brokerId);
+                skipped += 1;
                 continue;
               }
 
@@ -211,18 +207,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (new URL(req.url).searchParams.get('debug') === '1') {
-      return json({ success: true, debugInfo, appOrders: [...appOrders.values()].slice(0, 30), positions, skipped: foreignIds.length });
-    }
-
     return json({
       success: true,
       positions: positions.filter(p => !toClose.includes(p.id)),
       closed: toClose.length,
-      skipped: foreignIds.length,
+      skipped,
       timestamp: new Date().toISOString(),
     });
-
   } catch (e) {
     return json({ success: false, error: e instanceof Error ? e.message : 'erro', positions: [] });
   }

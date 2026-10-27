@@ -20,9 +20,9 @@ export function DemoStrategyScoreChart({ rows }: { rows: StrategyScoreSummary[] 
     const key = `${row.strategy}:${row.score}`;
     const total = row.demoWins + row.rejectedWins;
     const name = demoStrategyNames[row.strategy] ?? row.strategy;
-    return <Button key={key} variant="ghost" aria-pressed={selectedKey === key} aria-label={`Nota ${row.score.replace('.', ',')} · ${name} · ${total} WIN`} onClick={() => setSelectedKey(key)} className="grid h-auto w-full grid-cols-[minmax(0,8rem)_minmax(0,1fr)_3.5rem] gap-3 rounded-sm px-2 py-2 text-left data-[state=selected]:bg-secondary" data-state={selectedKey === key ? 'selected' : undefined}>
+    return <Button key={key} variant="ghost" aria-pressed={selectedKey === key} aria-label={`Nota ${row.score.replace('.', ',')} · ${name} · ${total} WIN`} onClick={() => setSelectedKey(key)} className="grid h-auto w-full grid-cols-[minmax(0,8rem)_minmax(0,1fr)_3.5rem] gap-3 rounded-sm px-2 py-2 text-left data-[state=selected]:bg-secondary data-[state=selected]:text-foreground" data-state={selectedKey === key ? 'selected' : undefined}>
      <span className="min-w-0"><span className="block font-mono text-sm">{row.score.replace('.', ',')}</span><span className="block truncate text-[10px] font-normal text-muted-foreground" title={name}>{name}</span></span>
-     <svg viewBox="0 0 1000 22" preserveAspectRatio="none" className="h-5 w-full" aria-hidden="true"><rect width="1000" height="22" rx="3" className="fill-secondary"/><rect width={total / max * 1000} height="22" rx="3" className="fill-call"/></svg>
+     <svg viewBox="0 0 1000 22" preserveAspectRatio="none" className="!h-5 !w-full" aria-hidden="true"><rect width="1000" height="22" rx="3" className="fill-secondary"/><rect width={total / max * 1000} height="22" rx="3" className="fill-call"/></svg>
      <span className="text-right font-mono text-sm text-call">{total}</span>
     </Button>;
    })}

@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
-import { sharedBalanceRead, resetSharedBalanceCache, BALANCE_MIN_INTERVAL_MS } from './shared-balance-read';
+import { sharedBalanceRead, resetSharedBalanceCache, BALANCE_MIN_INTERVAL_MS } from '../src/lib/shared-balance-read';
 
 describe('shared broker balance read', () => {
   beforeEach(() => resetSharedBalanceCache());

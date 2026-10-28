@@ -1,3 +1,6 @@
+# Liberar novas oportunidades Demo (28/10/2026)
+- [ ] Deixar tentativas sem ID expiradas fora do bloqueio, mantendo registros/resultados desconhecidos e recuperação baseada em resultados confirmados; selecionar somente mercados disponíveis, testar e conferir execução natural.
+
 # Retirar prioridade histórica de notas (28/10/2026)
 - [x] Removida leitura/ranking de notas vencedoras da seleção Demo; indicadores, ajustes anteriores, gales e pausa principal preservados. 20 testes passaram, build OK e executor publicado. Às 05:01 UTC analisou 98 ativos e selecionou GBP/JPY nota 1,04 entre 5 candidatos com historicalNotePriority=false; mercado indisponível e recuperação bloqueada por ordem anterior ambígua impediram entrada, sem forçar ou alterar históricos.
 

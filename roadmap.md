@@ -1,5 +1,6 @@
 # Liberar novas oportunidades Demo (28/10/2026)
-- [ ] Deixar tentativas sem ID expiradas fora do bloqueio, mantendo registros/resultados desconhecidos e recuperação baseada em resultados confirmados; selecionar somente mercados disponíveis, testar e conferir execução natural.
+- [x] Tentativas unknown/reserved expiradas sem ID ficam fora do bloqueio de novos minutos, sem alteração dos registros ou fabricação de resultados; última perda confirmada SOL/USD volta a orientar o gale. Mercados M1 disponíveis filtrados antes do ranking, com revalidação final. Executor publicado, 24 testes passaram e build OK.
+- [ ] Confirmar nova entrada natural: às 05:11 e 05:13 UTC analisou 98 ativos, sem candidato válido; às 05:12 a rodada anterior falhou no login IQ. Depende de novo sinal Takashi em mercado aberto e confirmação da corretora; nenhum replay/entrada forçada.
 
 # Retirar prioridade histórica de notas (28/10/2026)
 - [x] Removida leitura/ranking de notas vencedoras da seleção Demo; indicadores, ajustes anteriores, gales e pausa principal preservados. 20 testes passaram, build OK e executor publicado. Às 05:01 UTC analisou 98 ativos e selecionou GBP/JPY nota 1,04 entre 5 candidatos com historicalNotePriority=false; mercado indisponível e recuperação bloqueada por ordem anterior ambígua impediram entrada, sem forçar ou alterar históricos.

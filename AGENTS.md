@@ -15,7 +15,7 @@
 - Anchor reversal submission and expiry to the candidate's own minute, submitting right after the fourth candle confirms within the purchase window; why: another minute trades a different candle; stale candidates never roll forward.
 - Reuse broker sessions only for service-authenticated same-account reversals/Demo; never log/store secrets.
 - Master IQ collection, claims, placement and reconciliation use one service-only admin resolver with stable selection, never client fallback; copy keeps explicit client IDs; why: client connection updates must not redirect master entries.
-- Subdirectories (e.g. supabase/functions) have their own AGENTS.md; read it before changing files there.
+- Read nested AGENTS.md, including Demo auth recovery rules; why: keep execution safe and scoped.
 - IQ display reset combines browser and global admin cutoffs; hide only the cutoff's BRT day through that instant in admin/client views, preserving earlier days, new entries and all records; why: resetting today must not erase history.
 - IQ clearing uses the admin-authorized clear_iq_today_entries RPC to delete the BRT day's principal/client rows; daily totals derive from those rows, and DELETE events invalidate client results/history even without signal IDs; why: entry deletion must never leave stale daily results or affect isolated Demo/TEST/MT5 records.
 - All principal IQ placements, copies and trading Telegram notifications use unconditional shared pause gates before claims, while Demo and settlement remain independent; why: stopping strategies must block every executor without deleting history or changing broker results.

@@ -6,8 +6,11 @@ test('restored Takashi selection accepts notes without any chart match', () => {
   expect(selected?.signal_id).toBe('high');
   expect(selected?._score).toBe(1.95);
 });
-test('previous historical note priority precedes numeric note with no chart-distance ranking', () => {
-  expect(selectTakashiByNote([takashi('high', 9), takashi('priority', 2.23)], [223])?.signal_id).toBe('priority');
+test('current analysis wins regardless of historical winning-note references', () => {
+  const historicallyWinning = { ...takashi('historical', 2.23), historicalWins: 100, historicalLosses: 0 };
+  const strongerCurrentAnalysis = { ...takashi('current', 9), historicalWins: 0, historicalLosses: 10 };
+  expect(selectTakashiByNote([historicallyWinning, strongerCurrentAnalysis])?.signal_id).toBe('current');
+  expect(selectTakashiByNote([strongerCurrentAnalysis, historicallyWinning])?._score).toBe(9);
 });
 test('restored selection stays Takashi-only and accepts any finite note', () => {
   expect(selectTakashiByNote([{ ...takashi('other', 100), entry_strategy: 'VELA_FORCA' }, takashi('invalid', NaN), takashi('zero', 0)])?.signal_id).toBe('zero');

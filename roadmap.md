@@ -1,5 +1,6 @@
 # Recuperação Demo com quatro gales (28/10/2026)
-- [ ] Recuperação pelo retorno na próxima Takashi válida; máximo quatro gales/reinício base e exibição do nível: bloqueada pela colisão protegida dos snapshots 0058/0059; gravação segura não aplicada, executor/valores permanecem inalterados. Requer reparo do histórico de alterações da cópia pela plataforma.
+- [ ] Reparar histórico de alterações: nova tentativa em 28/10 confirmou colisão de identidade/vínculo dos snapshots 0058/0059; nenhuma alteração aplicada. Metadados são gerenciados/protegidos e a correção permitida está limitada a reparos de draft, não a esta cópia. Não apagar histórico nem republicar o executor local antigo sobre a versão ativa.
+- [x] Conferência em 28/10: executor publicado já aplica gales Demo, embora o código local desta cópia não contenha essa versão. Banco confirmou níveis 1/2/3/4 de US$2,21/4,92/10,35/22,25; quarto gale WIN +US$19,36, seguido de entrada base US$1. Painel autenticado confirmou ganhos US$55,21, perdas US$57,63, líquido -US$2,42; sem novas ordens forçadas. Reconciliação da versão publicada com o código local e validação da reserva por conta continuam necessárias antes de republicar.
 - [x] Ganhos/perdas monetários e saldo líquido confirmado com eventos e polling; saldo da corretora atualizado pelo leitor compartilhado, sem misturar totais principais. Seis testes passaram; admin autenticado confirmou 32 WIN/32 LOSS, ganhos US$26,52/perdas US$32/saldo -US$5,48, sem erros; build OK. Gales não ativados.
 
 # Confirmação rápida e busca contínua Demo (27/10/2026)

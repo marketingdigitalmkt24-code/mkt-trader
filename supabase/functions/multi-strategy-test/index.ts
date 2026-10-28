@@ -359,6 +359,9 @@ Deno.serve(async (req) => {
     ws.onmessage = async (ev) => {
       const d = JSON.parse(ev.data);
       handleOrder?.(d);
+      if (d.name === 'heartbeat' && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
+      }
       if (d.name === 'profile') {
         demoBalanceId = demoBalance(d.msg?.balances || [])?.id || 0;
         preparedBalanceId = demoBalanceId;

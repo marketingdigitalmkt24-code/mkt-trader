@@ -29,7 +29,8 @@ export function DemoTestOperations() {
   }).subscribe();
   return ()=>{void supabase.removeChannel(channel);};
  },[queryClient]);
- const stats = useQuery({queryKey:['demo-test-totals'],refetchInterval:10000,queryFn:async()=>demoTestStats(await allDemoOutcomes(async(from,to)=>{
+ // Version the cached shape: mounted sessions may still hold totals without gross fields.
+ const stats = useQuery({queryKey:['demo-test-totals','gross-v2'],refetchInterval:10000,queryFn:async()=>demoTestStats(await allDemoOutcomes(async(from,to)=>{
   const {data,error}=await supabase.from('iq_demo_test_orders').select('status,result,profit,iq_option_id').eq('status','confirmed').order('created_at',{ascending:false}).order('id').range(from,to);
   if(error)throw error;return data || [];
  }))});
@@ -46,8 +47,8 @@ export function DemoTestOperations() {
  return <section className="mb-4 border-b border-border pb-4" aria-label="Últimas operações Demo">
  <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 className="text-xs font-medium">Últimas operações · Demo</h4><Badge variant="outline">DEMO · TESTE</Badge></div>
  {stats.isLoading?<p className="mb-3 text-xs text-muted-foreground">Carregando resultado acumulado…</p>:stats.isError?<p role="alert" className="mb-3 text-xs text-destructive">Não foi possível carregar o resultado acumulado.</p>:stats.data && <div className="mb-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4" aria-label="Resultado acumulado Demo">
-  <div><span className="block text-muted-foreground">Ganhos</span><strong className="font-mono text-call">{stats.data.wins}</strong><span className="block font-mono text-call">{stats.data.grossWins.toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</span></div>
-  <div><span className="block text-muted-foreground">Perdas</span><strong className="font-mono text-put">{stats.data.losses}</strong><span className="block font-mono text-put">{stats.data.grossLosses.toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</span></div>
+  <div><span className="block text-muted-foreground">Ganhos</span><strong className="font-mono text-call">{stats.data.wins}</strong><span className="block font-mono text-call">{stats.data.grossWins?.toLocaleString('pt-BR',{style:'currency',currency:'USD'}) ?? '—'}</span></div>
+  <div><span className="block text-muted-foreground">Perdas</span><strong className="font-mono text-put">{stats.data.losses}</strong><span className="block font-mono text-put">{stats.data.grossLosses?.toLocaleString('pt-BR',{style:'currency',currency:'USD'}) ?? '—'}</span></div>
   <div><span className="block text-muted-foreground">Acerto</span><strong className="font-mono">{stats.data.accuracy.toLocaleString('pt-BR',{maximumFractionDigits:2})}%</strong></div>
   <div><span className="block text-muted-foreground">{stats.data.profit>0?'Saldo positivo':stats.data.profit<0?'Saldo negativo':'Saldo zerado'}</span><strong className={`font-mono ${stats.data.profit>0?'text-call':stats.data.profit<0?'text-put':'text-muted-foreground'}`}>{stats.data.profit.toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</strong></div>
   <span className="col-span-2 text-muted-foreground sm:col-span-4">Acumulado · {stats.data.pending} abertas · {stats.data.ties} empates</span>

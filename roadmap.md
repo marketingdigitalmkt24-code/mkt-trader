@@ -1,5 +1,5 @@
 # Gale Demo por dobro (28/10/2026)
-- [ ] Alterar recuperação para dobrar após LOSS, manter no máximo quatro gales, empate preserva valor e WIN/quarto LOSS reiniciam base; testar e publicar sem alterar histórico ou entradas principais.
+- [x] Recuperação alterada e publicada para dobrar o valor anterior após LOSS (base 1: 2/4/8/16), no máximo quatro gales; empate preserva valor e WIN/quarto LOSS reiniciam base. 18 testes passaram e build OK; histórico e principais preservados.
 - [ ] Confirmar valor em próxima entrada natural; depende de sinal Takashi válido e confirmação da IQ Option, sem forçar ordens.
 
 # Liberar novas oportunidades Demo (28/10/2026)

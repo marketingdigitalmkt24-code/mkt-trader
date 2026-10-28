@@ -1,3 +1,6 @@
+# Análise atual e conexão IQ (28/10/2026)
+- [ ] Conferir análise ativa e reduzir falhas de conexão, preservando apoio por notas, quatro gales e pausa principal.
+
 # Conexão IQ e ativação do apoio (28/10/2026)
 - [x] Todos os leitores frontend de saldo usam deduplicação/limite compartilhado; efeito de saldo não reinicia ao mudar status. Admin autenticado: duas consultas em 65s, nenhum erro de página.
 - [x] Recuperação restaurada no fonte local e apoio por notas integrado após validação por gráficos; publicado. Rotina 03:16 analisou 124 ativos, leu 24 notas sem LOSS, confirmou GBP/USD-OTC PRACTICE US$2,15 nível 1 às :02. 19 testes passaram; sem ordem forçada. Login às 03:14 ainda falhou: disponibilidade da corretora não garantida.

@@ -421,13 +421,6 @@
       "when": 1793080084433,
       "tag": "0059_strategy_scores_realtime",
       "breakpoints": true
-    },
-    {
-      "idx": 60,
-      "version": "7",
-      "when": 1793149292206,
-      "tag": "0060_demo_four_gale_recovery",
-      "breakpoints": true
     }
   ]
 }

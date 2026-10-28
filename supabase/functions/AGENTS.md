@@ -1,4 +1,5 @@
 # Edge functions rules
+- Supplementary unbeaten-note evidence must paginate confirmed PRACTICE broker WIN/LOSS, join exact signals, deduplicate broker outcomes and veto any all-history LOSS at displayed precision; keep it independent of chart eligibility and placement, and reconcile deployed/source drift before wiring it into the live runner to preserve active recovery.
 - Principal placement/copy and Telegram use unconditional shared pause gates before any claim. Daily reports stay paused; Demo/settlement independent; why: every executor must respect the full stop without changing confirmed history.
 
 - Demo prepares before :00 and sends fresh Takashi on that PRACTICE socket. Refresh expired pending IDs after :00 and retry history at :01/:03/:06/:10/:15 concurrently with scanning/placement; stop when none remain, conditional exact-ID writes only, preflight login attempts repeated until 3s before :00, never after; why: early snapshots/history must not miss just-confirmed orders or delay selection. Broker unavailability never fabricates signals/results.

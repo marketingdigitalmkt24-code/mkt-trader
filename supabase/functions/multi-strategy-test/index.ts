@@ -31,6 +31,7 @@ import { DEMO_MID_CANDLE } from '../_shared/demo-mid-candle.ts';
 import { readDemoWinningReferences } from '../_shared/demo-winning-reference-history.ts';
 import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
+import { nextDemoGaleState, demoGaleAmount, demoPayout, type DemoGaleState } from '../_shared/demo-gale.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
@@ -554,15 +555,41 @@ Deno.serve(async (req) => {
         preferredPatternDistance:Number.isFinite(demoWinner._preferredPatternDistance)?demoWinner._preferredPatternDistance:null}));
       // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
       const setting = await amountRead;
-      const amount = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
+      const baseAmount = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
       const found = Object.entries<any>(preparedActives).find(([,a])=>symbolOf(a.name || '')===demoWinner.asset);
-      const order = !setting.error && found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;
+      // Gale: size from the latest confirmed Demo order; wait briefly for its own result, never guess.
+      await Promise.all(demoSettlements);
+      let gale: DemoGaleState | null = null;
+      let lastDemoOrderError = false;
+      for (const waitUntil = Date.now() + 6000; ;) {
+        const last = await supabase.from('iq_demo_test_orders').select('result,amount,recovery_level,recovery_loss')
+          .eq('entry_strategy',TAKASHI_BNF).eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null)
+          .lt('entry_minute',demoWinner.created_at).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
+        if (last.error) { lastDemoOrderError = true; break; }
+        gale = nextDemoGaleState(last.data);
+        if (gale || Date.now() >= waitUntil) break;
+        await new Promise(r=>setTimeout(r,400));
+        await Promise.all(demoSettlements);
+      }
+      let payout: number | null = null;
+      if (gale && gale.level > 0) {
+        payout = demoPayout(found?.[1]);
+        if (payout === null) {
+          const lastWin = await supabase.from('iq_demo_test_orders').select('amount,profit').eq('status','confirmed')
+            .eq('account_type','PRACTICE').eq('result','win').order('entry_minute',{ascending:false}).limit(1).maybeSingle();
+          payout = demoPayout(null, lastWin.data);
+        }
+      }
+      const amount = gale ? demoGaleAmount(baseAmount, gale, payout) : null;
+      console.log('Demo gale:',JSON.stringify({level:gale?.level??null,loss:gale?.loss??null,payout,amount,lastError:lastDemoOrderError}));
+      const order = !setting.error && found && amount !== null ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;
       const socket = preparedSocket as WebSocket | null;
-      if(order && socket?.readyState===WebSocket.OPEN) {
+      if(order && amount !== null && gale && socket?.readyState===WebSocket.OPEN) {
         const reservation = await supabase.from('iq_demo_test_orders').insert({
           signal_id:demoWinner.signal_id,entry_minute:demoWinner.created_at,asset:demoWinner.asset,
           direction:demoWinner.direction,amount,entry_strategy:demoWinner.entry_strategy,
           expiration_time:new Date(order.expired*1000).toISOString(),account_type:'PRACTICE',
+          recovery_level:gale.level,recovery_loss:gale.loss,recovery_payout:payout,recovery_base:baseAmount,
         }).select('id').single();
         const reserved = reservation.data?.id;
         if(reserved && !reservation.error) {

@@ -1,3 +1,7 @@
+# Recuperação Demo com quatro gales (28/10/2026)
+- [ ] Recuperação pelo retorno na próxima Takashi válida; máximo quatro gales e reinício base, sem principal/Telegram/clientes.
+- [ ] Exibir gale e ganhos/perdas/saldo confirmados atualizados; testar e conferir execução.
+
 # Confirmação rápida e busca contínua Demo (27/10/2026)
 - [x] Pendências relidas após :00 com histórico repetido :01/:03/:06/:10/:15 na sessão preparada, separado da análise/envio; tentativa adicional de login só na preparação. 393 testes passaram, publicado e build OK.
 - [x] Rotina ao vivo 22:04/22:05 analisou 110 ativos e consulta :01 confirmou zero pendências; painel autenticado mostrou SUGAR WIN/LOSS reais e IA Analisando. Principais/Telegram/clientes preservados.

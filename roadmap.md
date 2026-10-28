@@ -1,4 +1,7 @@
 # Recuperação Demo com quatro gales (28/10/2026)
+- [x] Análise Takashi publicada: velas atuais da IQ Option comparadas aos gráficos WIN/LOSS confirmados e paginados; afinidade e distância escolhem sem ranking por nota, referência WIN persistida. 36 testes passaram; painel autenticado preserva totais e ordens; rotina inicia e acesso pelo navegador é recusado 401.
+- [ ] Conferir primeira seleção por gráfico ao vivo: depende de login disponível e candidato Takashi válido; rodada 00:55 recusada pela corretora, sem forçar entrada.
+- [ ] Repetir implantação segura dos quatro gales pelo retorno, preservando confirmação, saldo e isolamento Demo: nova tentativa recusada pela mesma colisão protegida 0058/0059; SQL não executado, gales não ativados.
 - [ ] Recuperação pelo retorno na próxima Takashi válida; máximo quatro gales/reinício base e exibição do nível: bloqueada pela colisão protegida dos snapshots 0058/0059; gravação segura não aplicada, executor/valores permanecem inalterados. Requer reparo do histórico de alterações da cópia pela plataforma.
 - [x] Ganhos/perdas monetários e saldo líquido confirmado com eventos e polling; saldo da corretora atualizado pelo leitor compartilhado, sem misturar totais principais. Seis testes passaram; admin autenticado confirmou 32 WIN/32 LOSS, ganhos US$26,52/perdas US$32/saldo -US$5,48, sem erros; build OK. Gales não ativados.
 

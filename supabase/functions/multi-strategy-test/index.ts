@@ -1,7 +1,7 @@
 // Modo TESTE com 7 estratégias (pedido 16/10/2026): roda a cada minuto em TODOS os ativos abertos da IQ Option.
 // Nada abre na corretora. Cada entrada é registrada como TESTE na vela :00 com expiração de 1 minuto
 // e resolvida pelas velas reais da IQ Option. Telegram: só o resultado WIN da Tendência (mesmo em teste).
-import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { telegramTradingEnabled } from '../_shared/principal-pause.ts';
 import { nextReversalMinute } from '../_shared/four-win-reversal.ts';
@@ -34,8 +34,10 @@ import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
+import { readTakashiChartEvidence, takashiChartComparison, compareTakashiCharts } from '../_shared/takashi-chart-selection.ts';
+import { corsHeaders } from 'npm:@supabase/supabase-js@2.118.0/cors';
 
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
+const cors = corsHeaders;
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
 const WS_URL = 'wss://iqoption.com/echo/websocket';
 const OPEN = 'test7_open';
@@ -209,16 +211,17 @@ Deno.serve(async (req) => {
     return data.filter(x=>ids.has(x.signal_id)).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:Number(x.profit)||0,asset:x.asset}));
   })().catch(()=>[]);
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
-  const scorePriorityPromise = readDemoScoreHistory(async(from,to)=>{
+  const directChartsPromise = readTakashiChartEvidence(async(from,to)=>{
     const {data,error}=await supabase.from('iq_demo_test_orders')
-      .select('signal_id,status,account_type,iq_option_id,result,profit').neq('entry_strategy',DEMO_MID_CANDLE)
+      .select('signal_id,result,settled_at').eq('entry_strategy',TAKASHI_BNF)
       .eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null)
-      .order('entry_minute',{ascending:true}).order('id').range(from,to);
+      .in('result',['win','loss']).lte('settled_at',new Date(targetMs).toISOString())
+      .order('entry_minute',{ascending:false}).order('id').range(from,to);
     if(error)throw error;return data||[];
   },async ids=>{
-    const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id',ids);
+    const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,asset,entry_minute,direction,candles').eq('entry_strategy',TAKASHI_BNF).in('signal_id',ids);
     if(error)throw error;return data||[];
-  }).then(data=>({data,error:null})).catch(error=>({data:null,error}));
+  },targetMs).then(data=>({data,error:null})).catch(()=>({data:[],error:'unavailable'}));
   const chartPromise = (async()=>{
     const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,asset,entry_minute,direction,candles,score')
       .neq('entry_strategy',DEMO_MID_CANDLE).not('candles','is',null).gte('entry_minute',demoSince)
@@ -488,19 +491,17 @@ Deno.serve(async (req) => {
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
   if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
   console.log('Rejected TEST outcomes in learning:',rejectedHist.length);
-  const priorityRead = await scorePriorityPromise;
-  if(priorityRead.error)console.error('Demo WIN score history unavailable: pattern authorization remains independent');
-  const winScores=priorityRead.data?.winScores??new Set<number>();
+  const directCharts = await directChartsPromise;
+  if(directCharts.error)console.error('Takashi direct chart history unavailable: no score fallback');
   const winningCharts=await winningChartsPromise;
   console.log('Demo all-history winning chart references:',winningCharts.length);
-  const priority=priorityRead.data?.priorities.map(row=>row.cents);
-  if(priorityRead.data)console.log('Demo all-history WIN score references:',JSON.stringify({exact_scores:winScores.size,priorities:priorityRead.data.priorities}));
+  console.log('Takashi direct chart learning:',JSON.stringify({samples:directCharts.data.length,wins:directCharts.data.filter(r=>r.result==='win').length,losses:directCharts.data.filter(r=>r.result==='loss').length,selection:'broker-candles-not-note'}));
   // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
   const rejections: any[] = [];
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'displayed226-takashi-v10',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-chart-first-v11',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -515,19 +516,15 @@ Deno.serve(async (req) => {
       if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
       reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];
     }
-    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null}];
+    const chart=takashiChartComparison(directCharts.data,series.get(c.asset)||[],curMin,c.direction,c.asset);
+    if(!chart?.reference || chart.affinity<=0){
+      reject(c,{code:directCharts.error?'chart_history_unavailable':!chart?.reference?'chart_win_unavailable':'chart_loss_pattern',details:{samples:chart?.samples??0,wins:chart?.wins??0,losses:chart?.losses??0,affinity:chart?.affinity??null}});return[];
+    }
+    return [{...c,_cohort:cohort,chart,_preferredPatternDistance:chart.distance,_patternMatch:{...chart.reference,learned:chart.affinity,samples:chart.samples,wins:chart.wins,losses:chart.losses,selection:'broker-candles-not-note'}}];
   });
   // User (Oct 25 2026 19:02 UTC): alternate Demo slots between Takashi and displayed-2.26 entries.
-  const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
-    .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
-  const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
-  const demoWinner = demoEligible.sort((a,b)=>{
-    const ranks=priority??[];
-    const rank=(score:number)=>{const i=ranks.indexOf(Math.round(score*100));return i<0?ranks.length:i;};
-    return Number(b._cohort===preferred)-Number(a._cohort===preferred)||rank(a._score)-rank(b._score)||b._score-a._score||a.signal_id.localeCompare(b.signal_id);
-  })[0]??null;
-  console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
-  console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));
+  const demoWinner = demoEligible.sort(compareTakashiCharts)[0]??null;
+  console.log('Takashi chart selection:',JSON.stringify({eligible:demoEligible.length,selected:demoWinner?.signal_id??null,chart:demoWinner?.chart??null}));
   for(const c of demoEligible){
     const reason:RejectionReason|null=demoWinner&&demoWinner.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:demoWinner.signal_id}}:null;
     if(reason)reject(c,reason);
@@ -553,7 +550,7 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
-      console.log('Demo winning-score priority:', JSON.stringify({score:demoWinner._score,
+      console.log('Demo chart priority (note display only):', JSON.stringify({score:demoWinner._score,
         preferredPatternDistance:Number.isFinite(demoWinner._preferredPatternDistance)?demoWinner._preferredPatternDistance:null}));
       // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
       const setting = await amountRead;

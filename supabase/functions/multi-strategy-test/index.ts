@@ -34,7 +34,7 @@ import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
-import { demoRecovery } from '../_shared/demo-recovery.ts';
+import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -487,7 +487,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-current-analysis-v12',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-open-market-v13',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -501,6 +501,11 @@ Deno.serve(async (req) => {
       if(c.entry_strategy===TAKASHI_STRATEGY){reject(c,{code:'takashi_demo_score',details:{score:Number.isFinite(c._score)?c._score:null,minimum:TAKASHI_DEMO_MIN_SCORE}});return[];}
       if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
       reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];
+    }
+    const market = Object.entries<any>(preparedActives).find(([, a]) => symbolOf(a.name || '') === c.asset);
+    if (!market || !preparedDemoOrder(c, DEMO_TEST_AMOUNT, preparedBalanceId, Number(market[0]), market[1], Date.now())) {
+      reject(c,{code:'market_unavailable',details:{asset:c.asset}});
+      return [];
     }
     // Restore prior finite-note eligibility; historical learning still adjusts the note.
     return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null}];
@@ -546,10 +551,12 @@ Deno.serve(async (req) => {
       const commission = found?.[1]?.option?.profit?.commission;
       const payout = typeof commission === 'number' ? (100-commission)/100 : null;
       const last = await supabase.from('iq_demo_test_orders')
-        .select('status,result,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base')
+        .select('status,result,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
         .eq('entry_strategy',TAKASHI_BNF).eq('account_type','PRACTICE')
-        .in('status',['confirmed','unknown','reserved']).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
-      const recovery = !last.error ? demoRecovery(last.data,base,payout) : null;
+        .in('status',['confirmed','unknown','reserved'])
+        .or(`status.eq.confirmed,iq_option_id.not.is.null,expiration_time.gt.${new Date().toISOString()}`)
+        .order('entry_minute',{ascending:false}).limit(1);
+      const recovery = !last.error ? demoRecovery(demoRecoveryPredecessor(last.data || [], Date.now()),base,payout) : null;
       const amount = recovery?.amount ?? 0;
       console.log('Demo gale:',JSON.stringify({recovery,lastError:!!last.error}));
       const order = !setting.error && recovery && amount <= preparedBalanceAmount && found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;

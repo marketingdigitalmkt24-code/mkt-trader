@@ -16,12 +16,12 @@ test('prepared order cannot enable retired strategies or an unavailable market',
   expect(preparedDemoOrder(candidate, 1, 4, 123, { ...asset, is_suspended: true }, at)).toBeNull();
 });
 test('available lower-score signal remains selectable when the top analysis market is closed', () => {
-  const closed = { ...candidate, signal_id: 'closed', asset: 'EUR/JPY', _score: 9 };
-  const open = { ...candidate, signal_id: 'open', asset: 'SUGAR-OTC', _score: .14 };
+  const closed = { ...candidate, signal_id: 'takashi-bnf-v1-closed', asset: 'EUR/JPY', _score: 9 };
+  const open = { ...candidate, signal_id: 'takashi-bnf-v1-open', asset: 'SUGAR-OTC', _score: .14 };
   const markets = new Map([[closed.asset, { ...asset, enabled: false }], [open.asset, asset]]);
   const eligible = [closed, open].filter(c => {
     const market = markets.get(c.asset);
     return market && preparedDemoOrder(c, 1, 4, 123, market, at);
   });
-  expect(selectTakashiByNote(eligible)?.signal_id).toBe('open');
+  expect(selectTakashiByNote(eligible)?.signal_id).toBe('takashi-bnf-v1-open');
 });

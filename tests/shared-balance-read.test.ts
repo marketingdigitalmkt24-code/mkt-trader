@@ -23,4 +23,11 @@ describe('shared broker balance read', () => {
     expect(calls).toBe(2);
     expect(BALANCE_MIN_INTERVAL_MS).toBe(30000);
   });
+  test('failed broker reads are also deduplicated instead of creating a retry storm', async () => {
+    let calls = 0;
+    const invoke = async () => { calls++; throw new Error('timeout'); };
+    await Promise.all([sharedBalanceRead('u',invoke),sharedBalanceRead('u',invoke)]);
+    await sharedBalanceRead('u',invoke);
+    expect(calls).toBe(1);
+  });
 });

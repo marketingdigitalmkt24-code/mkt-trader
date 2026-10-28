@@ -52,11 +52,12 @@ export const LABELS: Record<string, string> = {
   [TAKASHI_BNF]: 'Takashi Kotegawa',
 };
 
-async function login(email: string, password: string, timeoutMs = 10000): Promise<string | null> {
+async function login(email: string, password: string, timeoutMs = 10000, attemptNumber = 1): Promise<string | null> {
   // The broker login sometimes answers in 3-8s; splitting the budget across hosts
   // aborted every slow-but-valid answer. Give the primary host the whole budget.
   const deadline = Date.now() + timeoutMs;
-  for (const u of AUTH_URLS) {
+  const hosts = attemptNumber % 2 === 0 ? [...AUTH_URLS].reverse() : AUTH_URLS;
+  for (const u of hosts) {
     const left = deadline - Date.now();
     if (left < 1000) break;
     try {
@@ -258,7 +259,7 @@ Deno.serve(async (req) => {
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
     // Short attempts repeated until shortly before :00; never logs in after the boundary.
-    const ssid=cfg ? await loginBeforeBoundary(ms=>login(cfg.email,cfg.password,ms),targetMs) : null;
+    const ssid=cfg ? await loginBeforeBoundary((ms,n)=>login(cfg.email,cfg.password,ms,n),targetMs) : null;
     return {cfg,ssid};
   });
   const [{ cfg, ssid }, { data: open }] = await Promise.all([

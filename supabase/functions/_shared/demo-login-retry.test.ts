@@ -18,4 +18,14 @@ describe('Demo login retry before :00', () => {
     expect(t).toBeLessThanOrEqual(57000);
     expect(calls).toBeGreaterThan(5);
   });
+  test('never begins login after preparation deadline, even on first attempt', async () => {
+    let calls = 0;
+    expect(await loginBeforeBoundary(async () => { calls++; return 'late'; }, 60000, () => 58000)).toBeNull();
+    expect(calls).toBe(0);
+  });
+  test('exposes attempt sequence so hosts alternate instead of starving fallback', async () => {
+    let t = 0; const sequence: number[] = [];
+    await loginBeforeBoundary(async (ms, n) => { sequence.push(n); t += ms; return n === 2 ? 'ok' : null; },60000,()=>t,async ms=>{t+=ms;});
+    expect(sequence).toEqual([1,2]);
+  });
 });

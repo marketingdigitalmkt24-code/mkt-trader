@@ -1,5 +1,5 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { createClient } from 'npm:@supabase/supabase-js@2.95.3';
+import { corsHeaders } from 'npm:@supabase/supabase-js@2.95.3/cors';
 import { z } from 'npm:zod@3.25.76';
 import { DEMO_SCAN_BUCKET, latestDemoScan, type DemoScanStatus } from '../_shared/demo-scan-status.ts';
 const reply = (data: unknown, status = 200) => Response.json(data,{status,headers:{...corsHeaders,'Cache-Control':'no-store'}});

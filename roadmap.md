@@ -1,5 +1,5 @@
 # Conexão Demo resiliente (28/10/2026)
-- [ ] Reforçar login/reconexão antes de :00, testar e publicar sem reativar principais, Telegram ou clientes.
+- [x] Login alterna três endereços após falhas; conexão autenticada Demo tenta dois endereços e valida perfil/inicialização antes de :00. Trinta testes passaram e rotina publicada, sem reativar principais, Telegram ou clientes.
 - [ ] Conferir uma varredura real com a conexão reforçada; indisponibilidade da corretora não permite garantir continuidade.
 
 # Recuperação Demo com quatro gales (28/10/2026)

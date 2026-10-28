@@ -1,5 +1,5 @@
 # Retirar prioridade histórica de notas (28/10/2026)
-- [ ] Remover a leitura/ranking das notas vencedoras na seleção Demo, preservando indicadores, ajustes anteriores, gales e pausa principal; testar, publicar e conferir a próxima análise natural.
+- [x] Removida leitura/ranking de notas vencedoras da seleção Demo; indicadores, ajustes anteriores, gales e pausa principal preservados. 20 testes passaram, build OK e executor publicado. Às 05:01 UTC analisou 98 ativos e selecionou GBP/JPY nota 1,04 entre 5 candidatos com historicalNotePriority=false; mercado indisponível e recuperação bloqueada por ordem anterior ambígua impediram entrada, sem forçar ou alterar históricos.
 
 # Retirar seleção por gráficos (28/10/2026)
 - [x] Restaurada e publicada seleção Takashi anterior por prioridade histórica de notas/maior nota, sem correspondência WIN obrigatória; aprendizado anterior, gales, reconexão e pausa principal preservados. 25 testes passaram e build OK.

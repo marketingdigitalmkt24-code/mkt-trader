@@ -1,4 +1,5 @@
 # Edge functions rules
+- Demo recovery must reserve atomically from settled same-config/type-4 balance orders, block pending/unknown placements, snapshot payout and cycle debt per order, and never infer a broker result; why: concurrent runners and delayed settlement must not duplicate or over-increase stakes.
 - Principal placement/copy and Telegram use unconditional shared pause gates before any claim. Daily reports stay paused; Demo/settlement independent; why: every executor must respect the full stop without changing confirmed history.
 
 - Demo prepares before :00 and sends fresh Takashi on that PRACTICE socket. Refresh expired pending IDs after :00 and retry history at :01/:03/:06/:10/:15 concurrently with scanning/placement; stop when none remain, conditional exact-ID writes only, preflight login attempts repeated until 3s before :00, never after; why: early snapshots/history must not miss just-confirmed orders or delay selection. Broker unavailability never fabricates signals/results.

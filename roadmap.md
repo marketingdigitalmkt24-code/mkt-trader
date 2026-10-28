@@ -1,7 +1,10 @@
+# Retirar prioridade histórica de notas (28/10/2026)
+- [x] Removida leitura/ranking de notas vencedoras da seleção Demo; indicadores, ajustes anteriores, gales e pausa principal preservados. 20 testes passaram, build OK e executor publicado. Às 05:01 UTC analisou 98 ativos e selecionou GBP/JPY nota 1,04 entre 5 candidatos com historicalNotePriority=false; mercado indisponível e recuperação bloqueada por ordem anterior ambígua impediram entrada, sem forçar ou alterar históricos.
+
 # Retirar seleção por gráficos (28/10/2026)
 - [x] Restaurada e publicada seleção Takashi anterior por prioridade histórica de notas/maior nota, sem correspondência WIN obrigatória; aprendizado anterior, gales, reconexão e pausa principal preservados. 25 testes passaram e build OK.
 - [x] Apagadas 31 ordens Demo confirmadas identificadas por pattern_match não nulo, preservadas 80 ordens sem marca e uma ordem unknown não exibida/sem confirmação; candidatos e saldo da corretora intactos. Admin autenticado: zero nomes marcados, 35 WIN/34 LOSS, ganhos US$28,99/perdas US$34,00/líquido -US$5,01, sem erro de página.
-- [ ] Confirmar seleção natural após publicação: indisponibilidade do login IQ Option (TimeoutError nas rodadas 04:51/04:52 UTC) impede validar nova análise ao vivo; rotina segue tentando, sem operação forçada.
+- [x] Confirmada análise natural às 04:55 UTC: 96 ativos, 69 resultados próprios (35 WIN/34 LOSS), seleção por indicadores/notas sem candidato válido; nenhuma entrada forçada.
 
 # Análise atual e conexão IQ (28/10/2026)
 - [x] Reconexão WebSocket alterna endpoints com limite de handshake e deadline original, parse protegido e fechamento imediato; publicado. 338 testes passaram. Rodada 03:22 consultou 124 ativos e 43 gráficos WIN, enviou GBP/USD Demo às :00,799, confirmou às :00,969 e liquidou LOSS em :01,329 após expiração, lido no admin sem erros; apoio/gales/pausa preservados. Falhas HTTP às 03:19/03:20 persistiram, reconectou às 03:21; sem garantia de disponibilidade externa.

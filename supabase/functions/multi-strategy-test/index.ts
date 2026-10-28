@@ -23,7 +23,6 @@ import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay } from '../_
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
-import { readDemoScoreHistory } from '../_shared/demo-score-priority.ts';
 import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
 import { demoWinningPatternMatch, demoDisplayedTargetScore } from '../_shared/demo-continuation.ts';
 import { demoEntryReason } from '../_shared/demo-entry-authorization.ts';
@@ -211,16 +210,6 @@ Deno.serve(async (req) => {
     return data.filter(x=>ids.has(x.signal_id)).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:Number(x.profit)||0,asset:x.asset}));
   })().catch(()=>[]);
   const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
-  const scorePriorityPromise = readDemoScoreHistory(async(from,to)=>{
-    const {data,error}=await supabase.from('iq_demo_test_orders')
-      .select('signal_id,status,account_type,iq_option_id,result,profit').neq('entry_strategy',DEMO_MID_CANDLE)
-      .eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null)
-      .order('entry_minute',{ascending:true}).order('id').range(from,to);
-    if(error)throw error;return data||[];
-  },async ids=>{
-    const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id',ids);
-    if(error)throw error;return data||[];
-  }).then(data=>({data,error:null})).catch(error=>({data:null,error}));
   const chartPromise = (async()=>{
     const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,asset,entry_minute,direction,candles,score')
       .neq('entry_strategy',DEMO_MID_CANDLE).not('candles','is',null).gte('entry_minute',demoSince)
@@ -493,17 +482,12 @@ Deno.serve(async (req) => {
   if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
   if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
   console.log('Rejected TEST outcomes in learning:',rejectedHist.length);
-  const priorityRead = await scorePriorityPromise;
-  if(priorityRead.error)console.error('Demo WIN score history unavailable: pattern authorization remains independent');
-  const winScores=priorityRead.data?.winScores??new Set<number>();
-  const priority=priorityRead.data?.priorities.map(row=>row.cents);
-  if(priorityRead.data)console.log('Demo all-history WIN score references:',JSON.stringify({exact_scores:winScores.size,priorities:priorityRead.data.priorities}));
   // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
   const rejections: any[] = [];
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-note-selection-v11',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-current-analysis-v12',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -525,8 +509,8 @@ Deno.serve(async (req) => {
   const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
     .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
-  const demoWinner = selectTakashiByNote(demoEligible,priority);
-  console.log('Takashi indicator and note selection:',JSON.stringify({eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
+  const demoWinner = selectTakashiByNote(demoEligible);
+  console.log('Takashi current indicator analysis:',JSON.stringify({historicalNotePriority:false,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
   console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
   console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));
   for(const c of demoEligible){
@@ -554,8 +538,7 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
-      console.log('Demo winning-score priority:', JSON.stringify({score:demoWinner._score,
-        preferredPatternDistance:Number.isFinite(demoWinner._preferredPatternDistance)?demoWinner._preferredPatternDistance:null}));
+      console.log('Demo current-analysis selection:', JSON.stringify({score:demoWinner._score,historicalNotePriority:false}));
       // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
       const setting = await amountRead;
       const base = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);

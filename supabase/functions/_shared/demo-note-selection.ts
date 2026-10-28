@@ -1,14 +1,10 @@
 import type { UnbeatenNote } from './demo-unbeaten-notes.ts';
 import { demoCohort } from './demo-226-policy.ts';
 import type { DemoCandidate } from './demo-continuation.ts';
-// Restore the pre-chart Takashi ranking without changing calculated notes.
-export function selectTakashiByNote<T extends DemoCandidate>(candidates: T[], priorities: number[] = []): T | null {
-  const rank = (score: number) => {
-    const index = priorities.indexOf(Math.round(score * 100));
-    return index < 0 ? priorities.length : index;
-  };
+// Rank only the current calculated analysis; historical winning-note lists are not inputs.
+export function selectTakashiByNote<T extends DemoCandidate>(candidates: T[]): T | null {
   return candidates.filter(c => demoCohort(c._score, c.entry_strategy) === 'takashi')
-    .sort((a, b) => rank(a._score) - rank(b._score) || b._score - a._score
+    .sort((a, b) => b._score - a._score
       || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
 }
 type Candidate = { signal_id: string; _score: number; _preferredPatternDistance?: number };

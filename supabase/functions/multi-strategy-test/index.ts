@@ -34,13 +34,13 @@ import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
+import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { readUnbeatenDemoNotes } from '../_shared/demo-unbeaten-notes.ts';
 import { selectChartWithNoteSupport } from '../_shared/demo-note-selection.ts';
 import { demoRecovery } from '../_shared/demo-recovery.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
-const WS_URL = 'wss://iqoption.com/echo/websocket';
 const OPEN = 'test7_open';
 const DEMO_OWN_WATCH_GRACE_MS = 22000;
 type K = { t: number; o: number; c: number; h: number; l: number };
@@ -319,16 +319,20 @@ Deno.serve(async (req) => {
   let requestPending: () => Promise<boolean> = async () => false;
   let extendPrepared: (untilMs: number) => void = () => {};
   let ownExpiryMs = 0;
-  await new Promise<void>((resolve) => {
-    const ws = new WebSocket(WS_URL);
+  const connectionReady = await prepareDemoConnection((endpoint, handshakeMs) => new Promise<boolean>((resolve) => {
+    const ws = new WebSocket(endpoint);
     preparedSocket = ws;
     let pending = 0; const byReq = new Map<string, string>();
     let demoBalanceId = 0, candleDone = false;
     let historyAttempt=0;
     const historyResponses=new Set<string>();
     let demoHistoryTimer: ReturnType<typeof setTimeout> | undefined;
-    const finish = () => { if(demoHistoryTimer)clearTimeout(demoHistoryTimer); resolve(); };
-    closePrepared = () => { clearTimeout(timer); if(boundaryTimer)clearTimeout(boundaryTimer); if(demoHistoryTimer)clearTimeout(demoHistoryTimer); try{ws.close();}catch{} };
+    let completed = false;
+    const finish = () => {
+      if(demoHistoryTimer)clearTimeout(demoHistoryTimer);
+      if (!completed) { completed = true; resolve(candleDone); }
+    };
+    closePrepared = () => { clearTimeout(timer); clearTimeout(handshakeTimer); if(boundaryTimer)clearTimeout(boundaryTimer); if(demoHistoryTimer)clearTimeout(demoHistoryTimer); try{ws.close();}catch{} };
     const finishCandles = () => { candleDone=true; finish(); };
     let timer = setTimeout(() => { finish(); closePrepared(); }, Math.max(0, targetMs - Date.now()) + 30000);
     // Keep this authenticated socket alive past its own order expiry, so the result
@@ -336,6 +340,10 @@ Deno.serve(async (req) => {
     extendPrepared = (untilMs: number) => { clearTimeout(timer); timer = setTimeout(() => { finish(); closePrepared(); }, Math.max(0, untilMs - Date.now())); };
     let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
     let initialized = false;
+    const handshakeTimer = setTimeout(() => {
+      console.warn('Demo socket preparation timeout; trying alternate endpoint');
+      finish(); closePrepared();
+    }, handshakeMs);
     const requestInitialization = () => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
     };
@@ -360,9 +368,10 @@ Deno.serve(async (req) => {
     requestPending = requestPendingHistory;
     ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
     ws.onerror = () => { finish(); closePrepared(); };
-    ws.onclose = () => { if (boundaryTimer) clearTimeout(boundaryTimer); };
+    ws.onclose = () => { finish(); closePrepared(); };
     ws.onmessage = async (ev) => {
-      const d = JSON.parse(ev.data);
+      let d;
+      try { d = JSON.parse(ev.data); } catch { return; }
       handleOrder?.(d);
       if (d.name === 'heartbeat' && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
@@ -372,14 +381,15 @@ Deno.serve(async (req) => {
         preparedBalanceId = demoBalanceId;
         preparedBalanceAmount = Number((d.msg?.balances || []).find((b: any) => b.id === demoBalanceId)?.amount) || 0;
         // Re-read at :01 so this minute's confirmation is not missed by preflight.
-        settlementWatch=watchDemoSettlements(targetMs,requestPendingHistory)
-          .catch(error=>{console.error('Demo settlement watch failed:',String(error));return 0;});
         // Connection is already authenticated; only fresh closed candles are requested at :00.
         console.log('Demo timing broker ready:', new Date().toISOString());
         requestInitialization();
       }
       if (d.name === 'initialization-data' && !initialized) {
         initialized = true;
+        clearTimeout(handshakeTimer);
+        settlementWatch=watchDemoSettlements(targetMs,requestPendingHistory)
+          .catch(error=>{console.error('Demo settlement watch failed:',String(error));return 0;});
         preparedActives = d.msg?.turbo?.actives || {};
         const requestCandles = async () => {
         const requestTime = demoCandleRequestTime(Date.now(), targetMs);
@@ -430,7 +440,12 @@ Deno.serve(async (req) => {
         }
       }
     };
-  });
+  }), targetMs);
+  if (!connectionReady) {
+    closePrepared();
+    console.error('Demo scan unavailable: socket preparation failed; no stale entry submitted');
+    return Response.json({ success: false, error: 'broker connection unavailable' }, { headers: cors });
+  }
 
   // Await database confirmation, not Telegram, before the atomic four-win claim.
   await Promise.all(confirmations);

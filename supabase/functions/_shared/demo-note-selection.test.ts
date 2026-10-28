@@ -1,26 +1,17 @@
 import { expect, test } from 'bun:test';
-import { selectChartWithNoteSupport, selectTakashiByNote } from './demo-note-selection';
+import { noteSupportBonus, selectTakashiByNote } from './demo-note-selection';
 const takashi = (signal_id: string, _score: number) => ({ signal_id, _score, asset: 'GBP/USD-OTC', direction: 'CALL', entry_strategy: 'TAKASHI_BNF_V1', created_at: '2026-10-28T05:00:00Z' });
-test('restored Takashi selection accepts notes without any chart match', () => {
-  const selected = selectTakashiByNote([takashi('low', .14), takashi('high', 1.95)]);
-  expect(selected?.signal_id).toBe('high');
-  expect(selected?._score).toBe(1.95);
+test('without unbeaten notes the highest current note wins', () => {
+  expect(selectTakashiByNote([takashi('low', .14), takashi('high', 1.95)])?.signal_id).toBe('high');
 });
-test('current analysis wins regardless of historical winning-note references', () => {
-  const historicallyWinning = { ...takashi('historical', 2.23), historicalWins: 100, historicalLosses: 0 };
-  const strongerCurrentAnalysis = { ...takashi('current', 9), historicalWins: 0, historicalLosses: 10 };
-  expect(selectTakashiByNote([historicallyWinning, strongerCurrentAnalysis])?.signal_id).toBe('current');
-  expect(selectTakashiByNote([strongerCurrentAnalysis, historicallyWinning])?._score).toBe(9);
+test('unbeaten note with WINs helps a close candidate', () => {
+  expect(selectTakashiByNote([takashi('a', 1.5), takashi('b', 1.7)], [{ cents: 150, wins: 3 }])?.signal_id).toBe('a');
 });
-test('restored selection stays Takashi-only and accepts any finite note', () => {
+test('note support is capped and never overrides a much stronger analysis', () => {
+  expect(noteSupportBonus(1.5, [{ cents: 150, wins: 50 }])).toBe(0.5);
+  expect(selectTakashiByNote([takashi('a', 1.5), takashi('b', 2.5)], [{ cents: 150, wins: 50 }])?.signal_id).toBe('b');
+});
+test('stays Takashi-only and accepts any finite note', () => {
   expect(selectTakashiByNote([{ ...takashi('other', 100), entry_strategy: 'VELA_FORCA' }, takashi('invalid', NaN), takashi('zero', 0)])?.signal_id).toBe('zero');
   expect(selectTakashiByNote([])).toBeNull();
-});
-test('more WIN without LOSS supports only eligible charts', () => {
-  const candidates = [{ signal_id: 'a', _score: .14, _preferredPatternDistance: .8 }, { signal_id: 'b', _score: 4.9, _preferredPatternDistance: .2 }];
-  expect(selectChartWithNoteSupport(candidates, [{ cents: 14, wins: 3 }, { cents: 490, wins: 1 }])?.signal_id).toBe('a');
-  expect(selectChartWithNoteSupport([{ ...candidates[0], _preferredPatternDistance: 1.31 }, candidates[1]], [{ cents: 14, wins: 3 }])?.signal_id).toBe('b');
-});
-test('without supported notes chart distance chooses, not highest numeric note', () => {
-  expect(selectChartWithNoteSupport([{ signal_id: 'a', _score: 0, _preferredPatternDistance: .1 }, { signal_id: 'b', _score: 9, _preferredPatternDistance: .5 }], [])?.signal_id).toBe('a');
 });

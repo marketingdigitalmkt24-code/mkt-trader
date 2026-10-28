@@ -2,6 +2,7 @@
 // Uses Edge Functions as proxy to avoid browser CORS/blocking issues
 
 import { supabase } from '@/integrations/supabase/client';
+import { sharedBalanceRead } from '@/lib/shared-balance-read';
 
 interface IQOptionCredentials {
   email: string;
@@ -100,14 +101,15 @@ class IQOptionClient {
   }
 
   async refreshBalance(): Promise<BalanceInfo | null> {
-    if (!this.credentials) {
+    if (!this.credentials?.userId) {
       return null;
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('iqoption-get-balance', {
-        body: { userId: this.credentials.userId },
-      });
+      const userId = this.credentials.userId;
+      const { data, error } = await sharedBalanceRead(userId, () => supabase.functions.invoke('iqoption-get-balance', {
+        body: { userId, timezoneOffset: 180 },
+      }));
 
       if (!error && data?.success) {
         this.balanceInfo = {

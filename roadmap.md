@@ -1,3 +1,7 @@
+# Conexão IQ e ativação do apoio (28/10/2026)
+- [ ] Eliminar leituras de saldo fora do leitor compartilhado e repetição do efeito ao mudar status; testar limite/deduplicação.
+- [ ] Restaurar recuperação Demo no fonte local, integrar apoio por notas após validação por gráficos, publicar e conferir rotina sem forçar entrada.
+
 # Notas vencedoras como apoio à análise (28/10/2026)
 - [x] Preparada leitura independente paginada de todas as notas com mais WIN e nenhum LOSS Demo confirmado, agrupadas conforme duas casas do histórico; deduplicação de IDs e exclusão de resultados futuros/pendentes. Testes de WIN, veto de LOSS, páginas antigas e atualização adicionados; ainda não conectada à rotina ativa.
 - [ ] Integrar e conferir na rotina ativa: bloqueado pela divergência de versão do executor publicado (gales presentes) versus fonte local (gales ausentes e prioridade antiga). Não republicar a versão antiga nem alterar histórico/resultados para contornar.

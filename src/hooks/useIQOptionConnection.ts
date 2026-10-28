@@ -372,6 +372,11 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
           refreshBalanceFromAPI();
         }
       )
+      .on('postgres_changes', { event:'*', schema:'public', table:'iq_demo_test_orders' }, () => {
+        // Keep the broker balance separate from principal financial totals.
+        // This still uses the shared rate-limited broker balance read.
+        void refreshBalanceFromAPI();
+      })
       .subscribe();
 
     return () => {

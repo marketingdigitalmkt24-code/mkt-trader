@@ -1,3 +1,7 @@
+# Recuperação Demo com quatro gales (28/10/2026)
+- [ ] Recuperação pelo retorno na próxima Takashi válida; máximo quatro gales/reinício base e exibição do nível: bloqueada pela colisão protegida dos snapshots 0058/0059; gravação segura não aplicada, executor/valores permanecem inalterados. Requer reparo do histórico de alterações da cópia pela plataforma.
+- [x] Ganhos/perdas monetários e saldo líquido confirmado com eventos e polling; saldo da corretora atualizado pelo leitor compartilhado, sem misturar totais principais. Seis testes passaram; admin autenticado confirmou 32 WIN/32 LOSS, ganhos US$26,52/perdas US$32/saldo -US$5,48, sem erros; build OK. Gales não ativados.
+
 # Confirmação rápida e busca contínua Demo (27/10/2026)
 - [x] Pendências relidas após :00 com histórico repetido :01/:03/:06/:10/:15 na sessão preparada, separado da análise/envio; tentativa adicional de login só na preparação. 393 testes passaram, publicado e build OK.
 - [x] Rotina ao vivo 22:04/22:05 analisou 110 ativos e consulta :01 confirmou zero pendências; painel autenticado mostrou SUGAR WIN/LOSS reais e IA Analisando. Principais/Telegram/clientes preservados.

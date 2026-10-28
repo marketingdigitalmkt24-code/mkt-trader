@@ -5,7 +5,7 @@ export interface DemoOutcomeRow {
  iq_option_id: string | null;
 }
 export function demoTestStats(rows: DemoOutcomeRow[]) {
- let wins = 0, losses = 0, ties = 0, pending = 0, profit = 0;
+ let wins = 0, losses = 0, ties = 0, pending = 0, profit = 0, grossWins = 0, grossLosses = 0;
  for (const row of rows) {
   if (row.status !== 'confirmed' || !row.iq_option_id || !/^\d+$/.test(row.iq_option_id)) continue;
   if (row.result === 'pending') { pending++; continue; }
@@ -14,10 +14,15 @@ export function demoTestStats(rows: DemoOutcomeRow[]) {
   if (row.result === 'loss') losses++;
   if (row.result === 'tie') ties++;
   const amount = Number(row.profit);
-  if (Number.isFinite(amount)) profit += amount;
+  if (Number.isFinite(amount)) {
+   profit += amount;
+   if (amount > 0) grossWins += amount;
+   if (amount < 0) grossLosses += -amount;
+  }
  }
  return { wins, losses, ties, pending, accuracy: wins + losses ? 100 * wins / (wins + losses) : 0,
-  profit: Math.round(profit * 100) / 100 };
+  profit: Math.round(profit * 100) / 100, grossWins: Math.round(grossWins * 100) / 100,
+  grossLosses: Math.round(grossLosses * 100) / 100 };
 }
 export async function allDemoOutcomes(readPage: (from: number, to: number) => Promise<DemoOutcomeRow[]>) {
  const rows: DemoOutcomeRow[] = [];

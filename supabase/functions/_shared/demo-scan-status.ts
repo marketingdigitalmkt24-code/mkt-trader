@@ -25,3 +25,6 @@ export function latestDemoScan(rows: DemoScanStatus[]) {
   return rows.filter(row => Number.isFinite(Date.parse(row.target_minute)) && Number.isFinite(Date.parse(row.observed_at)))
     .sort((a,b) => Date.parse(b.target_minute) - Date.parse(a.target_minute) || Date.parse(b.observed_at) - Date.parse(a.observed_at))[0] ?? null;
 }
+export function latestCompletedDemoScan(rows: DemoScanStatus[]) {
+  return latestDemoScan(rows.filter(row=>row.phase==='completed' && Array.isArray(row.asset_analyses)));
+}

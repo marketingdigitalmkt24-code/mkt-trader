@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.95.3';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2.95.3/cors';
 import { z } from 'npm:zod@3.25.76';
-import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, latestDemoScan, type DemoScanStatus } from '../_shared/demo-scan-status.ts';
+import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, latestDemoScan, latestCompletedDemoScan, type DemoScanStatus } from '../_shared/demo-scan-status.ts';
 const reply = (data: unknown, status = 200) => Response.json(data,{status,headers:{...corsHeaders,'Cache-Control':'no-store'}});
 Deno.serve(async req => {
   if(req.method==='OPTIONS')return new Response('ok',{headers:corsHeaders});
@@ -23,6 +23,6 @@ Deno.serve(async req => {
       return JSON.parse(await data.text()) as DemoScanStatus;
     }));
     const valid=rows.filter((row): row is DemoScanStatus => row!==null);
-    return reply({scan:latestDemoScan(valid),analysis:latestDemoScan(valid.filter(row=>row.phase==='completed' && Array.isArray(row.asset_analyses)))});
+    return reply({scan:latestDemoScan(valid),analysis:latestCompletedDemoScan(valid)});
   }catch{return reply({error:'Status unavailable'},503);}
 });

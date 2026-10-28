@@ -1,3 +1,9 @@
+export type DemoAssetAnalysis = {
+  asset: string;
+  direction: 'CALL' | 'PUT' | null;
+  score: number | null;
+  state: 'no_signal' | 'incomplete_candles' | 'eligible' | 'market_unavailable';
+};
 export type DemoScanStatus = {
   target_minute: string;
   observed_at: string;
@@ -5,8 +11,10 @@ export type DemoScanStatus = {
   assets: number;
   selected_signal: string | null;
   error_code: string | null;
+  asset_analyses?: DemoAssetAnalysis[];
 };
 export const DEMO_SCAN_BUCKET = 'demo-scan-telemetry';
+export const DEMO_LAST_ANALYSIS = 'last-analysis.json';
 export function demoScanSlot(target: number) { return `minute-${Math.floor(target / 60000) % 3}.json`; }
 export function scanIsActive(status: DemoScanStatus | null, now: number) {
   if (!status || status.phase === 'unavailable') return false;

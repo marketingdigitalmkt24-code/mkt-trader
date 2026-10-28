@@ -1,3 +1,6 @@
+# Ativos e notas da análise (28/10/2026)
+- [ ] Mostrar os ativos realmente consultados, preservando a última análise durante reconexão; conferir notas e ausência de sinais sem mudar critérios nem forçar ordens.
+
 # Busca contínua visível da IA (28/10/2026)
 - [x] Rotina por minuto confirmada (98 ativos às 05:18–05:22 UTC). Telemetria privada rotativa e leitura admin publicadas; painel autenticado mostrou BUSCANDO com horário real e RECONECTANDO quando IQ falhou, sem erros de página. 18 testes passaram, build OK; gales/seleção/pausas preservados. Migração de tabela bloqueada por colisão protegida, substituída por Storage privado sem acesso público nem mudanças financeiras.
 

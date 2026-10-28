@@ -35,7 +35,7 @@ import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
-import { DEMO_SCAN_BUCKET, demoScanSlot, type DemoScanStatus } from '../_shared/demo-scan-status.ts';
+import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -164,11 +164,15 @@ Deno.serve(async (req) => {
   const targetMs = demoTargetMinute(Date.now(), input.scheduled === true);
   // Bounded private telemetry, not candidates or trade history. Never blocks execution.
   let statusWrites: Promise<void> = Promise.resolve();
-  const reportScan = (phase: DemoScanStatus['phase'], assets = 0, selected_signal: string | null = null, error_code: string | null = null) => {
-    const snapshot: DemoScanStatus = {target_minute:new Date(targetMs).toISOString(),observed_at:new Date().toISOString(),phase,assets,selected_signal,error_code};
+  const reportScan = (phase: DemoScanStatus['phase'], assets = 0, selected_signal: string | null = null, error_code: string | null = null, asset_analyses?: DemoAssetAnalysis[]) => {
+    const snapshot: DemoScanStatus = {target_minute:new Date(targetMs).toISOString(),observed_at:new Date().toISOString(),phase,assets,selected_signal,error_code,asset_analyses};
     statusWrites=statusWrites.then(async()=>{
       const {error}=await supabase.storage.from(DEMO_SCAN_BUCKET).upload(demoScanSlot(targetMs),JSON.stringify(snapshot),{upsert:true,contentType:'application/json'});
       if(error)console.warn('Demo scan status write unavailable');
+      if(phase==='completed' && asset_analyses){
+        const saved=await supabase.storage.from(DEMO_SCAN_BUCKET).upload(DEMO_LAST_ANALYSIS,JSON.stringify(snapshot),{upsert:true,contentType:'application/json'});
+        if(saved.error)console.warn('Demo last analysis write unavailable');
+      }
     }).catch(()=>{console.warn('Demo scan status write unavailable');});
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(statusWrites);
@@ -457,6 +461,7 @@ Deno.serve(async (req) => {
       && other.created_at === row.created_at && other.entry_strategy === row.entry_strategy) === index);
   const rows: any[] = [];
   const demoPatterns: DemoCandidate[] = [];
+  const assetAnalyses = new Map<string, DemoAssetAnalysis>();
   const recentTakashi = await takashiRecentRead;
   if(recentTakashi.error)console.error('Takashi recent learning unavailable');
   const learningObservedMs=Date.now();
@@ -464,6 +469,11 @@ Deno.serve(async (req) => {
   const ownEvidence=takashiRecentEvidence(takashiHistory,targetMs,learningObservedMs);
   console.log('Takashi recent learning:',JSON.stringify({samples:ownEvidence.length,wins:ownEvidence.filter(r=>r.result==='win').length,losses:ownEvidence.filter(r=>r.result==='loss').length}));
   for (const [asset, cs] of series) {
+    const prior=cs.filter(k=>k.t<curMin).slice(-60);
+    const complete=prior.length===60 && prior.every((k,i)=>k.t===curMin-(60-i)*60
+      && [k.t,k.o,k.c,k.h,k.l].every(Number.isFinite) && k.o>0 && k.c>0
+      && k.h>=Math.max(k.o,k.c) && k.l<=Math.min(k.o,k.c));
+    assetAnalyses.set(asset,{asset,direction:null,score:null,state:complete?'no_signal':'incomplete_candles'});
     const closed = cs.filter(k => k.t + 60 <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
     // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
@@ -512,6 +522,7 @@ Deno.serve(async (req) => {
       c.entry_strategy,c.asset,curMin*1000,rejectedHist);
     return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy),_learned:learn}];});
   const demoEligible = demoPool.flatMap(c => {
+    assetAnalyses.set(c.asset,{asset:c.asset,direction:c.direction,score:Number.isFinite(c._score)?c._score:null,state:'eligible'});
     const cohort=demoCohort(c._score,c.entry_strategy);
     if(!cohort){
       if(c.entry_strategy===TAKASHI_STRATEGY){reject(c,{code:'takashi_demo_score',details:{score:Number.isFinite(c._score)?c._score:null,minimum:TAKASHI_DEMO_MIN_SCORE}});return[];}
@@ -520,6 +531,8 @@ Deno.serve(async (req) => {
     }
     const market = Object.entries<any>(preparedActives).find(([, a]) => symbolOf(a.name || '') === c.asset);
     if (!market || !preparedDemoOrder(c, DEMO_TEST_AMOUNT, preparedBalanceId, Number(market[0]), market[1], Date.now())) {
+      const analysis=assetAnalyses.get(c.asset);
+      if(analysis)analysis.state='market_unavailable';
       reject(c,{code:'market_unavailable',details:{asset:c.asset}});
       return [];
     }
@@ -531,7 +544,7 @@ Deno.serve(async (req) => {
     .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
   const demoWinner = selectTakashiByNote(demoEligible);
-  reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles');
+  reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
   console.log('Takashi current indicator analysis:',JSON.stringify({historicalNotePriority:false,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
   console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
   console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));

@@ -1,3 +1,6 @@
+# Busca contínua visível da IA (28/10/2026)
+- [x] Rotina por minuto confirmada (98 ativos às 05:18–05:22 UTC). Telemetria privada rotativa e leitura admin publicadas; painel autenticado mostrou BUSCANDO com horário real e RECONECTANDO quando IQ falhou, sem erros de página. 18 testes passaram, build OK; gales/seleção/pausas preservados. Migração de tabela bloqueada por colisão protegida, substituída por Storage privado sem acesso público nem mudanças financeiras.
+
 # Gale Demo por dobro (28/10/2026)
 - [x] Recuperação alterada e publicada para dobrar o valor anterior após LOSS (base 1: 2/4/8/16), no máximo quatro gales; empate preserva valor e WIN/quarto LOSS reiniciam base. 18 testes passaram e build OK; histórico e principais preservados.
 - [ ] Confirmar valor em próxima entrada natural; depende de sinal Takashi válido e confirmação da IQ Option, sem forçar ordens.

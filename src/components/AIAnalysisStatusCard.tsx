@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { StrategyStat } from '@/lib/strategy-stats';
 import { allDemoStrategyRows, demoStrategyStats, demoWinningPatternStats, DEMO_STRATEGY_CUTOFF } from '@/lib/demo-strategy-stats';
+import { scanIsActive, type DemoScanStatus } from '../../supabase/functions/_shared/demo-scan-status';
 
 interface SignalEntry {
   id: string;
@@ -51,6 +52,8 @@ export function AIAnalysisStatusCard() {
   const [lastSignalTime, setLastSignalTime] = useState<Date | null>(null);
   const [isActive, setIsActive] = useState(false);
   const [analysisError, setAnalysisError] = useState(false);
+  const [scanStatus, setScanStatus] = useState<DemoScanStatus | null>(null);
+  const signalsBusy = useRef(false);
   const statsBusy = useRef(false);
   const statsQueued = useRef(false);
   const mounted = useRef(true);
@@ -92,9 +95,11 @@ export function AIAnalysisStatusCard() {
   };
 
   const fetchSignals = async () => {
+    if(signalsBusy.current)return;
+    signalsBusy.current=true;
     try {
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const [candidates, rejections] = await Promise.all([
+      const [candidates, rejections, scan] = await Promise.all([
         supabase.from('iq_demo_test_candidates')
           .select('signal_id,asset,direction,score,entry_minute')
           .eq('entry_strategy', 'TAKASHI_BNF_V1').gte('entry_minute', tenMinAgo)
@@ -103,6 +108,7 @@ export function AIAnalysisStatusCard() {
           .select('signal_id,asset,direction,score,entry_minute')
           .eq('entry_strategy', 'TAKASHI_BNF_V1').gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
+        supabase.functions.invoke('demo-analysis-status',{body:{}}),
       ]);
       if (candidates.error || rejections.error) throw candidates.error ?? rejections.error;
       const entries = new Map<string, SignalEntry>();
@@ -116,20 +122,19 @@ export function AIAnalysisStatusCard() {
       });
       const data = [...entries.values()].sort((a,b) => Date.parse(b.created_at) - Date.parse(a.created_at));
       if (!mounted.current) return;
-      setAnalysisError(false);
+      const currentScan: DemoScanStatus | null = scan.error ? null : scan.data?.scan ?? null;
+      setScanStatus(currentScan);
+      setAnalysisError(!!scan.error);
+      setIsActive(scanIsActive(currentScan,Date.now()));
+      setLastSignalTime(currentScan ? new Date(currentScan.observed_at) : null);
       if (data.length > 0) {
         setRecentSignals(data);
-        setLastSignalTime(new Date(data[0].created_at));
-        // Active if signal was generated in last 2 minutes
-        setIsActive(Date.now() - new Date(data[0].created_at).getTime() < 2 * 60 * 1000);
       } else {
         setRecentSignals([]);
-        setLastSignalTime(null);
-        setIsActive(false);
       }
     } catch {
       if (mounted.current) { setAnalysisError(true); setIsActive(false); }
-    }
+    } finally { signalsBusy.current=false; }
   };
 
   useEffect(() => {
@@ -203,7 +208,7 @@ export function AIAnalysisStatusCard() {
                 IA Analisando
               </h3>
               <p className="text-[10px] text-muted-foreground">
-                Takashi Kotegawa · Última análise: {getTimeSinceText()}
+                Takashi Kotegawa · Última varredura: {getTimeSinceText()}
               </p>
             </div>
           </div>
@@ -213,10 +218,17 @@ export function AIAnalysisStatusCard() {
               variant={isActive ? "default" : "secondary"}
               className={cn("text-[10px]", isActive && "bg-primary text-primary-foreground")}
             >
-              {analysisError ? 'INDISPONÍVEL' : isActive ? 'ANALISANDO' : 'SEM ANÁLISE RECENTE'}
+              {analysisError ? 'INDISPONÍVEL' : scanStatus?.phase === 'unavailable' ? 'RECONECTANDO' : isActive ? 'BUSCANDO' : 'SEM VARREDURA RECENTE'}
             </Badge>
           </div>
         </div>
+
+        {scanStatus && <p className="mb-3 text-xs text-muted-foreground">
+          {scanStatus.phase === 'unavailable' ? 'IQ Option indisponível nesta rodada; nova tentativa no próximo minuto.'
+            : scanStatus.phase === 'preparing' ? 'Preparando conexão para a próxima análise.'
+            : scanStatus.phase === 'scanning' ? 'Consultando os ativos na IQ Option.'
+            : `${scanStatus.assets} ativos consultados · ${scanStatus.selected_signal ? 'Oportunidade Takashi identificada' : 'Sem oportunidade válida nesta rodada'}`}
+        </p>}
 
         {/* Pipeline status */}
         <div className="grid grid-cols-3 gap-2 mb-3">
@@ -307,7 +319,7 @@ export function AIAnalysisStatusCard() {
         {recentSignals.length === 0 && (
           <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-lg">
             <Brain className="w-5 h-5 mx-auto mb-1 opacity-30" />
-            {analysisError ? 'Não foi possível consultar as análises.' : 'Nenhuma análise Takashi registrada nos últimos 10 minutos.'}
+            {analysisError ? 'Não foi possível consultar as análises.' : 'Nenhum sinal Takashi registrado nos últimos 10 minutos.'}
           </div>
         )}
       </CardContent>

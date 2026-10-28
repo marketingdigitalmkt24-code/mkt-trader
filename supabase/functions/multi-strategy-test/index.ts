@@ -35,6 +35,7 @@ import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
+import { DEMO_SCAN_BUCKET, demoScanSlot, type DemoScanStatus } from '../_shared/demo-scan-status.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -161,6 +162,18 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Invalid parameters' }, { status: 400, headers: cors });
   }
   const targetMs = demoTargetMinute(Date.now(), input.scheduled === true);
+  // Bounded private telemetry, not candidates or trade history. Never blocks execution.
+  let statusWrites: Promise<void> = Promise.resolve();
+  const reportScan = (phase: DemoScanStatus['phase'], assets = 0, selected_signal: string | null = null, error_code: string | null = null) => {
+    const snapshot: DemoScanStatus = {target_minute:new Date(targetMs).toISOString(),observed_at:new Date().toISOString(),phase,assets,selected_signal,error_code};
+    statusWrites=statusWrites.then(async()=>{
+      const {error}=await supabase.storage.from(DEMO_SCAN_BUCKET).upload(demoScanSlot(targetMs),JSON.stringify(snapshot),{upsert:true,contentType:'application/json'});
+      if(error)console.warn('Demo scan status write unavailable');
+    }).catch(()=>{console.warn('Demo scan status write unavailable');});
+    // @ts-ignore Hosted background runtime
+    if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(statusWrites);
+  };
+  reportScan('preparing');
   // Moves to this run's own order expiry when it keeps watching after placement.
   let pendingCutoffMs = targetMs;
   const readPendingDemo = () => supabase.from('iq_demo_test_orders')
@@ -240,8 +253,9 @@ Deno.serve(async (req) => {
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date(targetMs).toISOString()).limit(1000),
   ]);
-  if (!cfg) return Response.json({ success: false, error: 'no config' }, { headers: cors });
+  if (!cfg) { reportScan('unavailable',0,null,'no_config'); return Response.json({ success: false, error: 'no config' }, { headers: cors }); }
   if (!ssid) {
+    reportScan('unavailable',0,null,'login_failed');
     console.error('Demo scan unavailable: broker login failed; next scheduled minute retries');
     return Response.json({ success: false, error: 'login failed' }, { headers: cors });
   }
@@ -369,6 +383,7 @@ Deno.serve(async (req) => {
         if (requestTime === null) { clearTimeout(timer); finish(); return; }
         nowSec = requestTime;
         console.log('Demo timing candles requested:', new Date().toISOString());
+        reportScan('scanning');
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
         const cand = new Map<string, number>();
         for (const [id, a] of Object.entries<any>(all)) {
@@ -415,6 +430,7 @@ Deno.serve(async (req) => {
     };
   }), targetMs);
   if (!connectionReady) {
+    reportScan('unavailable',0,null,'connection_failed');
     closePrepared();
     console.error('Demo scan unavailable: socket preparation failed; no stale entry submitted');
     return Response.json({ success: false, error: 'broker connection unavailable' }, { headers: cors });
@@ -515,6 +531,7 @@ Deno.serve(async (req) => {
     .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
   const demoWinner = selectTakashiByNote(demoEligible);
+  reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles');
   console.log('Takashi current indicator analysis:',JSON.stringify({historicalNotePriority:false,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
   console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
   console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));

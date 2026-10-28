@@ -1,3 +1,7 @@
+# Retirar seleção por gráficos (28/10/2026)
+- [ ] Restaurar seleção Takashi anterior por indicadores/notas, preservando aprendizado recente, gales, reconexão e pausa principal.
+- [ ] Apagar somente ordens Demo identificadas pela marca de seleção por gráfico (estratégia verde escuro) e conferir totais/lista.
+
 # Análise atual e conexão IQ (28/10/2026)
 - [x] Reconexão WebSocket alterna endpoints com limite de handshake e deadline original, parse protegido e fechamento imediato; publicado. 338 testes passaram. Rodada 03:22 consultou 124 ativos e 43 gráficos WIN, enviou GBP/USD Demo às :00,799, confirmou às :00,969 e liquidou LOSS em :01,329 após expiração, lido no admin sem erros; apoio/gales/pausa preservados. Falhas HTTP às 03:19/03:20 persistiram, reconectou às 03:21; sem garantia de disponibilidade externa.
 

@@ -34,6 +34,9 @@ import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
+import { readUnbeatenDemoNotes } from '../_shared/demo-unbeaten-notes.ts';
+import { selectChartWithNoteSupport } from '../_shared/demo-note-selection.ts';
+import { demoRecovery } from '../_shared/demo-recovery.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
@@ -307,6 +310,7 @@ Deno.serve(async (req) => {
   const demoSettlements: Promise<void>[] = [];
   let preparedSocket: WebSocket | null = null;
   let preparedBalanceId = 0;
+  let preparedBalanceAmount = 0;
   let preparedActives: Record<string, any> = {};
   let closePrepared = () => {};
   let handleOrder: ((message: any) => void) | null = null;
@@ -365,6 +369,7 @@ Deno.serve(async (req) => {
       if (d.name === 'profile') {
         demoBalanceId = demoBalance(d.msg?.balances || [])?.id || 0;
         preparedBalanceId = demoBalanceId;
+        preparedBalanceAmount = Number((d.msg?.balances || []).find((b: any) => b.id === demoBalanceId)?.amount) || 0;
         // Re-read at :01 so this minute's confirmation is not missed by preflight.
         settlementWatch=watchDemoSettlements(targetMs,requestPendingHistory)
           .catch(error=>{console.error('Demo settlement watch failed:',String(error));return 0;});
@@ -515,17 +520,32 @@ Deno.serve(async (req) => {
       if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
       reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];
     }
-    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null}];
+    const features = chartFeatures(series.get(c.asset) || [], curMin, c.direction);
+    const match = demoWinningPatternMatch(winningCharts, features);
+    if (!match || demoLearnedReject(c._learned)) {
+      reject(c, {code:'chart_learning_blocked',details:{matched:!!match,learning:c._learned}});
+      return [];
+    }
+    return [{...c,_cohort:cohort,_preferredPatternDistance:match.distance,_patternMatch:match}];
   });
   // User (Oct 25 2026 19:02 UTC): alternate Demo slots between Takashi and displayed-2.26 entries.
   const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
     .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
-  const demoWinner = demoEligible.sort((a,b)=>{
-    const ranks=priority??[];
-    const rank=(score:number)=>{const i=ranks.indexOf(Math.round(score*100));return i<0?ranks.length:i;};
-    return Number(b._cohort===preferred)-Number(a._cohort===preferred)||rank(a._score)-rank(b._score)||b._score-a._score||a.signal_id.localeCompare(b.signal_id);
-  })[0]??null;
+  // Refresh after this run's settlements: LOSS veto and new WIN must not wait for a cached ranking.
+  const noteObservedAt = Date.now();
+  const noteSupport = await readUnbeatenDemoNotes(async (from,to) => {
+    const {data,error}=await supabase.from('iq_demo_test_orders')
+      .select('signal_id,status,account_type,iq_option_id,result,profit,settled_at')
+      .eq('status','confirmed').eq('account_type','PRACTICE').in('result',['win','loss'])
+      .lte('settled_at',new Date(noteObservedAt).toISOString()).order('entry_minute').order('id').range(from,to);
+    if(error)throw error;return data || [];
+  },async ids => {
+    const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id',ids);
+    if(error)throw error;return data || [];
+  },noteObservedAt).catch(()=>{console.warn('Demo note support unavailable; chart ranking remains');return [];});
+  const demoWinner = selectChartWithNoteSupport(demoEligible,noteSupport);
+  console.log('Takashi chart and unbeaten-note support:',JSON.stringify({eligible:demoEligible.length,notes:noteSupport,selected:demoWinner?.signal_id??null}));
   console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
   console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));
   for(const c of demoEligible){
@@ -557,14 +577,25 @@ Deno.serve(async (req) => {
         preferredPatternDistance:Number.isFinite(demoWinner._preferredPatternDistance)?demoWinner._preferredPatternDistance:null}));
       // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
       const setting = await amountRead;
-      const amount = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
+      const base = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
       const found = Object.entries<any>(preparedActives).find(([,a])=>symbolOf(a.name || '')===demoWinner.asset);
-      const order = !setting.error && found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;
+      const commission = found?.[1]?.option?.profit?.commission;
+      const payout = typeof commission === 'number' ? (100-commission)/100 : null;
+      const last = await supabase.from('iq_demo_test_orders')
+        .select('status,result,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base')
+        .eq('entry_strategy',TAKASHI_BNF).eq('account_type','PRACTICE')
+        .in('status',['confirmed','unknown','reserved']).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
+      const recovery = !last.error ? demoRecovery(last.data,base,payout) : null;
+      const amount = recovery?.amount ?? 0;
+      console.log('Demo gale:',JSON.stringify({recovery,lastError:!!last.error}));
+      const order = !setting.error && recovery && amount <= preparedBalanceAmount && found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;
       const socket = preparedSocket as WebSocket | null;
       if(order && socket?.readyState===WebSocket.OPEN) {
         const reservation = await supabase.from('iq_demo_test_orders').insert({
           signal_id:demoWinner.signal_id,entry_minute:demoWinner.created_at,asset:demoWinner.asset,
           direction:demoWinner.direction,amount,entry_strategy:demoWinner.entry_strategy,
+          recovery_level:recovery?.recovery_level,recovery_loss:recovery?.recovery_loss,
+          recovery_base:recovery?.recovery_base,recovery_payout:recovery?.recovery_payout,
           expiration_time:new Date(order.expired*1000).toISOString(),account_type:'PRACTICE',
         }).select('id').single();
         const reserved = reservation.data?.id;

@@ -1,5 +1,5 @@
 # Análise atual e conexão IQ (28/10/2026)
-- [ ] Conferir análise ativa e reduzir falhas de conexão, preservando apoio por notas, quatro gales e pausa principal.
+- [x] Reconexão WebSocket alterna endpoints com limite de handshake e deadline original, parse protegido e fechamento imediato; publicado. 338 testes passaram. Rodada 03:22 consultou 124 ativos e 43 gráficos WIN, enviou GBP/USD Demo às :00,799, confirmou às :00,969 e liquidou LOSS em :01,329 após expiração, lido no admin sem erros; apoio/gales/pausa preservados. Falhas HTTP às 03:19/03:20 persistiram, reconectou às 03:21; sem garantia de disponibilidade externa.
 
 # Conexão IQ e ativação do apoio (28/10/2026)
 - [x] Todos os leitores frontend de saldo usam deduplicação/limite compartilhado; efeito de saldo não reinicia ao mudar status. Admin autenticado: duas consultas em 65s, nenhum erro de página.
@@ -17,7 +17,7 @@
 # Confirmação rápida e busca contínua Demo (27/10/2026)
 - [x] Pendências relidas após :00 com histórico repetido :01/:03/:06/:10/:15 na sessão preparada, separado da análise/envio; tentativa adicional de login só na preparação. 393 testes passaram, publicado e build OK.
 - [x] Rotina ao vivo 22:04/22:05 analisou 110 ativos e consulta :01 confirmou zero pendências; painel autenticado mostrou SUGAR WIN/LOSS reais e IA Analisando. Principais/Telegram/clientes preservados.
-- [ ] Medir atraso de fechamento de nova ordem com as novas tentativas: depende de candidato Takashi válido em mercado M1; nenhum novo envio autorizado durante conferência, sem forçar operação.
+- [x] Nova ordem natural GBP/USD 03:22 liquidou LOSS às 03:23:01,329 (1,329s após expiração); registro e saldo Demo conferidos no admin, sem entrada forçada ou erro de página.
 
 # Aprendizado recente Takashi (27/10/2026)
 - [x] Ajuste recente da nota usa até 500 resultados próprios confirmados PRACTICE dos últimos 14 dias, paginados e deduplicados, incluindo os recém-liquidados; WIN favorece e LOSS penaliza. 390 testes passaram, sem mudança dos demais ajustes ou da elegibilidade por nota finita.

@@ -1,3 +1,7 @@
+# Conexão Demo resiliente (28/10/2026)
+- [ ] Reforçar login/reconexão antes de :00, testar e publicar sem reativar principais, Telegram ou clientes.
+- [ ] Conferir uma varredura real com a conexão reforçada; indisponibilidade da corretora não permite garantir continuidade.
+
 # Recuperação Demo com quatro gales (28/10/2026)
 - [x] Análise Takashi publicada: velas atuais da IQ Option comparadas aos gráficos WIN/LOSS confirmados e paginados; afinidade e distância escolhem sem ranking por nota, referência WIN persistida. 36 testes passaram; painel autenticado preserva totais e ordens; rotina inicia e acesso pelo navegador é recusado 401.
 - [ ] Conferir primeira seleção por gráfico ao vivo: depende de login disponível e candidato Takashi válido; rodada 00:55 recusada pela corretora, sem forçar entrada.

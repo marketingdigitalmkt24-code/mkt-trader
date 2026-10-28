@@ -31,7 +31,7 @@ import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
-import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
+import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
@@ -248,24 +248,25 @@ Deno.serve(async (req) => {
   const newlySettled: LearningOutcome[] = [];
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
-    // Short attempts repeated until shortly before :00; never logs in after the boundary.
-    const ssid=cfg ? await loginBeforeBoundary((ms,n)=>login(cfg.email,cfg.password,ms,n),targetMs) : null;
-    return {cfg,ssid};
+    // Do not spend the entire minute retrying an unavailable HTTP gateway.
+    // Direct WebSocket auth uses this same resolved master and invocation only.
+    const auth=cfg ? await prepareDemoAuthentication(cfg,ms=>login(cfg.email,cfg.password,ms),targetMs) : null;
+    return {cfg,auth};
   });
-  const [{ cfg, ssid }, { data: open }] = await Promise.all([
+  const [{ cfg, auth }, { data: open }] = await Promise.all([
     masterLogin,
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date(targetMs).toISOString()).limit(1000),
   ]);
   if (!cfg) { reportScan('unavailable',0,null,'no_config'); return Response.json({ success: false, error: 'no config' }, { headers: cors }); }
-  if (!ssid) {
+  if (!auth) {
     reportScan('unavailable',0,null,'login_failed');
     console.error('Demo scan unavailable: broker login failed; next scheduled minute retries');
     return Response.json({ success: false, error: 'login failed' }, { headers: cors });
   }
   let nowSec = Math.floor(Date.now() / 1000);
   const curMin = targetMs / 1000;
-  console.log('Demo timing login ready:', new Date().toISOString());
+  console.log('Demo timing authentication prepared:',new Date().toISOString(),'method:',auth.mode);
 
   // Confirm each expired TEST as soon as its broker candle arrives, not after all assets.
   let resolved = 0;
@@ -310,7 +311,18 @@ Deno.serve(async (req) => {
   let requestPending: () => Promise<boolean> = async () => false;
   let extendPrepared: (untilMs: number) => void = () => {};
   let ownExpiryMs = 0;
-  const connectionReady = await prepareDemoConnection((endpoint, handshakeMs) => new Promise<boolean>((resolve) => {
+  let socketAuth = auth;
+  let socketAttempts = 0;
+  const connectionReady = await prepareDemoConnection(async (endpoint, handshakeMs) => {
+    const refreshBudget=demoHttpRefreshBudget(socketAttempts,targetMs,Date.now());
+    if(refreshBudget){
+      const refreshed=await login(cfg.email,cfg.password,refreshBudget,2+Math.floor(socketAttempts/2));
+      if(refreshed){socketAuth={mode:'ssid',ssid:refreshed};console.log('Demo authentication recovered by HTTP refresh');}
+    }
+    socketAttempts++;
+    const remaining=targetMs-3000-Date.now();
+    if(remaining<1000)return false;
+    return new Promise<boolean>((resolve) => {
     const ws = new WebSocket(endpoint);
     preparedSocket = ws;
     let pending = 0; const byReq = new Map<string, string>();
@@ -334,7 +346,7 @@ Deno.serve(async (req) => {
     const handshakeTimer = setTimeout(() => {
       console.warn('Demo socket preparation timeout; trying alternate endpoint');
       finish(); closePrepared();
-    }, handshakeMs);
+    }, Math.min(handshakeMs,remaining));
     const requestInitialization = () => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
     };
@@ -357,18 +369,27 @@ Deno.serve(async (req) => {
       return true;
     };
     requestPending = requestPendingHistory;
-    ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
+    ws.onopen = () => ws.send(JSON.stringify(demoSocketAuthMessage(socketAuth)));
     ws.onerror = () => { finish(); closePrepared(); };
     ws.onclose = () => { finish(); closePrepared(); };
     ws.onmessage = async (ev) => {
       let d;
       try { d = JSON.parse(ev.data); } catch { return; }
+      if(demoSocketAuthenticationRejected(d)) {
+        console.warn('Demo socket authentication refused; trying alternate endpoint');
+        finish();closePrepared();return;
+      }
+      if(d.name==='authenticated') {
+        if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({name:'sendMessage',msg:{name:'get-profile',version:'1.0',body:{}}}));
+        return;
+      }
       handleOrder?.(d);
       if (d.name === 'heartbeat' && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
       }
       if (d.name === 'profile') {
         demoBalanceId = demoBalance(d.msg?.balances || [])?.id || 0;
+        if(!demoBalanceId){console.warn('Demo profile has no verified PRACTICE USD balance');finish();closePrepared();return;}
         preparedBalanceId = demoBalanceId;
         preparedBalanceAmount = Number((d.msg?.balances || []).find((b: any) => b.id === demoBalanceId)?.amount) || 0;
         // Re-read at :01 so this minute's confirmation is not missed by preflight.
@@ -432,7 +453,8 @@ Deno.serve(async (req) => {
         }
       }
     };
-  }), targetMs);
+    });
+  }, targetMs);
   if (!connectionReady) {
     reportScan('unavailable',0,null,'connection_failed');
     closePrepared();

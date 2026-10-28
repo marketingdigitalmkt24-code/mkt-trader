@@ -35,3 +35,6 @@ test('fresh confirmed WIN updates the support count on the next read', () => {
   expect(unbeatenDemoNotes([row('1')], scores, now)[0]?.wins).toBe(1);
   expect(unbeatenDemoNotes([row('1'), row('2')], scores, now)[0]?.wins).toBe(2);
 });
+test('note identity matches two-decimal history display rather than raw score', () => {
+  expect(unbeatenDemoNotes([row('1')], new Map([['1', 2.675]]), now)).toEqual([{ cents: 267, wins: 1 }]);
+});

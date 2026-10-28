@@ -1,5 +1,5 @@
 # Notas vencedoras como apoio à análise (28/10/2026)
-- [ ] Preparar e testar leitura paginada de notas com mais WIN e nenhum LOSS Demo confirmado, agrupadas em duas casas; novo LOSS remove apoio sem reentrada, sem substituir validação por gráficos.
+- [x] Preparada leitura independente paginada de todas as notas com mais WIN e nenhum LOSS Demo confirmado, agrupadas conforme duas casas do histórico; deduplicação de IDs e exclusão de resultados futuros/pendentes. Testes de WIN, veto de LOSS, páginas antigas e atualização adicionados; ainda não conectada à rotina ativa.
 - [ ] Integrar e conferir na rotina ativa: bloqueado pela divergência de versão do executor publicado (gales presentes) versus fonte local (gales ausentes e prioridade antiga). Não republicar a versão antiga nem alterar histórico/resultados para contornar.
 
 # Recuperação Demo com quatro gales (28/10/2026)

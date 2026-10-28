@@ -18,7 +18,7 @@ export function unbeatenDemoNotes(rows: Evidence[], scores: ReadonlyMap<string, 
     const key = `${row.iq_option_id}:${row.result}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const cents = Math.round(score * 100);
+    const cents = Math.round(Number(score.toFixed(2)) * 100);
     const note = notes.get(cents) ?? { wins: 0, loss: false };
     if (row.result === 'loss') note.loss = true;
     else note.wins++;

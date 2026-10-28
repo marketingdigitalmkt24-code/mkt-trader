@@ -1,3 +1,7 @@
+# Gale Demo por dobro (28/10/2026)
+- [ ] Alterar recuperação para dobrar após LOSS, manter no máximo quatro gales, empate preserva valor e WIN/quarto LOSS reiniciam base; testar e publicar sem alterar histórico ou entradas principais.
+- [ ] Confirmar valor em próxima entrada natural; depende de sinal Takashi válido e confirmação da IQ Option, sem forçar ordens.
+
 # Liberar novas oportunidades Demo (28/10/2026)
 - [x] Tentativas unknown/reserved expiradas sem ID ficam fora do bloqueio de novos minutos, sem alteração dos registros ou fabricação de resultados; última perda confirmada SOL/USD volta a orientar o gale. Mercados M1 disponíveis filtrados antes do ranking, com revalidação final. Executor publicado, 24 testes passaram e build OK.
 - [ ] Confirmar nova entrada natural: às 05:11 e 05:13 UTC analisou 98 ativos, sem candidato válido; às 05:12 a rodada anterior falhou no login IQ. Depende de novo sinal Takashi em mercado aberto e confirmação da corretora; nenhum replay/entrada forçada.

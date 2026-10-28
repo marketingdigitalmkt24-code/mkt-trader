@@ -1,13 +1,16 @@
+# Ativos e notas da análise (28/10/2026)
+- [x] Lista de ativos reais e última análise preservada durante preparação/reconexão; sem sinal não gera nota zero fictícia. 19 testes passaram, build OK e funções publicadas. Admin autenticado mostrou 98 ativos às 02:52 BRT sem erro. Nova entrada natural FARTCOINUSD-OTC PUT nota 2,39 às 02:50, US$2 gale 1, confirmada e liquidada WIN às 02:51:01; critérios intactos, sem ordem forçada. IQ ainda oscila.
+
 # Busca contínua visível da IA (28/10/2026)
 - [x] Rotina por minuto confirmada (98 ativos às 05:18–05:22 UTC). Telemetria privada rotativa e leitura admin publicadas; painel autenticado mostrou BUSCANDO com horário real e RECONECTANDO quando IQ falhou, sem erros de página. 18 testes passaram, build OK; gales/seleção/pausas preservados. Migração de tabela bloqueada por colisão protegida, substituída por Storage privado sem acesso público nem mudanças financeiras.
 
 # Gale Demo por dobro (28/10/2026)
 - [x] Recuperação alterada e publicada para dobrar o valor anterior após LOSS (base 1: 2/4/8/16), no máximo quatro gales; empate preserva valor e WIN/quarto LOSS reiniciam base. 18 testes passaram e build OK; histórico e principais preservados.
-- [ ] Confirmar valor em próxima entrada natural; depende de sinal Takashi válido e confirmação da IQ Option, sem forçar ordens.
+- [x] Próxima entrada natural confirmada: FARTCOINUSD-OTC às 05:50 UTC por US$2, gale 1 após LOSS base US$1; IQ confirmou WIN às 05:51:01. Sem ordem forçada.
 
 # Liberar novas oportunidades Demo (28/10/2026)
 - [x] Tentativas unknown/reserved expiradas sem ID ficam fora do bloqueio de novos minutos, sem alteração dos registros ou fabricação de resultados; última perda confirmada SOL/USD volta a orientar o gale. Mercados M1 disponíveis filtrados antes do ranking, com revalidação final. Executor publicado, 24 testes passaram e build OK.
-- [ ] Confirmar nova entrada natural: às 05:11 e 05:13 UTC analisou 98 ativos, sem candidato válido; às 05:12 a rodada anterior falhou no login IQ. Depende de novo sinal Takashi em mercado aberto e confirmação da corretora; nenhum replay/entrada forçada.
+- [x] Nova entrada natural FARTCOINUSD-OTC PUT nota 2,39 confirmada às 05:50:00,860 UTC e liquidada WIN às 05:51:01,267; nenhum replay ou entrada forçada.
 
 # Retirar prioridade histórica de notas (28/10/2026)
 - [x] Removida leitura/ranking de notas vencedoras da seleção Demo; indicadores, ajustes anteriores, gales e pausa principal preservados. 20 testes passaram, build OK e executor publicado. Às 05:01 UTC analisou 98 ativos e selecionou GBP/JPY nota 1,04 entre 5 candidatos com historicalNotePriority=false; mercado indisponível e recuperação bloqueada por ordem anterior ambígua impediram entrada, sem forçar ou alterar históricos.

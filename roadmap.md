@@ -1,3 +1,6 @@
+# Busca contínua visível da IA (28/10/2026)
+- [ ] Conferir execução por minuto e registrar varreduras reais mesmo sem candidato; painel deve distinguir busca ativa, ausência de oportunidade e falha da corretora, sem forçar entradas.
+
 # Gale Demo por dobro (28/10/2026)
 - [x] Recuperação alterada e publicada para dobrar o valor anterior após LOSS (base 1: 2/4/8/16), no máximo quatro gales; empate preserva valor e WIN/quarto LOSS reiniciam base. 18 testes passaram e build OK; histórico e principais preservados.
 - [ ] Confirmar valor em próxima entrada natural; depende de sinal Takashi válido e confirmação da IQ Option, sem forçar ordens.

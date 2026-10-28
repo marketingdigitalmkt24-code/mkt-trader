@@ -31,3 +31,11 @@ export function demoSocketAuthenticationRejected(message: { name?: string; msg?:
   return message.name === 'authentication_error'
     || (message.name === 'authenticated' && message.msg === false);
 }
+
+// After both direct endpoints fail, try the independent HTTP host again.
+export function demoHttpRefreshBudget(attempt: number, target: number, now: number): number {
+  const remaining = target - DEMO_LOGIN_MARGIN_MS - now;
+  return attempt > 1 && attempt % 2 === 0 && remaining >= 10000
+    ? Math.min(5000, remaining - 8000)
+    : 0;
+}

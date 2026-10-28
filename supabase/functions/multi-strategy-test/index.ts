@@ -31,7 +31,7 @@ import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
-import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected } from '../_shared/demo-broker-auth.ts';
+import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
@@ -311,7 +311,18 @@ Deno.serve(async (req) => {
   let requestPending: () => Promise<boolean> = async () => false;
   let extendPrepared: (untilMs: number) => void = () => {};
   let ownExpiryMs = 0;
-  const connectionReady = await prepareDemoConnection((endpoint, handshakeMs) => new Promise<boolean>((resolve) => {
+  let socketAuth = auth;
+  let socketAttempts = 0;
+  const connectionReady = await prepareDemoConnection(async (endpoint, handshakeMs) => {
+    const refreshBudget=demoHttpRefreshBudget(socketAttempts,targetMs,Date.now());
+    if(refreshBudget){
+      const refreshed=await login(cfg.email,cfg.password,refreshBudget,2+Math.floor(socketAttempts/2));
+      if(refreshed){socketAuth={mode:'ssid',ssid:refreshed};console.log('Demo authentication recovered by HTTP refresh');}
+    }
+    socketAttempts++;
+    const remaining=targetMs-3000-Date.now();
+    if(remaining<1000)return false;
+    return new Promise<boolean>((resolve) => {
     const ws = new WebSocket(endpoint);
     preparedSocket = ws;
     let pending = 0; const byReq = new Map<string, string>();
@@ -335,7 +346,7 @@ Deno.serve(async (req) => {
     const handshakeTimer = setTimeout(() => {
       console.warn('Demo socket preparation timeout; trying alternate endpoint');
       finish(); closePrepared();
-    }, handshakeMs);
+    }, Math.min(handshakeMs,remaining));
     const requestInitialization = () => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
     };
@@ -358,7 +369,7 @@ Deno.serve(async (req) => {
       return true;
     };
     requestPending = requestPendingHistory;
-    ws.onopen = () => ws.send(JSON.stringify(demoSocketAuthMessage(auth)));
+    ws.onopen = () => ws.send(JSON.stringify(demoSocketAuthMessage(socketAuth)));
     ws.onerror = () => { finish(); closePrepared(); };
     ws.onclose = () => { finish(); closePrepared(); };
     ws.onmessage = async (ev) => {
@@ -442,7 +453,8 @@ Deno.serve(async (req) => {
         }
       }
     };
-  }), targetMs);
+    });
+  }, targetMs);
   if (!connectionReady) {
     reportScan('unavailable',0,null,'connection_failed');
     closePrepared();

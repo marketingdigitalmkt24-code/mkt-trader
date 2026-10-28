@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected } from './demo-broker-auth';
+import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from './demo-broker-auth';
 
 const credentials = { email: 'fixture@example.test', password: 'fixture-only' };
 
@@ -44,4 +44,11 @@ test('authentication refusal fails immediately rather than waiting for candle ti
   expect(demoSocketAuthenticationRejected({ name: 'authenticated', msg: false })).toBe(true);
   expect(demoSocketAuthenticationRejected({ name: 'authenticated', msg: true })).toBe(false);
   expect(demoSocketAuthenticationRejected({ name: 'heartbeat' })).toBe(false);
+});
+
+test('both failed socket endpoints allow bounded HTTP refresh with time left for handshake', () => {
+  expect(demoHttpRefreshBudget(0,60000,10000)).toBe(0);
+  expect(demoHttpRefreshBudget(1,60000,20000)).toBe(0);
+  expect(demoHttpRefreshBudget(2,60000,30000)).toBe(5000);
+  expect(demoHttpRefreshBudget(4,60000,48000)).toBe(0);
 });

@@ -39,6 +39,7 @@ const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
 const WS_URL = 'wss://iqoption.com/echo/websocket';
 const OPEN = 'test7_open';
+const DEMO_OWN_WATCH_GRACE_MS = 22000;
 type K = { t: number; o: number; c: number; h: number; l: number };
 
 export const LABELS: Record<string, string> = {
@@ -159,11 +160,13 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Invalid parameters' }, { status: 400, headers: cors });
   }
   const targetMs = demoTargetMinute(Date.now(), input.scheduled === true);
+  // Moves to this run's own order expiry when it keeps watching after placement.
+  let pendingCutoffMs = targetMs;
   const readPendingDemo = () => supabase.from('iq_demo_test_orders')
     .select('id,signal_id,entry_strategy,entry_minute,result,profit,asset,direction,status,account_type,iq_option_id,settled_at')
     .eq('status','confirmed').not('iq_option_id','is',null)
     .eq('account_type','PRACTICE').eq('result','pending')
-    .lte('expiration_time',new Date(targetMs).toISOString())
+    .lte('expiration_time',new Date(pendingCutoffMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
   const amountRead = supabase.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r);
@@ -308,6 +311,9 @@ Deno.serve(async (req) => {
   let closePrepared = () => {};
   let handleOrder: ((message: any) => void) | null = null;
   let settlementWatch: Promise<number> = Promise.resolve(0);
+  let requestPending: () => Promise<boolean> = async () => false;
+  let extendPrepared: (untilMs: number) => void = () => {};
+  let ownExpiryMs = 0;
   await new Promise<void>((resolve) => {
     const ws = new WebSocket(WS_URL);
     preparedSocket = ws;
@@ -319,7 +325,10 @@ Deno.serve(async (req) => {
     const finish = () => { if(demoHistoryTimer)clearTimeout(demoHistoryTimer); resolve(); };
     closePrepared = () => { clearTimeout(timer); if(boundaryTimer)clearTimeout(boundaryTimer); if(demoHistoryTimer)clearTimeout(demoHistoryTimer); try{ws.close();}catch{} };
     const finishCandles = () => { candleDone=true; finish(); };
-    const timer = setTimeout(() => { finish(); closePrepared(); }, Math.max(0, targetMs - Date.now()) + 30000);
+    let timer = setTimeout(() => { finish(); closePrepared(); }, Math.max(0, targetMs - Date.now()) + 30000);
+    // Keep this authenticated socket alive past its own order expiry, so the result
+    // does not depend on the next minute's broker login succeeding.
+    extendPrepared = (untilMs: number) => { clearTimeout(timer); timer = setTimeout(() => { finish(); closePrepared(); }, Math.max(0, untilMs - Date.now())); };
     let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
     let initialized = false;
     const requestInitialization = () => {
@@ -343,6 +352,7 @@ Deno.serve(async (req) => {
       }
       return true;
     };
+    requestPending = requestPendingHistory;
     ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
     ws.onerror = () => { finish(); closePrepared(); };
     ws.onclose = () => { if (boundaryTimer) clearTimeout(boundaryTimer); };
@@ -566,6 +576,7 @@ Deno.serve(async (req) => {
                 if(d.request_id!=='demo-prepared-order')return;
                 if(d.name==='option' && /^\d+$/.test(String(d.msg?.id || ''))) {
                   confirmed=true;
+                  ownExpiryMs=Number(freshOrder.expired)*1000;
                   console.log('Demo timing order confirmed:',new Date().toISOString(),demoWinner.signal_id);
                   demoSettlements.push(supabase.from('iq_demo_test_orders').update({status:'confirmed',iq_option_id:String(d.msg.id),created_at:new Date().toISOString()}).eq('id',reserved).then(({error})=>{if(error)console.error('Demo confirmation write failed:',error.code);}));
                   clearTimeout(timeout);resolve();
@@ -585,7 +596,17 @@ Deno.serve(async (req) => {
   // Keep checking expired outcomes after selection; never delay the next fresh order for history.
   await settlementWatch;
   await new Promise(resolve=>setTimeout(resolve,500));
-  closePrepared();
+  const ownSocket = preparedSocket as WebSocket | null;
+  if(ownExpiryMs>Date.now() && ownSocket?.readyState===WebSocket.OPEN) {
+    // Settle this run's own order on the same session right after it closes.
+    pendingCutoffMs=ownExpiryMs;
+    extendPrepared(ownExpiryMs+DEMO_OWN_WATCH_GRACE_MS);
+    const ownWatch=watchDemoSettlements(ownExpiryMs,requestPending)
+      .catch(error=>{console.error('Demo own settlement watch failed:',String(error));return 0;})
+      .then(async()=>{await Promise.all(demoSettlements);closePrepared();});
+    // @ts-ignore Hosted background runtime keeps the socket alive until the own result is read.
+    if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(ownWatch);else await ownWatch;
+  } else closePrepared();
   await Promise.all(demoSettlements);
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));
   // @ts-ignore Hosted background runtime: chart writes must not delay a fresh entry.

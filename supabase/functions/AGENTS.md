@@ -1,4 +1,5 @@
 # Edge functions rules
+- Demo recovery sizing uses the actual confirmed predecessor amount, keeps tie stakes and resets on cycle completion; payout is metadata, not a recovery sizing input. Why: all fresh Demo reservations must follow the same progression without fabricated losses or payout-dependent stake changes.
 - Demo normal-minute selection ranks current calculated scores only among broker-available M1 markets, without historical winning-note priority or WIN-chart gates; preserve learning. Recovery ignores expired unknown/reserved attempts only without broker IDs, leaving their unknown outcomes intact and using the latest confirmed result; unexpired ambiguity, broker-ID pending orders and insufficient balance still block. Why: stale attempts must not strand new signals or fabricate recovery losses.
 - Principal placement/copy and Telegram use unconditional shared pause gates before any claim. Daily reports stay paused; Demo/settlement independent; why: every executor must respect the full stop without changing confirmed history.
 

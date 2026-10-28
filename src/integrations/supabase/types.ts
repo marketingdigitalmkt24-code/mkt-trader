@@ -274,6 +274,10 @@ export type Database = {
           id: string
           iq_option_id: string | null
           profit: number
+          recovery_base: number | null
+          recovery_level: number
+          recovery_loss: number
+          recovery_payout: number | null
           result: string
           settled_at: string | null
           signal_id: string
@@ -292,6 +296,10 @@ export type Database = {
           id?: string
           iq_option_id?: string | null
           profit?: number
+          recovery_base?: number | null
+          recovery_level?: number
+          recovery_loss?: number
+          recovery_payout?: number | null
           result?: string
           settled_at?: string | null
           signal_id: string
@@ -310,6 +318,10 @@ export type Database = {
           id?: string
           iq_option_id?: string | null
           profit?: number
+          recovery_base?: number | null
+          recovery_level?: number
+          recovery_loss?: number
+          recovery_payout?: number | null
           result?: string
           settled_at?: string | null
           signal_id?: string

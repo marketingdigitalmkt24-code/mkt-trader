@@ -150,7 +150,7 @@ export function LiveOperationsCard() {
     const recordedPoll = setInterval(fetchRecordedOpen, 3000);
     pollRef.current = setInterval(() => {
       fetchOpen();
-    }, 15000);
+    }, 30000); // each broker read is a login; keep logins low for the Demo routine
     return () => { clearInterval(recordedPoll); if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 

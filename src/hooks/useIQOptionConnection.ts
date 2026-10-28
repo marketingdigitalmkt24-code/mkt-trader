@@ -5,6 +5,7 @@ import { iqOptionClient } from '@/services/IQOptionClient';
 import { toast } from 'sonner';
 import { afterIQReset, combineCutoffs, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
 import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
+import { sharedBalanceRead } from '@/lib/shared-balance-read';
 
 interface BalanceInfo {
   balance: number;
@@ -21,6 +22,7 @@ interface DailyStats {
 }
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
 
 export function useIQOptionConnection({ silentMissingCredentials = false, fetchStatistics = true, balanceOnly = false }: { silentMissingCredentials?: boolean; fetchStatistics?: boolean; balanceOnly?: boolean } = {}) {
   const { user } = useAuth();
@@ -44,12 +46,12 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
     if (!user) return;
 
     try {
-      console.log('🔄 Fetching balance from IQ Option API...');
-      // Send local timezone offset so the server filters by user's local day
-      const timezoneOffset = new Date().getTimezoneOffset();
-      const { data, error } = await supabase.functions.invoke('iqoption-get-balance', {
-        body: { userId: user.id, timezoneOffset },
-      });
+      // Shared across every card: each balance read is a fresh broker login, and
+      // too many logins make the broker refuse the Demo routine's login.
+      const userId = user.id;
+      const { data, error } = await sharedBalanceRead(userId, () => supabase.functions.invoke('iqoption-get-balance', {
+        body: { userId, timezoneOffset: new Date().getTimezoneOffset() },
+      }));
 
       if (!error && data?.success) {
         const newBalance: BalanceInfo = {

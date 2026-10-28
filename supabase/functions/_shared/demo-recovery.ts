@@ -4,7 +4,7 @@ export function demoRecovery(previous: RecoveryOrder | null, base: number, payou
   if (!previous) return initial;
   if (previous.status === 'unknown' || previous.status === 'reserved' || (previous.status === 'confirmed' && previous.result === 'pending')) return null;
   if (previous.status !== 'confirmed' || previous.account_type !== 'PRACTICE' || !previous.iq_option_id || !/^\d+$/.test(previous.iq_option_id)) return initial;
-  if (previous.result === 'win' || previous.recovery_level >= 4) return initial;
+  if (previous.result === 'win' || (previous.result === 'loss' && previous.recovery_level >= 4)) return initial;
   if (previous.result !== 'loss' && previous.result !== 'tie') return null;
   if (!payout || !Number.isFinite(payout) || payout <= 0 || payout > 1) return null;
   const level = previous.result === 'loss' ? previous.recovery_level + 1 : previous.recovery_level;

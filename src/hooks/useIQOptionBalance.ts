@@ -140,7 +140,6 @@ export function useIQOptionBalance() {
 
     let intervalId: number | undefined;
     let cancelled = false;
-    let failureCount = 0;
 
     const run = async () => {
       if (cancelled) return;

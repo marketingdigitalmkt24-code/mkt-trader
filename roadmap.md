@@ -1,10 +1,10 @@
 # Conexão IQ e ativação do apoio (28/10/2026)
-- [ ] Eliminar leituras de saldo fora do leitor compartilhado e repetição do efeito ao mudar status; testar limite/deduplicação.
-- [ ] Restaurar recuperação Demo no fonte local, integrar apoio por notas após validação por gráficos, publicar e conferir rotina sem forçar entrada.
+- [x] Todos os leitores frontend de saldo usam deduplicação/limite compartilhado; efeito de saldo não reinicia ao mudar status. Admin autenticado: duas consultas em 65s, nenhum erro de página.
+- [x] Recuperação restaurada no fonte local e apoio por notas integrado após validação por gráficos; publicado. Rotina 03:16 analisou 124 ativos, leu 24 notas sem LOSS, confirmou GBP/USD-OTC PRACTICE US$2,15 nível 1 às :02. 19 testes passaram; sem ordem forçada. Login às 03:14 ainda falhou: disponibilidade da corretora não garantida.
 
 # Notas vencedoras como apoio à análise (28/10/2026)
 - [x] Preparada leitura independente paginada de todas as notas com mais WIN e nenhum LOSS Demo confirmado, agrupadas conforme duas casas do histórico; deduplicação de IDs e exclusão de resultados futuros/pendentes. Testes de WIN, veto de LOSS, páginas antigas e atualização adicionados; ainda não conectada à rotina ativa.
-- [ ] Integrar e conferir na rotina ativa: bloqueado pela divergência de versão do executor publicado (gales presentes) versus fonte local (gales ausentes e prioridade antiga). Não republicar a versão antiga nem alterar histórico/resultados para contornar.
+- [x] Integrado e confirmado ao vivo na rotina 03:16: ranking de notas com WIN/sem LOSS somente entre gráficos elegíveis, fallback neutro por distância; fonte local inclui recuperação publicada. Nenhum histórico foi alterado para contornar ordens ambíguas.
 
 # Recuperação Demo com quatro gales (28/10/2026)
 - [ ] Reparar histórico de alterações: nova tentativa em 28/10 confirmou colisão de identidade/vínculo dos snapshots 0058/0059; nenhuma alteração aplicada. Metadados são gerenciados/protegidos e a correção permitida está limitada a reparos de draft, não a esta cópia. Não apagar histórico nem republicar o executor local antigo sobre a versão ativa.

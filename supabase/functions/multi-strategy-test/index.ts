@@ -524,7 +524,7 @@ Deno.serve(async (req) => {
     const features = chartFeatures(series.get(c.asset) || [], curMin, c.direction);
     const match = demoWinningPatternMatch(winningCharts, features);
     if (!match || demoLearnedReject(c._learned)) {
-      reject(c, {code:'chart_learning_blocked',details:{matched:!!match,learning:c._learned}});
+      reject(c, {code:'chart_learning_blocked',details:{matched:Number(!!match),learning:c._learned}});
       return [];
     }
     return [{...c,_cohort:cohort,_preferredPatternDistance:match.distance,_patternMatch:match}];

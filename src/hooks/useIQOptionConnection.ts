@@ -22,6 +22,32 @@ interface DailyStats {
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+type BalanceRead = { data: any; error: any };
+export const BALANCE_MIN_INTERVAL_MS = 30000;
+const balanceCache = new Map<string, { at: number; result?: BalanceRead; inflight?: Promise<BalanceRead> }>();
+
+export function sharedBalanceRead(
+  userId: string,
+  invoke: () => Promise<BalanceRead> = () => supabase.functions.invoke('iqoption-get-balance', {
+    body: { userId, timezoneOffset: new Date().getTimezoneOffset() },
+  }) as Promise<BalanceRead>,
+  now: () => number = Date.now,
+): Promise<BalanceRead> {
+  const entry = balanceCache.get(userId);
+  if (entry?.inflight) return entry.inflight;
+  if (entry?.result && now() - entry.at < BALANCE_MIN_INTERVAL_MS) return Promise.resolve(entry.result);
+  const inflight = invoke()
+    .catch(error => ({ data: null, error }))
+    .then(result => {
+      balanceCache.set(userId, { at: now(), result });
+      return result;
+    });
+  balanceCache.set(userId, { at: entry?.at ?? 0, result: entry?.result, inflight });
+  return inflight;
+}
+
+export function resetSharedBalanceCache() { balanceCache.clear(); }
+
 export function useIQOptionConnection({ silentMissingCredentials = false, fetchStatistics = true, balanceOnly = false }: { silentMissingCredentials?: boolean; fetchStatistics?: boolean; balanceOnly?: boolean } = {}) {
   const { user } = useAuth();
   const globalCutoff = useGlobalIQResetCutoff();
@@ -44,12 +70,9 @@ export function useIQOptionConnection({ silentMissingCredentials = false, fetchS
     if (!user) return;
 
     try {
-      console.log('🔄 Fetching balance from IQ Option API...');
-      // Send local timezone offset so the server filters by user's local day
-      const timezoneOffset = new Date().getTimezoneOffset();
-      const { data, error } = await supabase.functions.invoke('iqoption-get-balance', {
-        body: { userId: user.id, timezoneOffset },
-      });
+      // Shared across every card: each balance read is a fresh broker login, and
+      // too many logins make the broker refuse the Demo routine's login.
+      const { data, error } = await sharedBalanceRead(user.id);
 
       if (!error && data?.success) {
         const newBalance: BalanceInfo = {

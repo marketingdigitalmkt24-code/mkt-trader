@@ -52,9 +52,10 @@ async function login(email: string, password: string, timeoutMs = 10000): Promis
   for (const u of AUTH_URLS) {
     try {
       const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(Math.max(1000, Math.floor(timeoutMs / AUTH_URLS.length))) });
-      const d = await r.json();
+      const d = await r.json().catch(() => ({}));
       if (d.code === 'success' && d.ssid) return d.ssid;
-    } catch (_) { /* */ }
+      console.warn('Demo login refused:', { status: r.status, code: d?.code ?? null });
+    } catch (e) { console.warn('Demo login error:', e instanceof Error ? e.name : 'unknown'); }
   }
   return null;
 }

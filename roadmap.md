@@ -1,3 +1,6 @@
+# Reduzir oscilações IQ Option (28/10/2026)
+- [ ] Recuperar preparação por canal alternativo de autenticação, com prazo original, PRACTICE verificada e sem repetir ordens; testar e conferir a rotina publicada.
+
 # Ativos e notas da análise (28/10/2026)
 - [x] Lista de ativos reais e última análise preservada durante preparação/reconexão; sem sinal não gera nota zero fictícia. 19 testes passaram, build OK e funções publicadas. Admin autenticado mostrou 98 ativos às 02:52 BRT sem erro. Nova entrada natural FARTCOINUSD-OTC PUT nota 2,39 às 02:50, US$2 gale 1, confirmada e liquidada WIN às 02:51:01; critérios intactos, sem ordem forçada. IQ ainda oscila.
 

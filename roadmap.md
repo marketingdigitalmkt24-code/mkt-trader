@@ -1,3 +1,7 @@
+# Notas vencedoras como apoio à análise (28/10/2026)
+- [x] Preparada leitura independente paginada de todas as notas com mais WIN e nenhum LOSS Demo confirmado, agrupadas conforme duas casas do histórico; deduplicação de IDs e exclusão de resultados futuros/pendentes. Testes de WIN, veto de LOSS, páginas antigas e atualização adicionados; ainda não conectada à rotina ativa.
+- [ ] Integrar e conferir na rotina ativa: bloqueado pela divergência de versão do executor publicado (gales presentes) versus fonte local (gales ausentes e prioridade antiga). Não republicar a versão antiga nem alterar histórico/resultados para contornar.
+
 # Recuperação Demo com quatro gales (28/10/2026)
 - [ ] Reparar histórico de alterações: nova tentativa em 28/10 confirmou colisão de identidade/vínculo dos snapshots 0058/0059; nenhuma alteração aplicada. Metadados são gerenciados/protegidos e a correção permitida está limitada a reparos de draft, não a esta cópia. Não apagar histórico nem republicar o executor local antigo sobre a versão ativa.
 - [x] Conferência em 28/10: executor publicado já aplica gales Demo, embora o código local desta cópia não contenha essa versão. Banco confirmou níveis 1/2/3/4 de US$2,21/4,92/10,35/22,25; quarto gale WIN +US$19,36, seguido de entrada base US$1. Painel autenticado confirmou ganhos US$55,21, perdas US$57,63, líquido -US$2,42; sem novas ordens forçadas. Reconciliação da versão publicada com o código local e validação da reserva por conta continuam necessárias antes de republicar.

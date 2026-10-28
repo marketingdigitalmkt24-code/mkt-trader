@@ -53,6 +53,7 @@ export function AIAnalysisStatusCard() {
   const [isActive, setIsActive] = useState(false);
   const [analysisError, setAnalysisError] = useState(false);
   const [scanStatus, setScanStatus] = useState<DemoScanStatus | null>(null);
+  const [lastAnalysis, setLastAnalysis] = useState<DemoScanStatus | null>(null);
   const signalsBusy = useRef(false);
   const statsBusy = useRef(false);
   const statsQueued = useRef(false);
@@ -124,6 +125,7 @@ export function AIAnalysisStatusCard() {
       if (!mounted.current) return;
       const currentScan: DemoScanStatus | null = scan.error ? null : scan.data?.scan ?? null;
       setScanStatus(currentScan);
+      if(!scan.error && scan.data?.analysis) setLastAnalysis(scan.data.analysis);
       setAnalysisError(!!scan.error);
       setIsActive(scanIsActive(currentScan,Date.now()));
       setLastSignalTime(currentScan ? new Date(currentScan.observed_at) : null);
@@ -234,8 +236,8 @@ export function AIAnalysisStatusCard() {
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="bg-secondary/50 rounded-lg p-2 text-center">
             <Zap className="w-3.5 h-3.5 text-gold mx-auto mb-1" />
-            <div className="text-xs font-bold">{new Set(recentSignals.map(s => s.asset)).size}</div>
-            <div className="text-[10px] text-muted-foreground">Ativos registrados (10min)</div>
+            <div className="text-xs font-bold">{lastAnalysis?.assets ?? '—'}</div>
+            <div className="text-[10px] text-muted-foreground">Ativos consultados</div>
           </div>
           <div className="bg-secondary/50 rounded-lg p-2 text-center">
             <CheckCircle className="w-3.5 h-3.5 text-call mx-auto mb-1" />
@@ -253,10 +255,31 @@ export function AIAnalysisStatusCard() {
           </div>
         </div>
 
+        {lastAnalysis?.asset_analyses && lastAnalysis.asset_analyses.length > 0 && (
+          <div className="mb-3 space-y-1">
+            <p className="text-[10px] text-muted-foreground">
+              Ativos analisados · {new Date(lastAnalysis.target_minute).toLocaleTimeString('pt-BR', {timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'})}
+            </p>
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {lastAnalysis.asset_analyses.map(analysis => (
+                <div key={analysis.asset} className="flex flex-wrap items-center justify-between gap-2 rounded bg-secondary/30 p-1.5 text-xs">
+                  <span className="font-medium">{analysis.asset}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {analysis.direction && <span className={analysis.direction==='CALL'?'text-call':'text-put'}>{analysis.direction} · </span>}
+                    {typeof analysis.score==='number' && Number.isFinite(analysis.score)
+                      ? `nota ${analysis.score.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} · ` : ''}
+                    {analysis.state==='incomplete_candles'?'Velas incompletas':analysis.state==='market_unavailable'?'Compra indisponível':analysis.state==='eligible'?'Sinal Takashi':'Sem sinal Takashi'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Recent signals list */}
         {recentSignals.length > 0 && (
           <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground">Ativos analisados · registros Takashi</p>
+            <p className="text-[10px] text-muted-foreground">Oportunidades registradas · últimos 10 minutos</p>
             <div className="max-h-60 overflow-y-auto space-y-1">
             {recentSignals.map(signal => (
               <div key={signal.id} className="flex flex-wrap gap-2 items-center justify-between p-1.5 rounded bg-secondary/30 text-xs">
@@ -273,7 +296,7 @@ export function AIAnalysisStatusCard() {
                     "font-mono text-[10px]",
                     signal.selected ? "text-call" : "text-muted-foreground"
                   )}>
-                    nota {signal.confluence_score.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    nota {Number.isFinite(signal.confluence_score) ? signal.confluence_score.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                   </span>
                   <span className="text-muted-foreground text-[10px]">
                     {new Date(signal.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
@@ -316,7 +339,7 @@ export function AIAnalysisStatusCard() {
           </div>
         )}
 
-        {recentSignals.length === 0 && (
+        {recentSignals.length === 0 && !lastAnalysis?.asset_analyses?.length && (
           <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-lg">
             <Brain className="w-5 h-5 mx-auto mb-1 opacity-30" />
             {analysisError ? 'Não foi possível consultar as análises.' : 'Nenhum sinal Takashi registrado nos últimos 10 minutos.'}

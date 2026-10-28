@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { sharedBalanceRead } from '@/lib/shared-balance-read';
 
 interface BalanceData {
   balance: number;
@@ -90,9 +91,9 @@ export function useIQOptionBalance() {
     try {
       console.log('🔄 Fetching IQ Option balance for user:', user.id);
       
-      const { data: response, error } = await supabase.functions.invoke('iqoption-get-balance', {
-        body: { userId: user.id }
-      });
+      const { data: response, error } = await sharedBalanceRead(user.id, () => supabase.functions.invoke('iqoption-get-balance', {
+        body: { userId: user.id, timezoneOffset: 180 }
+      }));
       
       if (error) {
         // Silently handle timeout errors (IQ Option API can be slow/blocked)
@@ -131,7 +132,7 @@ export function useIQOptionBalance() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   // Fetch on mount, when user changes, and poll with backoff to avoid UI freezing on network blocks
   useEffect(() => {
@@ -139,25 +140,13 @@ export function useIQOptionBalance() {
 
     let intervalId: number | undefined;
     let cancelled = false;
-    let failureCount = 0;
 
     const run = async () => {
       if (cancelled) return;
 
       await fetchBalance();
 
-      // If last fetch failed, back off to avoid repeated 10-15s timeouts
-      if (connectionStatus !== 'connected') {
-        failureCount = Math.min(failureCount + 1, 5);
-      } else {
-        failureCount = 0;
-      }
-
-      const nextMs = connectionStatus === 'connected'
-        ? 60000 // 1 min when healthy
-        : 60000 * (failureCount + 1); // 1-6 min backoff when failing
-
-      intervalId = window.setTimeout(run, nextMs);
+      if (!cancelled) intervalId = window.setTimeout(run, 60000);
     };
 
     run();
@@ -166,7 +155,7 @@ export function useIQOptionBalance() {
       cancelled = true;
       if (intervalId) window.clearTimeout(intervalId);
     };
-  }, [fetchBalance, user, connectionStatus]);
+  }, [fetchBalance, user]);
 
   return {
     ...data,

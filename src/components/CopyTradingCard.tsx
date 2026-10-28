@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { readCopyAccount } from '@/lib/client-copy-state';
 import { countClientCopyResults, copyResultRates } from '@/lib/admin-copy-results';
 import { copyDayStart } from '../../supabase/functions/_shared/copy-target';
+import { sharedBalanceRead } from '@/lib/shared-balance-read';
 
 interface ClientProfile {
   id: string;
@@ -78,9 +79,9 @@ export function CopyTradingCard() {
       const entries: [string, string][] = JSON.parse(connectedAccounts);
       const values = await Promise.all(entries.map(async ([userId, account]) => {
         try {
-          const { data, error } = await supabase.functions.invoke('iqoption-get-balance', {
+          const { data, error } = await sharedBalanceRead(userId, () => supabase.functions.invoke('iqoption-get-balance', {
             body: { userId, timezoneOffset: 180 },
-          });
+          }));
           return [userId, !error && data?.success && Number.isFinite(data.balance) && data.accountType === account
             ? { amount: data.balance as number, currency: (data.currency || 'USD') as string, account }
             : null] as const;

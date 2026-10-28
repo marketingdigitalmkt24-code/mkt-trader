@@ -1,7 +1,7 @@
 // Modo TESTE com 7 estratégias (pedido 16/10/2026): roda a cada minuto em TODOS os ativos abertos da IQ Option.
 // Nada abre na corretora. Cada entrada é registrada como TESTE na vela :00 com expiração de 1 minuto
 // e resolvida pelas velas reais da IQ Option. Telegram: só o resultado WIN da Tendência (mesmo em teste).
-import { createClient } from 'npm:@supabase/supabase-js@2.89.0';
+import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { telegramTradingEnabled } from '../_shared/principal-pause.ts';
 import { nextReversalMinute } from '../_shared/four-win-reversal.ts';
@@ -35,7 +35,7 @@ import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
 import { readTakashiChartEvidence, takashiChartComparison, compareTakashiCharts } from '../_shared/takashi-chart-selection.ts';
-import { corsHeaders } from 'npm:@supabase/supabase-js@2.89.0/cors';
+import { corsHeaders } from 'npm:@supabase/supabase-js@2.118.0/cors';
 
 const cors = corsHeaders;
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];

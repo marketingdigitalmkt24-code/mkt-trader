@@ -35,12 +35,12 @@ import { nextDemoGaleState, demoGaleAmount, demoPayout, type DemoGaleState } fro
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { loginBeforeBoundary } from '../_shared/demo-login-retry.ts';
+import { prepareBeforeBoundary } from '../_shared/demo-login-retry.ts';
+import { loginDemoHost, prepareDemoSocket } from '../_shared/demo-broker-connection.ts';
 import { readTakashiChartEvidence, takashiChartComparison, compareTakashiCharts } from '../_shared/takashi-chart-selection.ts';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2.118.0/cors';
 
 const cors = corsHeaders;
-const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
-const WS_URL = 'wss://iqoption.com/echo/websocket';
 const OPEN = 'test7_open';
 const DEMO_OWN_WATCH_GRACE_MS = 22000;
 type K = { t: number; o: number; c: number; h: number; l: number };
@@ -51,23 +51,6 @@ export const LABELS: Record<string, string> = {
   [FORCE_FIRST_TEST]: 'Força sem rompimento · primeira vela (TESTE)',
   [TAKASHI_BNF]: 'Takashi Kotegawa',
 };
-
-async function login(email: string, password: string, timeoutMs = 10000): Promise<string | null> {
-  // The broker login sometimes answers in 3-8s; splitting the budget across hosts
-  // aborted every slow-but-valid answer. Give the primary host the whole budget.
-  const deadline = Date.now() + timeoutMs;
-  for (const u of AUTH_URLS) {
-    const left = deadline - Date.now();
-    if (left < 1000) break;
-    try {
-      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left) });
-      const d = await r.json().catch(() => ({}));
-      if (d.code === 'success' && d.ssid) return d.ssid;
-      console.warn('Demo login refused:', { status: r.status, code: d?.code ?? null });
-    } catch (e) { console.warn('Demo login error:', e instanceof Error ? e.name : 'unknown'); }
-  }
-  return null;
-}
 
 function symbolOf(rawName: string) {
   let n = String(rawName || '').toUpperCase().replace('FRONT.', '');
@@ -259,7 +242,7 @@ Deno.serve(async (req) => {
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
     // Short attempts repeated until shortly before :00; never logs in after the boundary.
-    const ssid=cfg ? await loginBeforeBoundary(ms=>login(cfg.email,cfg.password,ms),targetMs) : null;
+    const ssid=cfg ? await loginBeforeBoundary((ms,index)=>loginDemoHost(cfg.email,cfg.password,ms,index),targetMs) : null;
     return {cfg,ssid};
   });
   const [{ cfg, ssid }, { data: open }] = await Promise.all([
@@ -275,6 +258,13 @@ Deno.serve(async (req) => {
   let nowSec = Math.floor(Date.now() / 1000);
   const curMin = targetMs / 1000;
   console.log('Demo timing login ready:', new Date().toISOString());
+  // Retry the authenticated socket handshake on alternate endpoints before :00.
+  // Reuse only this run's same-account session; never retry a submitted order.
+  const ready = await prepareBeforeBoundary((ms,index)=>prepareDemoSocket(ssid,ms,index),targetMs);
+  if (!ready) {
+    console.error('Demo scan unavailable: broker socket preparation failed');
+    return Response.json({ success: false, error: 'connection unavailable' }, { headers: cors });
+  }
 
   // Confirm each expired TEST as soon as its broker candle arrives, not after all assets.
   let resolved = 0;
@@ -319,7 +309,7 @@ Deno.serve(async (req) => {
   let extendPrepared: (untilMs: number) => void = () => {};
   let ownExpiryMs = 0;
   await new Promise<void>((resolve) => {
-    const ws = new WebSocket(WS_URL);
+    const ws = ready.socket;
     preparedSocket = ws;
     let pending = 0; const byReq = new Map<string, string>();
     let demoBalanceId = 0, candleDone = false;
@@ -335,9 +325,6 @@ Deno.serve(async (req) => {
     extendPrepared = (untilMs: number) => { clearTimeout(timer); timer = setTimeout(() => { finish(); closePrepared(); }, Math.max(0, untilMs - Date.now())); };
     let boundaryTimer: ReturnType<typeof setTimeout> | undefined;
     let initialized = false;
-    const requestInitialization = () => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ name: 'sendMessage', msg: { name: 'get-initialization-data', version: '3.0', body: {} } }));
-    };
     const requestPendingHistory = async () => {
       if(ws.readyState!==WebSocket.OPEN || !demoBalanceId)return false;
       await Promise.all(demoSettlements);
@@ -357,11 +344,9 @@ Deno.serve(async (req) => {
       return true;
     };
     requestPending = requestPendingHistory;
-    ws.onopen = () => ws.send(JSON.stringify({ name: 'ssid', msg: ssid }));
     ws.onerror = () => { finish(); closePrepared(); };
-    ws.onclose = () => { if (boundaryTimer) clearTimeout(boundaryTimer); };
-    ws.onmessage = async (ev) => {
-      const d = JSON.parse(ev.data);
+    ws.onclose = () => { finish(); closePrepared(); };
+    const handleMessage = async (d: any) => {
       handleOrder?.(d);
       if (d.name === 'heartbeat' && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
@@ -374,7 +359,6 @@ Deno.serve(async (req) => {
           .catch(error=>{console.error('Demo settlement watch failed:',String(error));return 0;});
         // Connection is already authenticated; only fresh closed candles are requested at :00.
         console.log('Demo timing broker ready:', new Date().toISOString());
-        requestInitialization();
       }
       if (d.name === 'initialization-data' && !initialized) {
         initialized = true;
@@ -428,6 +412,13 @@ Deno.serve(async (req) => {
         }
       }
     };
+    ws.onmessage = ev => {
+      let message: any;
+      try { message = JSON.parse(ev.data); } catch { return; }
+      void handleMessage(message);
+    };
+    void handleMessage(ready.profile);
+    void handleMessage(ready.initialization);
   });
 
   // Await database confirmation, not Telegram, before the atomic four-win claim.

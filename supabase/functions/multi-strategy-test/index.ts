@@ -49,9 +49,14 @@ export const LABELS: Record<string, string> = {
 };
 
 async function login(email: string, password: string, timeoutMs = 10000): Promise<string | null> {
+  // The broker login sometimes answers in 3-8s; splitting the budget across hosts
+  // aborted every slow-but-valid answer. Give the primary host the whole budget.
+  const deadline = Date.now() + timeoutMs;
   for (const u of AUTH_URLS) {
+    const left = deadline - Date.now();
+    if (left < 1000) break;
     try {
-      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(Math.max(1000, Math.floor(timeoutMs / AUTH_URLS.length))) });
+      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left) });
       const d = await r.json().catch(() => ({}));
       if (d.code === 'success' && d.ssid) return d.ssid;
       console.warn('Demo login refused:', { status: r.status, code: d?.code ?? null });

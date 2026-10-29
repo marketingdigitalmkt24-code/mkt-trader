@@ -272,8 +272,9 @@ async function placeTradeFireAndForget(
   trade: TradeRequest,
   gate?: Promise<boolean>,
   copyTarget?: { profit: number; value: number; type: string },
+  autoTradingOn = false,
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
-  if (!principalIQEnabled(trade.entryStrategy)) return { success: false, error: 'Principal IQ and copies paused by user' };
+  if (!principalIQEnabled(trade.entryStrategy, autoTradingOn)) return { success: false, error: 'Principal IQ and copies paused by user' };
   return new Promise((resolve) => {
     // Copies follow the confirmed principal's minute, never a new future candle.
     const anchoredCopy = !!gate;
@@ -677,7 +678,8 @@ serve(async (req) => {
 
     const body = await req.json();
     // Auto Trading switch off => no principal entry or copy reaches IQ Option.
-    if (!(await masterAutoTradingEnabled(supabase)))
+    const autoTradingOn = await masterAutoTradingEnabled(supabase);
+    if (!autoTradingOn)
       return Response.json({ skipped: 'Auto Trading disabled' }, { status: 410, headers: corsHeaders });
     if (body?.prepareCopyCandidate !== undefined) {
       if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`)
@@ -730,8 +732,8 @@ serve(async (req) => {
       return Response.json({ success: true, signalId: copyRequest.signalId }, { headers: corsHeaders });
     }
     const tradeRequest: TradeRequest = body;
-    // This endpoint is copy-only while legacy principals are paused; the sequence uses its own atomic claimant.
-    if (!principalIQEnabled()) return Response.json({ success: false, error: 'Direct principal strategies paused' }, { status: 410, headers: corsHeaders });
+    // Direct principal entries only run while the Auto Trading switch is on.
+    if (!principalIQEnabled(tradeRequest.entryStrategy, autoTradingOn)) return Response.json({ success: false, error: 'Direct principal strategies paused' }, { status: 410, headers: corsHeaders });
     if ((tradeRequest.signalId || '').startsWith('forca_antecipada-') && !isAnticipation(tradeRequest.entryStrategy)) {
       return Response.json({ error: 'Invalid anticipation strategy' }, { status: 400, headers: corsHeaders });
     }
@@ -965,7 +967,7 @@ serve(async (req) => {
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
     const masterLeaseScope = isAnticipation(tradeRequest.entryStrategy) ? 'master:forca_antecipada' : 'master';
     await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', masterLeaseScope).eq('signal_id', reservationSignal);
-    const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest);
+    const result = await placeTradeFireAndForget(ssid, configData.account_type, tradeRequest, undefined, undefined, autoTradingOn);
     const definiteRefusal = result.error && /invalid instrument|not available|não disponível|não enviada|não enviado|entrada cancelada|insufficient|not enough/i.test(result.error);
     if (!result.success && definiteRefusal) await supabase.from('iq_entry_leases').update({ reserved_until: new Date().toISOString() }).eq('scope', masterLeaseScope).eq('signal_id', reservationSignal);
     if (!(result.success && result.tradeId)) settleMaster({ ok: false, timeframe: '', expirationIso: null });

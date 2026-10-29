@@ -4,8 +4,12 @@ import { sendIQAlert } from './telegram-iq-alert';
 import { dispatchIQResults } from './telegram-iq-results';
 import { dispatchDailyReport } from './telegram-daily-dispatch';
 
-test('principal IQ and client copy authorization stay paused', () => {
+test('principal IQ entries stay blocked while Auto Trading is off', () => {
   expect(principalIQEnabled()).toBe(false);
+  expect(principalIQEnabled('TAKASHI_APOS_226_INVERTIDA', false)).toBe(false);
+});
+test('principal IQ entries run only when Auto Trading is on', () => {
+  expect(principalIQEnabled('TAKASHI_APOS_226_INVERTIDA', true)).toBe(true);
 });
 test('Telegram entries, results and reports are suppressed without requests', async () => {
   expect(telegramTradingEnabled()).toBe(false);

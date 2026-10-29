@@ -667,7 +667,14 @@ export function useAutoTrading() {
       
       if (targetReached) {
         console.log('🎯 Profit target reached! Disabling auto trading.');
-        setConfig(prev => ({ ...prev, enabled: false }));
+        // Persiste o desligamento: ao sair e voltar à página, o Auto Trading continua desligado.
+        const disabledConfig = { ...config, enabled: false };
+        try {
+          await saveToDatabase(disabledConfig);
+          setConfig(disabledConfig);
+        } catch {
+          console.error('Falha ao salvar o desligamento por meta de lucro');
+        }
         toast({
           title: '🎉 Meta de lucro atingida!',
           description: `Lucro de $${currentDailyProfit.toFixed(2)} - Auto Trading pausado.`,

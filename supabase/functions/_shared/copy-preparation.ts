@@ -5,7 +5,7 @@ export function prepareTakashiCopy(candidate: {
  signal_id: string; asset: string; direction: string; entry_strategy: string; entry_minute: string; score: number;
 } | null, now: number) {
  if (!candidate || candidate.entry_strategy !== 'TAKASHI_BNF_V1' || !Number.isFinite(candidate.score)
-  || Math.round(candidate.score * 100) === 0 || !['CALL', 'PUT'].includes(candidate.direction)) return null;
+  || !['CALL', 'PUT'].includes(candidate.direction)) return null;
  const entryAt = Date.parse(candidate.entry_minute);
  if (!Number.isFinite(entryAt) || now < entryAt || now >= entryAt + 30000) return null;
  return { asset: candidate.asset, direction: candidate.direction === 'PUT' ? 'call' as const : 'put' as const,

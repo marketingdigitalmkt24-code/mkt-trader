@@ -9,9 +9,10 @@ test('Takashi copy prepares the inverted direction in the current minute without
  expect(prepareTakashiCopy({ ...candidate, direction: 'PUT' }, at)?.direction).toBe('call');
  expect(prepareTakashiCopy(candidate, at + 30000)).toBeNull();
 });
-test('displayed zero Takashi score cannot prepare a copy', () => {
- expect(prepareTakashiCopy({ ...candidate, score: 0 }, at)).toBeNull();
- expect(prepareTakashiCopy({ ...candidate, score: 0.004 }, at)).toBeNull();
+test('accepted Takashi opening can prepare a copy even with displayed zero score', () => {
+ expect(prepareTakashiCopy({ ...candidate, score: 0 }, at)?.direction).toBe('put');
+ expect(prepareTakashiCopy({ ...candidate, score: 0.004 }, at)?.direction).toBe('put');
+ expect(prepareTakashiCopy({ ...candidate, score: NaN }, at)).toBeNull();
 });
 test('prepared client waits for both exact broker ID and executed principal queue', async () => {
  let clock = at, calls = 0;

@@ -1,3 +1,6 @@
+# Histórico diário Demo (29/10/2026)
+- [ ] Mostrar abaixo de Últimas operações dois dias BRT por página, com saldo, ganhos, perdas e acerto; conferir paginação e totais sem alterar execução.
+
 # Reduzir oscilações IQ Option (28/10/2026)
 - [x] Publicada autenticação direta alternativa com alternância de sockets, nova tentativa HTTP limitada após dois endpoints falharem e PRACTICE USD verificada, sem repetir ordens nem estender prazo. 361 testes passaram; build OK. Admin autenticado exibiu análise concluída de 98 ativos às 02:59 BRT, sem erro de página. IQ ainda apresenta TimeoutError e recusas na rodada seguinte; não foi comprovada eliminação da oscilação nem recuperação pelo canal direto, e nenhuma ordem foi forçada.
 

@@ -49,7 +49,7 @@ export function DemoDailyHistory() {
    </div>
   </div>
   {history.isLoading ? <p className="py-3 text-xs text-muted-foreground">Carregando histórico diário…</p> : history.isError ? <p role="alert" className="text-xs text-destructive">Não foi possível carregar o histórico diário.</p> : <div className="divide-y divide-border">
-    {history.data?.days.map(day => <div key={day.date} className="flex flex-nowrap items-center gap-1.5 overflow-x-auto py-2.5 text-xs first:pt-0" aria-label={`Resultado Demo ${day.date}`}>
+    {history.data?.days.map(day => <div key={day.date} className="flex flex-nowrap items-center gap-1 overflow-x-auto py-2.5 text-xs first:pt-0" aria-label={`Resultado Demo ${day.date}`}>
      <h5 className="flex shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold"><Calendar className="h-3.5 w-3.5 text-muted-foreground"/>{new Date(`${day.date}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}{day.date===today && <span className="font-normal text-muted-foreground">· Hoje</span>}</h5>
      <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground" title="Taxa de acerto">{day.accuracy.toLocaleString('pt-BR',{maximumFractionDigits:1})}% acerto</span>
      <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono text-[11px] text-call" title={`Ganhos: ${currency(day.grossWins)}`}><TrendingUp className="h-3 w-3"/>{day.wins} · {shortCurrency(day.grossWins)}</span>

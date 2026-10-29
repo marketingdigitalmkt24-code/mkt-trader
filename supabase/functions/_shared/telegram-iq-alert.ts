@@ -43,8 +43,9 @@ export async function sendIQAlert(
   alert: IQAlert,
   credentials: { lovableKey: string; telegramKey: string },
   request: typeof fetch = fetch,
+  autoTradingOn = false,
 ): Promise<number | undefined> {
-  if (!telegramTradingEnabled(alert.entryStrategy)) return;
+  if (!telegramTradingEnabled(alert.entryStrategy, autoTradingOn)) return;
   if (!alert.signalId || alert.timeframe === 'TEST' || alert.timeframe === 'MT5') return;
   if (!credentials.lovableKey || !credentials.telegramKey) throw new Error('Telegram não configurado');
   for (let attempt = 0; attempt < 3; attempt++) {

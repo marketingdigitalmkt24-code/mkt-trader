@@ -32,8 +32,9 @@ Deno.serve(async req => {
   const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
   const db = createClient(url, key);
-  // Principal entries follow the admin's Auto Trading switch.
-  if (!principalIQEnabled(TAKASHI_AFTER_226, await masterAutoTradingEnabled(db))) return reply({ skipped: 'Auto Trading disabled' }, 410);
+  // Principal entries, copies and Telegram follow the admin's Auto Trading switch.
+  const autoTradingOn = await masterAutoTradingEnabled(db);
+  if (!principalIQEnabled(TAKASHI_AFTER_226, autoTradingOn)) return reply({ skipped: 'Auto Trading disabled' }, 410);
   const state: { claimed?: { signalId: string; asset: string; amount: number; entryAt: number; configId: string; direction: string; entryStrategy: string } } = {};
   let submitted = false;
   let leaseScope = 'master:tendencia';
@@ -184,7 +185,7 @@ Deno.serve(async req => {
         try {
           const messageId = await sendIQAlert({ asset: candidate.asset, direction: direction === 'CALL' ? 'call' : 'put', expiration: 1, entryAt,
             signalId: queued.signal_id, timeframe: 'M1', strategy: strategyLabel, entryStrategy: owned.entryStrategy, brokerOrderId: outcome.tradeId, accountType: cfg.account_type,
-          }, { lovableKey: Deno.env.get('LOVABLE_API_KEY') || '', telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '' });
+          }, { lovableKey: Deno.env.get('LOVABLE_API_KEY') || '', telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '' }, fetch, autoTradingOn);
           if (messageId !== undefined) {
             const { error } = await db.from('telegram_iq_deliveries').upsert({ signal_id: queued.signal_id, chat_id: IQ_TELEGRAM_CHANNEL,
               signal_message_id: messageId, strategy: strategyLabel }, { onConflict: 'signal_id', ignoreDuplicates: true });

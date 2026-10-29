@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
   const readPendingDemo = () => supabase.from('iq_demo_test_orders')
     .select('id,signal_id,entry_strategy,entry_minute,result,profit,asset,direction,status,account_type,iq_option_id,settled_at')
     .eq('status','confirmed').not('iq_option_id','is',null)
-    .eq('account_type','PRACTICE').eq('result','pending')
+    .in('account_type',['PRACTICE','REAL']).eq('result','pending')
     .lte('expiration_time',new Date(pendingCutoffMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
   const takashiRecentRead = readTakashiRecentOrders(async(from,to)=>{
     const {data,error}=await supabase.from('iq_demo_test_orders')
       .select('signal_id,entry_strategy,asset,direction,entry_minute,settled_at,status,account_type,iq_option_id,result')
-      .eq('entry_strategy',TAKASHI_BNF).eq('status','confirmed').eq('account_type','PRACTICE')
+      .eq('entry_strategy',TAKASHI_BNF).eq('status','confirmed').in('account_type',['PRACTICE','REAL'])
       .not('iq_option_id','is',null).in('result',['win','loss'])
       .gte('entry_minute',new Date(targetMs-14*86400000).toISOString())
       .lt('entry_minute',new Date(targetMs).toISOString())
@@ -572,7 +572,7 @@ Deno.serve(async (req) => {
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
   const unbeatenNotes = await readUnbeatenDemoNotes(
     async (from,to)=>(await supabase.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result,profit,settled_at')
-      .eq('account_type','PRACTICE').eq('status','confirmed').in('result',['win','loss']).order('id').range(from,to)).data||[],
+      .in('account_type',['PRACTICE','REAL']).eq('status','confirmed').in('result',['win','loss']).order('id').range(from,to)).data||[],
     async ids=>(await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id',ids)).data||[],
     Date.now()).catch(()=>[]);
   const demoWinner = selectTakashiByNote(demoEligible, unbeatenNotes);
@@ -621,7 +621,7 @@ Deno.serve(async (req) => {
       const payout = typeof commission === 'number' ? (100-commission)/100 : null;
       const last = await supabase.from('iq_demo_test_orders')
         .select('status,result,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
-        .eq('entry_strategy',TAKASHI_BNF).eq('account_type','PRACTICE')
+        .eq('entry_strategy',TAKASHI_BNF).in('account_type',['PRACTICE','REAL'])
         .in('status',['confirmed','unknown','reserved'])
         .or(`status.eq.confirmed,iq_option_id.not.is.null,expiration_time.gt.${new Date().toISOString()}`)
         .order('entry_minute',{ascending:false}).limit(1);

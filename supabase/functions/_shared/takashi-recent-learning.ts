@@ -11,7 +11,7 @@ export type TakashiRecentOrder = {
 export function takashiRecentEvidence(rows: TakashiRecentOrder[], entryMs: number, observedMs: number): LearningOutcome[] {
   const seen = new Set<string>();
   return rows.filter(row => row.entry_strategy === TAKASHI_BNF && row.status === 'confirmed'
-    && row.account_type === 'PRACTICE' && /^\d+$/.test(row.iq_option_id ?? '')
+    && ['PRACTICE','REAL'].includes(row.account_type) && /^\d+$/.test(row.iq_option_id ?? '')
     && ['win', 'loss'].includes(row.result) && ['CALL', 'PUT'].includes(row.direction)
     && Date.parse(row.entry_minute) >= entryMs - TAKASHI_RECENT_DAYS * 86400000
     && Date.parse(row.entry_minute) < entryMs && row.settled_at !== null

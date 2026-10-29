@@ -17,7 +17,7 @@ export function DemoNoteMovementChart({ userId }: { userId: string }) {
    const rows = await readDemoScoreHistory(async (from, to) => {
     const { data, error } = await supabase.from('iq_demo_test_orders')
      .select('id,signal_id,entry_strategy,entry_minute,settled_at,status,result,profit,iq_option_id')
-     .eq('status', 'confirmed').eq('account_type', 'PRACTICE').in('result', ['win', 'loss'])
+     .eq('status', 'confirmed').in('account_type',['PRACTICE','REAL']).in('result', ['win', 'loss'])
      .not('iq_option_id', 'is', null).order('entry_minute').order('id').range(from, to);
     if (error) throw error;
     return data ?? [];

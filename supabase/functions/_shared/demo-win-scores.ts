@@ -1,6 +1,6 @@
 export type DemoWinOrder = {signal_id:string;status:string;account_type:string;iq_option_id:string|null;result:string};
 export function confirmedDemoWin(row:DemoWinOrder):boolean {
-  return row.status==='confirmed' && row.account_type==='PRACTICE'
+  return row.status==='confirmed' && ['PRACTICE','REAL'].includes(row.account_type)
     && typeof row.iq_option_id==='string' && /^\d+$/.test(row.iq_option_id) && row.result==='win';
 }
 export function demoWinScores(rows:DemoWinOrder[],scores:Map<string,number>):Set<number> {

@@ -35,7 +35,7 @@ Deno.serve(async req => {
    if(error)throw error;return data||[];
  },async ids=>{
    const {data,error}=await db.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result')
-     .in('signal_id',ids).eq('status','confirmed').eq('account_type','PRACTICE')
+     .in('signal_id',ids).eq('status','confirmed').in('account_type',['PRACTICE','REAL'])
      .eq('result','win').not('iq_option_id','is',null);
    if(error)throw error;return data||[];
  });

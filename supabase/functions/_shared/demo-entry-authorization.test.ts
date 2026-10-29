@@ -28,7 +28,7 @@ test('placement recomputes a real WIN correspondence without exact score evidenc
 });
 test('stored pattern claims cannot bypass missing, LOSS, non-Demo or unconfirmed references',async()=>{
   expect(await verifyDemoWinningPattern(candidate,async()=>null,async()=>[win])).toBe(false);
-  for(const row of [{...win,result:'loss'},{...win,account_type:'REAL'},{...win,status:'reserved'},{...win,signal_id:'other'}])
+  for(const row of [{...win,result:'loss'},{...win,account_type:'MT5'},{...win,status:'reserved'},{...win,signal_id:'other'}])
     expect(await verifyDemoWinningPattern(candidate,async()=>reference,async()=>[row])).toBe(false);
 });
 test('future references, absent learning evidence and fabricated candles do not authorize',async()=>{

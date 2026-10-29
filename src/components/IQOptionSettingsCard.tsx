@@ -22,12 +22,14 @@ interface IQOptionConfig {
 }
 
 interface IQOptionSettingsCardProps {
+  /** Admin: o tipo de conta aqui vale só para Últimas operações · Demo, separado do Auto Trading. */
+  demoAccount?: boolean;
   defaultOpen?: boolean;
   embedded?: boolean;
   onConnectionChange?: () => void;
 }
 
-export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, onConnectionChange }: IQOptionSettingsCardProps) {
+export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, onConnectionChange, demoAccount = false }: IQOptionSettingsCardProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -67,14 +69,18 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
         setConfig(data);
         setEmail(data.email);
         setPassword(data.password);
-        setAccountType(data.account_type);
+        if (!demoAccount) setAccountType(data.account_type);
         setNeedsReconnect(!data.is_active || !data.last_connected_at);
       } else {
         // Reset form if no config found
         setConfig(null);
         setEmail('');
         setPassword('');
-        setAccountType('PRACTICE');
+        if (!demoAccount) setAccountType('PRACTICE');
+      }
+      if (demoAccount) {
+        const { data: demo } = await supabase.from('iq_demo_test_settings').select('account_type').eq('id', 1).maybeSingle();
+        setAccountType((demo as { account_type?: string } | null)?.account_type ?? 'PRACTICE');
       }
     } catch (error) {
       console.error('Error loading config:', error);
@@ -98,13 +104,13 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
       const result = await iqOptionClient.login({
         email: email.trim(),
         password: password.trim(),
-        accountType: accountType,
+        accountType: demoAccount ? (config?.account_type ?? 'PRACTICE') : accountType,
         userId: user?.id,
       });
       
       if (result.success) {
         const values = {
-          email: email.trim(), password: password.trim(), account_type: accountType,
+          email: email.trim(), password: password.trim(), account_type: demoAccount ? (config?.account_type ?? 'PRACTICE') : accountType,
           is_active: true,
           last_connected_at: new Date().toISOString(),
         };
@@ -152,6 +158,16 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
     } finally {
       setIsTesting(false);
     }
+  };
+
+  const saveDemoAccount = async (next: string) => {
+    const previous = accountType;
+    setAccountType(next);
+    const { error } = await supabase.from('iq_demo_test_settings').update({ account_type: next } as never).eq('id', 1);
+    if (error) {
+      setAccountType(previous);
+      toast({ title: 'Não foi possível salvar', description: 'A conta de Últimas operações continua a mesma.', variant: 'destructive' });
+    } else toast({ title: 'Conta salva', description: `Últimas operações agora usam a conta ${next === 'REAL' ? 'Real' : 'Demo'}.` });
   };
 
   const invalidateConnection = async (nextAccount: string) => {
@@ -252,10 +268,11 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
 
         {/* Account Type */}
         <div>
-          <Label className="text-xs text-muted-foreground">Tipo de conta</Label>
+          <Label className="text-xs text-muted-foreground">{demoAccount ? 'Tipo de conta · Últimas operações' : 'Tipo de conta'}</Label>
           <Select value={accountType} disabled={isLoading || isTesting} onValueChange={(value) => {
             if (value === accountType) return;
-            if (embedded) void invalidateConnection(value);
+            if (demoAccount) void saveDemoAccount(value);
+            else if (embedded) void invalidateConnection(value);
             else setAccountType(value);
           }}>
             <SelectTrigger>

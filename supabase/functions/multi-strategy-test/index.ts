@@ -188,16 +188,16 @@ Deno.serve(async (req) => {
   const readPendingDemo = () => supabase.from('iq_demo_test_orders')
     .select('id,signal_id,entry_strategy,entry_minute,result,profit,asset,direction,status,account_type,iq_option_id,settled_at')
     .eq('status','confirmed').not('iq_option_id','is',null)
-    .eq('account_type','PRACTICE').eq('result','pending')
+    .in('account_type',['PRACTICE','REAL']).eq('result','pending')
     .lte('expiration_time',new Date(pendingCutoffMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
-  const amountRead = supabase.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r);
+  const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
   // Own recent broker evidence loads during preparation, not after the :00 candle request.
   const takashiRecentRead = readTakashiRecentOrders(async(from,to)=>{
     const {data,error}=await supabase.from('iq_demo_test_orders')
       .select('signal_id,entry_strategy,asset,direction,entry_minute,settled_at,status,account_type,iq_option_id,result')
-      .eq('entry_strategy',TAKASHI_BNF).eq('status','confirmed').eq('account_type','PRACTICE')
+      .eq('entry_strategy',TAKASHI_BNF).eq('status','confirmed').in('account_type',['PRACTICE','REAL'])
       .not('iq_option_id','is',null).in('result',['win','loss'])
       .gte('entry_minute',new Date(targetMs-14*86400000).toISOString())
       .lt('entry_minute',new Date(targetMs).toISOString())
@@ -307,6 +307,7 @@ Deno.serve(async (req) => {
   const previousPending = (previousDemo.data || []).filter(o=>o.result==='pending');
   const demoSettlements: Promise<void>[] = [];
   let preparedSocket: WebSocket | null = null;
+  let selectedDemoAccount: 'PRACTICE'|'REAL' = 'PRACTICE';
   let preparedBalanceId = 0;
   let preparedBalanceAmount = 0;
   let preparedActives: Record<string, any> = {};
@@ -393,7 +394,7 @@ Deno.serve(async (req) => {
         ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
       }
       if (d.name === 'profile') {
-        demoBalanceId = demoBalance(d.msg?.balances || [])?.id || 0;
+        {const demoAcct=(await amountRead).data?.account_type==='REAL'?'REAL':'PRACTICE';selectedDemoAccount=demoAcct;demoBalanceId = demoBalance(d.msg?.balances || [], demoAcct)?.id || 0;}
         if(!demoBalanceId){console.warn('Demo profile has no verified PRACTICE USD balance');finish();closePrepared();return;}
         preparedBalanceId = demoBalanceId;
         preparedBalanceAmount = Number((d.msg?.balances || []).find((b: any) => b.id === demoBalanceId)?.amount) || 0;
@@ -572,7 +573,7 @@ Deno.serve(async (req) => {
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
   const unbeatenNotes = await readUnbeatenDemoNotes(
     async (from,to)=>(await supabase.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result,profit,settled_at')
-      .eq('account_type','PRACTICE').eq('status','confirmed').in('result',['win','loss']).order('id').range(from,to)).data||[],
+      .in('account_type',['PRACTICE','REAL']).eq('status','confirmed').in('result',['win','loss']).order('id').range(from,to)).data||[],
     async ids=>(await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id',ids)).data||[],
     Date.now()).catch(()=>[]);
   const demoWinner = selectTakashiByNote(demoEligible, unbeatenNotes);
@@ -621,7 +622,7 @@ Deno.serve(async (req) => {
       const payout = typeof commission === 'number' ? (100-commission)/100 : null;
       const last = await supabase.from('iq_demo_test_orders')
         .select('status,result,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
-        .eq('entry_strategy',TAKASHI_BNF).eq('account_type','PRACTICE')
+        .eq('entry_strategy',TAKASHI_BNF).in('account_type',['PRACTICE','REAL'])
         .in('status',['confirmed','unknown','reserved'])
         .or(`status.eq.confirmed,iq_option_id.not.is.null,expiration_time.gt.${new Date().toISOString()}`)
         .order('entry_minute',{ascending:false}).limit(1);
@@ -636,7 +637,7 @@ Deno.serve(async (req) => {
           direction:demoWinner.direction,amount,entry_strategy:demoWinner.entry_strategy,
           recovery_level:recovery?.recovery_level,recovery_loss:recovery?.recovery_loss,
           recovery_base:recovery?.recovery_base,recovery_payout:recovery?.recovery_payout,
-          expiration_time:new Date(order.expired*1000).toISOString(),account_type:'PRACTICE',
+          expiration_time:new Date(order.expired*1000).toISOString(),account_type:selectedDemoAccount,
         }).select('id').single();
         const reserved = reservation.data?.id;
         if(reserved && !reservation.error) {

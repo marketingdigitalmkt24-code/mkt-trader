@@ -6,7 +6,7 @@ const cohort = DEMO_PREFERRED_SCORE_CENTS;
 export function rankDemoScores(rows:ScoreOutcome[],scores:Map<string,number>):ScorePriority[] {
  const stats = new Map(cohort.map(cents=>[cents,{cents,wins:0,losses:0,profit:0,accuracy:0}]));
  for(const row of rows){
-  if(row.status!=='confirmed'||row.account_type!=='PRACTICE'||!row.iq_option_id||!/^\d+$/.test(row.iq_option_id)||!['win','loss','tie'].includes(row.result))continue;
+  if(row.status!=='confirmed'||!['PRACTICE','REAL'].includes(row.account_type)||!row.iq_option_id||!/^\d+$/.test(row.iq_option_id)||!['win','loss','tie'].includes(row.result))continue;
   const score=scores.get(row.signal_id);
   if(score==null||!Number.isFinite(score))continue;
   const stat=stats.get(Math.round(score*100));if(!stat)continue;

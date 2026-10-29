@@ -23,7 +23,7 @@ export function DemoScoreOperations({ids,score,strategy='all'}:{ids:string[];sco
  const query = useQuery({queryKey:['demo-score-operation-charts',pageIds],enabled:pageIds.length>0,refetchInterval:30000,queryFn:async()=>{
   const {data:orders,error} = await supabase.from('iq_demo_test_orders')
    .select('id,signal_id,asset,direction,entry_strategy,amount,result,profit,created_at,entry_minute')
-   .eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null).in('id',pageIds);
+   .eq('status','confirmed').in('account_type',['PRACTICE','REAL']).not('iq_option_id','is',null).in('id',pageIds);
   if(error) throw error;
   const signals=(orders ?? []).map(r=>r.signal_id);
   const {data:charts,error:chartError} = signals.length ? await supabase.from('iq_demo_test_candidates')

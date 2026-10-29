@@ -11,7 +11,7 @@ export function demoDailyWindow(today: string, page: number) {
 }
 
 export function demoDailySummaries(rows: DemoDailyRow[], dates: string[]) {
- return dates.map(date => ({ date, ...demoTestStats(rows.filter(row => row.account_type === 'PRACTICE' && demoDayKey(new Date(row.entry_minute)) === date)) }));
+ return dates.map(date => ({ date, ...demoTestStats(rows.filter(row => ['PRACTICE','REAL'].includes(row.account_type) && demoDayKey(new Date(row.entry_minute)) === date)) }));
 }
 
 export function demoDailyPages(today: string, oldest: string) {

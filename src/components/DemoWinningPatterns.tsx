@@ -52,7 +52,7 @@ export function DemoWinningPatterns() {
      for (let from = 0; from < limit; from += 1000) {
       let request = supabase.from('iq_demo_test_orders')
        .select('id,signal_id,asset,direction,entry_strategy,entry_minute,amount,result,profit', { count: 'exact' })
-       .eq('status', 'confirmed').eq('account_type', 'PRACTICE').not('iq_option_id', 'is', null);
+       .eq('status', 'confirmed').in('account_type',['PRACTICE','REAL']).not('iq_option_id', 'is', null);
       if (filter === 'win' || filter === 'loss') request = request.eq('result', filter);
       const { data, error, count: total } = await request.order('entry_minute', { ascending: false }).order('id', { ascending: false }).range(from, Math.min(from + 999, limit - 1));
       if (error) throw error;

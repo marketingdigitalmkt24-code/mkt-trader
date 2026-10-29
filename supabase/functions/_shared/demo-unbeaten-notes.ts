@@ -10,7 +10,7 @@ export function unbeatenDemoNotes(rows: Evidence[], scores: ReadonlyMap<string, 
   for (const row of rows) {
     const settledAt = Date.parse(row.settled_at ?? '');
     const score = scores.get(row.signal_id);
-    if (row.status !== 'confirmed' || row.account_type !== 'PRACTICE'
+    if (row.status !== 'confirmed' || !['PRACTICE','REAL'].includes(row.account_type)
       || !row.iq_option_id || !/^\d+$/.test(row.iq_option_id)
       || !['win', 'loss'].includes(row.result)
       || !Number.isFinite(observedAt) || !Number.isFinite(settledAt) || settledAt > observedAt

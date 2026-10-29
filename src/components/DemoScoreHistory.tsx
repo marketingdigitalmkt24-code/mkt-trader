@@ -34,7 +34,7 @@ export function DemoScoreHistory() {
   queryFn: () => readDemoScoreHistory(async (from, to) => {
    const {data,error} = await supabase.from('iq_demo_test_orders')
     .select('id,signal_id,entry_strategy,entry_minute,settled_at,status,result,profit,iq_option_id')
-    .eq('status','confirmed').eq('account_type','PRACTICE').not('iq_option_id','is',null)
+    .eq('status','confirmed').in('account_type',['PRACTICE','REAL']).not('iq_option_id','is',null)
     .order('entry_minute',{ascending:true}).order('id').range(from,to);
    if (error) throw error;
    return data ?? [];

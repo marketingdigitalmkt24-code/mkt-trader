@@ -31,6 +31,14 @@ test('Panic rally far above SMA25 with overbought RSI fires PUT', () => {
   assertEquals(out ? out.rsi > 80 : false, true);
 });
 
+test('Moderate dislocation below 6x body no longer fires after tightening', () => {
+  // Flat base then a short drop: stretch lands under 6x the average body.
+  const values: number[] = [];
+  for (let i = 0; i < 55; i++) values.push(100);
+  for (let i = 0; i < 5; i++) values.push(99.8 - i * 0.06);
+  assertEquals(takashiKotegawa(series(values), entry), null);
+});
+
 test('Sideways market near the mean stays out', () => {
   const values: number[] = [];
   for (let i = 0; i < 60; i++) values.push(100 + Math.sin(i) * 0.2);

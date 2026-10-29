@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { iqOptionClient } from '@/lib/iqoption-client';
+import { iqOptionClient } from '@/services/IQOptionClient';
 
 // Account that receives the IQ Option entries. Changing it invalidates the connection (reconnect required).
 export function AutoTradingAccountSelect() {

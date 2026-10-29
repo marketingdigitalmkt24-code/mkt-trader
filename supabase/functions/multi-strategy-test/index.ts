@@ -307,6 +307,7 @@ Deno.serve(async (req) => {
   const previousPending = (previousDemo.data || []).filter(o=>o.result==='pending');
   const demoSettlements: Promise<void>[] = [];
   let preparedSocket: WebSocket | null = null;
+  let selectedDemoAccount: 'PRACTICE'|'REAL' = 'PRACTICE';
   let preparedBalanceId = 0;
   let preparedBalanceAmount = 0;
   let preparedActives: Record<string, any> = {};
@@ -331,7 +332,6 @@ Deno.serve(async (req) => {
     const ws = new WebSocket(endpoint);
     preparedSocket = ws;
     let pending = 0; const byReq = new Map<string, string>();
-  let selectedDemoAccount: 'PRACTICE'|'REAL' = 'PRACTICE';
     let demoBalanceId = 0, candleDone = false;
     let historyAttempt=0;
     const historyResponses=new Set<string>();

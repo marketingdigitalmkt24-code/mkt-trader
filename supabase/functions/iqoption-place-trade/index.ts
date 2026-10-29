@@ -16,6 +16,7 @@ import { selectedTrendCopyRequest } from '../_shared/selected-trend-copy.ts';
 import { isNormalPrincipalTrend } from '../_shared/normal-trend.ts';
 import { isDemoValidatedPrincipal } from '../_shared/demo-validated.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
+import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
 import { prepareTakashiCopy, waitForConfirmedCopy } from '../_shared/copy-preparation.ts';
 
 const corsHeaders = {
@@ -675,6 +676,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
+    // Auto Trading switch off => no principal entry or copy reaches IQ Option.
+    if (!(await masterAutoTradingEnabled(supabase)))
+      return Response.json({ skipped: 'Auto Trading disabled' }, { status: 410, headers: corsHeaders });
     if (body?.prepareCopyCandidate !== undefined) {
       if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`)
         return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });

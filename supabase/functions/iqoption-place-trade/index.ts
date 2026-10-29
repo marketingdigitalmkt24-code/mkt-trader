@@ -219,7 +219,7 @@ async function mirrorCopyTrades(
         // Unknown broker outcomes fail closed; never expire a possibly submitted order.
         await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
         return true;
-        }, gate => placeTradeFireAndForget(ssid, accountType, tradeRequest, gate,
+        }, gate => placeTradeFireAndForget(ssid, accountType, { ...tradeRequest }, gate,
           { profit: copiedProfit, value: Number(settings?.profit_target_value), type: settings?.profit_target_type || 'value' }, autoTradingOn,
           () => amount));
         const copySignal = `copy-${copy.user_id}-${masterSignalId}`;

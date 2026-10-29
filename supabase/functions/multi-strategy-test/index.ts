@@ -4,6 +4,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { telegramTradingEnabled } from '../_shared/principal-pause.ts';
+import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
 import { nextReversalMinute } from '../_shared/four-win-reversal.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
@@ -131,7 +132,10 @@ export function detect(cs: K[]): [string, 'CALL' | 'PUT'][] {
 }
 
 async function sendTelegram(text: string) {
-  if (!telegramTradingEnabled()) return;
+  // Avisos de Telegram seguem o seletor Auto Trading do admin.
+  const supaUrl = Deno.env.get('SUPABASE_URL'), supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const autoTradingOn = supaUrl && supaKey ? await masterAutoTradingEnabled(createClient(supaUrl, supaKey)) : false;
+  if (!telegramTradingEnabled(undefined, autoTradingOn)) return;
   const lk = Deno.env.get('LOVABLE_API_KEY'), tk = Deno.env.get('TELEGRAM_API_KEY');
   if (!lk || !tk) { console.error('Telegram não configurado'); return; }
   const r = await fetch('https://connector-gateway.lovable.dev/telegram/sendMessage', {

@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
     .lte('expiration_time',new Date(pendingCutoffMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
-  const amountRead = supabase.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r);
+  const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
   // Own recent broker evidence loads during preparation, not after the :00 candle request.
   const takashiRecentRead = readTakashiRecentOrders(async(from,to)=>{
     const {data,error}=await supabase.from('iq_demo_test_orders')
@@ -331,6 +331,7 @@ Deno.serve(async (req) => {
     const ws = new WebSocket(endpoint);
     preparedSocket = ws;
     let pending = 0; const byReq = new Map<string, string>();
+  let selectedDemoAccount: 'PRACTICE'|'REAL' = 'PRACTICE';
     let demoBalanceId = 0, candleDone = false;
     let historyAttempt=0;
     const historyResponses=new Set<string>();
@@ -393,7 +394,7 @@ Deno.serve(async (req) => {
         ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
       }
       if (d.name === 'profile') {
-        demoBalanceId = demoBalance(d.msg?.balances || [])?.id || 0;
+        {const demoAcct=(await amountRead).data?.account_type==='REAL'?'REAL':'PRACTICE';selectedDemoAccount=demoAcct;demoBalanceId = demoBalance(d.msg?.balances || [], demoAcct)?.id || 0;}
         if(!demoBalanceId){console.warn('Demo profile has no verified PRACTICE USD balance');finish();closePrepared();return;}
         preparedBalanceId = demoBalanceId;
         preparedBalanceAmount = Number((d.msg?.balances || []).find((b: any) => b.id === demoBalanceId)?.amount) || 0;
@@ -636,7 +637,7 @@ Deno.serve(async (req) => {
           direction:demoWinner.direction,amount,entry_strategy:demoWinner.entry_strategy,
           recovery_level:recovery?.recovery_level,recovery_loss:recovery?.recovery_loss,
           recovery_base:recovery?.recovery_base,recovery_payout:recovery?.recovery_payout,
-          expiration_time:new Date(order.expired*1000).toISOString(),account_type:'PRACTICE',
+          expiration_time:new Date(order.expired*1000).toISOString(),account_type:selectedDemoAccount,
         }).select('id').single();
         const reserved = reservation.data?.id;
         if(reserved && !reservation.error) {

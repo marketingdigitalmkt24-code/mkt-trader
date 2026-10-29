@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 import { isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
@@ -17,12 +18,7 @@ import { isNormalPrincipalTrend } from '../_shared/normal-trend.ts';
 import { isDemoValidatedPrincipal } from '../_shared/demo-validated.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
 import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
-import { prepareTakashiCopy, waitForConfirmedCopy } from '../_shared/copy-preparation.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
+import { prepareTakashiCopy, prepareCopyPlacement, waitForConfirmedCopy } from '../_shared/copy-preparation.ts';
 
 interface TradeRequest {
   asset: string;
@@ -180,37 +176,7 @@ async function mirrorCopyTrades(
           }
           return preparedSession;
         })();
-        // Login overlaps principal preparation, but no client reservation or placement precedes confirmation.
-        const confirmed = await master;
-        if (!confirmed.ok) return;
-        const [{ data: currentConfig }, { data: currentCopy }] = await Promise.all([
-          supabase.from('iqoption_config').select('id, updated_at, account_type').eq('user_id', copy.user_id).eq('is_active', true).limit(1).maybeSingle(),
-          supabase.from('copy_trading_configs').select('enabled').eq('user_id', copy.user_id).maybeSingle(),
-        ]);
-        if (!currentCopy?.enabled || currentConfig?.id !== cfg.id || currentConfig?.updated_at !== cfg.updated_at
-          || readCopyAccount(currentConfig) !== accountType) return;
-        const copySignal = `copy-${copy.user_id}-${masterSignalId}`;
-        const { data: reservedAmount, error: reserveError } = await supabase.rpc('reserve_iq_entry', { p_client: copy.user_id, p_signal: copySignal });
-        const amount = configuredEntryAmount(reservedAmount);
-        if (reserveError || amount === null) return;
-
-        // Respeita a meta de lucro do cliente
-        if (settings?.profit_target_type === 'value' && Number(settings.profit_target_value) > 0) {
-          const { data: todayOps } = await supabase.from('operation_results').select('profit')
-            .like('signal_id', `copy-${copy.user_id}-%`).gte('created_at', dayStartIso);
-          const dailyProfit = (todayOps || []).reduce((s: number, o: any) => s + Number(o.profit || 0), 0);
-          if (copyTargetReached(dailyProfit, Number(settings.profit_target_value))) {
-            await supabase.from('copy_trading_configs').update({ enabled: false }).eq('user_id', copy.user_id);
-            console.log(`🎯 Copy ${copy.user_id}: meta de lucro atingida, pulando`);
-            return;
-          }
-        }
-
-        // Retentativa de login: instabilidade/bloqueio temporário da corretora
-        // não pode derrubar o copy do cliente. A ordem só dispara após a
-        // confirmação da principal, então as tentativas correm em paralelo à espera.
-        const ssid = await loginPreparation;
-        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou após 3 tentativas`); return; }
+        // Prepare read-only limits while the principal and client login are in flight.
         let copiedProfit = 0;
         for (let offset = 0; ; offset += 1000) {
           const { data, error } = await supabase.from('operation_results').select('profit')
@@ -221,13 +187,38 @@ async function mirrorCopyTrades(
           copiedProfit += (data || []).reduce((sum: number, row: { profit: number }) => sum + Number(row.profit || 0), 0);
           if (!data || data.length < 1000) break;
         }
+        const ssid = await loginPreparation;
+        if (!ssid) { console.log(`⏭️ Copy ${copy.user_id}: login falhou após 3 tentativas`); return; }
+        let amount: number | null = null;
+        const res = await prepareCopyPlacement(master, async () => {
+        if (!await masterAutoTradingEnabled(supabase)) return false;
+        const [{ data: currentConfig }, { data: currentCopy }] = await Promise.all([
+          supabase.from('iqoption_config').select('id, updated_at, account_type').eq('user_id', copy.user_id).eq('is_active', true).limit(1).maybeSingle(),
+          supabase.from('copy_trading_configs').select('enabled').eq('user_id', copy.user_id).maybeSingle(),
+        ]);
+        if (!currentCopy?.enabled || currentConfig?.id !== cfg.id || currentConfig?.updated_at !== cfg.updated_at
+          || readCopyAccount(currentConfig) !== accountType) return false;
+        const copySignal = `copy-${copy.user_id}-${masterSignalId}`;
+        const { data: reservedAmount, error: reserveError } = await supabase.rpc('reserve_iq_entry', { p_client: copy.user_id, p_signal: copySignal });
+        amount = configuredEntryAmount(reservedAmount);
+        if (reserveError || amount === null) return false;
 
-        // Sessão e gráfico já preparados; a ordem só sai quando a principal for confirmada.
+        // Respeita a meta de lucro do cliente
+        if (settings?.profit_target_type === 'value' && Number(settings.profit_target_value) > 0) {
+          if (copyTargetReached(copiedProfit, Number(settings.profit_target_value))) {
+            await supabase.from('copy_trading_configs').update({ enabled: false }).eq('user_id', copy.user_id);
+            console.log(`🎯 Copy ${copy.user_id}: meta de lucro atingida, pulando`);
+            return false;
+          }
+        }
+
         // Unknown broker outcomes fail closed; never expire a possibly submitted order.
         await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
-        const entryAt = confirmed.expirationIso ? Date.parse(confirmed.expirationIso) - tradeRequest.expiration * 60000 : tradeRequest.entryAt;
-        const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount, entryAt }, Promise.resolve(confirmed.ok),
-          { profit: copiedProfit, value: Number(settings?.profit_target_value), type: settings?.profit_target_type || 'value' }, autoTradingOn);
+        return true;
+        }, gate => placeTradeFireAndForget(ssid, accountType, { ...tradeRequest }, gate,
+          { profit: copiedProfit, value: Number(settings?.profit_target_value), type: settings?.profit_target_type || 'value' }, autoTradingOn,
+          () => amount));
+        const copySignal = `copy-${copy.user_id}-${masterSignalId}`;
         if (res.error === 'Copy profit target reached') await supabase.from('copy_trading_configs').update({ enabled: false }).eq('user_id', copy.user_id);
         const { timeframe, expirationIso } = await master;
         if (res.success && res.tradeId) {
@@ -274,6 +265,7 @@ async function placeTradeFireAndForget(
   gate?: Promise<boolean>,
   copyTarget?: { profit: number; value: number; type: string },
   autoTradingOn = false,
+  copyAmount?: () => number | null,
 ): Promise<{ success: boolean; tradeId?: string; error?: string }> {
   if (!principalIQEnabled(trade.entryStrategy, autoTradingOn)) return { success: false, error: 'Principal IQ and copies paused by user' };
   return new Promise((resolve) => {
@@ -549,6 +541,15 @@ async function placeTradeFireAndForget(
               clearTimeout(timeout); ws.close();
               resolve({ success: false, error: 'Ordem principal não confirmada; copy não enviado' });
               return;
+            }
+            if (copyAmount) {
+              const reserved = configuredEntryAmount(copyAmount());
+              if (reserved === null) {
+                clearTimeout(timeout); ws.close();
+                resolve({ success: false, error: 'Copy amount unavailable; no order sent' });
+                return;
+              }
+              trade.amount = reserved;
             }
             // Recheck at actual submission: event-loop delay must never create a late order.
             if (anchoredEntry && (!canSendReversal(candleOpenMs, Date.now())

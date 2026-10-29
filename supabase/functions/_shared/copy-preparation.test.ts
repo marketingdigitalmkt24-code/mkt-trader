@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { prepareTakashiCopy, waitForConfirmedCopy } from './copy-preparation';
+import { prepareTakashiCopy, prepareCopyPlacement, waitForConfirmedCopy } from './copy-preparation';
 const at = Date.parse('2026-10-25T21:58:00Z');
 const candidate = { signal_id: 'takashi-bnf-v1-USD/VND-OTC-1792965480', asset: 'USD/VND-OTC', direction: 'CALL', entry_strategy: 'TAKASHI_BNF_V1', entry_minute: new Date(at).toISOString(), score: 1.59 };
 const request = prepareTakashiCopy(candidate, at);
@@ -9,9 +9,10 @@ test('Takashi copy prepares the inverted direction in the current minute without
  expect(prepareTakashiCopy({ ...candidate, direction: 'PUT' }, at)?.direction).toBe('call');
  expect(prepareTakashiCopy(candidate, at + 30000)).toBeNull();
 });
-test('displayed zero Takashi score cannot prepare a copy', () => {
- expect(prepareTakashiCopy({ ...candidate, score: 0 }, at)).toBeNull();
- expect(prepareTakashiCopy({ ...candidate, score: 0.004 }, at)).toBeNull();
+test('accepted Takashi opening can prepare a copy even with displayed zero score', () => {
+ expect(prepareTakashiCopy({ ...candidate, score: 0 }, at)?.direction).toBe('put');
+ expect(prepareTakashiCopy({ ...candidate, score: 0.004 }, at)?.direction).toBe('put');
+ expect(prepareTakashiCopy({ ...candidate, score: NaN }, at)).toBeNull();
 });
 test('prepared client waits for both exact broker ID and executed principal queue', async () => {
  let clock = at, calls = 0;
@@ -51,4 +52,27 @@ test('confirmation polling stops at the original 30-second boundary', async () =
  expect(calls).toBe(1);
  expect(delays).toEqual([10]);
  expect(clock).toBe(at + 30000);
+});
+test('client connection starts before opening; accepted pending order releases copy without WIN or LOSS', async () => {
+ let accept: (opened: { ok: boolean }) => void = () => {};
+ const opening = new Promise<{ ok: boolean }>(resolve => { accept = resolve; });
+ const events: string[] = [];
+ const placement = prepareCopyPlacement(opening, async () => { events.push('client-authorized'); return true; }, async gate => {
+  events.push('connected');
+  if (await gate) events.push('sent');
+ });
+ expect(events).toEqual(['connected']);
+ accept({ ok: true });
+ await placement;
+ expect(events).toEqual(['connected', 'client-authorized', 'sent']);
+});
+test('refused opening never reserves or sends a copy', async () => {
+ let reservations = 0, sent = false;
+ await prepareCopyPlacement(Promise.resolve({ ok: false }), async () => { reservations++; return true; }, async gate => { sent = await gate; });
+ expect(reservations).toBe(0);
+ expect(sent).toBe(false);
+});
+test('client disabled after preparation never sends a copy', async () => {
+ const sent = await prepareCopyPlacement(Promise.resolve({ ok: true }), async () => false, gate => gate);
+ expect(sent).toBe(false);
 });

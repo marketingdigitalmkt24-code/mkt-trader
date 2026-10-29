@@ -5,7 +5,7 @@ export function prepareTakashiCopy(candidate: {
  signal_id: string; asset: string; direction: string; entry_strategy: string; entry_minute: string; score: number;
 } | null, now: number) {
  if (!candidate || candidate.entry_strategy !== 'TAKASHI_BNF_V1' || !Number.isFinite(candidate.score)
-  || Math.round(candidate.score * 100) === 0 || !['CALL', 'PUT'].includes(candidate.direction)) return null;
+  || !['CALL', 'PUT'].includes(candidate.direction)) return null;
  const entryAt = Date.parse(candidate.entry_minute);
  if (!Number.isFinite(entryAt) || now < entryAt || now >= entryAt + 30000) return null;
  return { asset: candidate.asset, direction: candidate.direction === 'PUT' ? 'call' as const : 'put' as const,
@@ -15,6 +15,16 @@ export function prepareTakashiCopy(candidate: {
 
 type PrincipalOrder = Parameters<typeof selectedTrendCopyRequest>[0];
 export const COPY_CONFIRMATION_POLL_MS = 25;
+// Start the broker's read-only profile/market handshake before the principal opens.
+// The sender must still await the exact accepted principal and the client reservation.
+export function prepareCopyPlacement<T>(
+ confirmation: Promise<{ ok: boolean }>,
+ authorize: () => Promise<boolean>,
+ connect: (gate: Promise<boolean>) => Promise<T>,
+) {
+ const gate = confirmation.then(async opened => opened.ok && await authorize());
+ return connect(gate);
+}
 export async function waitForConfirmedCopy(
  signalId: string, entryAt: number,
  read: () => Promise<{ order: PrincipalOrder; executed: boolean }>,

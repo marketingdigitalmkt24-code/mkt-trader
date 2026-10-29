@@ -1,4 +1,5 @@
 # Histórico diário Demo (29/10/2026)
+- [x] Cada dia coube em uma única linha (data, acerto, ganhos, perdas, operações, empates e saldo à direita), com ganhos/perdas na forma curta e rolagem horizontal só em telas estreitas; painel autenticado conferiu 29 e 28 sem corte nem quebra, três testes passaram e build OK.
 - [x] Histórico abaixo de Últimas operações com dois dias BRT por página, saldo, ganhos/perdas monetários, acerto, operações e empates; leitura Demo confirmada paginada e atualização por eventos/10s. Sete testes passaram, build OK; admin autenticado conferiu 29/28 e 27/26, ida/volta da paginação e nenhum erro de página. Execução intacta.
 
 # Reduzir oscilações IQ Option (28/10/2026)

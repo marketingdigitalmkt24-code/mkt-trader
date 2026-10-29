@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import { demoDayKey, demoDailyWindow, demoDailySummaries, demoDailyPages, type DemoDailyRow } from '@/lib/demo-daily-history';
 
 const currency = (amount: number) => amount.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' });
+// Na linha única, os valores de ganhos/perdas usam a forma curta para caber sem rolagem.
+const shortCurrency = (amount: number) => `$${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function DemoDailyHistory() {
  const [page, setPage] = useState(0);
@@ -47,22 +49,16 @@ export function DemoDailyHistory() {
    </div>
   </div>
   {history.isLoading ? <p className="py-3 text-xs text-muted-foreground">Carregando histórico diário…</p> : history.isError ? <p role="alert" className="text-xs text-destructive">Não foi possível carregar o histórico diário.</p> : <div className="divide-y divide-border">
-   {history.data?.days.map(day => <div key={day.date} className="py-4 first:pt-0" aria-label={`Resultado Demo ${day.date}`}>
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-     <h5 className="flex items-center gap-2 text-xs font-semibold"><Calendar className="h-4 w-4 text-muted-foreground"/>{new Date(`${day.date}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}{day.date===today && <span className="text-muted-foreground">· Hoje</span>}</h5>
-     <span className={cn('flex items-center gap-2 font-mono text-xl font-bold',day.profit>0?'text-call':day.profit<0?'text-put':'text-muted-foreground')}>
-      {day.profit>=0?<TrendingUp className="h-4 w-4"/>:<TrendingDown className="h-4 w-4"/>}{currency(day.profit)}
-     </span>
-    </div>
-    <div className="mb-3 flex items-center justify-between text-xs"><span className="text-muted-foreground">Taxa de acerto</span><strong className="font-mono">{day.accuracy.toLocaleString('pt-BR',{maximumFractionDigits:1})}%</strong></div>
-    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
-     <div><span className="block text-muted-foreground">Ganhos</span><strong className="font-mono text-call">{day.wins}</strong><span className="block font-mono text-call">{currency(day.grossWins)}</span></div>
-     <div><span className="block text-muted-foreground">Perdas</span><strong className="font-mono text-put">{day.losses}</strong><span className="block font-mono text-put">{currency(day.grossLosses)}</span></div>
-     <div><span className="block text-muted-foreground">Operações</span><strong className="font-mono">{day.wins+day.losses+day.ties+day.pending}</strong></div>
-     <div><span className="block text-muted-foreground">Empates</span><strong className="font-mono">{day.ties}</strong></div>
-    </div>
-    {day.pending>0 && <p className="mt-2 text-xs text-muted-foreground">{day.pending} abertas</p>}
-   </div>)}
+    {history.data?.days.map(day => <div key={day.date} className="flex flex-nowrap items-center gap-1 overflow-x-auto py-2.5 text-xs first:pt-0" aria-label={`Resultado Demo ${day.date}`}>
+     <h5 className="flex shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold"><Calendar className="h-3.5 w-3.5 text-muted-foreground"/>{new Date(`${day.date}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}{day.date===today && <span className="font-normal text-muted-foreground">· Hoje</span>}</h5>
+     <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground" title="Taxa de acerto">{day.accuracy.toLocaleString('pt-BR',{maximumFractionDigits:1})}% acerto</span>
+     <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono text-[11px] text-call" title={`Ganhos: ${currency(day.grossWins)}`}><TrendingUp className="h-3 w-3"/>{day.wins} · {shortCurrency(day.grossWins)}</span>
+     <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono text-[11px] text-put" title={`Perdas: ${currency(day.grossLosses)}`}><TrendingDown className="h-3 w-3"/>{day.losses} · {shortCurrency(day.grossLosses)}</span>
+     <span className="shrink-0 whitespace-nowrap font-mono text-[11px]" title="Operações">{day.wins+day.losses+day.ties+day.pending} op</span>
+     <span className="shrink-0 whitespace-nowrap font-mono text-[11px]" title="Empates">{day.ties} emp</span>
+     {day.pending>0 && <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground" title="Operações ainda abertas">{day.pending} abertas</span>}
+     <span className={cn('ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap font-mono text-sm font-bold',day.profit>0?'text-call':day.profit<0?'text-put':'text-muted-foreground')} title="Saldo do dia">{day.profit>=0?<TrendingUp className="h-3.5 w-3.5"/>:<TrendingDown className="h-3.5 w-3.5"/>}{currency(day.profit)}</span>
+    </div>)}
   </div>}
  </section>;
 }

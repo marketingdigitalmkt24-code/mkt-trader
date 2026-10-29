@@ -31,11 +31,16 @@ test('Panic rally far above SMA25 with overbought RSI fires PUT', () => {
   assertEquals(out ? out.rsi > 80 : false, true);
 });
 
-test('Moderate dislocation below 6x body no longer fires after tightening', () => {
-  // Flat base then a short drop: stretch lands under 6x the average body.
+test('Dislocation with RSI 15–20 no longer fires CALL after tightening', () => {
+  // Steady decline: stretch ~7.2x body and RSI ~19.9 — fired under the old rsi<20 rule.
   const values: number[] = [];
-  for (let i = 0; i < 55; i++) values.push(100);
-  for (let i = 0; i < 5; i++) values.push(99.8 - i * 0.06);
+  for (let i = 0; i < 60; i++) values.push(100 - i * 0.25 + (i % 2 ? 0.2 : -0.2));
+  assertEquals(takashiKotegawa(series(values), entry), null);
+});
+
+test('Rally with RSI 80–85 no longer fires PUT after tightening', () => {
+  const values: number[] = [];
+  for (let i = 0; i < 60; i++) values.push(100 + i * 0.25 + (i % 2 ? 0.2 : -0.2));
   assertEquals(takashiKotegawa(series(values), entry), null);
 });
 

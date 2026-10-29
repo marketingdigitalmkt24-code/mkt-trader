@@ -33,3 +33,4 @@
 - Strategy-note drilldowns reuse the paginated Demo operation list and exact signal candle joins; load only contributing strategy cohorts within the selected summary's WIN span on demand, because opening details must not slow down summary loading or change execution.
 - AI card reads private per-asset scans, retains completed scans during reconnection and never invents notes. Why: no signal is not idle.
 - Operações Abertas shows only broker positions whose payload carries an order id this app recorded, with the app's own asset/direction/stake; why: never list orders opened outside the app.
+- Principal IQ placement and copies require the master admin's user_settings.auto_trading_enabled via the shared auto-trading gate; why: turning Auto Trading off must stop IQ Option entries server-side, not only in the browser.

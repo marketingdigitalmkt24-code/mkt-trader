@@ -52,8 +52,8 @@ export function DemoDailyHistory() {
     {history.data?.days.map(day => <div key={day.date} className="flex flex-nowrap items-center gap-1.5 overflow-x-auto py-2.5 text-xs first:pt-0" aria-label={`Resultado Demo ${day.date}`}>
      <h5 className="flex shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold"><Calendar className="h-3.5 w-3.5 text-muted-foreground"/>{new Date(`${day.date}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}{day.date===today && <span className="font-normal text-muted-foreground">· Hoje</span>}</h5>
      <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground" title="Taxa de acerto">{day.accuracy.toLocaleString('pt-BR',{maximumFractionDigits:1})}% acerto</span>
-     <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono text-[11px] text-call" title="Ganhos"><TrendingUp className="h-3 w-3"/>{day.wins} · {currency(day.grossWins)}</span>
-     <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono text-[11px] text-put" title="Perdas"><TrendingDown className="h-3 w-3"/>{day.losses} · {currency(day.grossLosses)}</span>
+     <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono text-[11px] text-call" title={`Ganhos: ${currency(day.grossWins)}`}><TrendingUp className="h-3 w-3"/>{day.wins} · {shortCurrency(day.grossWins)}</span>
+     <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-mono text-[11px] text-put" title={`Perdas: ${currency(day.grossLosses)}`}><TrendingDown className="h-3 w-3"/>{day.losses} · {shortCurrency(day.grossLosses)}</span>
      <span className="shrink-0 whitespace-nowrap font-mono text-[11px]" title="Operações">{day.wins+day.losses+day.ties+day.pending} op</span>
      <span className="shrink-0 whitespace-nowrap font-mono text-[11px]" title="Empates">{day.ties} emp</span>
      {day.pending>0 && <span className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground" title="Operações ainda abertas">{day.pending} abertas</span>}

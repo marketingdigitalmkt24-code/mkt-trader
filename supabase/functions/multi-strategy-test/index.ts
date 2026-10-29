@@ -606,6 +606,13 @@ Deno.serve(async (req) => {
     else {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
       console.log('Demo current-analysis selection:', JSON.stringify({score:demoWinner._score,historicalNotePriority:false}));
+      // Principal "Takashi invertida após WIN": the executor checks Auto Trading, the previous Takashi WIN on this asset and limits.
+      const invertedTask = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/selected-demo-trend`, {
+        method:'POST', headers:{Authorization:`Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,'Content-Type':'application/json'},
+        body:JSON.stringify({candidate:demoWinner.signal_id}), signal:AbortSignal.timeout(100000),
+      }).then(async r=>console.log('Takashi inverted principal:',r.status,(await r.text()).slice(0,200)))
+        .catch(e=>console.error('Takashi inverted principal failed:',String(e)));
+      if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(invertedTask);
       // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
       const setting = await amountRead;
       const base = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);

@@ -5,28 +5,26 @@ import { selectedTrendCopyRequest } from './selected-trend-copy';
 import { copyProfileTargetBlocked } from './copy-target';
 
 const now = Date.parse('2026-10-25T21:08:02Z');
-const current = { entry_minute: '2026-10-25T21:08:00Z', entry_strategy: 'TAKASHI_BNF_V1', direction: 'PUT', score: 0.94 };
-const previous = { entry_minute: '2026-10-25T21:07:00Z', entry_strategy: 'VELA_FORCA', direction: 'PUT', score: 2.26, status: 'confirmed', iq_option_id: '123' };
-test('2.26 Force then Takashi PUT 0.94 opens CALL without a result requirement', () => {
-  expect(takashiAfter226Direction(current, previous, now)).toBe('call');
-  for (const result of ['win', 'loss', 'pending', 'tie'])
-    expect(takashiAfter226Direction(current, { ...previous, result } as typeof previous, now)).toBe('call');
+const current = { entry_minute: '2026-10-25T21:08:00Z', entry_strategy: 'TAKASHI_BNF_V1', direction: 'CALL', asset: 'ONDOUSD-OTC' };
+const previous = { entry_minute: '2026-10-25T21:05:00Z', entry_strategy: 'TAKASHI_BNF_V1', asset: 'ONDOUSD-OTC', status: 'confirmed', iq_option_id: '123', result: 'win' };
+test('Takashi WIN then next Takashi signal on same asset CALL enters inverted PUT', () => {
+  expect(takashiAfter226Direction(current, previous, now)).toBe('put');
+  expect(takashiAfter226Direction({ ...current, direction: 'PUT' }, previous, now)).toBe('call');
 });
-test('Takashi CALL inverts to PUT and has no score cutoff', () => {
-  expect(takashiAfter226Direction({ ...current, direction: 'CALL', score: 9.3 }, previous, now)).toBe('put');
+test('previous LOSS, tie or pending never inverts', () => {
+  for (const result of ['loss', 'tie', 'pending', null])
+    expect(takashiAfter226Direction(current, { ...previous, result }, now)).toBeNull();
 });
-test('requires the immediately previous minute, not a gap or the same minute', () => {
-  expect(takashiAfter226Direction(current, { ...previous, entry_minute: '2026-10-25T21:06:00Z' }, now)).toBeNull();
+test('next signal on a different asset does not enter', () => {
+  expect(takashiAfter226Direction(current, { ...previous, asset: 'SUGAR-OTC' }, now)).toBeNull();
+});
+test('previous must be an earlier confirmed Takashi Demo order', () => {
+  expect(takashiAfter226Direction(current, { ...previous, entry_strategy: 'VELA_FORCA' }, now)).toBeNull();
   expect(takashiAfter226Direction(current, { ...previous, entry_minute: current.entry_minute }, now)).toBeNull();
-});
-test('previous score must display 2.26 and be Force or Trend', () => {
-  expect(takashiAfter226Direction(current, { ...previous, entry_strategy: 'TENDENCIA', score: 2.26032894533026 }, now)).toBe('call');
-  expect(takashiAfter226Direction(current, { ...previous, score: 2.27 }, now)).toBeNull();
-  expect(takashiAfter226Direction(current, { ...previous, entry_strategy: 'REVERSAO_RSI' }, now)).toBeNull();
-});
-test('requires confirmed previous Demo order and fresh selected Takashi', () => {
   expect(takashiAfter226Direction(current, { ...previous, status: 'failed' }, now)).toBeNull();
   expect(takashiAfter226Direction(current, { ...previous, iq_option_id: null }, now)).toBeNull();
+});
+test('current signal must be fresh (first 30s of its minute)', () => {
   expect(takashiAfter226Direction(current, previous, Date.parse('2026-10-25T21:08:30Z'))).toBeNull();
 });
 test('all strategies including Takashi stay paused for principal and Telegram', () => {

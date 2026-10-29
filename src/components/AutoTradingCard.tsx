@@ -9,6 +9,7 @@ import { Bot, DollarSign, Target, Calendar, AlertTriangle, Play, Square, Save, X
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { DemoTestAmountSetting } from './DemoTestAmountSetting';
+import { AutoTradingAccountSelect } from './AutoTradingAccountSelect';
 
 interface AutoTradingConfig {
   enabled: boolean;
@@ -193,6 +194,8 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
             )}
           </div>
         </div>
+
+        <AutoTradingAccountSelect />
 
         <DemoTestAmountSetting />
 

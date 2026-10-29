@@ -166,7 +166,15 @@ export function AutoTradingCard({ config, updateConfig, isPlacingTrade, isAnalyz
           </div>
           <Switch
             checked={localConfig.enabled}
-            onCheckedChange={(enabled) => handleLocalChange({ enabled })}
+            disabled={isSaving}
+            onCheckedChange={async (enabled) => {
+              // Ligar/desligar salva na hora, sem depender do botão Salvar.
+              setLocalConfig(prev => ({ ...prev, enabled }));
+              setIsSaving(true);
+              try { await updateConfig({ enabled }); }
+              catch { setLocalConfig(prev => ({ ...prev, enabled: !enabled })); }
+              finally { setIsSaving(false); }
+            }}
           />
         </div>
 

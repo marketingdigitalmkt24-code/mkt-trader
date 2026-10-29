@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 import { isNextMinuteStrategy } from '../_shared/force-loss-win.ts';
@@ -18,11 +19,6 @@ import { isDemoValidatedPrincipal } from '../_shared/demo-validated.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
 import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
 import { prepareTakashiCopy, prepareCopyPlacement, waitForConfirmedCopy } from '../_shared/copy-preparation.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
 
 interface TradeRequest {
   asset: string;

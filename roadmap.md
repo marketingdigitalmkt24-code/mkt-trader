@@ -1,5 +1,6 @@
 # Cópia na abertura do admin (29/10/2026)
-- [ ] Preparar a conexão de envio do cliente em paralelo e liberar a cópia na abertura aceita com ID IQ, sem esperar resultado final; preservar expiração, conta/valor/limites e Auto Trading. Testar e publicar, sem forçar operações.
+- [x] Conexão de envio do cliente preparada em paralelo e cópia liberada após abertura aceita com ID IQ e registro/fila exatos, sem esperar WIN/LOSS; expiração original, conta/valor/limites e Auto Trading preservados. 368 testes passaram e executor publicado; nenhum trade forçado.
+- [ ] Medir a primeira cópia real após a alteração: atualmente não existem configurações de copy nem ordens principais registradas neste banco; depende de cliente conectado com copy ativo e novo sinal autorizado. Não há garantia de preço/segundo idênticos.
 
 # Histórico diário Demo (29/10/2026)
 - [x] Linha compacta no formato `28/10 112W/135L (45%) -$128,31`, com os detalhes (ganhos, perdas/prejuízo, empates, abertas, acerto e saldo) ao passar o mouse no computador e ao tocar no celular; painel fecha ao sair, tocar fora ou Esc. Conferido autenticado em 1280px (582px, sem corte) e 390px com toque (324px, painel dentro da tela), três testes passaram e build OK.

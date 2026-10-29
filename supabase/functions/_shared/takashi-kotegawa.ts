@@ -35,9 +35,9 @@ export function takashiKotegawa(candles: Candle[], entry: number) {
   }
   const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
   const stretch = Math.abs(deviation) / avgBody;
-  // Panic dislocation: price at least 5x the average candle body away from the mean.
-  if (stretch < 5) return null;
-  if (deviation < 0 && rsi < 20) return { direction: 'CALL' as const, deviation, rsi, stretch };
-  if (deviation > 0 && rsi > 80) return { direction: 'PUT' as const, deviation, rsi, stretch };
+  // Tightened thresholds (2026-10): Demo win rate 45.6% (CALL 52%, PUT 42%) vs ~55% breakeven;
+  // require deeper dislocation (6x body, PUT 7x) and more extreme RSI to cut marginal signals.
+  if (deviation < 0 && stretch >= 6 && rsi < 15) return { direction: 'CALL' as const, deviation, rsi, stretch };
+  if (deviation > 0 && stretch >= 7 && rsi > 85) return { direction: 'PUT' as const, deviation, rsi, stretch };
   return null;
 }

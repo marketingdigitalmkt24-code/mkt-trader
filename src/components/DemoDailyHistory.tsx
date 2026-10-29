@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import { demoDayKey, demoDailyWindow, demoDailySummaries, demoDailyPages, type DemoDailyRow } from '@/lib/demo-daily-history';
 
 const currency = (amount: number) => amount.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' });
+// Na linha única, os valores de ganhos/perdas usam a forma curta para caber sem rolagem.
+const shortCurrency = (amount: number) => `$${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function DemoDailyHistory() {
  const [page, setPage] = useState(0);

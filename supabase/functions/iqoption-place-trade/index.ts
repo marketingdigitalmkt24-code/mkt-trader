@@ -141,8 +141,9 @@ async function mirrorCopyTrades(
   masterSignalId: string,
   master: Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>,
   principal: { user_id: string; email: string; account_type: string },
+  autoTradingOn = false,
 ) {
-  if (!principalIQEnabled(tradeRequest.entryStrategy)) return;
+  if (!principalIQEnabled(tradeRequest.entryStrategy, autoTradingOn)) return;
   try {
     if (tradeRequest.mode === 'forex') return; // copy apenas para binárias/turbo
     const { data: copies } = await supabase
@@ -226,7 +227,7 @@ async function mirrorCopyTrades(
         await supabase.from('iq_entry_leases').update({ reserved_until: 'infinity' }).eq('scope', `client:${copy.user_id}`).eq('signal_id', copySignal);
         const entryAt = confirmed.expirationIso ? Date.parse(confirmed.expirationIso) - tradeRequest.expiration * 60000 : tradeRequest.entryAt;
         const res = await placeTradeFireAndForget(ssid, accountType, { ...tradeRequest, amount, entryAt }, Promise.resolve(confirmed.ok),
-          { profit: copiedProfit, value: Number(settings?.profit_target_value), type: settings?.profit_target_type || 'value' });
+          { profit: copiedProfit, value: Number(settings?.profit_target_value), type: settings?.profit_target_type || 'value' }, autoTradingOn);
         if (res.error === 'Copy profit target reached') await supabase.from('copy_trading_configs').update({ enabled: false }).eq('user_id', copy.user_id);
         const { timeframe, expirationIso } = await master;
         if (res.success && res.tradeId) {
@@ -691,7 +692,7 @@ serve(async (req) => {
         readMasterIQConfig(supabase),
       ]);
       const copyRequest = prepareTakashiCopy(candidate, Date.now());
-      if (!principal || !copyRequest || !principalIQEnabled(copyRequest.entryStrategy))
+      if (!principal || !copyRequest || !principalIQEnabled(copyRequest.entryStrategy, autoTradingOn))
         return Response.json({ skipped: 'No fresh authorized copy preparation' }, { headers: corsHeaders });
       // The same invocation owns prepared client sessions and waits for persisted broker confirmation.
       const master = waitForConfirmedCopy(copyRequest.signalId, copyRequest.entryAt, async () => {
@@ -704,7 +705,7 @@ serve(async (req) => {
           && order?.entry_strategy === copyRequest.entryStrategy && order?.asset === copyRequest.asset
           && order?.direction === copyRequest.direction.toUpperCase()) };
       });
-      const task = mirrorCopyTrades(supabase, copyRequest, copyRequest.signalId, master, principal);
+      const task = mirrorCopyTrades(supabase, copyRequest, copyRequest.signalId, master, principal, autoTradingOn);
       await Promise.allSettled([task, master]);
       return Response.json({ success: true, signalId: copyRequest.signalId }, { headers: corsHeaders });
     }
@@ -718,7 +719,7 @@ serve(async (req) => {
         .select('signal_id,asset,direction,iq_option_id,entry_strategy,timeframe,expiration_time,entry_price')
         .eq('signal_id', body.copyPrincipalSignalId).maybeSingle();
       if (error) throw error;
-      if (!principalIQEnabled(order?.entry_strategy)) return Response.json({ skipped: 'Principal strategy paused' }, { status: 410, headers: corsHeaders });
+      if (!principalIQEnabled(order?.entry_strategy, autoTradingOn)) return Response.json({ skipped: 'Principal strategy paused' }, { status: 410, headers: corsHeaders });
       const copyRequest = selectedTrendCopyRequest(order, Date.now());
       if (!copyRequest) return Response.json({ skipped: 'No fresh confirmed principal order' }, { headers: corsHeaders });
       const [{ data: principal }, { data: queued }] = await Promise.all([
@@ -728,7 +729,7 @@ serve(async (req) => {
       ]);
       if (!principal || !queued) return Response.json({ skipped: 'Principal confirmation unavailable' }, { headers: corsHeaders });
       await mirrorCopyTrades(supabase, copyRequest, copyRequest.signalId,
-        Promise.resolve({ ok: true, timeframe: order.timeframe, expirationIso: order.expiration_time }), principal);
+        Promise.resolve({ ok: true, timeframe: order.timeframe, expirationIso: order.expiration_time }), principal, autoTradingOn);
       return Response.json({ success: true, signalId: copyRequest.signalId }, { headers: corsHeaders });
     }
     const tradeRequest: TradeRequest = body;
@@ -869,7 +870,7 @@ serve(async (req) => {
         }, {
           lovableKey: Deno.env.get('LOVABLE_API_KEY') || '',
           telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '',
-          });
+          }, fetch, autoTradingOn);
           if (messageId === undefined) return undefined;
           const { error: deliveryError } = await supabase.from('telegram_iq_deliveries').upsert({
             signal_id: signalId, chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy,
@@ -962,7 +963,7 @@ serve(async (req) => {
     // Copy: prepara login/gráfico dos clientes em paralelo e envia assim que a principal confirmar.
     let settleMaster: (m: { ok: boolean; timeframe: string; expirationIso: string | null }) => void = () => {};
     const masterOutcome = new Promise<{ ok: boolean; timeframe: string; expirationIso: string | null }>(res => { settleMaster = res; });
-    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData);
+    const copyTask = mirrorCopyTrades(supabase, tradeRequest, tradeRequest.signalId || `auto_${Date.now()}`, masterOutcome, configData, autoTradingOn);
     // @ts-ignore EdgeRuntime exists in Supabase runtime
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(copyTask);
     const masterLeaseScope = isAnticipation(tradeRequest.entryStrategy) ? 'master:forca_antecipada' : 'master';
@@ -1013,7 +1014,7 @@ serve(async (req) => {
           const messageId = await sendIQAlert({ asset: tradeRequest.asset, direction: tradeRequest.direction,
             expiration: tradeRequest.expiration, entryAt, signalId, timeframe,
             strategy: 'Antecipação de Força', brokerOrderId: result.tradeId, accountType: configData.account_type,
-          }, { lovableKey: Deno.env.get('LOVABLE_API_KEY') || '', telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '' });
+          }, { lovableKey: Deno.env.get('LOVABLE_API_KEY') || '', telegramKey: Deno.env.get('TELEGRAM_API_KEY') || '' }, fetch, autoTradingOn);
           if (messageId === undefined) return;
           const { error } = await supabase.from('telegram_iq_deliveries').upsert({ signal_id: signalId,
             chat_id: IQ_TELEGRAM_CHANNEL, signal_message_id: messageId, strategy: 'Antecipação de Força',

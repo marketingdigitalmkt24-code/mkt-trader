@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { prepareTakashiCopy, waitForConfirmedCopy } from './copy-preparation';
+import { prepareTakashiCopy, prepareCopyPlacement, waitForConfirmedCopy } from './copy-preparation';
 const at = Date.parse('2026-10-25T21:58:00Z');
 const candidate = { signal_id: 'takashi-bnf-v1-USD/VND-OTC-1792965480', asset: 'USD/VND-OTC', direction: 'CALL', entry_strategy: 'TAKASHI_BNF_V1', entry_minute: new Date(at).toISOString(), score: 1.59 };
 const request = prepareTakashiCopy(candidate, at);
@@ -51,4 +51,27 @@ test('confirmation polling stops at the original 30-second boundary', async () =
  expect(calls).toBe(1);
  expect(delays).toEqual([10]);
  expect(clock).toBe(at + 30000);
+});
+test('client connection starts before opening; accepted pending order releases copy without WIN or LOSS', async () => {
+ let accept: (opened: { ok: boolean }) => void = () => {};
+ const opening = new Promise<{ ok: boolean }>(resolve => { accept = resolve; });
+ const events: string[] = [];
+ const placement = prepareCopyPlacement(opening, async () => { events.push('client-authorized'); return true; }, async gate => {
+  events.push('connected');
+  if (await gate) events.push('sent');
+ });
+ expect(events).toEqual(['connected']);
+ accept({ ok: true });
+ await placement;
+ expect(events).toEqual(['connected', 'client-authorized', 'sent']);
+});
+test('refused opening never reserves or sends a copy', async () => {
+ let reservations = 0, sent = false;
+ await prepareCopyPlacement(Promise.resolve({ ok: false }), async () => { reservations++; return true; }, async gate => { sent = await gate; });
+ expect(reservations).toBe(0);
+ expect(sent).toBe(false);
+});
+test('client disabled after preparation never sends a copy', async () => {
+ const sent = await prepareCopyPlacement(Promise.resolve({ ok: true }), async () => false, gate => gate);
+ expect(sent).toBe(false);
 });

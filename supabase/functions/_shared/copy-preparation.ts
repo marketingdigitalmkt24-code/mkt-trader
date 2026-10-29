@@ -15,6 +15,16 @@ export function prepareTakashiCopy(candidate: {
 
 type PrincipalOrder = Parameters<typeof selectedTrendCopyRequest>[0];
 export const COPY_CONFIRMATION_POLL_MS = 25;
+// Start the broker's read-only profile/market handshake before the principal opens.
+// The sender must still await the exact accepted principal and the client reservation.
+export function prepareCopyPlacement<T>(
+ confirmation: Promise<{ ok: boolean }>,
+ authorize: () => Promise<boolean>,
+ connect: (gate: Promise<boolean>) => Promise<T>,
+) {
+ const gate = confirmation.then(async opened => opened.ok && await authorize());
+ return connect(gate);
+}
 export async function waitForConfirmedCopy(
  signalId: string, entryAt: number,
  read: () => Promise<{ order: PrincipalOrder; executed: boolean }>,

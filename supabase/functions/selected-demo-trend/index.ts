@@ -12,6 +12,7 @@ import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
 import { TAKASHI_AFTER_226, TAKASHI_AFTER_226_LABEL, takashiAfter226Direction } from '../_shared/takashi-after-226.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
+import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
 const freshTrendPut = freshSelectedTrend;
 const notifyTrendPut = notifySelectedTrend;
 
@@ -28,10 +29,11 @@ const symbolOf = (raw: string) => {
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return reply({});
   if (req.method !== 'POST') return reply({ error: 'Method not allowed' }, 405);
-  if (!principalIQEnabled(TAKASHI_AFTER_226)) return reply({ skipped: 'Principal IQ and copies paused by user' }, 410);
   const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) return reply({ error: 'Service unavailable' }, 503);
   const db = createClient(url, key);
+  // Principal entries follow the admin's Auto Trading switch.
+  if (!principalIQEnabled(TAKASHI_AFTER_226, await masterAutoTradingEnabled(db))) return reply({ skipped: 'Auto Trading disabled' }, 410);
   const state: { claimed?: { signalId: string; asset: string; amount: number; entryAt: number; configId: string; direction: string; entryStrategy: string } } = {};
   let submitted = false;
   let leaseScope = 'master:tendencia';

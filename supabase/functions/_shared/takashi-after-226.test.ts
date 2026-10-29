@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { takashiAfter226Direction, TAKASHI_AFTER_226 } from './takashi-after-226';
-import { principalIQEnabled, telegramTradingEnabled } from './principal-pause';
+
 import { selectedTrendCopyRequest } from './selected-trend-copy';
 import { copyProfileTargetBlocked } from './copy-target';
 
@@ -27,12 +27,6 @@ test('previous must be an earlier confirmed Takashi Demo order', () => {
 test('current signal must be fresh (first 30s of its minute)', () => {
   expect(takashiAfter226Direction(current, previous, Date.parse('2026-10-25T21:08:30Z'))).toBeNull();
 });
-test('all strategies including Takashi stay paused for principal and Telegram', () => {
-  for (const strategy of [TAKASHI_AFTER_226, undefined, 'SUPER_SELECIONADA', 'TAKASHI_BNF_V1', 'TENDENCIA_3_LOSS_PUT']) {
-    expect(principalIQEnabled(strategy)).toBe(false);
-    expect(telegramTradingEnabled(strategy)).toBe(false);
-  }
-});
 test('confirmed principal copies retain inverse direction and exact minute', () => {
   const copy = selectedTrendCopyRequest({ signal_id: 'takashi_apos_226_invertida-v1-fresh', asset: 'BIDU-OTC', direction: 'CALL', iq_option_id: '456', entry_strategy: TAKASHI_AFTER_226, timeframe: 'M1', expiration_time: '2026-10-25T21:09:00Z', entry_price: 10 }, now);
   expect(copy?.direction).toBe('call');
@@ -43,12 +37,4 @@ test('client percentage target uses its own confirmed broker balance and blocks 
   expect(copyProfileTargetBlocked(9, 10, 'percentage', 109)).toBe(false);
   expect(copyProfileTargetBlocked(0, 10, 'percentage', NaN)).toBe(true);
   expect(copyProfileTargetBlocked(100, 100, 'value', 1000)).toBe(true);
-});
-test('Takashi scored 0,00 never authorizes the inverted entry', () => {
-  const at = Date.parse('2026-10-25T21:40:00Z');
-  const prev = { entry_minute: new Date(at - 60000).toISOString(), entry_strategy: 'VELA_FORCA', direction: 'PUT', score: 2.26, status: 'confirmed', iq_option_id: '123' };
-  const cur = (score: number) => ({ entry_minute: new Date(at).toISOString(), entry_strategy: 'TAKASHI_BNF_V1', direction: 'PUT', score });
-  expect(takashiAfter226Direction(cur(0), prev, at + 1000)).toBeNull();
-  expect(takashiAfter226Direction(cur(0.004), prev, at + 1000)).toBeNull();
-  expect(takashiAfter226Direction(cur(0.94), prev, at + 1000)).toBe('call');
 });

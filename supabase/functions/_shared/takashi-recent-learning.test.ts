@@ -13,7 +13,7 @@ test('own recent Takashi WIN increases next note and LOSS decreases it',()=>{
   expect(demoFinalScore(0.14+loss,0,row.entry_strategy)).toBeCloseTo(0.097142857143,8);
 });
 test('only confirmed own PRACTICE outcomes teach; no TEST, other strategies, pending, ties or future results',()=>{
-  const invalid=[{...row,status:'failed'},{...row,account_type:'REAL'},{...row,iq_option_id:'test-1'},
+  const invalid=[{...row,status:'failed'},{...row,account_type:'MT5'},{...row,iq_option_id:'test-1'},
     {...row,entry_strategy:'VELA_FORCA'},{...row,result:'pending'},{...row,result:'tie'},
     {...row,settled_at:null},{...row,settled_at:new Date(at+1).toISOString()},
     {...row,entry_minute:new Date(at).toISOString()}, {...row,entry_minute:new Date(at-14*86400000-1).toISOString()}];

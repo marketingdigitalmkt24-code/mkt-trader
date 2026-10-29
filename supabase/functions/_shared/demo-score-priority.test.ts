@@ -22,7 +22,7 @@ test('equal accuracy prefers more wins, not highest numeric score',()=>{
  expect(ranked[0].cents).toBe(203);
 });
 test('only exact displayed fourteen scores and confirmed Demo outcomes contribute',()=>{
- const ranked=rankDemoScores([row('a'),{...row('a'),status:'failed'},{...row('a'),account_type:'REAL'},row('a','pending',100),row('outside')],new Map([['a',2.264],['outside',2.27]]));
+ const ranked=rankDemoScores([row('a'),{...row('a'),status:'failed'},{...row('a'),account_type:'MT5'},row('a','pending',100),row('outside')],new Map([['a',2.264],['outside',2.27]]));
  expect(ranked.find(r=>r.cents===226)).toMatchObject({wins:1,profit:1.64});
  expect(ranked.length).toBe(14);
 });

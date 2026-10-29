@@ -16,7 +16,7 @@ test('a LOSS permanently vetoes that displayed note despite subsequent WIN', () 
 });
 test('pending, failed, REAL, nonbroker and future results never teach note support', () => {
   const rows = [row('1', 'pending'), { ...row('2'), status: 'failed' },
-    { ...row('3'), account_type: 'REAL' }, { ...row('4'), iq_option_id: 'test4' },
+    { ...row('3'), account_type:'MT5' }, { ...row('4'), iq_option_id: 'test4' },
     { ...row('5'), settled_at: '2026-10-28T03:07:00Z' }, { ...row('6'), settled_at: null }];
   expect(unbeatenDemoNotes(rows, new Map(rows.map(r => [r.signal_id, .14])), now)).toEqual([]);
 });

@@ -22,7 +22,7 @@ describe('all confirmed Demo WIN exact scores',()=>{
   expect(demoWinScoreAllowed(2.259004451962001,allowed)).toBe(false);
  });
  it('excludes LOSS-only, pending, nonbroker, REAL, simulations and missing scores',()=>{
-  const rows=[{...win('loss'),result:'loss'},{...win('pending'),result:'pending'},{...win('reserved'),status:'reserved'}, {...win('real'),account_type:'REAL'},{...win('sim'),iq_option_id:'test-123'},win('missing')];
+  const rows=[{...win('loss'),result:'loss'},{...win('pending'),result:'pending'},{...win('reserved'),status:'reserved'}, {...win('real'),account_type:'MT5'},{...win('sim'),iq_option_id:'test-123'},win('missing')];
   expect(demoWinScores(rows,new Map(rows.slice(0,-1).map((r,i)=>[r.signal_id,i+1]))).size).toBe(0);
  });
  it('a confirmed WIN authorizes even if another operation with the same score lost',()=>{

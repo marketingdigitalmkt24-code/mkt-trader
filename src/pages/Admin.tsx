@@ -174,7 +174,7 @@ const Admin = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="px-3 sm:px-6">
-                  <IQOptionSettingsCard defaultOpen={true} />
+                  <IQOptionSettingsCard defaultOpen={true} demoAccount />
                 </CardContent>
               </Card>
             </div>

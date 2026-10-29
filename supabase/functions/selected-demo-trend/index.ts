@@ -50,14 +50,21 @@ Deno.serve(async req => {
     if (candidateError) throw candidateError;
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);
-    const { data: previous } = await db.from('iq_demo_test_orders')
-      .select('entry_minute,entry_strategy,direction,status,iq_option_id,signal_id')
-      .eq('entry_minute', new Date(entryAt - 60000).toISOString()).eq('status', 'confirmed')
-      .not('iq_option_id', 'is', null).not('signal_id', 'like', 'demo-mid-%').limit(1).maybeSingle();
-    const { data: previousCandidate } = previous ? await db.from('iq_demo_test_candidates')
-      .select('score').eq('signal_id', previous.signal_id).maybeSingle() : { data: null };
-    if (!takashiAfter226Direction(candidate, previous && previousCandidate ? { ...previous, score: previousCandidate.score } : null, Date.now()))
-      return reply({ skipped: 'No fresh Takashi after confirmed 2.26 in the previous minute' });
+    // The previous Takashi order may close exactly at this :00; wait briefly for its confirmed result.
+    const readPrevious = async () => (await db.from('iq_demo_test_orders')
+      .select('entry_minute,entry_strategy,asset,status,iq_option_id,result')
+      .eq('entry_strategy', 'TAKASHI_BNF_V1').eq('status', 'confirmed').not('iq_option_id', 'is', null)
+      .not('signal_id', 'like', 'demo-mid-%').lt('entry_minute', candidate.entry_minute)
+      .order('entry_minute', { ascending: false }).limit(1).maybeSingle()).data;
+    let previous = await readPrevious();
+    while (previous && previous.asset === candidate.asset && !['win', 'loss', 'tie'].includes(previous.result || '')
+      && Date.now() < entryAt + 8000) {
+      await new Promise(r => setTimeout(r, 400));
+      previous = await readPrevious();
+    }
+    if (Date.now() < entryAt) await new Promise(r => setTimeout(r, entryAt - Date.now() + 50));
+    if (!takashiAfter226Direction(candidate, previous, Date.now()))
+      return reply({ skipped: 'Previous Takashi signal was not a confirmed WIN on the same asset' });
     if (!cfg || !cfg.last_connected_at || !['PRACTICE', 'REAL'].includes(cfg.account_type)) return reply({ skipped: 'Principal connection unavailable' });
     // Prepare each client's own login concurrently; this invocation never sends a client order.
     // The copy executor waits for our exact confirmed order and executed queue before reserving/placing.

@@ -37,3 +37,6 @@ export function consistentNoteDirection(candidate: ConsistentNoteCandidate | nul
  }
  return wonDays.size === 3 ? (candidate.direction === 'CALL' ? 'call' : 'put') : null;
 }
+export function isConsistentNoteSignal(signalId: string): boolean {
+ return signalId.startsWith(CONSISTENT_NOTE_PREFIX);
+}

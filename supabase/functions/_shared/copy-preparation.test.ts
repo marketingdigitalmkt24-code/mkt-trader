@@ -75,4 +75,8 @@ test('refused opening never reserves or sends a copy', async () => {
 test('client disabled after preparation never sends a copy', async () => {
  const sent = await prepareCopyPlacement(Promise.resolve({ ok: true }), async () => false, gate => gate);
  expect(sent).toBe(false);
+});test('Nota consistente copy follows the signal direction with its own identity', () => {
+ const consistent = prepareTakashiCopy(candidate, at, 'consistent');
+ expect(consistent).toMatchObject({ direction: 'call', entryStrategy: 'NOTA_CONSISTENTE', signalId: 'nota-consistente-v1-' + candidate.signal_id });
+ expect(prepareTakashiCopy({ ...candidate, direction: 'PUT' }, at, 'consistent')?.direction).toBe('put');
 });

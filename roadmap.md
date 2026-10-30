@@ -1,10 +1,9 @@
 # Estratégia Nota consistente (29/10/2026)
-- [x] Pedido de 23:29 BRT: atualização automática conferida no painel autenticado em três leituras (10,3s/11,5s), 63 notas/83 WIN/zero LOSS, iguais à consulta do histórico; nenhuma nota atende aos três dias e zero ordens REAL atuais. Sem erros na tela.
-- [ ] Resolver conflito e habilitar principal/cópia/Telegram: snapshots 0058/0059 são idênticos com identidade duplicada; nenhum contexto de draft permite o reparo autorizado. Metadados gerenciados não alterados, claim ausente confirmado. Depende de correção do histórico gerenciado por mecanismo permitido.
-- [ ] Alinhar resumo e drilldown com contas PRACTICE/REAL de Últimas operações: RPC de resumo ainda filtra apenas PRACTICE; hoje os totais coincidem porque não há REAL. Depende da correção do histórico para aplicar atualização do RPC com veto de LOSS nas duas contas.
-- [x] Preparada política somente leitura com WIN hoje e nos dois dias anteriores BRT, veto de LOSS no grupo estratégia/nota exibida e direção do sinal. 14 testes passaram com regressão da invertida; build OK. Consulta atual: nenhuma nota atende aos três dias.
-- [ ] Instalar autorização atômica claim_consistent_note: impedida pela colisão protegida dos snapshots 0058/0059; ferramenta confirmou SQL não executado e banco confirmou função ausente. Depende de reparo permitido do histórico gerenciado.
-- [ ] Integrar executor, identidade no histórico/cópias/Telegram e verificar próxima entrada natural: depende da autorização atômica acima. Nenhuma chamada de placement conectada ou operação forçada; estratégias atuais preservadas.
+- [x] Conflito do histórico de alterações resolvido (identificador duplicado do registro 0059 corrigido, nada apagado; verificação OK).
+- [x] Autorização atômica instalada (somente serviço): revalida WIN hoje e nos dois dias anteriores BRT, nenhum LOSS da nota, Auto Trading, conta/valor, limites e travas; cópias de clientes liberadas pela mesma reserva da invertida.
+- [x] Executor publicado: Takashi invertida tem prioridade; senão Nota consistente segue a direção do sinal; Telegram de entrada e resultado e rótulo "Nota consistente" no painel. 376 testes passaram, build OK.
+- [ ] Confirmar a primeira entrada natural: hoje nenhuma nota tem os três dias; 0.76, 0.94 e 0.61 têm WIN em 28 e 29/10 e se qualificam com um WIN em 30/10 sem LOSS. Depende do mercado.
+- [ ] Alinhar resumo da aba Estratégias com contas PRACTICE/REAL: hoje coincide (sem REAL); pendente de pedido.
 
 # Operações pelas legendas do gráfico (29/10/2026)
 - [x] Legendas abrem a lista Demo por IDs exatos dos resultados que contribuíram para os 30 dias: primeiros WIN de entrada, LOSS de saída e WIN consistentes antes da perda. Lista compartilhada de dez operações/página e gráficos individuais; 25 testes passaram, build OK e painel autenticado confirmou as três listas, próxima/anterior e fechamento, sem erros. Execução preservada.

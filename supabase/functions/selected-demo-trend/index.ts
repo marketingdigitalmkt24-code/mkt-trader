@@ -11,6 +11,7 @@ import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
 import { TAKASHI_AFTER_226, TAKASHI_AFTER_226_LABEL, takashiAfter226Direction } from '../_shared/takashi-after-226.ts';
+import { CONSISTENT_NOTE, CONSISTENT_NOTE_LABEL, consistentNoteDirection } from '../_shared/consistent-note.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
 import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
 const freshTrendPut = freshSelectedTrend;
@@ -63,14 +64,36 @@ Deno.serve(async req => {
       previous = await readPrevious();
     }
     if (Date.now() < entryAt) await new Promise(r => setTimeout(r, entryAt - Date.now() + 50));
-    if (!takashiAfter226Direction(candidate, previous, Date.now()))
-      return reply({ skipped: 'Previous Takashi signal was not a confirmed WIN on the same asset' });
+    // Takashi invertida keeps priority; otherwise check Nota consistente (WIN today and the two previous BRT days, no LOSS).
+    let plan: { strategy: string; label: string; rpc: string; copy: 'inverted' | 'consistent' } | null = null;
+    if (takashiAfter226Direction(candidate, previous, Date.now())) {
+      plan = { strategy: TAKASHI_AFTER_226, label: TAKASHI_AFTER_226_LABEL, rpc: 'claim_takashi_after_226', copy: 'inverted' };
+    } else if (candidate.entry_strategy === 'TAKASHI_BNF_V1' && Number.isFinite(candidate.score)) {
+      const note = Math.round(candidate.score * 100) / 100;
+      const { data: peers, error: peersError } = await db.from('iq_demo_test_candidates').select('signal_id,score')
+        .eq('entry_strategy', 'TAKASHI_BNF_V1').gte('score', note - 0.006).lte('score', note + 0.006).limit(1000);
+      if (peersError) throw peersError;
+      const scores = new Map((peers || []).map(p => [p.signal_id, p.score as number]));
+      const ids = [...scores.keys()].filter(id => id !== candidate.signal_id);
+      const rows: Parameters<typeof consistentNoteDirection>[1] = [];
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data, error } = await db.from('iq_demo_test_orders')
+          .select('signal_id,entry_strategy,entry_minute,settled_at,status,account_type,iq_option_id,result')
+          .in('signal_id', ids.slice(i, i + 200)).eq('status', 'confirmed');
+        if (error) throw error;
+        for (const row of data || []) rows.push({ ...row, score: scores.get(row.signal_id) ?? null });
+      }
+      if (consistentNoteDirection(candidate, rows, Date.now()))
+        plan = { strategy: CONSISTENT_NOTE, label: CONSISTENT_NOTE_LABEL, rpc: 'claim_consistent_note', copy: 'consistent' };
+    }
+    if (!plan) return reply({ skipped: 'No authorized principal strategy for this signal' });
+    const chosen = plan;
     if (!cfg || !cfg.last_connected_at || !['PRACTICE', 'REAL'].includes(cfg.account_type)) return reply({ skipped: 'Principal connection unavailable' });
     // Prepare each client's own login concurrently; this invocation never sends a client order.
     // The copy executor waits for our exact confirmed order and executed queue before reserving/placing.
     const copyTask = fetch(`${url}/functions/v1/iqoption-place-trade`, {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prepareCopyCandidate: candidate.signal_id }), signal: AbortSignal.timeout(90000),
+      body: JSON.stringify({ prepareCopyCandidate: candidate.signal_id, copyStrategy: chosen.copy }), signal: AbortSignal.timeout(90000),
     }).then(async response => {
       if (!response.ok) console.error('Selected Trend copy preparation:', response.status);
       else console.log('Selected Trend copy dispatch:', await response.text());
@@ -123,13 +146,13 @@ Deno.serve(async req => {
             }
             const activeId = Number(instrument[0]);
             if (!Number.isSafeInteger(activeId) || activeId <= 0) { finish({ success: false, error: 'Invalid instrument; no order sent' }); return; }
-            const { data: order, error } = await db.rpc('claim_takashi_after_226', { p_candidate: candidate.signal_id, p_config: cfg.id, p_balance: balanceAmount });
+            const { data: order, error } = await db.rpc(chosen.rpc, { p_candidate: candidate.signal_id, p_config: cfg.id, p_balance: balanceAmount });
             if (error) throw error;
             if (!order) { finish({ success: false, error: 'Sequence, limits or reservation rejected; no order sent' }); return; }
             state.claimed = order;
             leaseScope = `master:${String(order.entryStrategy).toLowerCase()}`;
             if (order.configId !== cfg.id || !['call','put'].includes(order.direction)
-              || order.entryStrategy !== TAKASHI_AFTER_226
+              || order.entryStrategy !== chosen.strategy
               || !freshTrendPut(order.entryAt, Date.now()) || done) {
               finish({ success: false, error: 'Configuration changed or entry window closed; no order sent' }); return;
             }
@@ -165,7 +188,7 @@ Deno.serve(async req => {
     if (!owned) return reply({ skipped: outcome.error || 'No authorized order' });
     const queued = { signal_id: owned.signalId, amount: owned.amount };
     const direction = owned.direction.toUpperCase();
-    const strategyLabel = TAKASHI_AFTER_226_LABEL;
+    const strategyLabel = chosen.label;
     if (!outcome.success || !outcome.tradeId) {
       console.error('Selected Trend failed:', outcome.error);
       await db.from('trade_queue').update({ status: 'failed', error: outcome.error || 'Broker confirmation unknown' }).eq('signal_id', queued.signal_id);

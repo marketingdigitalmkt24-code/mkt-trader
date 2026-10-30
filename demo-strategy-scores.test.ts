@@ -109,7 +109,25 @@ test('linha de notas consistentes conta só WIN antes do primeiro LOSS da nota',
   r('a', 3.1, 'win', '2026-10-29T12:00:00Z'), r('b', 3.1, 'win', '2026-10-29T13:00:00Z'),
   r('c', 4.2, 'win', '2026-10-29T12:30:00Z'), r('d', 4.2, 'loss', '2026-10-29T14:00:00Z'), r('e', 4.2, 'win', '2026-10-29T15:00:00Z'),
  ], now);
- const today = days.at(-1)!;
- expect(today.consistent).toBe(2);
- expect(today.consistentWins).toBe(3);
+ const today = days[days.length - 1];
+ expect(today?.consistent).toBe(2);
+ expect(today?.consistentWins).toBe(3);
+});
+
+test('consistent legend lists every contributing WIN once and excludes post-LOSS, rejected and older trades', () => {
+ const now = Date.parse('2026-10-29T20:00:00Z');
+ const a = { ...row('a', 'A', 3.1), entry_minute: '2026-10-29T12:00:00Z' };
+ const observations = [a, a, { ...a, signal_id: 'b' }, { ...a, signal_id: 'loss', result: 'loss', entry_minute: '2026-10-29T13:00:00Z' }, { ...a, signal_id: 'late', entry_minute: '2026-10-29T14:00:00Z' }, { ...a, signal_id: 'rejected', source: 'rejected' as const }, { ...row('old', 'B', 4), entry_minute: '2026-08-01T12:00:00Z' }];
+ const days = winningNoteDailyMovement(observations, now);
+ expect(days.flatMap(day => day.operationSignals.consistent)).toEqual(['a', 'b']);
+ expect(days.flatMap(day => day.operationSignals.entered)).toEqual(['a']);
+ expect(days.flatMap(day => day.operationSignals.exited)).toEqual(['loss']);
+});
+
+test('entry and exit legends follow merged notes, not intermediate strategy changes', () => {
+ const at = (id: string, strategy: string, result: string, time: string) => ({ ...row(id, strategy, 2.26, result), settled_at: time });
+ const days = winningNoteDailyMovement([at('startA', 'A', 'win', '2026-10-25T04:00:00Z'), at('startB', 'B', 'win', '2026-10-25T05:00:00Z'), at('lossA', 'A', 'loss', '2026-10-26T05:00:00Z'), at('lossB', 'B', 'loss', '2026-10-27T02:59:59Z')], Date.parse('2026-10-27T06:00:00Z'));
+ expect(days.flatMap(day => day.operationSignals.entered)).toEqual(['startA']);
+ expect(days.flatMap(day => day.operationSignals.exited)).toEqual(['lossB']);
+ expect(days.find(day => day.day === '2026-10-26')?.operationSignals.exited).toEqual(['lossB']);
 });

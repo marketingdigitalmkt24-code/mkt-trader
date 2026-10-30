@@ -1,6 +1,7 @@
 # Estratégia Nota consistente (29/10/2026)
-- [ ] Criar autorização atômica para nota com WIN hoje e nos dois dias anteriores BRT, sem LOSS histórico, com direção do novo sinal e controles Auto Trading.
-- [ ] Integrar executor, identificação no histórico/cópias/Telegram e testar sem forçar operações.
+- [x] Preparada política somente leitura com WIN hoje e nos dois dias anteriores BRT, veto de LOSS no grupo estratégia/nota exibida e direção do sinal. 14 testes passaram com regressão da invertida; build OK. Consulta atual: nenhuma nota atende aos três dias.
+- [ ] Instalar autorização atômica claim_consistent_note: impedida pela colisão protegida dos snapshots 0058/0059; ferramenta confirmou SQL não executado e banco confirmou função ausente. Depende de reparo permitido do histórico gerenciado.
+- [ ] Integrar executor, identidade no histórico/cópias/Telegram e verificar próxima entrada natural: depende da autorização atômica acima. Nenhuma chamada de placement conectada ou operação forçada; estratégias atuais preservadas.
 
 # Operações pelas legendas do gráfico (29/10/2026)
 - [x] Legendas abrem a lista Demo por IDs exatos dos resultados que contribuíram para os 30 dias: primeiros WIN de entrada, LOSS de saída e WIN consistentes antes da perda. Lista compartilhada de dez operações/página e gráficos individuais; 25 testes passaram, build OK e painel autenticado confirmou as três listas, próxima/anterior e fechamento, sem erros. Execução preservada.

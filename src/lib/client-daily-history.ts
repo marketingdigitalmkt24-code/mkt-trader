@@ -1,4 +1,4 @@
-import { countClientCopyResults, type CopyResultRow } from './admin-copy-results';
+import { countClientCopyResults, isClientCopyResult, type CopyResultRow } from './admin-copy-results';
 import { afterIQReset } from './iq-results-reset';
 
 export interface ClientDailyRow extends CopyResultRow {
@@ -10,14 +10,10 @@ export function clientDailyHistory(rows: ClientDailyRow[], userId: string, cutof
   const grouped = new Map<string, ClientDailyRow[]>();
   const seen = new Set<string>();
   for (const row of rows) {
-    if (seen.has(row.id) || !row.signal_id.startsWith(`copy-${userId}-`)
+    if (seen.has(row.id) || !isClientCopyResult(row, userId)
       || !['win', 'loss', 'draw', 'tie'].includes(row.result)
       || !/^\d+$/.test(row.iq_option_id ?? '') || row.created_at > now.toISOString()
       || !afterIQReset(row.created_at, cutoff)) continue;
-    // Use the same retirement/ownership rules as the client's daily results.
-    const counts = countClientCopyResults([row], userId);
-    if (counts.wins + counts.losses === 0 && !['draw', 'tie'].includes(row.result)) continue;
-    if (['TEST', 'MT5'].includes(row.timeframe)) continue;
     seen.add(row.id);
     const date = new Date(Date.parse(row.created_at) - 3 * 3600000).toISOString().slice(0, 10);
     grouped.set(date, [...(grouped.get(date) ?? []), row]);

@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { formatAccountMoney } from '@/lib/account-currency';
 
 const MENU = [
   { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,7 +28,7 @@ const MENU = [
   { value: 'users', label: 'Usuários', icon: Users },
   { value: 'score-history', label: 'Histórico por nota', icon: BarChart3 },
   { value: 'winning-patterns', label: 'Padrões vencedores', icon: TrendingUp },
-  { value: 'strategies', label: 'Estratégias', icon: BarChart3 },
+  { value: 'strategies', label: 'Notas com WIN', icon: BarChart3 },
 ];
 
 const Admin = () => {
@@ -82,10 +83,10 @@ const Admin = () => {
               {balance > 0 && (
                 <div className="hidden sm:flex items-center gap-2">
                   <span className="text-sm font-bold text-call">
-                    ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatAccountMoney(balance, iqBalance?.currency)}
                   </span>
                   <Badge variant={dailyProfit >= 0 ? "default" : "destructive"} className="text-xs">
-                    {dailyProfit >= 0 ? '+' : ''}{dailyProfit.toFixed(2)}
+                    {formatAccountMoney(dailyProfit, iqBalance?.currency, true)}
                   </Badge>
                 </div>
               )}

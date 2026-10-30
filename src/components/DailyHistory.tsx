@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { afterIQReset, combineCutoffs, getIQResultsReset, IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
 import { useGlobalIQResetCutoff } from '@/hooks/useGlobalIQResetCutoff';
+import { formatAccountMoney } from '@/lib/account-currency';
 
 interface DayResult {
   date: string;
@@ -22,6 +23,7 @@ interface DailyHistoryProps {
   excludeTimeframe?: string; // exclude specific timeframe
   daysToFetch?: number;
   perPage?: number;
+  currency?: string;
   /** Operações já filtradas (ex.: cópias do cliente); substitui a fonte da conta principal. */
   operations?: Array<{ created_at: string; profit?: number | string | null; result: string }>;
 }
@@ -41,6 +43,7 @@ export function DailyHistory({
   daysToFetch = 30,
   perPage = 5,
   operations,
+  currency,
 }: DailyHistoryProps) {
   const { user } = useAuth();
   const globalCutoff = useGlobalIQResetCutoff();
@@ -123,7 +126,7 @@ export function DailyHistory({
   const totalPages = Math.ceil(pastDays.length / perPage);
   const visible = pastDays.slice(page * perPage, (page + 1) * perPage);
 
-  const formatCurrency = (v: number) => `$ ${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  const formatCurrency = (v: number) => formatAccountMoney(v, timeframeFilter === 'MT5' ? 'USD' : currency, true);
   const formatDate = (d: string) => {
     const [, m, day] = d.split('-');
     return `${day}/${m}`;
@@ -185,7 +188,7 @@ export function DailyHistory({
                   "text-xs font-bold font-mono",
                   day.profit >= 0 ? "text-call" : "text-put"
                 )}>
-                  {day.profit >= 0 ? '+' : ''}{formatCurrency(day.profit)}
+                  {formatCurrency(day.profit)}
                 </span>
               </div>
             </div>

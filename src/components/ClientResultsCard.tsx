@@ -8,12 +8,15 @@ import { copyResultRates } from '@/lib/admin-copy-results';
 import { clientDayStart } from '@/lib/client-copy-results';
 import { useClientCopyResults } from '@/hooks/useClientCopyResults';
 import { brtDayKey, dayLabel } from '@/components/dayLabel';
+import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
+import { formatAccountMoney } from '@/lib/account-currency';
 
 const PAGE_SIZE = 12;
 const SETTLED = ['win', 'loss', 'draw', 'tie'];
 
 // Histórico do cliente no mesmo formato do card "Entradas na IQ Option" do admin; nunca exibe a estratégia.
 export function ClientResultsCard() {
+  const { balance } = useIQOptionConnection({ silentMissingCredentials: true, fetchStatistics: false, balanceOnly: true });
   const { operations, isLoading, isError } = useClientCopyHistory();
   const [page, setPage] = useState(0);
   const [showOpen, setShowOpen] = useState(true);
@@ -51,7 +54,7 @@ export function ClientResultsCard() {
           <span className="text-gold">{winPercent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span>
         </span>
         <span className={cn('font-mono text-sm font-bold', total >= 0 ? 'text-call' : 'text-put')}>
-          {total >= 0 ? '+' : '−'}US$ {Math.abs(total).toFixed(2)}
+          {formatAccountMoney(total, balance?.currency, true)}
         </span>
       </div>
 
@@ -91,7 +94,7 @@ export function ClientResultsCard() {
                       <div className="text-[10px] font-semibold uppercase tracking-wider text-gold">{dayLabel(o.created_at)}</div>
                       <div className="font-mono text-[10px]">
                         <span className="text-call">✓{s.w}</span> <span className="text-put">✗{s.l}</span> <span className="text-gold">{s.pct}%</span>{' '}
-                        <span className={s.p >= 0 ? 'text-call' : 'text-put'}>{s.p >= 0 ? '+' : '−'}{Math.abs(s.p).toFixed(2)}</span>
+                        <span className={s.p >= 0 ? 'text-call' : 'text-put'}>{formatAccountMoney(s.p, balance?.currency, true)}</span>
                       </div>
                     </div>
                   );
@@ -105,9 +108,9 @@ export function ClientResultsCard() {
                     <span className="font-mono text-[9px] text-muted-foreground truncate">#{o.iq_option_id}</span>
                   </span>
                   <span className={o.direction === 'CALL' ? 'text-call' : 'text-put'}>{o.direction}</span>
-                  <span className="ml-1 w-16 text-right font-mono">
-                    {o.result === 'win' ? <span className="text-call">+{Number(o.profit).toFixed(2)}</span>
-                      : o.result === 'loss' ? <span className="text-put">{Number(o.profit).toFixed(2)}</span>
+                  <span className="ml-1 shrink-0 text-right font-mono whitespace-nowrap">
+                    {o.result === 'win' ? <span className="text-call">{formatAccountMoney(Number(o.profit), balance?.currency, true)}</span>
+                      : o.result === 'loss' ? <span className="text-put">{formatAccountMoney(Number(o.profit), balance?.currency, true)}</span>
                       : ['tie', 'draw'].includes(o.result) ? <span className="text-muted-foreground">empate</span>
                       : <span className="text-muted-foreground">aberta</span>}
                   </span>

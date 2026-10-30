@@ -51,3 +51,9 @@ test('Without any Takashi signal in the window nothing fires', () => {
 test('Entry minute must be aligned to :00', () => {
   expect(takashiConfluence(candles(closes()), entry + 30)).toBeNull();
 });
+
+test('diagnostics report the first failed confirmation', async () => {
+  const { takashiConfluenceCheck } = await import('./takashi-confluence.ts');
+  expect(takashiConfluenceCheck(candles(closes(), 100), entry)).toEqual({ failed: 'volume', direction: 'CALL', volumeSource: 'tick' });
+  expect(takashiConfluenceCheck(candles(closes([0.3, 0.3])), entry)).toMatchObject({ failed: 'vwap', direction: 'CALL' });
+});

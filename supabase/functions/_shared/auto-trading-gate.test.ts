@@ -18,3 +18,12 @@ describe('auto trading gate', () => {
     expect(await masterAutoTradingEnabled(db(true))).toBe(true);
   });
 });
+
+describe('auto trading gate table', () => {
+  it('reads the admin switch from user_trading_settings', async () => {
+    const tables: string[] = [];
+    const spy = { ...db(true), from: (t: string) => { tables.push(t); return db(true).from(); } };
+    expect(await masterAutoTradingEnabled(spy)).toBe(true);
+    expect(tables).toEqual(['user_trading_settings']);
+  });
+});

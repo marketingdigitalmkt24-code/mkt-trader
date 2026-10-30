@@ -64,12 +64,19 @@ async function login(email: string, password: string, timeoutMs = 10000, attempt
   for (const u of hosts) {
     const left = Math.min(LOGIN_HOST_MS, deadline - Date.now());
     if (left < 1000) break;
+    // Fresh connection per attempt: a warm worker can keep a wedged pooled (HTTP/2, coalesced
+    // across the three hosts) connection that hangs every login while other functions succeed.
+    // @ts-ignore Deno runtime API; plain fetch when unavailable.
+    const client = typeof Deno !== 'undefined' && typeof Deno.createHttpClient === 'function'
+      // @ts-ignore Deno runtime API
+      ? (() => { try { return Deno.createHttpClient({ http2: false, poolMaxIdlePerHost: 0 }); } catch { return null; } })() : null;
     try {
-      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': BROWSER_UA, Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left) });
+      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': BROWSER_UA, Accept: 'application/json', Connection: 'close' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left), ...(client ? { client } : {}) } as RequestInit);
       const d = await r.json().catch(() => ({}));
       if (d.code === 'success' && d.ssid) return d.ssid;
       console.warn('Demo login refused:', { host: new URL(u).host, status: r.status, code: d?.code ?? null });
-    } catch (e) { console.warn('Demo login error:', new URL(u).host, e instanceof Error ? e.name : 'unknown'); }
+    } catch (e) { console.warn('Demo login error:', new URL(u).host, e instanceof Error ? e.name : 'unknown', client ? 'fresh-client' : 'pooled'); }
+    finally { try { client?.close(); } catch { /* already closed */ } }
   }
   return null;
 }

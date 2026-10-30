@@ -10,7 +10,7 @@ import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartToo
 const config = { entered: { label: 'Entraram', color: 'hsl(var(--call))' }, exited: { label: 'Saíram', color: 'hsl(var(--put))' }, consistent: { label: 'Notas consistentes', color: 'hsl(var(--gold))' }, consistentWins: { label: 'WIN dessas notas', color: 'hsl(var(--gold-dim))' } };
 const dayLabel = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`;
 // The WIN helper line exists only to feed the tooltip, so it must not appear in the legend without a visible stroke.
-const legendContent = (props: ComponentProps<typeof ChartLegendContent>) => <ChartLegendContent {...props} payload={(props.payload ?? []).filter(item => String((item as { dataKey?: unknown }).dataKey) !== 'consistentWins')} />;
+const legendContent = (props: ComponentProps<typeof ChartLegend>) => <ChartLegendContent payload={(props.payload ?? []).filter(item => String((item as { dataKey?: unknown }).dataKey) !== 'consistentWins')} verticalAlign={props.verticalAlign} />;
 
 
 export function DemoNoteMovementChart({ userId }: { userId: string }) {

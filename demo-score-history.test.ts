@@ -13,7 +13,7 @@ test('groups by the actual displayed two-decimal score, not a score band', () =>
 test('only confirmed numeric broker orders count; pending and ties do not dilute accuracy', () => {
  const history = scoreHistory([order('a', 2.26), order('b', 2.26, 'pending', 999), order('c', null, 'tie', 0),
   {...order('d', 2.26), status: 'failed'}, {...order('e', 2.26), iq_option_id: 'invalid'}]);
- expect(history.totals).toEqual({wins: 1, losses: 0, pending: 1, ties: 1, accuracy: 100, profit: 1.64});
+ expect(history.totals).toEqual({wins: 1, losses: 0, pending: 1, ties: 1, accuracy: 100, profit: 1.64, grossWins: 1.64, grossLosses: 0});
  expect(history.timeline.length).toBe(2);
  expect(history.byScore.find(r => r.score === 'unscored')?.ties).toBe(1);
 });

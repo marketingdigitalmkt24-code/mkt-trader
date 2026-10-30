@@ -1038,6 +1038,10 @@ export type Database = {
           strategy: string
         }[]
       }
+      claim_consistent_note: {
+        Args: { p_balance: number; p_candidate: string; p_config: string }
+        Returns: Json
+      }
       claim_force_anticipation_entry: {
         Args: { p_signal: string }
         Returns: Json

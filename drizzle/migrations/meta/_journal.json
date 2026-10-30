@@ -421,6 +421,13 @@
       "when": 1793080084433,
       "tag": "0059_strategy_scores_realtime",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793327776276,
+      "tag": "0060_consistent_note_claim",
+      "breakpoints": true
     }
   ]
 }

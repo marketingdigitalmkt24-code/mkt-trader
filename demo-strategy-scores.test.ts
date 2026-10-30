@@ -101,3 +101,15 @@ test('Só por nota sums WINs across strategies and keeps earliest and latest WIN
  expect(n226.lastWinAt).toBe('2026-10-27T03:00:00Z');
  expect(n226.historyFirstWinAt).toBe('2026-10-23T03:00:00Z');
 });
+
+test('linha de notas consistentes conta só WIN antes do primeiro LOSS da nota', () => {
+ const now = Date.parse('2026-10-29T20:00:00Z');
+ const r = (id: string, score: number, result: string, at: string) => ({ signal_id: id, entry_strategy: 'TAKASHI', score, result, source: 'demo' as const, entry_minute: at, settled_at: at });
+ const days = winningNoteDailyMovement([
+  r('a', 3.1, 'win', '2026-10-29T12:00:00Z'), r('b', 3.1, 'win', '2026-10-29T13:00:00Z'),
+  r('c', 4.2, 'win', '2026-10-29T12:30:00Z'), r('d', 4.2, 'loss', '2026-10-29T14:00:00Z'), r('e', 4.2, 'win', '2026-10-29T15:00:00Z'),
+ ], now);
+ const today = days.at(-1)!;
+ expect(today.consistent).toBe(2);
+ expect(today.consistentWins).toBe(3);
+});

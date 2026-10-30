@@ -1,3 +1,7 @@
+# Estratégia Nota consistente (29/10/2026)
+- [ ] Criar autorização atômica para nota com WIN hoje e nos dois dias anteriores BRT, sem LOSS histórico, com direção do novo sinal e controles Auto Trading.
+- [ ] Integrar executor, identificação no histórico/cópias/Telegram e testar sem forçar operações.
+
 # Operações pelas legendas do gráfico (29/10/2026)
 - [x] Legendas abrem a lista Demo por IDs exatos dos resultados que contribuíram para os 30 dias: primeiros WIN de entrada, LOSS de saída e WIN consistentes antes da perda. Lista compartilhada de dez operações/página e gráficos individuais; 25 testes passaram, build OK e painel autenticado confirmou as três listas, próxima/anterior e fechamento, sem erros. Execução preservada.
 

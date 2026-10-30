@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, Loader2, UserCheck } from 'lucide-react';
+import { Copy, Loader2, UserCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,6 +7,9 @@ import { readCopyAccount } from '@/lib/client-copy-state';
 import { countClientCopyResults, copyResultRates } from '@/lib/admin-copy-results';
 import { copyDayStart } from '../../supabase/functions/_shared/copy-target';
 import { sharedBalanceRead } from '@/lib/shared-balance-read';
+import { Button } from '@/components/ui/button';
+import { ClientDailyResults } from '@/components/ClientDailyResults';
+import { formatAccountMoney } from '@/lib/account-currency';
 
 interface ClientProfile {
   id: string;
@@ -28,6 +31,7 @@ export function CopyTradingCard() {
   const [results, setResults] = useState<Record<string, { wins: number; losses: number; profit: number }>>({});
   const [balances, setBalances] = useState<Record<string, { amount: number; currency: string; account: string } | null>>({});
   const [balancesLoading, setBalancesLoading] = useState(false);
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [{ data: profiles }, { data: copyConfigs }, { data: iqConfigs }] = await Promise.all([
@@ -51,7 +55,7 @@ export function CopyTradingCard() {
       let profit = 0;
       for (let offset = 0; ; offset += 1000) {
         const { data, error } = await supabase.from('operation_results')
-          .select('signal_id, result, iq_option_id, timeframe, profit')
+          .select('signal_id, result, iq_option_id, timeframe, profit, entry_strategy')
           .like('signal_id', `copy-${client.user_id}-%`)
           .gte('created_at', copyDayStart())
           .order('created_at').order('id')
@@ -83,7 +87,7 @@ export function CopyTradingCard() {
             body: { userId, timezoneOffset: 180 },
           }));
           return [userId, !error && data?.success && Number.isFinite(data.balance) && data.accountType === account
-            ? { amount: data.balance as number, currency: (data.currency || 'USD') as string, account }
+            ? { amount: data.balance as number, currency: (data.currency || '') as string, account }
             : null] as const;
         } catch {
           return [userId, null] as const;
@@ -137,6 +141,8 @@ export function CopyTradingCard() {
             const enabled = cfg?.enabled ?? false;
             const accountType = accounts[client.user_id];
             const balance = balances[client.user_id];
+            const currency = balance?.account === accountType ? balance.currency : undefined;
+            const expanded = expandedClient === client.user_id;
             const totals = results[client.user_id];
             const rates = totals ? copyResultRates(totals.wins, totals.losses) : null;
             return (
@@ -146,7 +152,10 @@ export function CopyTradingCard() {
                     <UserCheck className="w-4 h-4 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{client.email}</p>
+                    <Button variant="ghost" className="h-auto py-1 px-0 max-w-full gap-1 text-sm font-medium" onClick={() => setExpandedClient(expanded ? null : client.user_id)} aria-expanded={expanded} aria-controls={`client-history-${client.user_id}`}>
+                      <span className="truncate">{client.email}</span>
+                      {expanded ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+                    </Button>
                     <p className="text-xs text-muted-foreground">
                       {accountType ? `Conta ${accountType === 'REAL' ? 'Real' : 'Demo'}` : 'Conta não conectada'}
                     </p>
@@ -157,14 +166,14 @@ export function CopyTradingCard() {
                     <dt className="text-xs text-muted-foreground">Saldo</dt>
                     <dd className="text-sm font-semibold tabular-nums">
                       {balance && balance.account === accountType
-                        ? `${balance.currency} ${balance.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        ? formatAccountMoney(balance.amount, currency)
                         : balancesLoading && accountType ? 'Consultando…' : 'Indisponível'}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Lucro hoje</dt>
                     <dd className={`text-sm font-semibold tabular-nums ${totals && totals.profit < 0 ? 'text-put' : totals && totals.profit > 0 ? 'text-call' : 'text-foreground'}`}>
-                      {totals ? `${balance?.currency || 'USD'} ${totals.profit > 0 ? '+' : ''}${totals.profit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                      {totals ? formatAccountMoney(totals.profit, currency, true) : '—'}
                     </dd>
                   </div>
                   <div>
@@ -185,6 +194,7 @@ export function CopyTradingCard() {
                     {enabled ? 'Copy Ativo' : 'Inativo'}
                   </Badge>
                 </div>
+                {expanded && <ClientDailyResults userId={client.user_id} currency={currency} />}
               </div>
             );
           })

@@ -16,6 +16,7 @@ import { canEnableCopy, readCopyAccount, readCopyEnabled } from '@/lib/client-co
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatAccountMoney } from '@/lib/account-currency';
 
 export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?: boolean }) {
   const { user } = useAuth();
@@ -24,7 +25,6 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
   const results = useClientCopyResults();
   const history = useClientCopyHistory();
   const { winPercent } = copyResultRates(results.wins, results.losses);
-  const money = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const [enabled, setEnabled] = useState(false);
   const [connected, setConnected] = useState(false);
   const [tradeAmount, setTradeAmount] = useState('1');
@@ -151,12 +151,12 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
             <span className="text-sm text-muted-foreground">Saldo Atual</span>
             {balance && <Badge variant={balance.accountType === 'REAL' ? 'default' : 'secondary'}>{balance.accountType === 'REAL' ? 'REAL' : 'DEMO'}</Badge>}
           </div>
-          <p className="text-2xl font-bold font-mono">{balance ? `${balance.currency === 'BRL' ? 'R$' : 'US$'} ${money(balance.balance)}` : '—'}</p>
+          <p className="text-2xl font-bold font-mono">{balance ? formatAccountMoney(balance.balance, balance.currency) : '—'}</p>
         </div>
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase text-muted-foreground">Resultado de Hoje</p>
           <p className={cn('text-3xl font-bold font-mono text-center', results.profit < 0 ? 'text-put' : 'text-call')}>
-            {results.isError ? 'Indisponível' : results.isLoading ? '…' : `${results.profit < 0 ? '−' : '+'}US$ ${money(Math.abs(results.profit))}`}
+            {results.isError ? 'Indisponível' : results.isLoading ? '…' : formatAccountMoney(results.profit, balance?.currency, true)}
           </p>
           <div className="grid grid-cols-4 gap-2 text-center">
             <div><p className="font-mono font-bold text-call">{results.wins}</p><p className="text-[10px] text-muted-foreground">Wins</p></div>
@@ -167,7 +167,7 @@ export function ClientCopyTradingCard({ settingsOnly = false }: { settingsOnly?:
         </div>
         </>}
         {!settingsOnly && (history.operations.some(op => op.created_at < clientDayStart() && ['win', 'loss', 'draw', 'tie'].includes(op.result))
-          ? <DailyHistory title="Histórico Diário IQ Option" operations={history.operations} perPage={5} />
+          ? <DailyHistory title="Histórico Diário IQ Option" operations={history.operations} perPage={5} currency={balance?.currency} />
           : <div className="border-t border-border pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Histórico Diário IQ Option</p>
               <p className="text-xs text-muted-foreground mt-2">{history.isLoading ? 'Carregando histórico…' : history.isError ? 'Não foi possível atualizar o histórico.' : 'Nenhuma operação copiada em dias anteriores.'}</p>

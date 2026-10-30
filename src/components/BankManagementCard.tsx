@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { IQ_RESULTS_RESET_EVENT } from '@/lib/iq-results-reset';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
+import { formatAccountMoney } from '@/lib/account-currency';
 
 export function BankManagementCard() {
   const { toast } = useToast();
@@ -39,7 +40,7 @@ export function BankManagementCard() {
   const totalDecided = wins + losses;
   const winRate = totalDecided > 0 ? (wins / totalDecided) * 100 : 0;
   
-  const currency = balance?.currency || 'USD';
+  const currency = balance?.currency;
   const accountType = balance?.accountType || 'PRACTICE';
   const currentBalance = balance?.balance ?? 0;
 
@@ -88,12 +89,7 @@ export function BankManagementCard() {
     } finally { setIsRefilling(false); }
   };
 
-  const formatCurrency = (value: number) => {
-    if (currency === 'BRL') {
-      return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-    }
-    return `$ ${value.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-  };
+  const formatCurrency = (value: number) => formatAccountMoney(value, currency);
 
   return (
     <section className="glass-card p-4">
@@ -220,7 +216,7 @@ export function BankManagementCard() {
             "text-3xl font-bold font-mono",
             profit >= 0 ? "text-call" : "text-put"
           )}>
-            {profit >= 0 ? '+' : ''}{formatCurrency(profit)}
+            {formatAccountMoney(profit, currency, true)}
           </span>
         </div>
 
@@ -304,7 +300,7 @@ export function BankManagementCard() {
       )}
 
       {/* Daily History */}
-      <DailyHistory title="Histórico Diário IQ Option" excludeTimeframe="MT5" perPage={5} />
+      <DailyHistory title="Histórico Diário IQ Option" excludeTimeframe="MT5" perPage={5} currency={currency} />
     </section>
   );
 }

@@ -1,4 +1,5 @@
 # Estratégia Nota consistente (29/10/2026)
+- [ ] Pedido de 23:29 BRT: resolver conflito por mecanismo permitido, habilitar principal/cópia/Telegram e verificar atualização contínua das notas com Últimas operações.
 - [x] Preparada política somente leitura com WIN hoje e nos dois dias anteriores BRT, veto de LOSS no grupo estratégia/nota exibida e direção do sinal. 14 testes passaram com regressão da invertida; build OK. Consulta atual: nenhuma nota atende aos três dias.
 - [ ] Instalar autorização atômica claim_consistent_note: impedida pela colisão protegida dos snapshots 0058/0059; ferramenta confirmou SQL não executado e banco confirmou função ausente. Depende de reparo permitido do histórico gerenciado.
 - [ ] Integrar executor, identidade no histórico/cópias/Telegram e verificar próxima entrada natural: depende da autorização atômica acima. Nenhuma chamada de placement conectada ou operação forçada; estratégias atuais preservadas.

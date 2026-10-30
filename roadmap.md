@@ -1,3 +1,6 @@
+# Operações pelas legendas do gráfico (29/10/2026)
+- [ ] Abrir lista paginada por Entraram, Saíram e Notas consistentes, usando exatamente os resultados que contribuíram para os 30 dias do gráfico, com gráficos individuais e sem alterar execução.
+
 # Cópia na abertura do admin (29/10/2026)
 - [x] Conexão de envio do cliente preparada em paralelo e cópia liberada após abertura aceita com ID IQ e registro/fila exatos, sem esperar WIN/LOSS; expiração original, conta/valor/limites e Auto Trading preservados. 368 testes passaram e executor publicado; nenhum trade forçado.
 - [ ] Medir a primeira cópia real após a alteração: atualmente não existem configurações de copy nem ordens principais registradas neste banco; depende de cliente conectado com copy ativo e novo sinal autorizado. Não há garantia de preço/segundo idênticos.

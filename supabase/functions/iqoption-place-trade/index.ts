@@ -686,13 +686,16 @@ serve(async (req) => {
     if (body?.prepareCopyCandidate !== undefined) {
       if (req.headers.get('Authorization') !== `Bearer ${supabaseKey}`)
         return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
-      if (typeof body.prepareCopyCandidate !== 'string' || body.prepareCopyCandidate.length > 255 || Object.keys(body).length !== 1)
+      const copyStrategy = body.copyStrategy ?? 'inverted';
+      if (typeof body.prepareCopyCandidate !== 'string' || body.prepareCopyCandidate.length > 255
+        || !['inverted', 'consistent'].includes(copyStrategy)
+        || Object.keys(body).some(k => !['prepareCopyCandidate', 'copyStrategy'].includes(k)))
         return Response.json({ error: 'Invalid preparation request' }, { status: 400, headers: corsHeaders });
       const [{ data: candidate }, { data: principal }] = await Promise.all([
         supabase.from('iq_demo_test_candidates').select('signal_id,asset,direction,entry_strategy,entry_minute,score').eq('signal_id', body.prepareCopyCandidate).maybeSingle(),
         readMasterIQConfig(supabase),
       ]);
-      const copyRequest = prepareTakashiCopy(candidate, Date.now());
+      const copyRequest = prepareTakashiCopy(candidate, Date.now(), copyStrategy);
       if (!principal || !copyRequest || !principalIQEnabled(copyRequest.entryStrategy, autoTradingOn))
         return Response.json({ skipped: 'No fresh authorized copy preparation' }, { headers: corsHeaders });
       // The same invocation owns prepared client sessions and waits for persisted broker confirmation.

@@ -3,17 +3,25 @@ import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticat
 
 const credentials = { email: 'fixture@example.test', password: 'fixture-only' };
 
-test('HTTP timeout preserves the minute for direct WebSocket authentication', async () => {
+test('HTTP timeouts keep retrying until only the socket reserve remains, then fall back', async () => {
   let time = 0;
-  let calls = 0;
-  const auth = await prepareDemoAuthentication(credentials, async ms => {
-    calls++; time += ms; return null;
+  const attempts: number[] = [];
+  const auth = await prepareDemoAuthentication(credentials, async (ms, n) => {
+    attempts.push(n); time += ms; return null;
   }, 60000, () => time);
-  expect(calls).toBe(1);
-  expect(time).toBe(10000);
+  // 60000 - 3000 margin - 12000 socket reserve = 45000ms of HTTP retries (10s each, last 5s).
+  expect(attempts).toEqual([1, 2, 3, 4, 5]);
+  expect(time).toBe(45000);
   expect(auth?.mode).toBe('credentials');
   if (!auth) throw new Error('Expected direct fallback');
   expect(demoSocketAuthMessage(auth)).toEqual({ name: 'authenticate', msg: credentials });
+});
+
+test('a later HTTP retry that succeeds authenticates by session', async () => {
+  let time = 0;
+  const auth = await prepareDemoAuthentication(credentials, async (ms, n) => { time += ms; return n === 3 ? 'retry-session' : null; }, 60000, () => time);
+  expect(auth).toEqual({ mode: 'ssid', ssid: 'retry-session' });
+  expect(time).toBe(30000);
 });
 
 test('successful HTTP login authenticates on the same socket by session', async () => {
@@ -23,8 +31,9 @@ test('successful HTTP login authenticates on the same socket by session', async 
   expect(demoSocketAuthMessage(auth)).toEqual({ name: 'ssid', msg: 'fixture-session' });
 });
 
-test('HTTP network exceptions use direct fallback without repeated login requests', async () => {
-  const auth = await prepareDemoAuthentication(credentials, async () => { throw new Error('timeout'); }, 60000, () => 0);
+test('HTTP network exceptions are retried, then use direct fallback', async () => {
+  let time = 0;
+  const auth = await prepareDemoAuthentication(credentials, async ms => { time += ms; throw new Error('timeout'); }, 60000, () => time);
   expect(auth?.mode).toBe('credentials');
 });
 

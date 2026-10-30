@@ -33,6 +33,7 @@ import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
+import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_shared/broker-session-cache.ts';
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
@@ -41,7 +42,9 @@ import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
-const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
+const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
+const LOGIN_HOST_MS = 8000;
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const OPEN = 'test7_open';
 const DEMO_OWN_WATCH_GRACE_MS = 22000;
 type K = { t: number; o: number; c: number; h: number; l: number; v?: number };
@@ -54,19 +57,27 @@ export const LABELS: Record<string, string> = {
 };
 
 async function login(email: string, password: string, timeoutMs = 10000, attemptNumber = 1): Promise<string | null> {
-  // The broker login sometimes answers in 3-8s; splitting the budget across hosts
-  // aborted every slow-but-valid answer. Give the primary host the whole budget.
+  // Slow-but-valid answers take 3-8s; cap each host so one hung host cannot eat the budget,
+  // and rotate the starting host per attempt (the balance function succeeds this way).
   const deadline = Date.now() + timeoutMs;
-  const hosts = attemptNumber % 2 === 0 ? [...AUTH_URLS].reverse() : AUTH_URLS;
+  const shift = (attemptNumber - 1) % AUTH_URLS.length;
+  const hosts = [...AUTH_URLS.slice(shift), ...AUTH_URLS.slice(0, shift)];
   for (const u of hosts) {
-    const left = deadline - Date.now();
+    const left = Math.min(LOGIN_HOST_MS, deadline - Date.now());
     if (left < 1000) break;
+    // Fresh connection per attempt: a warm worker can keep a wedged pooled (HTTP/2, coalesced
+    // across the three hosts) connection that hangs every login while other functions succeed.
+    // @ts-ignore Deno runtime API; plain fetch when unavailable.
+    const client = typeof Deno !== 'undefined' && typeof Deno.createHttpClient === 'function'
+      // @ts-ignore Deno runtime API
+      ? (() => { try { return Deno.createHttpClient({ http2: false, poolMaxIdlePerHost: 0 }); } catch { return null; } })() : null;
     try {
-      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left) });
+      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': BROWSER_UA, Accept: 'application/json', Connection: 'close' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left), ...(client ? { client } : {}) } as RequestInit);
       const d = await r.json().catch(() => ({}));
       if (d.code === 'success' && d.ssid) return d.ssid;
-      console.warn('Demo login refused:', { status: r.status, code: d?.code ?? null });
-    } catch (e) { console.warn('Demo login error:', e instanceof Error ? e.name : 'unknown'); }
+      console.warn('Demo login refused:', { host: new URL(u).host, status: r.status, code: d?.code ?? null });
+    } catch (e) { console.warn('Demo login error:', new URL(u).host, e instanceof Error ? e.name : 'unknown', client ? 'fresh-client' : 'pooled'); }
+    finally { try { client?.close(); } catch { /* already closed */ } }
   }
   return null;
 }
@@ -256,10 +267,18 @@ Deno.serve(async (req) => {
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
     // Do not spend the entire minute retrying an unavailable HTTP gateway.
     // Direct WebSocket auth uses this same resolved master and invocation only.
-    const auth=cfg ? await prepareDemoAuthentication(cfg,ms=>login(cfg.email,cfg.password,ms),targetMs) : null;
-    return {cfg,auth};
+    if(!cfg)return {cfg,auth:null,cached:false};
+    // Reuse the last valid master session: the broker throttles per-minute HTTP logins.
+    const cachedSsid=await readBrokerSession(supabase,cfg.id);
+    if(cachedSsid)return {cfg,auth:{mode:'ssid' as const,ssid:cachedSsid},cached:true};
+    const auth=await prepareDemoAuthentication(cfg,async(ms,n)=>{
+      const ssid=await login(cfg.email,cfg.password,ms,n);
+      if(ssid)await saveBrokerSession(supabase,cfg.id,ssid);
+      return ssid;
+    },targetMs);
+    return {cfg,auth,cached:false};
   });
-  const [{ cfg, auth }, { data: open }] = await Promise.all([
+  const [{ cfg, auth, cached: authFromCache }, { data: open }] = await Promise.all([
     masterLogin,
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date(targetMs).toISOString()).limit(1000),
@@ -272,7 +291,7 @@ Deno.serve(async (req) => {
   }
   let nowSec = Math.floor(Date.now() / 1000);
   const curMin = targetMs / 1000;
-  console.log('Demo timing authentication prepared:',new Date().toISOString(),'method:',auth.mode);
+  console.log('Demo timing authentication prepared:',new Date().toISOString(),'method:',auth.mode,authFromCache?'cached':'fresh');
 
   // Confirm each expired TEST as soon as its broker candle arrives, not after all assets.
   let resolved = 0;
@@ -319,12 +338,16 @@ Deno.serve(async (req) => {
   let extendPrepared: (untilMs: number) => void = () => {};
   let ownExpiryMs = 0;
   let socketAuth = auth;
+  let cachedRefused = false;
   let socketAttempts = 0;
   const connectionReady = await prepareDemoConnection(async (endpoint, handshakeMs) => {
-    const refreshBudget=demoHttpRefreshBudget(socketAttempts,targetMs,Date.now());
-    if(refreshBudget){
+    // A refused cached session gets one immediate HTTP login instead of waiting for the refresh slot.
+    const staleBudget=cachedRefused?Math.min(10000,targetMs-3000-8000-Date.now()):0;
+    const refreshBudget=staleBudget>=1000?staleBudget:demoHttpRefreshBudget(socketAttempts,targetMs,Date.now());
+    cachedRefused=false;
+    if(refreshBudget>=1000){
       const refreshed=await login(cfg.email,cfg.password,refreshBudget,2+Math.floor(socketAttempts/2));
-      if(refreshed){socketAuth={mode:'ssid',ssid:refreshed};console.log('Demo authentication recovered by HTTP refresh');}
+      if(refreshed){socketAuth={mode:'ssid',ssid:refreshed};await saveBrokerSession(supabase,cfg.id,refreshed);console.log('Demo authentication recovered by HTTP refresh');}
     }
     socketAttempts++;
     const remaining=targetMs-3000-Date.now();
@@ -384,6 +407,7 @@ Deno.serve(async (req) => {
       try { d = JSON.parse(ev.data); } catch { return; }
       if(demoSocketAuthenticationRejected(d)) {
         console.warn('Demo socket authentication refused; trying alternate endpoint');
+        if(socketAuth.mode==='ssid'){cachedRefused=true;void clearBrokerSession(supabase,cfg.id,socketAuth.ssid);}
         finish();closePrepared();return;
       }
       if(d.name==='authenticated') {

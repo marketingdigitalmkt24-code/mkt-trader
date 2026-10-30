@@ -68,8 +68,8 @@ async function login(email: string, password: string, timeoutMs = 10000, attempt
       const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': BROWSER_UA, Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left) });
       const d = await r.json().catch(() => ({}));
       if (d.code === 'success' && d.ssid) return d.ssid;
-      console.warn('Demo login refused:', { status: r.status, code: d?.code ?? null });
-    } catch (e) { console.warn('Demo login error:', e instanceof Error ? e.name : 'unknown'); }
+      console.warn('Demo login refused:', { host: new URL(u).host, status: r.status, code: d?.code ?? null });
+    } catch (e) { console.warn('Demo login error:', new URL(u).host, e instanceof Error ? e.name : 'unknown'); }
   }
   return null;
 }

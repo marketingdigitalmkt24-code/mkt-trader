@@ -1,3 +1,9 @@
+# Ajustes de Copy Trading e resultados (30/10/2026)
+- [ ] Ao clicar no email do cliente, mostrar histórico diário com cinco dias por página e páginas antigas.
+- [ ] Renomear a aba Estratégias para Notas com WIN.
+- [ ] Exibir resultados admin/cliente na moeda identificada da respectiva conta IQ Option, sem conversão.
+- [ ] Verificar testes e fluxo autenticado na tela.
+
 # Estratégia Nota consistente (29/10/2026)
 - [x] Conflito do histórico de alterações resolvido (identificador duplicado do registro 0059 corrigido, nada apagado; verificação OK).
 - [x] Autorização atômica instalada (somente serviço): revalida WIN hoje e nos dois dias anteriores BRT, nenhum LOSS da nota, Auto Trading, conta/valor, limites e travas; cópias de clientes liberadas pela mesma reserva da invertida.

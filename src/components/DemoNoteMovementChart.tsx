@@ -1,4 +1,6 @@
+import { type ComponentProps } from 'react';
 import { useQuery } from '@tanstack/react-query';
+
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { readDemoScoreHistory } from '@/lib/demo-score-history';

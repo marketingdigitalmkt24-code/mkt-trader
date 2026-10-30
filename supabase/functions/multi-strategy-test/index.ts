@@ -33,6 +33,7 @@ import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
 import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
+import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_shared/broker-session-cache.ts';
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
@@ -266,10 +267,18 @@ Deno.serve(async (req) => {
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
     // Do not spend the entire minute retrying an unavailable HTTP gateway.
     // Direct WebSocket auth uses this same resolved master and invocation only.
-    const auth=cfg ? await prepareDemoAuthentication(cfg,(ms,n)=>login(cfg.email,cfg.password,ms,n),targetMs) : null;
-    return {cfg,auth};
+    if(!cfg)return {cfg,auth:null,cached:false};
+    // Reuse the last valid master session: the broker throttles per-minute HTTP logins.
+    const cachedSsid=await readBrokerSession(supabase,cfg.id);
+    if(cachedSsid)return {cfg,auth:{mode:'ssid' as const,ssid:cachedSsid},cached:true};
+    const auth=await prepareDemoAuthentication(cfg,async(ms,n)=>{
+      const ssid=await login(cfg.email,cfg.password,ms,n);
+      if(ssid)await saveBrokerSession(supabase,cfg.id,ssid);
+      return ssid;
+    },targetMs);
+    return {cfg,auth,cached:false};
   });
-  const [{ cfg, auth }, { data: open }] = await Promise.all([
+  const [{ cfg, auth, cached: authFromCache }, { data: open }] = await Promise.all([
     masterLogin,
     supabase.from('operation_results').select('id, asset, direction, entry_strategy, created_at, telegram_sent')
       .eq('result', OPEN).lte('expiration_time', new Date(targetMs).toISOString()).limit(1000),
@@ -282,7 +291,7 @@ Deno.serve(async (req) => {
   }
   let nowSec = Math.floor(Date.now() / 1000);
   const curMin = targetMs / 1000;
-  console.log('Demo timing authentication prepared:',new Date().toISOString(),'method:',auth.mode);
+  console.log('Demo timing authentication prepared:',new Date().toISOString(),'method:',auth.mode,authFromCache?'cached':'fresh');
 
   // Confirm each expired TEST as soon as its broker candle arrives, not after all assets.
   let resolved = 0;
@@ -329,12 +338,16 @@ Deno.serve(async (req) => {
   let extendPrepared: (untilMs: number) => void = () => {};
   let ownExpiryMs = 0;
   let socketAuth = auth;
+  let cachedRefused = false;
   let socketAttempts = 0;
   const connectionReady = await prepareDemoConnection(async (endpoint, handshakeMs) => {
-    const refreshBudget=demoHttpRefreshBudget(socketAttempts,targetMs,Date.now());
-    if(refreshBudget){
+    // A refused cached session gets one immediate HTTP login instead of waiting for the refresh slot.
+    const staleBudget=cachedRefused?Math.min(10000,targetMs-3000-8000-Date.now()):0;
+    const refreshBudget=staleBudget>=1000?staleBudget:demoHttpRefreshBudget(socketAttempts,targetMs,Date.now());
+    cachedRefused=false;
+    if(refreshBudget>=1000){
       const refreshed=await login(cfg.email,cfg.password,refreshBudget,2+Math.floor(socketAttempts/2));
-      if(refreshed){socketAuth={mode:'ssid',ssid:refreshed};console.log('Demo authentication recovered by HTTP refresh');}
+      if(refreshed){socketAuth={mode:'ssid',ssid:refreshed};await saveBrokerSession(supabase,cfg.id,refreshed);console.log('Demo authentication recovered by HTTP refresh');}
     }
     socketAttempts++;
     const remaining=targetMs-3000-Date.now();
@@ -394,6 +407,7 @@ Deno.serve(async (req) => {
       try { d = JSON.parse(ev.data); } catch { return; }
       if(demoSocketAuthenticationRejected(d)) {
         console.warn('Demo socket authentication refused; trying alternate endpoint');
+        if(socketAuth.mode==='ssid'){cachedRefused=true;void clearBrokerSession(supabase,cfg.id,socketAuth.ssid);}
         finish();closePrepared();return;
       }
       if(d.name==='authenticated') {

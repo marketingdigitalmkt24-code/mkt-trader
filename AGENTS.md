@@ -32,4 +32,5 @@
 - Operações Abertas shows only broker positions whose payload carries an order id this app recorded, with the app's own asset/direction/stake; why: never list orders opened outside the app.
 - Principal IQ placement and copies require the master admin's user_settings.auto_trading_enabled via the shared auto-trading gate; why: turning Auto Trading off must stop IQ Option entries server-side, not only in the browser.
 - Subdirectories have their own AGENTS.md (e.g. src/components); read them before changing files there.
+- New consistent-note eligibility lives in the shared read-only policy and must be revalidated by a service-only atomic database claim before any placement or copy preparation; why: historical eligibility alone must never authorize money-moving actions.
 - Client copies prepare read-only broker handshakes concurrently and send only after exact persisted principal opening acceptance plus fresh client authorization, never final WIN/LOSS; preserve the principal expiry. Why: reduce opening latency without unconfirmed trades or fabricated results.

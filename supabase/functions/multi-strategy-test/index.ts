@@ -13,7 +13,7 @@ import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recen
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { takashiBaseScore, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
-import { takashiConfluence } from '../_shared/takashi-confluence.ts';
+import { takashiConfluenceCheck } from '../_shared/takashi-confluence.ts';
 import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE } from '../_shared/demo-226-policy.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
@@ -521,6 +521,7 @@ Deno.serve(async (req) => {
   const takashiHistory=[...previousPending,...recentTakashi.data];
   const ownEvidence=takashiRecentEvidence(takashiHistory,targetMs,learningObservedMs);
   console.log('Takashi recent learning:',JSON.stringify({samples:ownEvidence.length,wins:ownEvidence.filter(r=>r.result==='win').length,losses:ownEvidence.filter(r=>r.result==='loss').length}));
+  const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
     const prior=cs.filter(k=>k.t<curMin).slice(-60);
     const complete=prior.length===60 && prior.every((k,i)=>k.t===curMin-(60-i)*60
@@ -533,7 +534,11 @@ Deno.serve(async (req) => {
     // Keep legacy indicator warmup unchanged despite the larger Demo candle window.
     const fired = detect(cs.slice(-90).filter(k => k.t + 60 <= curMin));
     // Setup de 5 confirmações: Takashi + VWAP + EMA 9/21 + price action + volume.
-    const takashi = takashiConfluence(cs, curMin);
+    const check = takashiConfluenceCheck(cs, curMin);
+    const gate = 'failed' in check ? check.failed : 'passed';
+    confluenceGates[gate] = (confluenceGates[gate] || 0) + 1;
+    if (check.volumeSource) confluenceGates[`vol_${check.volumeSource}`] = (confluenceGates[`vol_${check.volumeSource}`] || 0) + 1;
+    const takashi = 'failed' in check ? null : check;
     if (takashi) demoPatterns.push({
       signal_id: `takashi-bnf-v1-${asset}-${curMin}`, asset, direction: takashi.direction,
       entry_strategy: TAKASHI_BNF, created_at: new Date(curMin * 1000).toISOString(),
@@ -542,6 +547,7 @@ Deno.serve(async (req) => {
         + takashiRecentAdjustment(takashiHistory, { asset, direction: takashi.direction }, targetMs, learningObservedMs),
     });
   }
+  console.log('Takashi 5-confluence gates:', JSON.stringify(confluenceGates));
   let inserted = 0;
   // Separate service ledger: new Demo patterns never enter principal TEST history/claims.
   // Display-only enrichment: retain the result and following closed candle.

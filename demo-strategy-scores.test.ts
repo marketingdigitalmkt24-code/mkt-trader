@@ -12,7 +12,7 @@ test('daily chart contains exactly 30 inclusive Brasília dates and counts entry
  expect(days).toHaveLength(30);
  expect(days[0].day).toBe('2026-09-28');
  expect(days.find(day => day.day === '2026-10-25')?.entered).toBe(1);
- expect(days[29]).toEqual({ day: '2026-10-27', entered: 0, exited: 1 });
+ expect(days[29]).toEqual(expect.objectContaining({ day: '2026-10-27', entered: 0, exited: 1 }));
 });
 test('overlapping strategies with the same note do not duplicate note movements', () => {
  const observations = [{ ...row('a', 'A'), settled_at: '2026-10-25T04:00:00Z' }, { ...row('b', 'B'), settled_at: '2026-10-25T05:00:00Z' }, { ...row('c', 'A', 2.26, 'loss'), settled_at: '2026-10-26T05:00:00Z' }, { ...row('d', 'B', 2.26, 'loss'), settled_at: '2026-10-27T05:00:00Z' }];

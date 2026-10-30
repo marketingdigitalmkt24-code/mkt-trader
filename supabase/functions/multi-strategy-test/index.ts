@@ -41,7 +41,9 @@ import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
-const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
+const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
+const LOGIN_HOST_MS = 8000;
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const OPEN = 'test7_open';
 const DEMO_OWN_WATCH_GRACE_MS = 22000;
 type K = { t: number; o: number; c: number; h: number; l: number; v?: number };
@@ -54,15 +56,16 @@ export const LABELS: Record<string, string> = {
 };
 
 async function login(email: string, password: string, timeoutMs = 10000, attemptNumber = 1): Promise<string | null> {
-  // The broker login sometimes answers in 3-8s; splitting the budget across hosts
-  // aborted every slow-but-valid answer. Give the primary host the whole budget.
+  // Slow-but-valid answers take 3-8s; cap each host so one hung host cannot eat the budget,
+  // and rotate the starting host per attempt (the balance function succeeds this way).
   const deadline = Date.now() + timeoutMs;
-  const hosts = attemptNumber % 2 === 0 ? [...AUTH_URLS].reverse() : AUTH_URLS;
+  const shift = (attemptNumber - 1) % AUTH_URLS.length;
+  const hosts = [...AUTH_URLS.slice(shift), ...AUTH_URLS.slice(0, shift)];
   for (const u of hosts) {
-    const left = deadline - Date.now();
+    const left = Math.min(LOGIN_HOST_MS, deadline - Date.now());
     if (left < 1000) break;
     try {
-      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left) });
+      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': BROWSER_UA, Accept: 'application/json' }, body: new URLSearchParams({ identifier: email, password }), signal: AbortSignal.timeout(left) });
       const d = await r.json().catch(() => ({}));
       if (d.code === 'success' && d.ssid) return d.ssid;
       console.warn('Demo login refused:', { status: r.status, code: d?.code ?? null });
@@ -256,7 +259,7 @@ Deno.serve(async (req) => {
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
     // Do not spend the entire minute retrying an unavailable HTTP gateway.
     // Direct WebSocket auth uses this same resolved master and invocation only.
-    const auth=cfg ? await prepareDemoAuthentication(cfg,ms=>login(cfg.email,cfg.password,ms),targetMs) : null;
+    const auth=cfg ? await prepareDemoAuthentication(cfg,(ms,n)=>login(cfg.email,cfg.password,ms,n),targetMs) : null;
     return {cfg,auth};
   });
   const [{ cfg, auth }, { data: open }] = await Promise.all([

@@ -87,12 +87,13 @@ Deno.serve(async req => {
         plan = { strategy: CONSISTENT_NOTE, label: CONSISTENT_NOTE_LABEL, rpc: 'claim_consistent_note', copy: 'consistent' };
     }
     if (!plan) return reply({ skipped: 'No authorized principal strategy for this signal' });
+    const chosen = plan;
     if (!cfg || !cfg.last_connected_at || !['PRACTICE', 'REAL'].includes(cfg.account_type)) return reply({ skipped: 'Principal connection unavailable' });
     // Prepare each client's own login concurrently; this invocation never sends a client order.
     // The copy executor waits for our exact confirmed order and executed queue before reserving/placing.
     const copyTask = fetch(`${url}/functions/v1/iqoption-place-trade`, {
       method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prepareCopyCandidate: candidate.signal_id, copyStrategy: plan.copy }), signal: AbortSignal.timeout(90000),
+      body: JSON.stringify({ prepareCopyCandidate: candidate.signal_id, copyStrategy: chosen.copy }), signal: AbortSignal.timeout(90000),
     }).then(async response => {
       if (!response.ok) console.error('Selected Trend copy preparation:', response.status);
       else console.log('Selected Trend copy dispatch:', await response.text());
@@ -145,13 +146,13 @@ Deno.serve(async req => {
             }
             const activeId = Number(instrument[0]);
             if (!Number.isSafeInteger(activeId) || activeId <= 0) { finish({ success: false, error: 'Invalid instrument; no order sent' }); return; }
-            const { data: order, error } = await db.rpc(plan.rpc, { p_candidate: candidate.signal_id, p_config: cfg.id, p_balance: balanceAmount });
+            const { data: order, error } = await db.rpc(chosen.rpc, { p_candidate: candidate.signal_id, p_config: cfg.id, p_balance: balanceAmount });
             if (error) throw error;
             if (!order) { finish({ success: false, error: 'Sequence, limits or reservation rejected; no order sent' }); return; }
             state.claimed = order;
             leaseScope = `master:${String(order.entryStrategy).toLowerCase()}`;
             if (order.configId !== cfg.id || !['call','put'].includes(order.direction)
-              || order.entryStrategy !== plan.strategy
+              || order.entryStrategy !== chosen.strategy
               || !freshTrendPut(order.entryAt, Date.now()) || done) {
               finish({ success: false, error: 'Configuration changed or entry window closed; no order sent' }); return;
             }
@@ -187,7 +188,7 @@ Deno.serve(async req => {
     if (!owned) return reply({ skipped: outcome.error || 'No authorized order' });
     const queued = { signal_id: owned.signalId, amount: owned.amount };
     const direction = owned.direction.toUpperCase();
-    const strategyLabel = plan.label;
+    const strategyLabel = chosen.label;
     if (!outcome.success || !outcome.tradeId) {
       console.error('Selected Trend failed:', outcome.error);
       await db.from('trade_queue').update({ status: 'failed', error: outcome.error || 'Broker confirmation unknown' }).eq('signal_id', queued.signal_id);

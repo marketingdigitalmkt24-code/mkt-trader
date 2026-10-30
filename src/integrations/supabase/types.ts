@@ -224,6 +224,24 @@ export type Database = {
         }
         Relationships: []
       }
+      iq_broker_sessions: {
+        Row: {
+          config_id: string
+          obtained_at: string
+          ssid: string
+        }
+        Insert: {
+          config_id: string
+          obtained_at?: string
+          ssid: string
+        }
+        Update: {
+          config_id?: string
+          obtained_at?: string
+          ssid?: string
+        }
+        Relationships: []
+      }
       iq_demo_test_candidates: {
         Row: {
           asset: string

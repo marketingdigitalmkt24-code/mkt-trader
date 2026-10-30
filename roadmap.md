@@ -1,4 +1,5 @@
 # Ajustes de Copy Trading e resultados (30/10/2026)
+- [x] Telegram vinculado ao novo workspace; bot @BlazeBilionario_bot e permissão de publicação no canal @MktTarder confirmados por leitura; sete funções de avisos republicadas sem mudar controles de negociação.
 - [ ] Ao clicar no email do cliente, mostrar histórico diário com cinco dias por página e páginas antigas.
 - [ ] Renomear a aba Estratégias para Notas com WIN.
 - [ ] Exibir resultados admin/cliente na moeda identificada da respectiva conta IQ Option, sem conversão.

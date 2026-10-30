@@ -12,7 +12,7 @@ test('daily chart contains exactly 30 inclusive Brasília dates and counts entry
  expect(days).toHaveLength(30);
  expect(days[0].day).toBe('2026-09-28');
  expect(days.find(day => day.day === '2026-10-25')?.entered).toBe(1);
- expect(days[29]).toEqual({ day: '2026-10-27', entered: 0, exited: 1 });
+ expect(days[29]).toEqual(expect.objectContaining({ day: '2026-10-27', entered: 0, exited: 1 }));
 });
 test('overlapping strategies with the same note do not duplicate note movements', () => {
  const observations = [{ ...row('a', 'A'), settled_at: '2026-10-25T04:00:00Z' }, { ...row('b', 'B'), settled_at: '2026-10-25T05:00:00Z' }, { ...row('c', 'A', 2.26, 'loss'), settled_at: '2026-10-26T05:00:00Z' }, { ...row('d', 'B', 2.26, 'loss'), settled_at: '2026-10-27T05:00:00Z' }];
@@ -100,4 +100,16 @@ test('Só por nota sums WINs across strategies and keeps earliest and latest WIN
  expect(n226.firstWinAt).toBe('2026-10-24T03:00:00Z');
  expect(n226.lastWinAt).toBe('2026-10-27T03:00:00Z');
  expect(n226.historyFirstWinAt).toBe('2026-10-23T03:00:00Z');
+});
+
+test('linha de notas consistentes conta só WIN antes do primeiro LOSS da nota', () => {
+ const now = Date.parse('2026-10-29T20:00:00Z');
+ const r = (id: string, score: number, result: string, at: string) => ({ signal_id: id, entry_strategy: 'TAKASHI', score, result, source: 'demo' as const, entry_minute: at, settled_at: at });
+ const days = winningNoteDailyMovement([
+  r('a', 3.1, 'win', '2026-10-29T12:00:00Z'), r('b', 3.1, 'win', '2026-10-29T13:00:00Z'),
+  r('c', 4.2, 'win', '2026-10-29T12:30:00Z'), r('d', 4.2, 'loss', '2026-10-29T14:00:00Z'), r('e', 4.2, 'win', '2026-10-29T15:00:00Z'),
+ ], now);
+ const today = days.at(-1)!;
+ expect(today.consistent).toBe(2);
+ expect(today.consistentWins).toBe(3);
 });

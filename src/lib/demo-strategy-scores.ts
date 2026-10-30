@@ -55,6 +55,20 @@ export function winningNoteDailyMovement(rows: NoteMovementOutcome[], now = Date
   else cohort.end = Math.min(cohort.end, at);
   cohorts.set(key, cohort);
  }
+ const winsByDay = new Map<string, Map<string, number>>();
+ const counted = new Set<string>();
+ for (const row of rows) {
+  const score = displayedDemoScore(row.score);
+  const at = Date.parse(row.settled_at ?? row.entry_minute);
+  if (row.source !== 'demo' || score === 'unscored' || row.result.toLowerCase() !== 'win' || !Number.isFinite(at) || counted.has(row.signal_id)) continue;
+  counted.add(row.signal_id);
+  const cohort = cohorts.get(`${row.entry_strategy}:${score}`);
+  if (!cohort || at >= cohort.end) continue;
+  const day = new Date(at - 3 * 3600000).toISOString().slice(0, 10);
+  const notes = winsByDay.get(day) ?? new Map<string, number>();
+  notes.set(score, (notes.get(score) ?? 0) + 1);
+  winsByDay.set(day, notes);
+ }
  const events = new Map<string, Map<number, number>>();
  for (const cohort of cohorts.values()) {
   if (!Number.isFinite(cohort.start) || cohort.start >= cohort.end) continue;
@@ -64,7 +78,7 @@ export function winningNoteDailyMovement(rows: NoteMovementOutcome[], now = Date
   events.set(cohort.score, noteEvents);
  }
  const brtDay = (at: number) => new Date(at - 3 * 3600000).toISOString().slice(0, 10);
- const days = Array.from({ length: 30 }, (_, index) => ({ day: brtDay(now - (29 - index) * 86400000), entered: 0, exited: 0 }));
+ const days = Array.from({ length: 30 }, (_, index) => ({ day: brtDay(now - (29 - index) * 86400000), entered: 0, exited: 0, consistent: 0, consistentWins: 0 }));
  const byDay = new Map(days.map(day => [day.day, day]));
  for (const noteEvents of events.values()) {
   let active = 0;
@@ -76,6 +90,13 @@ export function winningNoteDailyMovement(rows: NoteMovementOutcome[], now = Date
    if (previous === 0 && active > 0) day.entered++;
    if (previous > 0 && active === 0) day.exited++;
   }
+ }
+ // Consistent: distinct notes with WIN that day before any LOSS removed them; consistentWins: their WIN count that day.
+ for (const day of days) {
+  const notes = winsByDay.get(day.day);
+  if (!notes) continue;
+  day.consistent = notes.size;
+  day.consistentWins = [...notes.values()].reduce((a, b) => a + b, 0);
  }
  return days;
 }

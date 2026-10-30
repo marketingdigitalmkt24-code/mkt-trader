@@ -15,7 +15,7 @@ function candlesFromJson(value: unknown): Candle[] | null {
 const money = (value:number) => value.toLocaleString('pt-BR',{style:'currency',currency:'USD'});
 const PAGE = 10;
 
-export function DemoScoreOperations({ids,score,strategy='all'}:{ids:string[];score:string;strategy?:string}) {
+export function DemoScoreOperations({ids,score,strategy='all',label}:{ids:string[];score:string;strategy?:string;label?:string}) {
  const [page,setPage] = useState(0);
  const pages = Math.max(1,Math.ceil(ids.length/PAGE));
  const currentPage = Math.min(page,pages-1);
@@ -32,7 +32,7 @@ export function DemoScoreOperations({ids,score,strategy='all'}:{ids:string[];sco
   const snapshots = new Map((charts ?? []).map(c=>[c.signal_id,{candles:candlesFromJson(c.candles),score:c.score==null?null:Number(c.score)}]));
   return (orders ?? []).sort((a,b)=>pageIds.indexOf(a.id)-pageIds.indexOf(b.id)).map(row=>({...row,...(snapshots.get(row.signal_id) ?? {candles:null,score:null})}));
  }});
- const title = [score !== 'all' && score !== 'unscored' ? `nota ${score.replace('.',',')}` : null, strategy !== 'all' ? (demoStrategyNames[strategy] ?? strategy) : null].filter(Boolean).join(' · ');
+ const title = label ?? [score !== 'all' && score !== 'unscored' ? `nota ${score.replace('.',',')}` : null, strategy !== 'all' ? (demoStrategyNames[strategy] ?? strategy) : null].filter(Boolean).join(' · ');
  return <section aria-label="Operações filtradas" className="space-y-3 border-t border-border pt-5">
   <h3 className="text-sm font-semibold">Operações · {title} <span className="font-normal text-muted-foreground">({ids.length})</span></h3>
   {!ids.length ? <p className="text-sm text-muted-foreground">Nenhuma operação neste filtro.</p> : query.isPending ? <p role="status" className="text-sm text-muted-foreground">Carregando operações…</p> : query.isError ? <div role="alert" className="flex flex-wrap items-center gap-3"><p className="text-sm text-destructive">Não foi possível carregar as operações.</p><Button variant="outline" size="sm" onClick={()=>query.refetch()}>Tentar novamente</Button></div> : <div className="space-y-1">

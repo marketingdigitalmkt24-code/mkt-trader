@@ -39,7 +39,7 @@ export type NoteScoreSummary = StrategyScoreSummary & { strategies: string[] };
 
 export type NoteMovementOutcome = StrategyScoreOutcome & { settled_at?: string | null };
 export function winningNoteDailyMovement(rows: NoteMovementOutcome[], now = Date.now()) {
- const cohorts = new Map<string, { score: string; start: number; end: number }>();
+ const cohorts = new Map<string, { score: string; start: number; end: number; firstWin: string; firstLoss: string }>();
  const seen = new Set<string>();
  for (const row of rows) {
   const score = displayedDemoScore(row.score);
@@ -50,12 +50,16 @@ export function winningNoteDailyMovement(rows: NoteMovementOutcome[], now = Date
   if (seen.has(identity)) continue;
   seen.add(identity);
   const key = `${row.entry_strategy}:${score}`;
-  const cohort = cohorts.get(key) ?? { score, start: Infinity, end: Infinity };
-  if (result === 'win') cohort.start = Math.min(cohort.start, at);
-  else cohort.end = Math.min(cohort.end, at);
+  const cohort = cohorts.get(key) ?? { score, start: Infinity, end: Infinity, firstWin: '', firstLoss: '' };
+  if (result === 'win' && (at < cohort.start || (at === cohort.start && row.signal_id < cohort.firstWin))) {
+   cohort.start = at; cohort.firstWin = row.signal_id;
+  } else if (result === 'loss' && (at < cohort.end || (at === cohort.end && row.signal_id < cohort.firstLoss))) {
+   cohort.end = at; cohort.firstLoss = row.signal_id;
+  }
   cohorts.set(key, cohort);
  }
  const winsByDay = new Map<string, Map<string, number>>();
+ const consistentSignals = new Map<string, string[]>();
  const counted = new Set<string>();
  for (const row of rows) {
   const score = displayedDemoScore(row.score);
@@ -68,27 +72,32 @@ export function winningNoteDailyMovement(rows: NoteMovementOutcome[], now = Date
   const notes = winsByDay.get(day) ?? new Map<string, number>();
   notes.set(score, (notes.get(score) ?? 0) + 1);
   winsByDay.set(day, notes);
+  consistentSignals.set(day, [...(consistentSignals.get(day) ?? []), row.signal_id]);
  }
- const events = new Map<string, Map<number, number>>();
+ const events = new Map<string, Map<number, { delta: number; wins: string[]; losses: string[] }>>();
  for (const cohort of cohorts.values()) {
   if (!Number.isFinite(cohort.start) || cohort.start >= cohort.end) continue;
-  const noteEvents = events.get(cohort.score) ?? new Map<number, number>();
-  noteEvents.set(cohort.start, (noteEvents.get(cohort.start) ?? 0) + 1);
-  if (Number.isFinite(cohort.end)) noteEvents.set(cohort.end, (noteEvents.get(cohort.end) ?? 0) - 1);
+  const noteEvents = events.get(cohort.score) ?? new Map<number, { delta: number; wins: string[]; losses: string[] }>();
+  const start = noteEvents.get(cohort.start) ?? { delta: 0, wins: [], losses: [] };
+  start.delta++; start.wins.push(cohort.firstWin); noteEvents.set(cohort.start, start);
+  if (Number.isFinite(cohort.end)) {
+   const end = noteEvents.get(cohort.end) ?? { delta: 0, wins: [], losses: [] };
+   end.delta--; end.losses.push(cohort.firstLoss); noteEvents.set(cohort.end, end);
+  }
   events.set(cohort.score, noteEvents);
  }
  const brtDay = (at: number) => new Date(at - 3 * 3600000).toISOString().slice(0, 10);
- const days = Array.from({ length: 30 }, (_, index) => ({ day: brtDay(now - (29 - index) * 86400000), entered: 0, exited: 0, consistent: 0, consistentWins: 0 }));
+ const days = Array.from({ length: 30 }, (_, index) => ({ day: brtDay(now - (29 - index) * 86400000), entered: 0, exited: 0, consistent: 0, consistentWins: 0, operationSignals: { entered: [] as string[], exited: [] as string[], consistent: [] as string[] } }));
  const byDay = new Map(days.map(day => [day.day, day]));
  for (const noteEvents of events.values()) {
   let active = 0;
-  for (const [at, delta] of [...noteEvents].sort((a, b) => a[0] - b[0])) {
+  for (const [at, event] of [...noteEvents].sort((a, b) => a[0] - b[0])) {
    const previous = active;
-   active += delta;
+   active += event.delta;
    const day = byDay.get(brtDay(at));
    if (!day) continue;
-   if (previous === 0 && active > 0) day.entered++;
-   if (previous > 0 && active === 0) day.exited++;
+   if (previous === 0 && active > 0) { day.entered++; day.operationSignals.entered.push(...event.wins); }
+   if (previous > 0 && active === 0) { day.exited++; day.operationSignals.exited.push(...event.losses); }
   }
  }
  // Consistent: distinct notes with WIN that day before any LOSS removed them; consistentWins: their WIN count that day.
@@ -97,6 +106,7 @@ export function winningNoteDailyMovement(rows: NoteMovementOutcome[], now = Date
   if (!notes) continue;
   day.consistent = notes.size;
   day.consistentWins = [...notes.values()].reduce((a, b) => a + b, 0);
+  day.operationSignals.consistent = consistentSignals.get(day.day) ?? [];
  }
  return days;
 }

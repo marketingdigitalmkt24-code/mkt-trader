@@ -12,7 +12,8 @@ import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
 import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { takashiKotegawa, takashiBaseScore, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
+import { takashiBaseScore, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
+import { takashiConfluence } from '../_shared/takashi-confluence.ts';
 import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE } from '../_shared/demo-226-policy.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
@@ -43,7 +44,7 @@ const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login'];
 const OPEN = 'test7_open';
 const DEMO_OWN_WATCH_GRACE_MS = 22000;
-type K = { t: number; o: number; c: number; h: number; l: number };
+type K = { t: number; o: number; c: number; h: number; l: number; v?: number };
 
 export const LABELS: Record<string, string> = {
   TENDENCIA: 'Tendência', REVERSAO_RSI: 'Reversão RSI', VELA_FORCA: 'Vela de força', ROMPIMENTO: 'Rompimento',
@@ -437,7 +438,7 @@ Deno.serve(async (req) => {
       if (d.name === 'candles' && byReq.has(d.request_id)) {
         const s = byReq.get(d.request_id); byReq.delete(d.request_id);
         if (!s) return;
-        series.set(s, (d.msg?.candles || []).map((c: any) => ({ t: c.from, o: c.open, c: c.close, h: c.max, l: c.min }))
+        series.set(s, (d.msg?.candles || []).map((c: any) => ({ t: c.from, o: c.open, c: c.close, h: c.max, l: c.min, v: Number.isFinite(c.volume) ? c.volume : undefined }))
           .filter((k: K) => typeof k.c === 'number').sort((a: K, b: K) => a.t - b.t));
         confirmations.push(confirmAsset(s, series.get(s) || []));
         if (--pending <= 0) { finishCandles(); }
@@ -507,7 +508,8 @@ Deno.serve(async (req) => {
     // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
     // Keep legacy indicator warmup unchanged despite the larger Demo candle window.
     const fired = detect(cs.slice(-90).filter(k => k.t + 60 <= curMin));
-    const takashi = takashiKotegawa(cs, curMin);
+    // Setup de 5 confirmações: Takashi + VWAP + EMA 9/21 + price action + volume.
+    const takashi = takashiConfluence(cs, curMin);
     if (takashi) demoPatterns.push({
       signal_id: `takashi-bnf-v1-${asset}-${curMin}`, asset, direction: takashi.direction,
       entry_strategy: TAKASHI_BNF, created_at: new Date(curMin * 1000).toISOString(),
@@ -541,7 +543,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-combined-notes-v14',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-5-confluences-v15',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{

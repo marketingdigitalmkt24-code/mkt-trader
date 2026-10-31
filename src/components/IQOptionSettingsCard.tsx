@@ -100,17 +100,20 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
     setTestResult(null);
     
     try {
+      // Corretora tab (demoAccount) never changes the Auto Trading account: read it fresh,
+      // so a stale screen cannot revert a change made in the Auto Trading tab.
+      const connectionAccount = demoAccount ? await currentAutoTradingAccount() : accountType;
       // Use Edge Function to avoid browser CORS/blocking
       const result = await iqOptionClient.login({
         email: email.trim(),
         password: password.trim(),
-        accountType: demoAccount ? (config?.account_type ?? 'PRACTICE') : accountType,
+        accountType: connectionAccount,
         userId: user?.id,
       });
       
       if (result.success) {
         const values = {
-          email: email.trim(), password: password.trim(), account_type: demoAccount ? (config?.account_type ?? 'PRACTICE') : accountType,
+          email: email.trim(), password: password.trim(), account_type: connectionAccount,
           is_active: true,
           last_connected_at: new Date().toISOString(),
         };
@@ -170,19 +173,28 @@ export function IQOptionSettingsCard({ defaultOpen = false, embedded = false, on
     } else toast({ title: 'Conta salva', description: `Últimas operações agora usam a conta ${next === 'REAL' ? 'Real' : 'Demo'}.` });
   };
 
+  const currentAutoTradingAccount = async (): Promise<string> => {
+    if (!config || !user) return 'PRACTICE';
+    const { data } = await supabase.from('iqoption_config').select('account_type')
+      .eq('id', config.id).eq('user_id', user.id).maybeSingle();
+    return data?.account_type === 'REAL' ? 'REAL' : data?.account_type === 'PRACTICE' ? 'PRACTICE' : (config.account_type ?? 'PRACTICE');
+  };
+
   const invalidateConnection = async (nextAccount: string) => {
     if (!user || isLoading || isTesting) return;
     setIsLoading(true);
     try {
       if (config) {
+        // In the Corretora tab the selector belongs to Últimas operações; keep the Auto Trading account.
+        const account = demoAccount ? await currentAutoTradingAccount() : nextAccount;
         const { data, error } = await supabase.from('iqoption_config')
-          .update({ account_type: nextAccount, is_active: false, last_connected_at: null })
+          .update({ account_type: account, is_active: false, last_connected_at: null })
           .eq('id', config.id).eq('user_id', user.id).select().single();
         if (error) throw error;
         setConfig(data);
       }
       iqOptionClient.disconnect();
-      setAccountType(nextAccount);
+      if (!demoAccount) setAccountType(nextAccount);
       setNeedsReconnect(true);
       setTestResult(null);
       onConnectionChange?.();

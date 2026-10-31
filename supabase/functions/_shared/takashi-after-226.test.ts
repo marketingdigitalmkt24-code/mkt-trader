@@ -6,26 +6,17 @@ import { copyProfileTargetBlocked } from './copy-target';
 
 const now = Date.parse('2026-10-25T21:08:02Z');
 const current = { entry_minute: '2026-10-25T21:08:00Z', entry_strategy: 'TAKASHI_BNF_V1', direction: 'CALL', asset: 'ONDOUSD-OTC' };
-const previous = { entry_minute: '2026-10-25T21:05:00Z', entry_strategy: 'TAKASHI_BNF_V1', asset: 'ONDOUSD-OTC', status: 'confirmed', iq_option_id: '123', result: 'win' };
-test('Takashi WIN then next Takashi signal on same asset CALL enters inverted PUT', () => {
-  expect(takashiAfter226Direction(current, previous, now)).toBe('put');
-  expect(takashiAfter226Direction({ ...current, direction: 'PUT' }, previous, now)).toBe('call');
+test('every Demo Takashi signal enters inverted: CALL -> PUT, PUT -> CALL, no previous WIN needed', () => {
+  expect(takashiAfter226Direction(current, now)).toBe('put');
+  expect(takashiAfter226Direction({ ...current, direction: 'PUT' }, now)).toBe('call');
 });
-test('previous LOSS, tie or pending never inverts', () => {
-  for (const result of ['loss', 'tie', 'pending', null])
-    expect(takashiAfter226Direction(current, { ...previous, result }, now)).toBeNull();
-});
-test('next signal on a different asset does not enter', () => {
-  expect(takashiAfter226Direction(current, { ...previous, asset: 'SUGAR-OTC' }, now)).toBeNull();
-});
-test('previous must be an earlier confirmed Takashi Demo order', () => {
-  expect(takashiAfter226Direction(current, { ...previous, entry_strategy: 'VELA_FORCA' }, now)).toBeNull();
-  expect(takashiAfter226Direction(current, { ...previous, entry_minute: current.entry_minute }, now)).toBeNull();
-  expect(takashiAfter226Direction(current, { ...previous, status: 'failed' }, now)).toBeNull();
-  expect(takashiAfter226Direction(current, { ...previous, iq_option_id: null }, now)).toBeNull();
+test('non-Takashi or invalid direction signals never enter', () => {
+  expect(takashiAfter226Direction({ ...current, entry_strategy: 'VELA_FORCA' }, now)).toBeNull();
+  expect(takashiAfter226Direction({ ...current, direction: 'HOLD' }, now)).toBeNull();
+  expect(takashiAfter226Direction(null, now)).toBeNull();
 });
 test('current signal must be fresh (first 30s of its minute)', () => {
-  expect(takashiAfter226Direction(current, previous, Date.parse('2026-10-25T21:08:30Z'))).toBeNull();
+  expect(takashiAfter226Direction(current, Date.parse('2026-10-25T21:08:30Z'))).toBeNull();
 });
 test('confirmed principal copies retain inverse direction and exact minute', () => {
   const copy = selectedTrendCopyRequest({ signal_id: 'takashi_apos_226_invertida-v1-fresh', asset: 'BIDU-OTC', direction: 'CALL', iq_option_id: '456', entry_strategy: TAKASHI_AFTER_226, timeframe: 'M1', expiration_time: '2026-10-25T21:09:00Z', entry_price: 10 }, now);

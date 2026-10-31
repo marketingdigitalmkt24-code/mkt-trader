@@ -51,22 +51,10 @@ Deno.serve(async req => {
     if (candidateError) throw candidateError;
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);
-    // The previous Takashi order may close exactly at this :00; wait briefly for its confirmed result.
-    const readPrevious = async () => (await db.from('iq_demo_test_orders')
-      .select('entry_minute,entry_strategy,asset,status,iq_option_id,result')
-      .eq('entry_strategy', 'TAKASHI_BNF_V1').eq('status', 'confirmed').not('iq_option_id', 'is', null)
-      .not('signal_id', 'like', 'demo-mid-%').lt('entry_minute', candidate.entry_minute)
-      .order('entry_minute', { ascending: false }).limit(1).maybeSingle()).data;
-    let previous = await readPrevious();
-    while (previous && previous.asset === candidate.asset && !['win', 'loss', 'tie'].includes(previous.result || '')
-      && Date.now() < entryAt + 8000) {
-      await new Promise(r => setTimeout(r, 400));
-      previous = await readPrevious();
-    }
     if (Date.now() < entryAt) await new Promise(r => setTimeout(r, entryAt - Date.now() + 50));
-    // Takashi invertida keeps priority; otherwise check Nota consistente (WIN today and the two previous BRT days, no LOSS).
+    // Takashi invertida applies to every Demo Takashi signal; Nota consistente only if it ever stops matching.
     let plan: { strategy: string; label: string; rpc: string; copy: 'inverted' | 'consistent' } | null = null;
-    if (takashiAfter226Direction(candidate, previous, Date.now())) {
+    if (takashiAfter226Direction(candidate, Date.now())) {
       plan = { strategy: TAKASHI_AFTER_226, label: TAKASHI_AFTER_226_LABEL, rpc: 'claim_takashi_after_226', copy: 'inverted' };
     } else if (candidate.entry_strategy === 'TAKASHI_BNF_V1' && Number.isFinite(candidate.score)) {
       const note = Math.round(candidate.score * 100) / 100;

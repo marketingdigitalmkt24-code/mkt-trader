@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.claim_consistent_note(text, uuid, numeric) FROM PUBLIC, anon, authenticated, service_role;
+COMMENT ON FUNCTION public.claim_consistent_note(text, uuid, numeric) IS 'DEPRECATED: Nota consistente removed by user on 2026-10-31; history preserved.';

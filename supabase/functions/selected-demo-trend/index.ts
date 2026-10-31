@@ -11,7 +11,6 @@ import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
 import { TAKASHI_AFTER_226, TAKASHI_AFTER_226_LABEL, takashiAfter226Direction } from '../_shared/takashi-after-226.ts';
-import { CONSISTENT_NOTE, CONSISTENT_NOTE_LABEL, consistentNoteDirection } from '../_shared/consistent-note.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
 import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
 const freshTrendPut = freshSelectedTrend;
@@ -52,27 +51,10 @@ Deno.serve(async req => {
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);
     if (Date.now() < entryAt) await new Promise(r => setTimeout(r, entryAt - Date.now() + 50));
-    // Takashi invertida applies to every Demo Takashi signal; Nota consistente only if it ever stops matching.
-    let plan: { strategy: string; label: string; rpc: string; copy: 'inverted' | 'consistent' } | null = null;
+    // Only principal strategy: Takashi invertida on every Demo Takashi signal (Nota consistente removed, Oct 31 2026).
+    let plan: { strategy: string; label: string; rpc: string; copy: 'inverted' } | null = null;
     if (takashiAfter226Direction(candidate, Date.now())) {
       plan = { strategy: TAKASHI_AFTER_226, label: TAKASHI_AFTER_226_LABEL, rpc: 'claim_takashi_after_226', copy: 'inverted' };
-    } else if (candidate.entry_strategy === 'TAKASHI_BNF_V1' && Number.isFinite(candidate.score)) {
-      const note = Math.round(candidate.score * 100) / 100;
-      const { data: peers, error: peersError } = await db.from('iq_demo_test_candidates').select('signal_id,score')
-        .eq('entry_strategy', 'TAKASHI_BNF_V1').gte('score', note - 0.006).lte('score', note + 0.006).limit(1000);
-      if (peersError) throw peersError;
-      const scores = new Map((peers || []).map(p => [p.signal_id, p.score as number]));
-      const ids = [...scores.keys()].filter(id => id !== candidate.signal_id);
-      const rows: Parameters<typeof consistentNoteDirection>[1] = [];
-      for (let i = 0; i < ids.length; i += 200) {
-        const { data, error } = await db.from('iq_demo_test_orders')
-          .select('signal_id,entry_strategy,entry_minute,settled_at,status,account_type,iq_option_id,result')
-          .in('signal_id', ids.slice(i, i + 200)).eq('status', 'confirmed');
-        if (error) throw error;
-        for (const row of data || []) rows.push({ ...row, score: scores.get(row.signal_id) ?? null });
-      }
-      if (consistentNoteDirection(candidate, rows, Date.now()))
-        plan = { strategy: CONSISTENT_NOTE, label: CONSISTENT_NOTE_LABEL, rpc: 'claim_consistent_note', copy: 'consistent' };
     }
     if (!plan) return reply({ skipped: 'No authorized principal strategy for this signal' });
     const chosen = plan;

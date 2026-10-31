@@ -442,6 +442,13 @@
       "when": 1793430203216,
       "tag": "0062_takashi_inverted_all_signals",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793430509502,
+      "tag": "0063_retire_consistent_note_claim",
+      "breakpoints": true
     }
   ]
 }

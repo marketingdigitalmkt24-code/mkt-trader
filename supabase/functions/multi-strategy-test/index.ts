@@ -36,9 +36,8 @@ import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_shared/broker-session-cache.ts';
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
-import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
+import { selectDemoByExpectedProfit } from '../_shared/demo-profit-selection.ts';
 import { ichimokuRecuo21Direction } from '../_shared/ichimoku-recuo21.ts';
-import { readUnbeatenDemoNotes } from '../_shared/demo-unbeaten-notes.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 
@@ -590,7 +589,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-ichimoku-recuo21-all-v18',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-expected-profit-v19',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -614,20 +613,18 @@ Deno.serve(async (req) => {
       return [];
     }
     // Restore prior finite-note eligibility; historical learning still adjusts the note.
-    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null}];
+    const commission = market[1]?.option?.profit?.commission;
+    const _payout = typeof commission === 'number' ? (100-commission)/100 : null;
+    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null,_payout}];
   });
   // User (Oct 25 2026 19:02 UTC): alternate Demo slots between Takashi and displayed-2.26 entries.
   const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
     .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
-  const unbeatenNotes = await readUnbeatenDemoNotes(
-    async (from,to)=>(await supabase.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result,profit,settled_at')
-      .in('account_type',['PRACTICE','REAL']).eq('status','confirmed').in('result',['win','loss']).order('id').range(from,to)).data||[],
-    async ids=>(await supabase.from('iq_demo_test_candidates').select('signal_id,score').in('signal_id',ids)).data||[],
-    Date.now()).catch(()=>[]);
-  const demoWinner = selectTakashiByNote(demoEligible, unbeatenNotes);
+  // Most profitable candidate wins the slot (strategy win rate x asset payout); no strategy priority.
+  const demoWinner = selectDemoByExpectedProfit(demoEligible, demoHist.data || []);
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  console.log('Takashi current indicator analysis:',JSON.stringify({unbeatenNoteSupport:unbeatenNotes.length,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
+  console.log('Demo expected-profit selection:',JSON.stringify({expectedProfit:demoWinner?._expectedProfit??null,strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
   console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
   console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));
   for(const c of demoEligible){

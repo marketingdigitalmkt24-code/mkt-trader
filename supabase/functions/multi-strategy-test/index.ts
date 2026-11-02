@@ -14,7 +14,7 @@ import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequ
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { takashiBaseScore, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
 import { takashiConfluenceCheck } from '../_shared/takashi-confluence.ts';
-import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE, DEMO_INDICATOR_STRATEGIES, DEMO_ENTRY_STRATEGIES } from '../_shared/demo-226-policy.ts';
+import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE, ICHIMOKU_RECUO21_STRATEGY, DEMO_ENTRY_STRATEGIES } from '../_shared/demo-226-policy.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
@@ -37,6 +37,7 @@ import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_sh
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectTakashiByNote } from '../_shared/demo-note-selection.ts';
+import { ichimokuRecuo21Direction } from '../_shared/ichimoku-recuo21.ts';
 import { readUnbeatenDemoNotes } from '../_shared/demo-unbeaten-notes.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
@@ -546,15 +547,13 @@ Deno.serve(async (req) => {
       _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, direction]) => direction === takashi.direction).length)
         + takashiRecentAdjustment(takashiHistory, { asset, direction: takashi.direction }, targetMs, learningObservedMs),
     });
-    // Ichimoku and Recuo na média 21: two separate Demo-only strategies from the same closed candle.
-    for (const [strategy, direction] of fired) {
-      if (!(DEMO_INDICATOR_STRATEGIES as readonly string[]).includes(strategy)) continue;
-      demoPatterns.push({
-        signal_id: `demo-${strategy.toLowerCase()}-v1-${asset}-${curMin}`, asset, direction,
-        entry_strategy: strategy, created_at: new Date(curMin * 1000).toISOString(),
-        _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === direction).length),
-      });
-    }
+    // Ichimoku + Recuo na média 21 combined: both must fire on the same closed candle, same direction.
+    const combined = ichimokuRecuo21Direction(fired);
+    if (combined) demoPatterns.push({
+      signal_id: `demo-ichimoku-recuo21-v1-${asset}-${curMin}`, asset, direction: combined,
+      entry_strategy: ICHIMOKU_RECUO21_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
+      _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === combined).length),
+    });
   }
   console.log('Takashi 5-confluence gates:', JSON.stringify(confluenceGates));
   let inserted = 0;
@@ -582,7 +581,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-ichimoku-recuo21-v16',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-ichimoku-recuo21-combined-v17',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -637,7 +636,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo: no valid Takashi/Ichimoku/Recuo 21 candidate this minute');
+  if (!demoWinner) console.log('Demo: no valid Takashi/Ichimoku+Recuo 21 candidate this minute');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,

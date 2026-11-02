@@ -14,7 +14,7 @@ import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequ
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { takashiBaseScore, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
 import { takashiConfluenceCheck } from '../_shared/takashi-confluence.ts';
-import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE } from '../_shared/demo-226-policy.ts';
+import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE, DEMO_INDICATOR_STRATEGIES, DEMO_ENTRY_STRATEGIES } from '../_shared/demo-226-policy.ts';
 import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
@@ -546,6 +546,15 @@ Deno.serve(async (req) => {
       _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, direction]) => direction === takashi.direction).length)
         + takashiRecentAdjustment(takashiHistory, { asset, direction: takashi.direction }, targetMs, learningObservedMs),
     });
+    // Ichimoku and Recuo na média 21: two separate Demo-only strategies from the same closed candle.
+    for (const [strategy, direction] of fired) {
+      if (!(DEMO_INDICATOR_STRATEGIES as readonly string[]).includes(strategy)) continue;
+      demoPatterns.push({
+        signal_id: `demo-${strategy.toLowerCase()}-v1-${asset}-${curMin}`, asset, direction,
+        entry_strategy: strategy, created_at: new Date(curMin * 1000).toISOString(),
+        _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === direction).length),
+      });
+    }
   }
   console.log('Takashi 5-confluence gates:', JSON.stringify(confluenceGates));
   let inserted = 0;
@@ -573,7 +582,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-5-confluences-v15',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-ichimoku-recuo21-v16',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -628,7 +637,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo: no valid Takashi candidate this minute');
+  if (!demoWinner) console.log('Demo: no valid Takashi/Ichimoku/Recuo 21 candidate this minute');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
@@ -640,12 +649,12 @@ Deno.serve(async (req) => {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
       console.log('Demo current-analysis selection:', JSON.stringify({score:demoWinner._score,historicalNotePriority:false}));
       // Principal "Takashi invertida": every Demo signal enters inverted; the executor checks Auto Trading and limits.
-      const invertedTask = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/selected-demo-trend`, {
+      const invertedTask = demoWinner.entry_strategy!==TAKASHI_BNF ? null : fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/selected-demo-trend`, {
         method:'POST', headers:{Authorization:`Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,'Content-Type':'application/json'},
         body:JSON.stringify({candidate:demoWinner.signal_id}), signal:AbortSignal.timeout(100000),
       }).then(async r=>console.log('Takashi inverted principal:',r.status,(await r.text()).slice(0,200)))
         .catch(e=>console.error('Takashi inverted principal failed:',String(e)));
-      if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(invertedTask);
+      if(invertedTask && typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(invertedTask);
       // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
       const setting = await amountRead;
       const base = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
@@ -654,7 +663,7 @@ Deno.serve(async (req) => {
       const payout = typeof commission === 'number' ? (100-commission)/100 : null;
       const last = await supabase.from('iq_demo_test_orders')
         .select('status,result,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
-        .eq('entry_strategy',TAKASHI_BNF).in('account_type',['PRACTICE','REAL'])
+        .in('entry_strategy',DEMO_ENTRY_STRATEGIES).in('account_type',['PRACTICE','REAL'])
         .in('status',['confirmed','unknown','reserved'])
         .or(`status.eq.confirmed,iq_option_id.not.is.null,expiration_time.gt.${new Date().toISOString()}`)
         .order('entry_minute',{ascending:false}).limit(1);

@@ -103,11 +103,11 @@ export function AIAnalysisStatusCard() {
       const [candidates, rejections, scan] = await Promise.all([
         supabase.from('iq_demo_test_candidates')
           .select('signal_id,asset,direction,score,entry_minute')
-          .eq('entry_strategy', 'TAKASHI_BNF_V1').gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU', 'RECUO_EMA21']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.from('demo_selection_rejections')
           .select('signal_id,asset,direction,score,entry_minute')
-          .eq('entry_strategy', 'TAKASHI_BNF_V1').gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU', 'RECUO_EMA21']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.functions.invoke('demo-analysis-status',{body:{}}),
       ]);

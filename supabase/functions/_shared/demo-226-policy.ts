@@ -19,9 +19,17 @@ export function takashiDemoAuthorized(score: number): boolean {
 }
 // Oct 26 2026: Demo-only "Força antecipada" joins the rotation (never principal/Telegram/copy).
 export const FORCA_ANTECIPADA_STRATEGY = 'FORCA_ANTECIPADA_V1';
-export type DemoCohort = 'takashi' | 'score226' | 'antecipada';
+// Nov 2 2026 (user): Ichimoku and Recuo na média 21 enter the Demo as two separate strategies,
+// competing with Takashi for the single Demo slot per minute. Demo-only: never principal/Telegram/copy.
+export const DEMO_INDICATOR_STRATEGIES = ['ICHIMOKU', 'RECUO_EMA21'] as const;
+export function isDemoIndicatorStrategy(strategy: unknown): boolean {
+  return (DEMO_INDICATOR_STRATEGIES as readonly unknown[]).includes(strategy);
+}
+export const DEMO_ENTRY_STRATEGIES = [TAKASHI_STRATEGY, ...DEMO_INDICATOR_STRATEGIES];
+export type DemoCohort = 'takashi' | 'indicator' | 'score226' | 'antecipada';
 export function demoCohort(score: number, strategy: unknown): DemoCohort | null {
   if (strategy === TAKASHI_STRATEGY) return takashiDemoAuthorized(score) ? 'takashi' : null;
+  if (isDemoIndicatorStrategy(strategy)) return Number.isFinite(score) ? 'indicator' : null;
   return null;
 }
 export function demoAlternationAuthorized(score: number, strategy: unknown): boolean {

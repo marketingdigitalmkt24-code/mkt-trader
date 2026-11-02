@@ -1,0 +1,34 @@
+import { expect, test } from 'bun:test';
+import { expectedProfitPerUnit, selectDemoByExpectedProfit, strategyWinRate } from './demo-profit-selection';
+
+const c = (signal_id: string, entry_strategy: string, _score: number, _payout: number | null) =>
+  ({ signal_id, entry_strategy, _score, _payout, asset: 'X', direction: 'CALL', created_at: '2026-11-02T00:40:00Z' });
+const h = (entry_strategy: string, wins: number, losses: number) => [
+  ...Array.from({ length: wins }, () => ({ entry_strategy, result: 'win' })),
+  ...Array.from({ length: losses }, () => ({ entry_strategy, result: 'loss' })),
+];
+
+test('win rate uses only own WIN/LOSS with one virtual win and loss', () => {
+  expect(strategyWinRate([...h('ICHIMOKU', 3, 1), { entry_strategy: 'ICHIMOKU', result: 'tie' }], 'ICHIMOKU')).toBeCloseTo(4 / 6);
+  expect(strategyWinRate([], 'RECUO_EMA21')).toBe(0.5);
+});
+
+test('expected profit per US$1 = p*payout - (1-p); unknown payout is -1', () => {
+  expect(expectedProfitPerUnit(0.6, 0.85)).toBeCloseTo(0.11);
+  expect(expectedProfitPerUnit(0.6, null)).toBe(-1);
+});
+
+test('highest note does not win: the most profitable strategy does', () => {
+  const history = [...h('TAKASHI_BNF_V1', 1, 4), ...h('RECUO_EMA21', 6, 2)];
+  const pick = selectDemoByExpectedProfit([c('t', 'TAKASHI_BNF_V1', 9, 0.9), c('r', 'RECUO_EMA21', 0.5, 0.85)], history);
+  expect(pick?.signal_id).toBe('r');
+});
+
+test('same strategy record: the higher payout asset wins', () => {
+  const pick = selectDemoByExpectedProfit([c('a', 'ICHIMOKU', 3, 0.7), c('b', 'ICHIMOKU', 1, 0.9)], h('ICHIMOKU', 2, 1));
+  expect(pick?.signal_id).toBe('b');
+});
+
+test('ineligible strategies are never selected', () => {
+  expect(selectDemoByExpectedProfit([c('v', 'VELA_FORCA', 5, 0.9)], [])).toBeNull();
+});

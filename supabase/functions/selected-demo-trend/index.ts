@@ -10,7 +10,8 @@ import { TREND_WIN_INVERTED } from '../_shared/trend-win-inverted.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
-import { TAKASHI_AFTER_226, TAKASHI_AFTER_226_LABEL, takashiAfter226Direction } from '../_shared/takashi-after-226.ts';
+import { FOUR_LOSS_FOLLOW, FOUR_LOSS_FOLLOW_LABEL, FOUR_LOSS_STREAK, fourLossFollowDirection } from '../_shared/four-loss-follow.ts';
+import { DEMO_ENTRY_STRATEGIES } from '../_shared/demo-226-policy.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
 import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
 const freshTrendPut = freshSelectedTrend;
@@ -34,7 +35,7 @@ Deno.serve(async req => {
   const db = createClient(url, key);
   // Principal entries, copies and Telegram follow the admin's Auto Trading switch.
   const autoTradingOn = await masterAutoTradingEnabled(db);
-  if (!principalIQEnabled(TAKASHI_AFTER_226, autoTradingOn)) return reply({ skipped: 'Auto Trading disabled' }, 410);
+  if (!principalIQEnabled(FOUR_LOSS_FOLLOW, autoTradingOn)) return reply({ skipped: 'Auto Trading disabled' }, 410);
   const state: { claimed?: { signalId: string; asset: string; amount: number; entryAt: number; configId: string; direction: string; entryStrategy: string } } = {};
   let submitted = false;
   let leaseScope = 'master:tendencia';
@@ -51,10 +52,15 @@ Deno.serve(async req => {
     if (!candidate) return reply({ skipped: 'No candidate' });
     const entryAt = Date.parse(candidate.entry_minute);
     if (Date.now() < entryAt) await new Promise(r => setTimeout(r, entryAt - Date.now() + 50));
-    // Only principal strategy: Takashi invertida on every Demo Takashi signal (Nota consistente removed, Oct 31 2026).
-    let plan: { strategy: string; label: string; rpc: string; copy: 'inverted' } | null = null;
-    if (takashiAfter226Direction(candidate, Date.now())) {
-      plan = { strategy: TAKASHI_AFTER_226, label: TAKASHI_AFTER_226_LABEL, rpc: 'claim_takashi_after_226', copy: 'inverted' };
+    // Only principal strategy (user, Nov 2 2026): after 4 consecutive Demo LOSS, follow the next Demo signal.
+    // Takashi invertida and Nota consistente are retired (history kept).
+    const { data: streak, error: streakError } = await db.from('iq_demo_test_orders').select('status,result,recovery_level')
+      .eq('status', 'confirmed').in('account_type', ['PRACTICE', 'REAL']).in('entry_strategy', DEMO_ENTRY_STRATEGIES)
+      .lt('entry_minute', candidate.entry_minute).order('entry_minute', { ascending: false }).limit(FOUR_LOSS_STREAK);
+    if (streakError) throw streakError;
+    let plan: { strategy: string; label: string; rpc: string; copy: 'follow' } | null = null;
+    if (fourLossFollowDirection(candidate, streak || [], Date.now())) {
+      plan = { strategy: FOUR_LOSS_FOLLOW, label: FOUR_LOSS_FOLLOW_LABEL, rpc: 'claim_after_four_losses', copy: 'follow' };
     }
     if (!plan) return reply({ skipped: 'No authorized principal strategy for this signal' });
     const chosen = plan;

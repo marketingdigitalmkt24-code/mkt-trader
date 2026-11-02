@@ -688,7 +688,7 @@ serve(async (req) => {
         return Response.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
       const copyStrategy = body.copyStrategy ?? 'inverted';
       if (typeof body.prepareCopyCandidate !== 'string' || body.prepareCopyCandidate.length > 255
-        || !['inverted', 'consistent'].includes(copyStrategy)
+        || !['inverted', 'consistent', 'follow'].includes(copyStrategy)
         || Object.keys(body).some(k => !['prepareCopyCandidate', 'copyStrategy'].includes(k)))
         return Response.json({ error: 'Invalid preparation request' }, { status: 400, headers: corsHeaders });
       const [{ data: candidate }, { data: principal }] = await Promise.all([

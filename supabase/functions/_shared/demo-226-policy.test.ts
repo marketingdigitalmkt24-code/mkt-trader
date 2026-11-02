@@ -33,8 +33,9 @@ test('Demo always prefers Takashi', () => {
   expect(preferredDemoCohort('VELA_FORCA')).toBe('takashi');
   expect(preferredDemoCohort('FORCA_ANTECIPADA_V1')).toBe('takashi');
 });
-test('Combined Ichimoku + Recuo 21 enters the Demo; separate strategies no longer do', () => {
-  expect(demoCohort(0.4,'ICHIMOKU_RECUO21')).toBe('indicator');
-  expect(demoAlternationAuthorized(Number.NaN,'ICHIMOKU_RECUO21')).toBe(false);
-  for (const strategy of ['ICHIMOKU','RECUO_EMA21']) expect(demoAlternationAuthorized(3,strategy)).toBe(false);
+test('Combined Ichimoku + Recuo 21 and the separate strategies all enter the Demo', () => {
+  for (const strategy of ['ICHIMOKU_RECUO21','ICHIMOKU','RECUO_EMA21']) {
+    expect(demoCohort(0.4,strategy)).toBe('indicator');
+    expect(demoAlternationAuthorized(Number.NaN,strategy)).toBe(false);
+  }
 });

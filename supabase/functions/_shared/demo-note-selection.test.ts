@@ -15,7 +15,7 @@ test('stays Takashi-only and accepts any finite note', () => {
   expect(selectTakashiByNote([{ ...takashi('other', 100), entry_strategy: 'VELA_FORCA' }, takashi('invalid', NaN), takashi('zero', 0)])?.signal_id).toBe('zero');
   expect(selectTakashiByNote([])).toBeNull();
 });
-test('Combined Ichimoku + Recuo 21 competes with Takashi for the single Demo slot', () => {
+test('Takashi, combined and separate Ichimoku/Recuo 21 compete for the single Demo slot by score', () => {
   const pick = selectTakashiByNote([takashi('t', 1.2), { ...takashi('i', 2.1), entry_strategy: 'ICHIMOKU_RECUO21' }, { ...takashi('r', 3), entry_strategy: 'RECUO_EMA21' }]);
-  expect(pick?.signal_id).toBe('i');
+  expect(pick?.signal_id).toBe('r');
 });

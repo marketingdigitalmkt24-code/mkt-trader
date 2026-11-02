@@ -554,6 +554,15 @@ Deno.serve(async (req) => {
       entry_strategy: ICHIMOKU_RECUO21_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
       _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === combined).length),
     });
+    // Ichimoku and Recuo na média 21 also run as separate Demo-only strategies.
+    for (const [strategy, direction] of fired) {
+      if (strategy !== 'ICHIMOKU' && strategy !== 'RECUO_EMA21') continue;
+      demoPatterns.push({
+        signal_id: `demo-${strategy.toLowerCase()}-v1-${asset}-${curMin}`, asset, direction,
+        entry_strategy: strategy, created_at: new Date(curMin * 1000).toISOString(),
+        _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === direction).length),
+      });
+    }
   }
   console.log('Takashi 5-confluence gates:', JSON.stringify(confluenceGates));
   let inserted = 0;
@@ -581,7 +590,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-ichimoku-recuo21-combined-v17',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'takashi-ichimoku-recuo21-all-v18',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -636,7 +645,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo: no valid Takashi/Ichimoku+Recuo 21 candidate this minute');
+  if (!demoWinner) console.log('Demo: no valid Takashi/Ichimoku/Recuo 21/combined candidate this minute');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,

@@ -37,10 +37,8 @@ test('rotation: the strategy with the better result gets more turns', () => {
   const base = [...h(good, 16, 4), ...h(bad, 4, 16)]; // weights ~0.77 vs ~0.23 (own last 20)
   const turns: string[] = [];
   for (let i = 0; i < 40; i++) {
-    const recent = turns.slice(-30).reverse().map(s => ({ entry_strategy: s, result: 'none' }));
     const settled = turns.slice().reverse().map(s => ({ entry_strategy: s, result: s === good ? 'win' : 'loss' }));
-    const pick = pickRotationStrategy([good, bad], [...settled, ...base].slice(0, 1000).length ? [...settled, ...base] : recent)!;
-    turns.push(pick);
+    turns.push(pickRotationStrategy([good, bad], [...settled, ...base])!);
   }
   const goodTurns = turns.filter(s => s === good).length, badTurns = turns.length - goodTurns;
   expect(badTurns).toBeGreaterThan(0);

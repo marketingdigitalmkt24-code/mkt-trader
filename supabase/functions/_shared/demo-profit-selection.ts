@@ -25,19 +25,46 @@ export function expectedProfitPerUnit(winRate: number, payout: number | null | u
   return winRate * payout - (1 - winRate);
 }
 
-// Nov 2 2026 (user): Ichimoku + Recuo 21 has priority when it has an eligible candidate that minute;
-// otherwise every strategy still competes by expected profit.
+// Nov 2 2026 (user): Ichimoku + Recuo 21 has priority when it has an eligible candidate that minute.
+// Otherwise strategies take turns (weighted rotation): every strategy with a candidate keeps entering,
+// but the one with the better recent result gets proportionally more turns.
 export const DEMO_PRIORITY_STRATEGY = 'ICHIMOKU_RECUO21';
+export const ROTATION_WINDOW = 30;      // most recent settled Demo entries used to count turns
+export const STRATEGY_RESULT_WINDOW = 20; // most recent settled entries of each strategy used for its weight
+export const MIN_ROTATION_WEIGHT = 0.2; // a losing streak never removes a strategy from the rotation
+
+// history must be newest first (as fetched). Weight = smoothed win rate of the strategy's own last entries.
+export function recentStrategyWeight(history: StrategyOutcome[], strategy: string): number {
+  const own = history.filter(r => r.entry_strategy === strategy && (r.result === 'win' || r.result === 'loss')).slice(0, STRATEGY_RESULT_WINDOW);
+  return Math.max(MIN_ROTATION_WEIGHT, strategyWinRate(own, strategy));
+}
+
+export function pickRotationStrategy(strategies: string[], history: StrategyOutcome[]): string | null {
+  const unique = [...new Set(strategies)];
+  if (!unique.length) return null;
+  const recent = history.filter(r => r.result === 'win' || r.result === 'loss').slice(0, ROTATION_WINDOW);
+  const weights = new Map(unique.map(s => [s, recentStrategyWeight(history, s)]));
+  const counts = new Map(unique.map(s => [s, recent.filter(r => r.entry_strategy === s).length]));
+  const totalWeight = [...weights.values()].reduce((a, b) => a + b, 0);
+  const turns = [...counts.values()].reduce((a, b) => a + b, 0) + 1;
+  // Deficit = turns this strategy deserves by its result share minus turns it actually had.
+  return unique
+    .map(s => ({ s, deficit: (weights.get(s)! / totalWeight) * turns - counts.get(s)!, w: weights.get(s)! }))
+    .sort((a, b) => b.deficit - a.deficit || b.w - a.w || a.s.localeCompare(b.s))[0].s;
+}
+
 export function selectDemoByExpectedProfit<T extends ProfitCandidate>(candidates: T[], history: StrategyOutcome[]): (T & { _expectedProfit: number }) | null {
   const eligible = candidates.filter(c => demoCohort(c._score, c.entry_strategy) !== null);
   const priority = eligible.filter(c => c.entry_strategy === DEMO_PRIORITY_STRATEGY);
-  return rankByExpectedProfit(priority.length ? priority : eligible, history);
+  if (priority.length) return rankByExpectedProfit(priority, history);
+  const turn = pickRotationStrategy(eligible.map(c => c.entry_strategy), history);
+  return rankByExpectedProfit(eligible.filter(c => c.entry_strategy === turn), history);
 }
 function rankByExpectedProfit<T extends ProfitCandidate>(candidates: T[], history: StrategyOutcome[]): (T & { _expectedProfit: number }) | null {
   const rates = new Map<string, number>();
   const rate = (s: string) => rates.get(s) ?? (rates.set(s, strategyWinRate(history, s)), rates.get(s)!);
   return candidates
     .map(c => ({ ...c, _expectedProfit: expectedProfitPerUnit(rate(c.entry_strategy), c._payout) }))
-    // Neutral tie-break (no strategy preference): stable signal id order.
+    // Within the strategy whose turn it is, the asset with the best expected profit enters.
     .sort((a, b) => b._expectedProfit - a._expectedProfit || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
 }

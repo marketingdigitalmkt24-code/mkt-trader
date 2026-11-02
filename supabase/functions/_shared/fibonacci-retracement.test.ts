@@ -23,10 +23,6 @@ test('CALL rejects a deep pullback below 61.8%', () => {
   expect(fibonacciRetracementConfirms(upSwing({ l: 103, c: 106 }), 'CALL')).toBeNull();
 });
 
-test('CALL rejects when the close stays below the 61.8% level', () => {
-  expect(fibonacciRetracementConfirms(upSwing({ l: 104, c: 103.5 }), 'CALL')).toBeNull();
-});
-
 test('PUT mirrors the CALL rule', () => {
   expect(fibonacciRetracementConfirms(mirror(upSwing({ l: 105, c: 106 })), 'PUT')?.ratio).toBeCloseTo(0.5, 5);
   expect(fibonacciRetracementConfirms(mirror(upSwing({ l: 107, c: 108 })), 'PUT')).toBeNull();

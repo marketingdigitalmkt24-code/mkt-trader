@@ -14,7 +14,7 @@ export function noteSupportBonus(score: number, notes: UnbeatenNote[] = []): num
 }
 export function selectTakashiByNote<T extends DemoCandidate>(candidates: T[], notes: UnbeatenNote[] = []): T | null {
   const rank = (c: T) => c._score + noteSupportBonus(c._score, notes);
-  return candidates.filter(c => demoCohort(c._score, c.entry_strategy) === 'takashi')
+  return candidates.filter(c => demoCohort(c._score, c.entry_strategy) !== null)
     .sort((a, b) => rank(b) - rank(a) || b._score - a._score
       || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
 }

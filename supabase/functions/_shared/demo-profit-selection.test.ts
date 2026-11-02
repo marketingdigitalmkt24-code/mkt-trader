@@ -32,3 +32,14 @@ test('same strategy record: the higher payout asset wins', () => {
 test('ineligible strategies are never selected', () => {
   expect(selectDemoByExpectedProfit([c('v', 'VELA_FORCA', 5, 0.9)], [])).toBeNull();
 });
+
+test('Ichimoku + Recuo 21 takes the slot whenever it has a candidate, even with worse record', () => {
+  const history = [...h('ICHIMOKU_RECUO21', 0, 3), ...h('RECUO_EMA21', 9, 1)];
+  const pick = selectDemoByExpectedProfit([c('r', 'RECUO_EMA21', 3, 0.92), c('k', 'ICHIMOKU_RECUO21', 1, 0.8)], history);
+  expect(pick?.signal_id).toBe('k');
+});
+
+test('without a combined candidate, all other strategies still enter by expected profit', () => {
+  const pick = selectDemoByExpectedProfit([c('t', 'TAKASHI_BNF_V1', 3, 0.9), c('i', 'ICHIMOKU', 1, 0.9)], [...h('ICHIMOKU', 5, 1)]);
+  expect(pick?.signal_id).toBe('i');
+});

@@ -621,7 +621,7 @@ Deno.serve(async (req) => {
   const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
     .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
-  // Most profitable candidate wins the slot (strategy win rate x asset payout); no strategy priority.
+  // Combined Ichimoku + Recuo 21 first; otherwise weighted rotation by recent result, best payout asset within the turn.
   const demoWinner = selectDemoByExpectedProfit(demoEligible, demoHist.data || []);
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
   console.log('Demo expected-profit selection:',JSON.stringify({expectedProfit:demoWinner?._expectedProfit??null,strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));

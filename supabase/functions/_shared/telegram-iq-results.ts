@@ -2,6 +2,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4';
 import { telegramTradingEnabled } from './principal-pause.ts';
 import { masterAutoTradingEnabled } from './auto-trading-gate.ts';
 import { TAKASHI_AFTER_226, isTakashiAfter226Signal } from './takashi-after-226.ts';
+import { isFourLossFollowSignal } from './four-loss-follow.ts';
 import { isConsistentNoteSignal } from './consistent-note.ts';
 
 interface IQResult {
@@ -50,7 +51,7 @@ export async function dispatchIQResults(db: SupabaseClient, request: typeof fetc
   if (error) throw error;
   let sent = 0;
   for (const delivery of deliveries || []) {
-    if (!isTakashiAfter226Signal(delivery.signal_id) && !isConsistentNoteSignal(delivery.signal_id)) continue;
+    if (!isTakashiAfter226Signal(delivery.signal_id) && !isConsistentNoteSignal(delivery.signal_id) && !isFourLossFollowSignal(delivery.signal_id)) continue;
     const { data: op, error: opError } = await db.from('operation_results')
       .select('signal_id, asset, direction, result, profit, created_at, timeframe, iq_option_id')
       .eq('signal_id', delivery.signal_id).in('result', ['win', 'loss', 'tie'])

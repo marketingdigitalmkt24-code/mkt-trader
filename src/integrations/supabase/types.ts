@@ -1056,6 +1056,10 @@ export type Database = {
           strategy: string
         }[]
       }
+      claim_after_four_losses: {
+        Args: { p_balance: number; p_candidate: string; p_config: string }
+        Returns: Json
+      }
       claim_consistent_note: {
         Args: { p_balance: number; p_candidate: string; p_config: string }
         Returns: Json

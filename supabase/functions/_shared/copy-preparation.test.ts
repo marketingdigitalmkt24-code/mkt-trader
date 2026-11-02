@@ -80,3 +80,11 @@ test('client disabled after preparation never sends a copy', async () => {
  expect(consistent).toMatchObject({ direction: 'call', entryStrategy: 'NOTA_CONSISTENTE', signalId: 'nota-consistente-v1-' + candidate.signal_id });
  expect(prepareTakashiCopy({ ...candidate, direction: 'PUT' }, at, 'consistent')?.direction).toBe('put');
 });
+
+test('Após 4 LOSS copy follows the Demo signal direction for any Demo strategy', () => {
+ const follow = prepareTakashiCopy({ ...candidate, entry_strategy: 'ICHIMOKU_RECUO21', direction: 'PUT' }, at, 'follow');
+ expect(follow?.direction).toBe('put');
+ expect(follow?.entryStrategy).toBe('APOS_4_LOSS');
+ expect(follow?.signalId.startsWith('apos-4-loss-v1-')).toBe(true);
+ expect(prepareTakashiCopy({ ...candidate, entry_strategy: 'VELA_FORCA' }, at, 'follow')).toBeNull();
+});

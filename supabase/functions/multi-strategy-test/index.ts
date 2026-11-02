@@ -38,7 +38,6 @@ import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticat
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByExpectedProfit } from '../_shared/demo-profit-selection.ts';
 import { ichimokuRecuo21Direction } from '../_shared/ichimoku-recuo21.ts';
-import { fibonacciRetracementConfirms } from '../_shared/fibonacci-retracement.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 
@@ -123,9 +122,8 @@ export function detect(cs: K[]): [string, 'CALL' | 'PUT'][] {
   if (avgB > 0 && b > 2 * avgB) out.push(['VELA_FORCA', cs[i].c > cs[i].o ? 'CALL' : 'PUT']);
   let hi = -Infinity, lo = Infinity; for (let j = i - 20; j < i; j++) { hi = Math.max(hi, cs[j].h); lo = Math.min(lo, cs[j].l); }
   if (c[i] > hi) out.push(['ROMPIMENTO', 'CALL']); else if (c[i] < lo) out.push(['ROMPIMENTO', 'PUT']);
-  // Recuo na média 21 + confluência com a Retração de Fibonacci (zona 38,2%–61,8% do último impulso).
-  if (upT && cs[i].l <= e21[i] && c[i] > e21[i] && fibonacciRetracementConfirms(cs, 'CALL')) out.push(['RECUO_EMA21', 'CALL']);
-  else if (dnT && cs[i].h >= e21[i] && c[i] < e21[i] && fibonacciRetracementConfirms(cs, 'PUT')) out.push(['RECUO_EMA21', 'PUT']);
+  if (upT && cs[i].l <= e21[i] && c[i] > e21[i]) out.push(['RECUO_EMA21', 'CALL']);
+  else if (dnT && cs[i].h >= e21[i] && c[i] < e21[i]) out.push(['RECUO_EMA21', 'PUT']);
   // KDJ (9,3,3)
   let k = 50, d = 50, pk = 50, pd = 50;
   for (let j = 0; j <= i; j++) {

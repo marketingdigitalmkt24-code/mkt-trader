@@ -449,6 +449,13 @@
       "when": 1793430509502,
       "tag": "0063_retire_consistent_note_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1793598884450,
+      "tag": "0064_after_four_losses_claim",
+      "breakpoints": true
     }
   ]
 }

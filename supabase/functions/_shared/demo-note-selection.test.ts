@@ -15,3 +15,7 @@ test('stays Takashi-only and accepts any finite note', () => {
   expect(selectTakashiByNote([{ ...takashi('other', 100), entry_strategy: 'VELA_FORCA' }, takashi('invalid', NaN), takashi('zero', 0)])?.signal_id).toBe('zero');
   expect(selectTakashiByNote([])).toBeNull();
 });
+test('Ichimoku and Recuo 21 compete with Takashi for the single Demo slot', () => {
+  const pick = selectTakashiByNote([takashi('t', 1.2), { ...takashi('i', 2.1), entry_strategy: 'ICHIMOKU' }, { ...takashi('r', 1.5), entry_strategy: 'RECUO_EMA21' }]);
+  expect(pick?.signal_id).toBe('i');
+});

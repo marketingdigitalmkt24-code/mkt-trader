@@ -16,6 +16,7 @@ export const demoStrategyNames: Record<string, string> = {
  KDJ_RSI: 'KDJ + Reversão RSI', TREND_WIN_LOSS_FORCE_LOSS: 'Retomada',
  TAKASHI_BNF_V1: 'Takashi Kotegawa', ICHIMOKU: 'Ichimoku', RECUO_EMA21: 'Recuo na média 21',
  ICHIMOKU_RECUO21: 'Ichimoku + Recuo 21',
+ TENDENCIA_FORCA_RECUO: 'Tendência + Vela de força + Recuo',
 };
 
 export function DemoTestOperations() {

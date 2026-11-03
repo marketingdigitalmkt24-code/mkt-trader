@@ -38,6 +38,7 @@ import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticat
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByExpectedProfit } from '../_shared/demo-profit-selection.ts';
 import { ichimokuRecuo21Direction } from '../_shared/ichimoku-recuo21.ts';
+import { tendenciaForcaRecuoDirection, TENDENCIA_FORCA_RECUO_STRATEGY } from '../_shared/tendencia-forca-recuo.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 
@@ -552,6 +553,13 @@ Deno.serve(async (req) => {
       signal_id: `demo-ichimoku-recuo21-v1-${asset}-${curMin}`, asset, direction: combined,
       entry_strategy: ICHIMOKU_RECUO21_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
       _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === combined).length),
+    });
+    // Tendência + Vela de força + Recuo combined: all three on the same closed candle, same direction.
+    const tfr = tendenciaForcaRecuoDirection(fired);
+    if (tfr) demoPatterns.push({
+      signal_id: `demo-tendencia-forca-recuo-v1-${asset}-${curMin}`, asset, direction: tfr,
+      entry_strategy: TENDENCIA_FORCA_RECUO_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
+      _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === tfr).length),
     });
     // Ichimoku and Recuo na média 21 also run as separate Demo-only strategies.
     for (const [strategy, direction] of fired) {

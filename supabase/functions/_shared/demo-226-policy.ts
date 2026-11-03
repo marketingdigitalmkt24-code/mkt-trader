@@ -23,7 +23,8 @@ export const FORCA_ANTECIPADA_STRATEGY = 'FORCA_ANTECIPADA_V1';
 // direction) enter the Demo, competing with Takashi for the single Demo slot per minute.
 // Demo-only: never principal/Telegram/copy. The separate ICHIMOKU/RECUO_EMA21 entries also run (user, Nov 2 2026).
 export const ICHIMOKU_RECUO21_STRATEGY = 'ICHIMOKU_RECUO21';
-export const DEMO_INDICATOR_STRATEGIES = [ICHIMOKU_RECUO21_STRATEGY, 'ICHIMOKU', 'RECUO_EMA21'] as const;
+// Nov 3 2026 (user): Tendência + Vela de força + Recuo combined on the same candle/direction (Demo only).
+export const DEMO_INDICATOR_STRATEGIES = [ICHIMOKU_RECUO21_STRATEGY, 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO'] as const;
 export function isDemoIndicatorStrategy(strategy: unknown): boolean {
   return (DEMO_INDICATOR_STRATEGIES as readonly unknown[]).includes(strategy);
 }

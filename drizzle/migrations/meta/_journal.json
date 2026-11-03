@@ -456,6 +456,13 @@
       "when": 1793598884450,
       "tag": "0064_after_four_losses_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1793676275241,
+      "tag": "0065_after_four_losses_tendencia_forca_recuo",
+      "breakpoints": true
     }
   ]
 }

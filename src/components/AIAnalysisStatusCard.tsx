@@ -41,6 +41,7 @@ const strategyLabels: Record<string, string> = {
   KDJ: 'KDJ',
   ICHIMOKU: 'Ichimoku',
   ICHIMOKU_RECUO21: 'Ichimoku + Recuo 21',
+  TENDENCIA_FORCA_RECUO: 'Tendência + Vela de força + Recuo',
   ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
   KDJ_RSI: 'KDJ + Reversão RSI',
   TESTES_HISTORICO: 'Testes (histórico)',
@@ -104,11 +105,11 @@ export function AIAnalysisStatusCard() {
       const [candidates, rejections, scan] = await Promise.all([
         supabase.from('iq_demo_test_candidates')
           .select('signal_id,asset,direction,score,entry_minute')
-          .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21']).gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.from('demo_selection_rejections')
           .select('signal_id,asset,direction,score,entry_minute')
-          .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21']).gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.functions.invoke('demo-analysis-status',{body:{}}),
       ]);

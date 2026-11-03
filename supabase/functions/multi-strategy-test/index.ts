@@ -36,7 +36,7 @@ import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_shared/broker-session-cache.ts';
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
-import { selectDemoByExpectedProfit } from '../_shared/demo-profit-selection.ts';
+import { selectDemoByRotation, DEMO_ROTATION } from '../_shared/demo-profit-selection.ts';
 import { ichimokuRecuo21Direction } from '../_shared/ichimoku-recuo21.ts';
 import { tendenciaForcaRecuoDirection, TENDENCIA_FORCA_RECUO_STRATEGY } from '../_shared/tendencia-forca-recuo.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
@@ -540,7 +540,8 @@ Deno.serve(async (req) => {
     confluenceGates[gate] = (confluenceGates[gate] || 0) + 1;
     if (check.volumeSource) confluenceGates[`vol_${check.volumeSource}`] = (confluenceGates[`vol_${check.volumeSource}`] || 0) + 1;
     const takashi = 'failed' in check ? null : check;
-    if (takashi) demoPatterns.push({
+    // Nov 3 2026 (user): Takashi no longer enters the Demo; its gate diagnostics stay logged.
+    if (takashi && demoCohort(0, TAKASHI_BNF) !== null) demoPatterns.push({
       signal_id: `takashi-bnf-v1-${asset}-${curMin}`, asset, direction: takashi.direction,
       entry_strategy: TAKASHI_BNF, created_at: new Date(curMin * 1000).toISOString(),
       // Same confluence/body base as other indicators; never assign the target score.
@@ -597,7 +598,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-expected-profit-v19',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-rotation-v20',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = [...rows,...demoPatterns].flatMap(c=>{
@@ -627,12 +628,12 @@ Deno.serve(async (req) => {
   });
   // User (Oct 25 2026 19:02 UTC): alternate Demo slots between Takashi and displayed-2.26 entries.
   const lastCandidate=await supabase.from('iq_demo_test_candidates').select('entry_strategy')
-    .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
+    .in('entry_strategy',[...DEMO_ROTATION]).lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle();
   const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
-  // Combined Ichimoku + Recuo 21 first; otherwise most profitable candidate (strategy win rate x asset payout).
-  const demoWinner = selectDemoByExpectedProfit(demoEligible, demoHist.data || []);
+  // Combined Ichimoku + Recuo 21 first; otherwise rotate Tendência+Força+Recuo -> Ichimoku -> Recuo 21.
+  const demoWinner = selectDemoByRotation(demoEligible, lastCandidate.data?.entry_strategy);
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  console.log('Demo expected-profit selection:',JSON.stringify({expectedProfit:demoWinner?._expectedProfit??null,strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
+  console.log('Demo rotation selection:',JSON.stringify({strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
   console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
   console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));
   for(const c of demoEligible){

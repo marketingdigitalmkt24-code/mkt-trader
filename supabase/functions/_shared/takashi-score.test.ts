@@ -18,7 +18,7 @@ test('empty remix history contributes zero learning, not invented performance', 
 });
 test('any finite Takashi Demo note never authorizes principal, copies or Telegram', () => {
   for (const score of [0,0.5,2.26,4,9]) {
-    expect(demoAlternationAuthorized(score,TAKASHI_BNF)).toBe(true);
+    expect(demoAlternationAuthorized(score,TAKASHI_BNF)).toBe(false);
     expect(principalIQEnabled(TAKASHI_BNF)).toBe(false);
     expect(telegramTradingEnabled(TAKASHI_BNF)).toBe(false);
   }

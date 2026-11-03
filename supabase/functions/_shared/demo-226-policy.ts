@@ -24,17 +24,18 @@ export const FORCA_ANTECIPADA_STRATEGY = 'FORCA_ANTECIPADA_V1';
 // Demo-only: never principal/Telegram/copy. The separate ICHIMOKU/RECUO_EMA21 entries also run (user, Nov 2 2026).
 export const ICHIMOKU_RECUO21_STRATEGY = 'ICHIMOKU_RECUO21';
 // Nov 3 2026 (user): Tendência + Vela de força + Recuo combined on the same candle/direction (Demo only).
-// Nov 3 2026 (user): every detected indicator also competes separately for the single Demo slot.
-export const DEMO_STANDALONE_INDICATORS = ['ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ'] as const;
+// Nov 3 2026 00:48 BRT (user): ONLY these four strategies enter the Demo (Takashi and the other
+// standalone indicators no longer enter); Ichimoku + Recuo 21 keeps priority, the rest rotate.
+export const DEMO_STANDALONE_INDICATORS = ['ICHIMOKU', 'RECUO_EMA21'] as const;
 export const DEMO_INDICATOR_STRATEGIES = [ICHIMOKU_RECUO21_STRATEGY, 'TENDENCIA_FORCA_RECUO', ...DEMO_STANDALONE_INDICATORS] as const;
 export function isDemoIndicatorStrategy(strategy: unknown): boolean {
   return (DEMO_INDICATOR_STRATEGIES as readonly unknown[]).includes(strategy);
 }
-// One shared gale progression across every Demo entry strategy.
-export const DEMO_ENTRY_STRATEGIES = [TAKASHI_STRATEGY, ...DEMO_INDICATOR_STRATEGIES];
+// Strategies that have Demo history: one shared gale progression and the Após 4 LOSS streak read all of them,
+// so retiring a strategy from new Demo entries never breaks gale/streak continuity.
+export const DEMO_ENTRY_STRATEGIES = [TAKASHI_STRATEGY, ...DEMO_INDICATOR_STRATEGIES, 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ'];
 export type DemoCohort = 'takashi' | 'indicator' | 'score226' | 'antecipada';
 export function demoCohort(score: number, strategy: unknown): DemoCohort | null {
-  if (strategy === TAKASHI_STRATEGY) return takashiDemoAuthorized(score) ? 'takashi' : null;
   if (isDemoIndicatorStrategy(strategy)) return Number.isFinite(score) ? 'indicator' : null;
   return null;
 }

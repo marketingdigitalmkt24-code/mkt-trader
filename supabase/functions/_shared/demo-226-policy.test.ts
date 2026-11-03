@@ -14,15 +14,9 @@ test('Force and Trend remain authorized; other strategies cannot use 2.26', () =
 });
 
 import { demoAlternationAuthorized, preferredDemoCohort, demoCohort, takashiDemoAuthorized, TAKASHI_DEMO_MIN_SCORE } from './demo-226-policy';
-test('Takashi Demo accepts any finite score including zero and below four', () => {
-  expect(demoAlternationAuthorized(4.01, 'TAKASHI_BNF_V1')).toBe(true);
-  expect(demoAlternationAuthorized(4, 'TAKASHI_BNF_V1')).toBe(true);
-  expect(demoAlternationAuthorized(3.99, 'TAKASHI_BNF_V1')).toBe(true);
-  expect(demoAlternationAuthorized(0, 'TAKASHI_BNF_V1')).toBe(true);
-  expect(demoCohort(4.5, 'TAKASHI_BNF_V1')).toBe('takashi');
-  expect(demoCohort(TAKASHI_DEMO_MIN_SCORE, 'TAKASHI_BNF_V1')).toBe('takashi');
-  expect(takashiDemoAuthorized(4.01)).toBe(true);
-  expect(takashiDemoAuthorized(Number.NaN)).toBe(false);
+test('Takashi no longer enters the Demo (user, Nov 3 2026)', () => {
+  for (const score of [0, 4, 9]) expect(demoAlternationAuthorized(score, 'TAKASHI_BNF_V1')).toBe(false);
+  expect(demoCohort(4.5, 'TAKASHI_BNF_V1')).toBeNull();
 });
 test('Demo rejects retired strategies regardless of score', () => {
   for (const strategy of ['FORCA_ANTECIPADA_V1','PADRAO_MEIO_V1','TETO_V1'])

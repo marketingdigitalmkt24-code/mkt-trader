@@ -22,7 +22,8 @@ export function freshDemoCandidate(row: { signal_id: string; timeframe: string; 
     || (row.signal_id.startsWith('takashi-bnf-v1-') && row.entry_strategy === 'TAKASHI_BNF_V1' && ['CALL','PUT'].includes(row.direction))
     || (row.signal_id.startsWith('demo-ichimoku-recuo21-v1-') && row.entry_strategy === 'ICHIMOKU_RECUO21' && ['CALL','PUT'].includes(row.direction))
     || (row.signal_id.startsWith('demo-ichimoku-v1-') && row.entry_strategy === 'ICHIMOKU' && ['CALL','PUT'].includes(row.direction))
-    || (row.signal_id.startsWith('demo-recuo_ema21-v1-') && row.entry_strategy === 'RECUO_EMA21' && ['CALL','PUT'].includes(row.direction));
+    || (row.signal_id.startsWith('demo-recuo_ema21-v1-') && row.entry_strategy === 'RECUO_EMA21' && ['CALL','PUT'].includes(row.direction))
+    || (row.signal_id.startsWith('demo-tendencia-forca-recuo-v1-') && row.entry_strategy === 'TENDENCIA_FORCA_RECUO' && ['CALL','PUT'].includes(row.direction));
  return known && row.timeframe === 'TEST' && Number.isFinite(at)
   && at % 60000 === 0 && now >= at && now-at <= 25000;
 }

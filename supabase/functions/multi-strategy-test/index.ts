@@ -561,9 +561,9 @@ Deno.serve(async (req) => {
       entry_strategy: TENDENCIA_FORCA_RECUO_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
       _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === tfr).length),
     });
-    // Ichimoku and Recuo na média 21 also run as separate Demo-only strategies.
+    // Every detected indicator also runs as a separate Demo-only strategy (user, Nov 3 2026).
     for (const [strategy, direction] of fired) {
-      if (strategy !== 'ICHIMOKU' && strategy !== 'RECUO_EMA21') continue;
+      if (!(DEMO_STANDALONE_INDICATORS as readonly string[]).includes(strategy)) continue;
       demoPatterns.push({
         signal_id: `demo-${strategy.toLowerCase()}-v1-${asset}-${curMin}`, asset, direction,
         entry_strategy: strategy, created_at: new Date(curMin * 1000).toISOString(),

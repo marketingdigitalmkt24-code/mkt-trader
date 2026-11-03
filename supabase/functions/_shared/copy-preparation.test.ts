@@ -86,5 +86,5 @@ test('Após 4 LOSS copy follows the Demo signal direction for any Demo strategy'
  expect(follow?.direction).toBe('put');
  expect(follow?.entryStrategy).toBe('APOS_4_LOSS');
  expect(follow?.signalId.startsWith('apos-4-loss-v1-')).toBe(true);
- expect(prepareTakashiCopy({ ...candidate, entry_strategy: 'VELA_FORCA' }, at, 'follow')).toBeNull();
+ expect(prepareTakashiCopy({ ...candidate, entry_strategy: 'FORCA_ANTECIPADA_V1' }, at, 'follow')).toBeNull();
 });

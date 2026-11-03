@@ -24,8 +24,8 @@ test('Takashi Demo accepts any finite score including zero and below four', () =
   expect(takashiDemoAuthorized(4.01)).toBe(true);
   expect(takashiDemoAuthorized(Number.NaN)).toBe(false);
 });
-test('Demo rejects strategies other than Takashi, Ichimoku and Recuo 21 regardless of score', () => {
-  for (const strategy of ['TENDENCIA','VELA_FORCA','FORCA_ANTECIPADA_V1','PADRAO_MEIO_V1','REVERSAO_RSI'])
+test('Demo rejects retired strategies regardless of score', () => {
+  for (const strategy of ['FORCA_ANTECIPADA_V1','PADRAO_MEIO_V1','TETO_V1'])
     for (const score of [0,2.26,5]) expect(demoAlternationAuthorized(score,strategy)).toBe(false);
 });
 test('Demo always prefers Takashi', () => {

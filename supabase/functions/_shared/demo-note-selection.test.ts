@@ -12,7 +12,7 @@ test('note support is capped and never overrides a much stronger analysis', () =
   expect(selectTakashiByNote([takashi('a', 1.5), takashi('b', 2.5)], [{ cents: 150, wins: 50 }])?.signal_id).toBe('b');
 });
 test('stays Takashi-only and accepts any finite note', () => {
-  expect(selectTakashiByNote([{ ...takashi('other', 100), entry_strategy: 'VELA_FORCA' }, takashi('invalid', NaN), takashi('zero', 0)])?.signal_id).toBe('zero');
+  expect(selectTakashiByNote([{ ...takashi('other', 100), entry_strategy: 'FORCA_ANTECIPADA_V1' }, takashi('invalid', NaN), takashi('zero', 0)])?.signal_id).toBe('zero');
   expect(selectTakashiByNote([])).toBeNull();
 });
 test('Takashi, combined and separate Ichimoku/Recuo 21 compete for the single Demo slot by score', () => {

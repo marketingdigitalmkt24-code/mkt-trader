@@ -30,7 +30,7 @@ test('same strategy record: the higher payout asset wins', () => {
 });
 
 test('ineligible strategies are never selected', () => {
-  expect(selectDemoByExpectedProfit([c('v', 'VELA_FORCA', 5, 0.9)], [])).toBeNull();
+  expect(selectDemoByExpectedProfit([c('v', 'FORCA_ANTECIPADA_V1', 5, 0.9)], [])).toBeNull();
 });
 
 test('Ichimoku + Recuo 21 takes the slot whenever it has a candidate, even with worse record', () => {

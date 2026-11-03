@@ -1,3 +1,8 @@
+# Telegram no novo workspace (03/11/2026)
+- [x] Conexão "MKT TRADER | Canal" (gateway) vinculada ao projeto; bot @BlazeBilionario_bot confirmado por leitura e canal MKT TRADER (@MktTarder) acessível; mensagem de teste publicada com sucesso.
+- [x] Sete funções de avisos republicadas para usarem a nova chave (iqoption-place-trade, selected-demo-trend, multi-strategy-test, trend-three-loss-put, telegram-daily-report, iqoption-check-results, auto-generate-signals); nenhum controle de negociação alterado.
+- [x] Teste do histórico diário Demo alinhado à regra atual: conta Demo ou Real escolhida na aba Corretora conta, falhas ficam fora; 492 testes passaram.
+
 # Ajustes de Copy Trading e resultados (30/10/2026)
 - [x] Telegram vinculado ao novo workspace; bot @BlazeBilionario_bot e permissão de publicação no canal @MktTarder confirmados por leitura; sete funções de avisos republicadas sem mudar controles de negociação.
 - [ ] Ao clicar no email do cliente, mostrar histórico diário com cinco dias por página e páginas antigas.

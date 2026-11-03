@@ -41,7 +41,7 @@ const strategyLabels: Record<string, string> = {
   KDJ: 'KDJ',
   ICHIMOKU: 'Ichimoku',
   ICHIMOKU_RECUO21: 'Ichimoku + Recuo 21',
-  TENDENCIA_FORCA_RECUO: 'Tendência + Vela de força + Recuo',
+  TENDENCIA_FORCA_RECUO: 'Tendência + Força + Recuo',
   ICHIMOKU_FORCA: 'Ichimoku + Vela de Força',
   KDJ_RSI: 'KDJ + Reversão RSI',
   TESTES_HISTORICO: 'Testes (histórico)',

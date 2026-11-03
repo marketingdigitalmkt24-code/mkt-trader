@@ -21,5 +21,5 @@ test('if the follow-up also loses, wait for a new streak of 4 (no entry on the 5
 test('pending result or stale/unknown signal never enters', () => {
   expect(fourLossStreak([{ status: 'confirmed', result: 'pending', recovery_level: 3 }, loss(2), loss(1), loss(0)])).toBe(false);
   expect(fourLossFollowDirection(current, streak, Date.parse('2026-11-02T05:30:30Z'))).toBeNull();
-  expect(fourLossFollowDirection({ ...current, entry_strategy: 'VELA_FORCA' }, streak, now)).toBeNull();
+  expect(fourLossFollowDirection({ ...current, entry_strategy: 'FORCA_ANTECIPADA_V1' }, streak, now)).toBeNull();
 });

@@ -470,6 +470,13 @@
       "when": 1793677251932,
       "tag": "0066_after_four_losses_all_demo_strategies",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793737653017,
+      "tag": "0067_after_five_losses_claim",
+      "breakpoints": true
     }
   ]
 }

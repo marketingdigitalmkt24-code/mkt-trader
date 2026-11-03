@@ -677,9 +677,10 @@ Deno.serve(async (req) => {
       const recovery = !last.error ? demoRecovery(demoRecoveryPredecessor(last.data || [], Date.now()),base,payout) : null;
       const amount = recovery?.amount ?? 0;
       console.log('Demo gale:',JSON.stringify({recovery,lastError:!!last.error}));
-      // Principal "Após 4 LOSS" (user, Nov 2 2026): level 4 means the 4 previous confirmed Demo orders lost.
-      // The executor re-reads the streak and the service-only claim revalidates it, Auto Trading and limits.
-      if(recovery?.recovery_level===4){
+      // Principal "Após 5 LOSS" (user, Nov 3 2026): the previous confirmed Demo order lost at gale level 4,
+      // i.e. 5 consecutive LOSS. The executor re-reads the streak and the claim revalidates it, Auto Trading and limits.
+      const prevOrder=(last.data||[])[0];
+      if(prevOrder?.status==='confirmed'&&prevOrder?.result==='loss'&&Number(prevOrder?.recovery_level)===4){
         const followTask = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/selected-demo-trend`, {
           method:'POST', headers:{Authorization:`Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,'Content-Type':'application/json'},
           body:JSON.stringify({candidate:demoWinner.signal_id}), signal:AbortSignal.timeout(100000),

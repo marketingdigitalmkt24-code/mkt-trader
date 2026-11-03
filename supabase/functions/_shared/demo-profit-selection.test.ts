@@ -1,45 +1,27 @@
 import { expect, test } from 'bun:test';
-import { expectedProfitPerUnit, selectDemoByExpectedProfit, strategyWinRate } from './demo-profit-selection';
+import { selectDemoByRotation, nextRotationOrder } from './demo-profit-selection.ts';
+import { demoCohort } from './demo-226-policy.ts';
 
-const c = (signal_id: string, entry_strategy: string, _score: number, _payout: number | null) =>
-  ({ signal_id, entry_strategy, _score, _payout, asset: 'X', direction: 'CALL', created_at: '2026-11-02T00:40:00Z' });
-const h = (entry_strategy: string, wins: number, losses: number) => [
-  ...Array.from({ length: wins }, () => ({ entry_strategy, result: 'win' })),
-  ...Array.from({ length: losses }, () => ({ entry_strategy, result: 'loss' })),
-];
+const c = (id: string, strategy: string, score = 2) => ({ signal_id: id, asset: id, direction: 'CALL', entry_strategy: strategy, created_at: '2026-11-03T03:50:00Z', _score: score });
+const all = [c('t', 'TENDENCIA_FORCA_RECUO'), c('i', 'ICHIMOKU'), c('r', 'RECUO_EMA21', 9)];
 
-test('win rate uses only own WIN/LOSS with one virtual win and loss', () => {
-  expect(strategyWinRate([...h('ICHIMOKU', 3, 1), { entry_strategy: 'ICHIMOKU', result: 'tie' }], 'ICHIMOKU')).toBeCloseTo(4 / 6);
-  expect(strategyWinRate([], 'RECUO_EMA21')).toBe(0.5);
+test('only the four chosen strategies may enter the Demo', () => {
+  for (const s of ['ICHIMOKU_RECUO21', 'TENDENCIA_FORCA_RECUO', 'ICHIMOKU', 'RECUO_EMA21']) expect(demoCohort(1, s)).toBe('indicator');
+  for (const s of ['TAKASHI_BNF_V1', 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ']) expect(demoCohort(9, s)).toBeNull();
+  expect(selectDemoByRotation([c('k', 'KDJ', 99), c('x', 'TAKASHI_BNF_V1', 99)], null)).toBeNull();
 });
 
-test('expected profit per US$1 = p*payout - (1-p); unknown payout is -1', () => {
-  expect(expectedProfitPerUnit(0.6, 0.85)).toBeCloseTo(0.11);
-  expect(expectedProfitPerUnit(0.6, null)).toBe(-1);
+test('Ichimoku + Recuo 21 keeps priority', () => {
+  expect(selectDemoByRotation([...all, c('k', 'ICHIMOKU_RECUO21', 0.1)], 'TENDENCIA_FORCA_RECUO')?.signal_id).toBe('k');
 });
 
-test('highest note does not win: the most profitable strategy does', () => {
-  const history = [...h('TAKASHI_BNF_V1', 1, 4), ...h('RECUO_EMA21', 6, 2)];
-  const pick = selectDemoByExpectedProfit([c('t', 'TAKASHI_BNF_V1', 9, 0.9), c('r', 'RECUO_EMA21', 0.5, 0.85)], history);
-  expect(pick?.signal_id).toBe('r');
+test('others rotate after the previous slot, ignoring note and profit', () => {
+  expect(nextRotationOrder('TENDENCIA_FORCA_RECUO')).toEqual(['ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO']);
+  expect(selectDemoByRotation(all, 'TENDENCIA_FORCA_RECUO')?.signal_id).toBe('i');
+  expect(selectDemoByRotation(all, 'ICHIMOKU')?.signal_id).toBe('r');
+  expect(selectDemoByRotation(all, 'RECUO_EMA21')?.signal_id).toBe('t');
 });
 
-test('same strategy record: the higher payout asset wins', () => {
-  const pick = selectDemoByExpectedProfit([c('a', 'ICHIMOKU', 3, 0.7), c('b', 'ICHIMOKU', 1, 0.9)], h('ICHIMOKU', 2, 1));
-  expect(pick?.signal_id).toBe('b');
-});
-
-test('ineligible strategies are never selected', () => {
-  expect(selectDemoByExpectedProfit([c('v', 'FORCA_ANTECIPADA_V1', 5, 0.9)], [])).toBeNull();
-});
-
-test('Ichimoku + Recuo 21 takes the slot whenever it has a candidate, even with worse record', () => {
-  const history = [...h('ICHIMOKU_RECUO21', 0, 3), ...h('RECUO_EMA21', 9, 1)];
-  const pick = selectDemoByExpectedProfit([c('r', 'RECUO_EMA21', 3, 0.92), c('k', 'ICHIMOKU_RECUO21', 1, 0.8)], history);
-  expect(pick?.signal_id).toBe('k');
-});
-
-test('without a combined candidate, all other strategies still enter by expected profit', () => {
-  const pick = selectDemoByExpectedProfit([c('t', 'TAKASHI_BNF_V1', 3, 0.9), c('i', 'ICHIMOKU', 1, 0.9)], [...h('ICHIMOKU', 5, 1)]);
-  expect(pick?.signal_id).toBe('i');
+test('a strategy without a signal that minute passes its turn to the next one', () => {
+  expect(selectDemoByRotation([c('t', 'TENDENCIA_FORCA_RECUO'), c('r', 'RECUO_EMA21')], 'TENDENCIA_FORCA_RECUO')?.signal_id).toBe('r');
 });

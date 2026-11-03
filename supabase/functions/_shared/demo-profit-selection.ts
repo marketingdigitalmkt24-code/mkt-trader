@@ -1,43 +1,31 @@
 import { demoCohort } from './demo-226-policy.ts';
 import type { DemoCandidate } from './demo-continuation.ts';
 
-// Nov 2 2026 (user): the single Demo slot goes to the candidate that can give the most profit,
-// not the highest note (Ichimoku + Recuo 21 has priority, see below).
-// Expected profit per US$1 = p * payout - (1 - p), where p is the strategy's own confirmed
-// Demo win rate (WIN/LOSS only, ties excluded) smoothed with one virtual WIN and one virtual LOSS,
-// and payout is the broker's current payout for that candidate's asset.
+// Nov 3 2026 00:48 BRT (user): no expected-profit / note ranking between strategies.
+// Ichimoku + Recuo 21 keeps priority whenever it has a candidate; otherwise the strategies take
+// turns in a fixed cycle, starting after the strategy that took the previous minute's slot.
+// Inside the chosen strategy, the highest note breaks ties between assets (then signal id).
 export type StrategyOutcome = { entry_strategy: string; result: string };
 export type ProfitCandidate = DemoCandidate & { _payout?: number | null };
 
-export function strategyWinRate(history: StrategyOutcome[], strategy: string): number {
-  let wins = 0, losses = 0;
-  for (const row of history) {
-    if (row.entry_strategy !== strategy) continue;
-    if (row.result === 'win') wins++;
-    else if (row.result === 'loss') losses++;
-  }
-  return (wins + 1) / (wins + losses + 2);
-}
-
-export function expectedProfitPerUnit(winRate: number, payout: number | null | undefined): number {
-  // Unknown payout cannot be shown to be profitable: it only wins the slot when nothing else exists.
-  if (typeof payout !== 'number' || !Number.isFinite(payout) || payout <= 0) return -1;
-  return winRate * payout - (1 - winRate);
-}
-
-// Nov 2 2026 (user): Ichimoku + Recuo 21 has priority when it has an eligible candidate that minute;
-// otherwise every strategy still competes by expected profit.
 export const DEMO_PRIORITY_STRATEGY = 'ICHIMOKU_RECUO21';
-export function selectDemoByExpectedProfit<T extends ProfitCandidate>(candidates: T[], history: StrategyOutcome[]): (T & { _expectedProfit: number }) | null {
-  const eligible = candidates.filter(c => demoCohort(c._score, c.entry_strategy) !== null);
-  const priority = eligible.filter(c => c.entry_strategy === DEMO_PRIORITY_STRATEGY);
-  return rankByExpectedProfit(priority.length ? priority : eligible, history);
+export const DEMO_ROTATION = ['TENDENCIA_FORCA_RECUO', 'ICHIMOKU', 'RECUO_EMA21'] as const;
+
+export function nextRotationOrder(previousStrategy: unknown): string[] {
+  const at = (DEMO_ROTATION as readonly unknown[]).indexOf(previousStrategy);
+  return DEMO_ROTATION.map((_, i) => DEMO_ROTATION[(at + 1 + i) % DEMO_ROTATION.length]);
 }
-function rankByExpectedProfit<T extends ProfitCandidate>(candidates: T[], history: StrategyOutcome[]): (T & { _expectedProfit: number }) | null {
-  const rates = new Map<string, number>();
-  const rate = (s: string) => rates.get(s) ?? (rates.set(s, strategyWinRate(history, s)), rates.get(s)!);
-  return candidates
-    .map(c => ({ ...c, _expectedProfit: expectedProfitPerUnit(rate(c.entry_strategy), c._payout) }))
-    // Neutral tie-break (no strategy preference): stable signal id order.
-    .sort((a, b) => b._expectedProfit - a._expectedProfit || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
+
+export function selectDemoByRotation<T extends ProfitCandidate>(candidates: T[], previousStrategy: unknown): T | null {
+  const eligible = candidates.filter(c => demoCohort(c._score, c.entry_strategy) !== null);
+  const best = (list: T[]) => [...list].sort((a, b) =>
+    (Number.isFinite(b._score) ? b._score : -Infinity) - (Number.isFinite(a._score) ? a._score : -Infinity)
+    || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
+  const priority = eligible.filter(c => c.entry_strategy === DEMO_PRIORITY_STRATEGY);
+  if (priority.length) return best(priority);
+  for (const strategy of nextRotationOrder(previousStrategy)) {
+    const pick = best(eligible.filter(c => c.entry_strategy === strategy));
+    if (pick) return pick;
+  }
+  return null;
 }

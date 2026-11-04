@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { DemoTestOperations } from './DemoTestOperations';
+import { DemoOpenOperations } from './DemoOpenOperations';
 import { DemoDailyHistory } from './DemoDailyHistory';
 
 interface OpenPosition {
@@ -237,6 +238,7 @@ export function LiveOperationsCard() {
           )}
         </div>
 
+        <DemoOpenOperations />
         {/* Últimas operações · Demo */}
         <DemoTestOperations />
         <DemoDailyHistory />

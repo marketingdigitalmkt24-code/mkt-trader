@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { signalSequenceAction, signalSequenceDirection, SIGNAL_SEQUENCES } from './signal-sequence.ts';
 
 const o = (entry_strategy: string, direction: string, result: string) => ({ status: 'confirmed', entry_strategy, direction, result });

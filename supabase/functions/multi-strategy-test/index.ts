@@ -669,7 +669,7 @@ Deno.serve(async (req) => {
       const commission = found?.[1]?.option?.profit?.commission;
       const payout = typeof commission === 'number' ? (100-commission)/100 : null;
       const last = await supabase.from('iq_demo_test_orders')
-        .select('status,result,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
+        .select('status,result,entry_strategy,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
         .in('entry_strategy',DEMO_ENTRY_STRATEGIES).in('account_type',['PRACTICE','REAL'])
         .in('status',['confirmed','unknown','reserved'])
         .or(`status.eq.confirmed,iq_option_id.not.is.null,expiration_time.gt.${new Date().toISOString()}`)
@@ -680,7 +680,8 @@ Deno.serve(async (req) => {
       // Principal "Após 5 LOSS" (user, Nov 3 2026): the previous confirmed Demo order lost at gale level 4,
       // i.e. 5 consecutive LOSS. The executor re-reads the streak and the claim revalidates it, Auto Trading and limits.
       const prevOrder=(last.data||[])[0];
-      if(prevOrder?.status==='confirmed'&&prevOrder?.result==='loss'&&Number(prevOrder?.recovery_level)===4){
+      // Also "Sequência de 3 sinais": the executor re-reads the 3 latest confirmed orders and the claim revalidates the user sets.
+      if(prevOrder?.status==='confirmed'&&((prevOrder?.result==='loss'&&Number(prevOrder?.recovery_level)===4)||['RECUO_EMA21','ICHIMOKU_RECUO21'].includes(prevOrder?.entry_strategy))){
         const followTask = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/selected-demo-trend`, {
           method:'POST', headers:{Authorization:`Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,'Content-Type':'application/json'},
           body:JSON.stringify({candidate:demoWinner.signal_id}), signal:AbortSignal.timeout(100000),

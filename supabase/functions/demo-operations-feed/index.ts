@@ -107,6 +107,6 @@ Deno.serve(async (req) => {
     count: operations.length,
     next_before: !since && full && last ? last.entry_time : null,
     next_since: since ? (last ? last.entry_time : since) : (operations[0]?.entry_time ?? null),
-    has_more: since ? full : full,
+    has_more: full,
   });
 });

@@ -11,6 +11,7 @@ import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
 import { QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { SUPER_SELECIONADA } from '../_shared/demo-validated.ts';
 import { FOUR_LOSS_FOLLOW, FOUR_LOSS_FOLLOW_LABEL, FOUR_LOSS_STREAK, fourLossFollowDirection } from '../_shared/four-loss-follow.ts';
+import { SIGNAL_SEQUENCE, SIGNAL_SEQUENCE_LABEL, signalSequenceAction, signalSequenceDirection } from '../_shared/signal-sequence.ts';
 import { DEMO_ENTRY_STRATEGIES } from '../_shared/demo-226-policy.ts';
 import { principalIQEnabled } from '../_shared/principal-pause.ts';
 import { masterAutoTradingEnabled } from '../_shared/auto-trading-gate.ts';
@@ -54,13 +55,17 @@ Deno.serve(async req => {
     if (Date.now() < entryAt) await new Promise(r => setTimeout(r, entryAt - Date.now() + 50));
     // Only principal strategy (user, Nov 2 2026): after 4 consecutive Demo LOSS, follow the next Demo signal.
     // Takashi invertida and Nota consistente are retired (history kept).
-    const { data: streak, error: streakError } = await db.from('iq_demo_test_orders').select('status,result,recovery_level')
+    const { data: streak, error: streakError } = await db.from('iq_demo_test_orders').select('status,result,recovery_level,entry_strategy,direction')
       .eq('status', 'confirmed').in('account_type', ['PRACTICE', 'REAL']).in('entry_strategy', DEMO_ENTRY_STRATEGIES)
       .lt('entry_minute', candidate.entry_minute).order('entry_minute', { ascending: false }).limit(FOUR_LOSS_STREAK);
     if (streakError) throw streakError;
-    let plan: { strategy: string; label: string; rpc: string; copy: 'follow' } | null = null;
+    let plan: { strategy: string; label: string; rpc: string; copy: 'follow' | 'sequence_follow' | 'sequence_inverted' } | null = null;
     if (fourLossFollowDirection(candidate, streak || [], Date.now())) {
       plan = { strategy: FOUR_LOSS_FOLLOW, label: FOUR_LOSS_FOLLOW_LABEL, rpc: 'claim_after_four_losses', copy: 'follow' };
+    } else if (signalSequenceDirection(candidate, streak || [], Date.now())) {
+      // Sequência de 3 sinais (user, Nov 3 2026): the 3 latest confirmed Demo orders match a user set.
+      plan = { strategy: SIGNAL_SEQUENCE, label: SIGNAL_SEQUENCE_LABEL, rpc: 'claim_after_signal_sequence',
+        copy: signalSequenceAction(streak || []) === 'inverted' ? 'sequence_inverted' : 'sequence_follow' };
     }
     if (!plan) return reply({ skipped: 'No authorized principal strategy for this signal' });
     const chosen = plan;

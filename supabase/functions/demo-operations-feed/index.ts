@@ -47,6 +47,11 @@ Deno.serve(async (req) => {
   if (since === undefined || before === undefined) {
     return json({ error: "since/before must be ISO-8601 timestamps" }, 400);
   }
+  const includeOpenRaw = url.searchParams.get("include_open");
+  if (includeOpenRaw !== null && includeOpenRaw !== "true" && includeOpenRaw !== "false") {
+    return json({ error: "include_open must be true or false" }, 400);
+  }
+  const includeOpen = includeOpenRaw === "true";
   if (since && before) return json({ error: "Use either since or before, not both" }, 400);
 
   const supabase = createClient(
@@ -100,9 +105,49 @@ Deno.serve(async (req) => {
     };
   });
 
+  let openOperations: unknown[] | undefined;
+  if (includeOpen) {
+    const { data: open, error: oErr } = await supabase
+      .from("iq_demo_test_orders")
+      .select("signal_id, entry_minute, asset, direction, entry_strategy, amount, expiration_time")
+      .eq("status", "confirmed")
+      .eq("account_type", "PRACTICE")
+      .eq("result", "pending")
+      .not("iq_option_id", "is", null)
+      .order("entry_minute", { ascending: true })
+      .limit(50);
+    if (oErr) {
+      console.error("demo-operations-feed open error", oErr.message);
+      return json({ error: "Query failed" }, 500);
+    }
+    const openRows = open ?? [];
+    const openScores = new Map<string, number>();
+    if (openRows.length) {
+      const { data: oc } = await supabase
+        .from("iq_demo_test_candidates")
+        .select("signal_id, entry_minute, score")
+        .in("signal_id", openRows.map((r) => r.signal_id));
+      for (const c of oc ?? []) openScores.set(`${c.signal_id}|${new Date(c.entry_minute).toISOString()}`, c.score);
+    }
+    openOperations = openRows.map((r) => {
+      const t = new Date(r.entry_minute).toISOString();
+      const s = openScores.get(`${r.signal_id}|${t}`);
+      return {
+        asset: r.asset,
+        score: s == null ? null : Math.round(s * 100) / 100,
+        direction: r.direction,
+        strategy: r.entry_strategy,
+        amount: Number(r.amount),
+        entry_time: t,
+        expires_at: new Date(r.expiration_time).toISOString(),
+      };
+    });
+  }
+
   const last = operations[operations.length - 1];
   const full = operations.length === limitRaw;
   return json({
+    ...(openOperations ? { open_operations: openOperations } : {}),
     operations,
     count: operations.length,
     next_before: !since && full && last ? last.entry_time : null,

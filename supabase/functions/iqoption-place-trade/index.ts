@@ -1,7 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const ENTRY_LATENCY_LEAD_MS = 120;
 import { createClient } from 'npm:@supabase/supabase-js@2.49.4';
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+// Local CORS headers: mixing '@2/cors' with a pinned 2.49.4 client resolved to a version without
+// the cors export and crashed the worker at boot, silently blocking every principal placement.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
 import { sendIQAlert, IQ_TELEGRAM_CHANNEL } from '../_shared/telegram-iq-alert.ts';
 import { canSendReversal, canReuseBrokerSession } from '../_shared/four-win-reversal.ts';
 import { isNextMinuteStrategy } from '../_shared/force-loss-win.ts';

@@ -9,13 +9,12 @@ import { nextReversalMinute } from '../_shared/four-win-reversal.ts';
 import { closedTestResult, prioritizeResultAssets } from '../_shared/test-candle-result.ts';
 import { readMasterIQConfig } from '../_shared/master-iq-config.ts';
 import { sendCandleRequestBatches } from '../_shared/candle-request-batches.ts';
-import { recentLearningAdjustment, type LearningOutcome } from '../_shared/recent-signal-learning.ts';
 import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequence-test.ts';
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
-import { takashiBaseScore, TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
+import { TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
+import type { DemoCandidate } from '../_shared/demo-continuation.ts';
 import { takashiConfluenceCheck } from '../_shared/takashi-confluence.ts';
-import { demoCohort, preferredDemoCohort, TAKASHI_STRATEGY, TAKASHI_DEMO_MIN_SCORE, ICHIMOKU_RECUO21_STRATEGY, DEMO_ENTRY_STRATEGIES, DEMO_STANDALONE_INDICATORS } from '../_shared/demo-226-policy.ts';
-import { demoContinuation, demoCeiling, DEMO_CEILING, demoLearningAdjustment, demoAssetAdjustment, demoLearnedReject, demoScoreAllowed, demoFinalScore, combinedLearnedScore, chartFeatures, chartPatternAdjustment, demoPreferredPatternDistance, chooseDemoCandidate, DEMO_CONTINUATION, DEMO_REFERENCE_SIGNAL, similarToReference, similarToAnyReference, type DemoCandidate } from '../_shared/demo-continuation.ts';
+import { demoCohort, preferredDemoCohort, ICHIMOKU_RECUO21_STRATEGY, DEMO_ENTRY_STRATEGIES, DEMO_STANDALONE_INDICATORS } from '../_shared/demo-226-policy.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { forcaAntecipada, FORCA_ANTECIPADA } from '../_shared/forca-antecipada.ts';
@@ -26,12 +25,9 @@ import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '..
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
 import { demoRejectionReason, type RejectionReason } from '../_shared/demo-rejection.ts';
-import { demoWinningPatternMatch, demoDisplayedTargetScore } from '../_shared/demo-continuation.ts';
-import { demoEntryReason } from '../_shared/demo-entry-authorization.ts';
 import { DEMO_MID_CANDLE } from '../_shared/demo-mid-candle.ts';
 import { preparedDemoOrder } from '../_shared/prepared-demo-order.ts';
 import { DEMO_TEST_AMOUNT } from '../_shared/demo-test-policy.ts';
-import { readTakashiRecentOrders, takashiRecentEvidence, takashiRecentAdjustment } from '../_shared/takashi-recent-learning.ts';
 import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_shared/broker-session-cache.ts';
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
@@ -206,64 +202,7 @@ Deno.serve(async (req) => {
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
   const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
-  // Own recent broker evidence loads during preparation, not after the :00 candle request.
-  const takashiRecentRead = readTakashiRecentOrders(async(from,to)=>{
-    const {data,error}=await supabase.from('iq_demo_test_orders')
-      .select('signal_id,entry_strategy,asset,direction,entry_minute,settled_at,status,account_type,iq_option_id,result')
-      .eq('entry_strategy',TAKASHI_BNF).eq('status','confirmed').in('account_type',['PRACTICE','REAL'])
-      .not('iq_option_id','is',null).in('result',['win','loss'])
-      .gte('entry_minute',new Date(targetMs-14*86400000).toISOString())
-      .lt('entry_minute',new Date(targetMs).toISOString())
-      .order('entry_minute',{ascending:false}).order('id').range(from,to);
-    if(error)throw error;return data||[];
-  }).then(data=>({data,error:null})).catch(()=>({data:[],error:'unavailable'}));
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
-  // Fetch independent Demo learning inputs while broker login/candles are in flight.
-  const demoSince = new Date(Date.now()-14*86400000).toISOString();
-  const demoHistPromise = supabase.from('iq_demo_test_orders').select('entry_strategy,entry_minute,result,profit,asset,direction').neq('entry_strategy',DEMO_MID_CANDLE)
-    .eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss'])
-    .gte('entry_minute',demoSince).order('entry_minute',{ascending:false}).limit(1000).then(r=>r);
-  // Real principal IQ entries and their confirmed results also teach the scorer (heavier weight).
-  const realHistPromise = supabase.from('operation_results')
-    .select('entry_strategy,asset,direction,result,created_at')
-    .not('timeframe','in','("TEST","MT5")').in('result',['win','loss'])
-    .not('iq_option_id','is',null).not('iq_option_id','like','mt5-%').not('iq_option_id','ilike','test%')
-    .gte('created_at',demoSince).order('created_at',{ascending:false}).limit(1000)
-    .then(r=>({...r,data:(r.data||[]).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:x.result==='win'?1:-1,asset:x.asset}))}));
-  // Rejected Demo candidates whose live-price TEST outcome is known also teach the scorer (half weight).
-  const rejectedHistPromise = (async()=>{
-    const {data,error}=await supabase.from('operation_results').select('signal_id,entry_strategy,asset,result,profit,created_at')
-      .eq('timeframe','TEST').in('result',['win','loss']).gte('created_at',demoSince)
-      .order('created_at',{ascending:false}).limit(1000);
-    if(error||!data?.length)return [];
-    const ids=new Set<string>();
-    for(let i=0;i<data.length;i+=200){
-      const r=await supabase.from('demo_selection_rejections').select('signal_id').in('signal_id',data.slice(i,i+200).map(x=>x.signal_id));
-      if(r.error)return [];
-      for(const x of r.data||[])ids.add(x.signal_id);
-    }
-    return data.filter(x=>ids.has(x.signal_id)).map(x=>({entry_strategy:x.entry_strategy,entry_minute:x.created_at,result:x.result,profit:Number(x.profit)||0,asset:x.asset}));
-  })().catch(()=>[]);
-  const refPromise = supabase.from('iq_demo_test_candidates').select('entry_minute,direction,candles').eq('signal_id',DEMO_REFERENCE_SIGNAL).maybeSingle().then(r=>r);
-  const chartPromise = (async()=>{
-    const chartRead = await supabase.from('iq_demo_test_candidates').select('signal_id,asset,entry_minute,direction,candles,score')
-      .neq('entry_strategy',DEMO_MID_CANDLE).not('candles','is',null).gte('entry_minute',demoSince)
-      .lt('entry_minute',new Date(Math.floor(Date.now()/60000)*60000-60000).toISOString())
-      .order('entry_minute',{ascending:false}).limit(1000);
-    const ids=(chartRead.data||[]).map(r=>r.signal_id);
-    const chartOut=ids.length ? await supabase.from('iq_demo_test_orders').select('signal_id,result').in('signal_id',ids).eq('status','confirmed').not('iq_option_id','is',null).in('result',['win','loss']) : {data:[]};
-    const outcome=new Map((chartOut.data||[]).map(r=>[r.signal_id,r.result]));
-    return (chartRead.data||[]).flatMap(r=>{const res=outcome.get(r.signal_id);
-      const f=res&&chartFeatures(r.candles as any[],Date.parse(r.entry_minute)/1000,r.direction);return f?[{f,result:res,score:r.score,signal_id:r.signal_id,asset:r.asset,entry_minute:r.entry_minute}]:[];});
-  })();
-  const historyPromise = supabase.from('operation_results')
-    .select('asset, direction, entry_strategy, result, created_at')
-    .eq('timeframe', 'TEST').in('result', ['win', 'loss'])
-    .neq('entry_strategy', FORCE_FIRST_TEST).neq('entry_strategy', TAKASHI_BNF)
-    .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString())
-    .order('created_at', { ascending: false }).limit(500)
-    .abortSignal(AbortSignal.timeout(1500)).then(result => result);
-  const newlySettled: LearningOutcome[] = [];
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
     // Do not spend the entire minute retrying an unavailable HTTP gateway.
@@ -306,8 +245,6 @@ Deno.serve(async (req) => {
         .eq('id', o.id).eq('result', OPEN).select('id');
       if (!upd?.length) continue;
       resolved++;
-      if (o.entry_strategy !== FORCE_FIRST_TEST && o.entry_strategy !== TAKASHI_BNF) newlySettled.push({ asset: o.asset, direction: o.direction, entry_strategy: o.entry_strategy,
-        result: outcome.result, created_at: o.created_at });
       if (o.telegram_sent && o.entry_strategy !== FORCE_FIRST_TEST && o.entry_strategy !== TAKASHI_BNF) {
         const hh = new Date(o.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
         const head = outcome.result === 'win' ? '✅ RESULTADO: WIN' : outcome.result === 'loss' ? '❌ RESULTADO: LOSS' : '⚖️ RESULTADO: EMPATE';
@@ -507,21 +444,8 @@ Deno.serve(async (req) => {
   }
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
-  const historyRead = await historyPromise;
-  if (historyRead.error) console.error('Recent learning history unavailable:', historyRead.error.message);
-  const history = [...newlySettled, ...(historyRead.data || [])]
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
-    .filter((row, index, all) => all.findIndex(other => other.asset === row.asset
-      && other.created_at === row.created_at && other.entry_strategy === row.entry_strategy) === index);
-  const rows: any[] = [];
   const demoPatterns: DemoCandidate[] = [];
   const assetAnalyses = new Map<string, DemoAssetAnalysis>();
-  const recentTakashi = await takashiRecentRead;
-  if(recentTakashi.error)console.error('Takashi recent learning unavailable');
-  const learningObservedMs=Date.now();
-  const takashiHistory=[...previousPending,...recentTakashi.data];
-  const ownEvidence=takashiRecentEvidence(takashiHistory,targetMs,learningObservedMs);
-  console.log('Takashi recent learning:',JSON.stringify({samples:ownEvidence.length,wins:ownEvidence.filter(r=>r.result==='win').length,losses:ownEvidence.filter(r=>r.result==='loss').length}));
   const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
     const prior=cs.filter(k=>k.t<curMin).slice(-60);
@@ -540,27 +464,19 @@ Deno.serve(async (req) => {
     confluenceGates[gate] = (confluenceGates[gate] || 0) + 1;
     if (check.volumeSource) confluenceGates[`vol_${check.volumeSource}`] = (confluenceGates[`vol_${check.volumeSource}`] || 0) + 1;
     const takashi = 'failed' in check ? null : check;
-    // Nov 3 2026 (user): Takashi no longer enters the Demo; its gate diagnostics stay logged.
-    if (takashi && demoCohort(0, TAKASHI_BNF) !== null) demoPatterns.push({
-      signal_id: `takashi-bnf-v1-${asset}-${curMin}`, asset, direction: takashi.direction,
-      entry_strategy: TAKASHI_BNF, created_at: new Date(curMin * 1000).toISOString(),
-      // Same confluence/body base as other indicators; never assign the target score.
-      _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, direction]) => direction === takashi.direction).length)
-        + takashiRecentAdjustment(takashiHistory, { asset, direction: takashi.direction }, targetMs, learningObservedMs),
-    });
     // Ichimoku + Recuo na média 21 combined: both must fire on the same closed candle, same direction.
     const combined = ichimokuRecuo21Direction(fired);
     if (combined) demoPatterns.push({
       signal_id: `demo-ichimoku-recuo21-v1-${asset}-${curMin}`, asset, direction: combined,
       entry_strategy: ICHIMOKU_RECUO21_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
-      _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === combined).length),
+      _score: Number.NaN, // No note is calculated; legacy internal shape only.
     });
     // Tendência + Vela de força + Recuo combined: all three on the same closed candle, same direction.
     const tfr = tendenciaForcaRecuoDirection(fired);
     if (tfr) demoPatterns.push({
       signal_id: `demo-tendencia-forca-recuo-v1-${asset}-${curMin}`, asset, direction: tfr,
       entry_strategy: TENDENCIA_FORCA_RECUO_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
-      _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === tfr).length),
+      _score: Number.NaN, // No note is calculated; legacy internal shape only.
     });
     // Every detected indicator also runs as a separate Demo-only strategy (user, Nov 3 2026).
     for (const [strategy, direction] of fired) {
@@ -568,7 +484,7 @@ Deno.serve(async (req) => {
       demoPatterns.push({
         signal_id: `demo-${strategy.toLowerCase()}-v1-${asset}-${curMin}`, asset, direction,
         entry_strategy: strategy, created_at: new Date(curMin * 1000).toISOString(),
-        _score: takashiBaseScore(closed[closed.length - 1], fired.filter(([, d]) => d === direction).length),
+        _score: Number.NaN, // No note is calculated; legacy internal shape only.
       });
     }
   }
@@ -589,30 +505,21 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  const [demoHist,chartSamples,refRow,realHist,rejectedHist] = await Promise.all([demoHistPromise,chartPromise,refPromise,realHistPromise,rejectedHistPromise]);
-  if (demoHist.error) console.error('Demo learning unavailable:',demoHist.error.code);
-  if (realHist.error) console.error('Real IQ learning unavailable:',realHist.error.code);
-  console.log('Rejected TEST outcomes in learning:',rejectedHist.length);
-  // Learned gate: candidates whose strategy/hour/asset/chart history is strongly losing are dropped.
+  // No historical note analysis participates in candidate selection.
   const rejections: any[] = [];
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
-    entry_strategy:c.entry_strategy,score:Number.isFinite(c._score)?c._score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-rotation-v20',
+    entry_strategy:c.entry_strategy,score:null,
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-no-notes-v21',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
-  const demoPool = [...rows,...demoPatterns].flatMap(c=>{
-    const learn=combinedLearnedScore(demoHist.data||[],realHist.data||[],
-      chartPatternAdjustment(chartSamples,chartFeatures(series.get(c.asset)||[],curMin,c.direction)),
-      c.entry_strategy,c.asset,curMin*1000,rejectedHist);
-    return[{...c,_score:demoFinalScore(c._score,learn,c.entry_strategy),_learned:learn}];});
+  const demoPool = demoPatterns;
   const demoEligible = demoPool.flatMap(c => {
-    assetAnalyses.set(c.asset,{asset:c.asset,direction:c.direction,score:Number.isFinite(c._score)?c._score:null,state:'eligible'});
-    const cohort=demoCohort(c._score,c.entry_strategy);
+    assetAnalyses.set(c.asset,{asset:c.asset,direction:c.direction,score:null,state:'eligible'});
+    const cohort=demoCohort(undefined,c.entry_strategy);
     if(!cohort){
-      if(c.entry_strategy===TAKASHI_STRATEGY){reject(c,{code:'takashi_demo_score',details:{score:Number.isFinite(c._score)?c._score:null,minimum:TAKASHI_DEMO_MIN_SCORE}});return[];}
-      if(!demoDisplayedTargetScore(c._score)){reject(c,{code:'score_not_226',details:{score:c._score}});return[];}
-      reject(c,{code:'strategy_not_226_allowed',details:{score:c._score,strategy:c.entry_strategy}});return[];
+      reject(c,{code:'strategy_not_enabled',details:{strategy:c.entry_strategy}});
+      return [];
     }
     const market = Object.entries<any>(preparedActives).find(([, a]) => symbolOf(a.name || '') === c.asset);
     if (!market || !preparedDemoOrder(c, DEMO_TEST_AMOUNT, preparedBalanceId, Number(market[0]), market[1], Date.now())) {
@@ -621,7 +528,7 @@ Deno.serve(async (req) => {
       reject(c,{code:'market_unavailable',details:{asset:c.asset}});
       return [];
     }
-    // Restore prior finite-note eligibility; historical learning still adjusts the note.
+    // Preserve market availability and strategy rules; no note eligibility gate.
     const commission = market[1]?.option?.profit?.commission;
     const _payout = typeof commission === 'number' ? (100-commission)/100 : null;
     return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null,_payout}];
@@ -633,9 +540,8 @@ Deno.serve(async (req) => {
   // Combined Ichimoku + Recuo 21 first; otherwise rotate Tendência+Força+Recuo -> Ichimoku -> Recuo 21.
   const demoWinner = selectDemoByRotation(demoEligible, lastCandidate.data?.entry_strategy);
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  console.log('Demo rotation selection:',JSON.stringify({strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,score:demoWinner?._score??null}));
+  console.log('Demo rotation selection:',JSON.stringify({strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,scoreAnalysis:false}));
   console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
-  console.log('Demo displayed 2.26 authorization:',JSON.stringify({eligible:demoEligible.filter(c=>demoDisplayedTargetScore(c._score)).length,selected:demoWinner?.signal_id??null}));
   for(const c of demoEligible){
     const reason:RejectionReason|null=demoWinner&&demoWinner.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:demoWinner.signal_id}}:null;
     if(reason)reject(c,reason);
@@ -655,13 +561,13 @@ Deno.serve(async (req) => {
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
-      entry_strategy:demoWinner.entry_strategy,score:demoWinner._score,
+      entry_strategy:demoWinner.entry_strategy,score:null,
       pattern_match:demoEligible.find(c=>c.signal_id===demoWinner.signal_id)?._patternMatch??null,
       candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
-      console.log('Demo current-analysis selection:', JSON.stringify({score:demoWinner._score,historicalNotePriority:false}));
+      console.log('Demo current-analysis selection:', JSON.stringify({scoreAnalysis:false}));
       // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
       const setting = await amountRead;
       const base = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
@@ -747,5 +653,5 @@ Deno.serve(async (req) => {
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));
   // @ts-ignore Hosted background runtime: chart writes must not delay a fresh entry.
   if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(chartTask);else await chartTask;
-  return Response.json({ success: true, assets: series.size, resolved, strategy: TAKASHI_BNF, selected: demoWinner?.signal_id ?? null, score: demoWinner?._score ?? null }, { headers: cors });
+  return Response.json({ success: true, assets: series.size, resolved, strategy: TAKASHI_BNF, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
 });

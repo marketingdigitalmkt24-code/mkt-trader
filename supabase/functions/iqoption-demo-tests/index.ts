@@ -6,10 +6,7 @@ import { iqMarketOpen } from '../_shared/iq-market-open.ts';
 import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount } from './policy.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
-import { demoDisplayedTargetScore } from '../_shared/demo-continuation.ts';
 import { demoAlternationAuthorized } from '../_shared/demo-226-policy.ts';
-import { verifyDemoWinScore } from '../_shared/demo-win-scores.ts';
-import { verifyDemoWinningPattern } from '../_shared/demo-entry-authorization.ts';
 import { DEMO_MID_CANDLE, midCandleSignal, midCandleTime, freshMidCandle, midCandleExpiry } from '../_shared/demo-mid-candle.ts';
 const schema = z.object({ candidate: z.string().max(200).optional(), mode:z.literal('mid').optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
 const reply = (body: unknown, status = 200) => {
@@ -29,16 +26,6 @@ Deno.serve(async req => {
  const url = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
  if (!url || !key) return reply({ error: 'Service unavailable' },503);
  const db = createClient(url,key);
- const winScoreEvidence=(score:unknown)=>verifyDemoWinScore(score,async(value,from,to)=>{
-   const {data,error}=await db.from('iq_demo_test_candidates').select('signal_id,score')
-     .neq('entry_strategy',DEMO_MID_CANDLE).eq('score',value).order('signal_id').range(from,to);
-   if(error)throw error;return data||[];
- },async ids=>{
-   const {data,error}=await db.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result')
-     .in('signal_id',ids).eq('status','confirmed').in('account_type',['PRACTICE','REAL'])
-     .eq('result','win').not('iq_option_id','is',null);
-   if(error)throw error;return data||[];
- });
  const scheduler = req.headers.get('x-scheduler-token');
  const serviceAuthorized = req.headers.get('Authorization') === `Bearer ${key}`;
  let authorized = serviceAuthorized;
@@ -81,15 +68,7 @@ Deno.serve(async req => {
  const error = selectedResult?.error;
  const data = selected ? {...selected,created_at:selected.entry_minute,timeframe:'TEST'} : null;
  if (data && freshDemoCandidate(data,Date.now())) {
-    const displayedAuthorized=!mid && demoAlternationAuthorized(data.score, data.entry_strategy);
-   const patternEvidence=displayedAuthorized ? false : await verifyDemoWinningPattern(data,async id=>{
-     const {data:reference,error}=await db.from('iq_demo_test_candidates').select('signal_id,entry_minute,direction,candles,score').eq('signal_id',id).maybeSingle();
-     if(error)throw error;return reference;
-   },async ids=>{
-     const {data:orders,error}=await db.from('iq_demo_test_orders').select('signal_id,status,account_type,iq_option_id,result').in('signal_id',ids);
-     if(error)throw error;return orders||[];
-   });
-    if(mid ? patternEvidence && data.signal_id===parsed.data.candidate : displayedAuthorized) candidate=data;
+    if (!mid && demoAlternationAuthorized(undefined, data.entry_strategy)) candidate=data;
  }
  else console.log('Demo candidate skipped:', JSON.stringify({error:error?.code,found:!!data,created_at:data?.created_at,timeframe:data?.timeframe,direction:data?.direction,now:new Date().toISOString()}));
  }
@@ -160,7 +139,7 @@ Deno.serve(async req => {
  if(finished)return;
  const expiry=mid?midCandleExpiry(candidate.created_at):Date.parse(candidate.created_at)/1000+60;
  const found=Object.entries<any>(d.msg?.turbo?.actives || {}).find(([,a])=>symbol(a.name || '')===candidate.asset && iqMarketOpen(a,Math.floor(Date.now()/1000),expiry));
- // Exact WIN score or recomputed confirmed winning pattern checked before reservation; recheck freshness.
+ // Strategy eligibility checked before reservation; recheck freshness.
  if(!found || !isFresh(candidate)) {
  requestHistory();
  writes.push(db.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).then(()=>{}));

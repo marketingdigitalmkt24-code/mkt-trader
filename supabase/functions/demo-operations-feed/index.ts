@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 
   let q = supabase
     .from("iq_demo_test_orders")
-    .select("signal_id, entry_minute, asset, direction, entry_strategy, amount, result, profit, settled_at")
+    .select("entry_minute, asset, direction, entry_strategy, amount, result, profit, settled_at")
     .eq("status", "confirmed")
     .eq("account_type", "PRACTICE")
     .in("result", ["win", "loss", "tie"]);
@@ -80,22 +80,11 @@ Deno.serve(async (req) => {
   }
 
   const rows = orders ?? [];
-  const scores = new Map<string, number>();
-  if (rows.length) {
-    const { data: cands, error: cErr } = await supabase
-      .from("iq_demo_test_candidates")
-      .select("signal_id, entry_minute, score")
-      .in("signal_id", rows.map((r) => r.signal_id));
-    if (cErr) console.error("demo-operations-feed candidates error", cErr.message);
-    for (const c of cands ?? []) scores.set(`${c.signal_id}|${new Date(c.entry_minute).toISOString()}`, c.score);
-  }
 
   const operations = rows.map((r) => {
     const t = new Date(r.entry_minute).toISOString();
-    const s = scores.get(`${r.signal_id}|${t}`);
     return {
       asset: r.asset,
-      score: s == null ? null : Math.round(s * 100) / 100,
       direction: r.direction,
       strategy: r.entry_strategy,
       amount: Number(r.amount),
@@ -109,7 +98,7 @@ Deno.serve(async (req) => {
   if (includeOpen) {
     const { data: open, error: oErr } = await supabase
       .from("iq_demo_test_orders")
-      .select("signal_id, entry_minute, asset, direction, entry_strategy, amount, expiration_time")
+      .select("entry_minute, asset, direction, entry_strategy, amount, expiration_time")
       .eq("status", "confirmed")
       .eq("account_type", "PRACTICE")
       .eq("result", "pending")
@@ -121,20 +110,10 @@ Deno.serve(async (req) => {
       return json({ error: "Query failed" }, 500);
     }
     const openRows = open ?? [];
-    const openScores = new Map<string, number>();
-    if (openRows.length) {
-      const { data: oc } = await supabase
-        .from("iq_demo_test_candidates")
-        .select("signal_id, entry_minute, score")
-        .in("signal_id", openRows.map((r) => r.signal_id));
-      for (const c of oc ?? []) openScores.set(`${c.signal_id}|${new Date(c.entry_minute).toISOString()}`, c.score);
-    }
     openOperations = openRows.map((r) => {
       const t = new Date(r.entry_minute).toISOString();
-      const s = openScores.get(`${r.signal_id}|${t}`);
       return {
         asset: r.asset,
-        score: s == null ? null : Math.round(s * 100) / 100,
         direction: r.direction,
         strategy: r.entry_strategy,
         amount: Number(r.amount),

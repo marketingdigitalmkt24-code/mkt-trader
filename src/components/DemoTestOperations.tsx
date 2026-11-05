@@ -41,11 +41,10 @@ export function DemoTestOperations() {
  const {data,count,error}=await supabase.from('iq_demo_test_orders').select('*',{count:'exact'}).eq('status','confirmed').not('iq_option_id','is',null).order('created_at',{ascending:false}).range(page*10,page*10+9);
  if(error)throw error;
  const ids=(data||[]).map(r=>r.signal_id);
- const {data:cand}=ids.length?await supabase.from('iq_demo_test_candidates').select('signal_id,candles,score,pattern_match').in('signal_id',ids):{data:[]};
+ const {data:cand}=ids.length?await supabase.from('iq_demo_test_candidates').select('signal_id,candles,pattern_match').in('signal_id',ids):{data:[]};
  const charts=new Map((cand||[]).map(c=>[c.signal_id,c.candles as Candle[]|null]));
- const scores=new Map((cand||[]).map(c=>[c.signal_id,Number(c.score)]));
  const patterns=new Map((cand||[]).filter(c=>c.pattern_match!=null).map(c=>[c.signal_id,c.pattern_match]));
- return {rows:data || [],count:count || 0,charts,scores,patterns};
+ return {rows:data || [],count:count || 0,charts,patterns};
  }});
  return <section className="mb-4 border-b border-border pb-4" aria-label="Últimas operações Demo">
  <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h4 className="text-xs font-medium">Últimas operações · Demo</h4><Badge variant="outline">DEMO · TESTE</Badge></div>
@@ -57,7 +56,7 @@ export function DemoTestOperations() {
   <span className="col-span-2 text-muted-foreground sm:col-span-4">Acumulado · {stats.data.pending} abertas · {stats.data.ties} empates</span>
  </div>}
  {isLoading?<p className="text-xs text-muted-foreground">Carregando ordens Demo…</p>:isError?<p role="alert" className="text-xs text-destructive">Não foi possível carregar as ordens Demo.</p>:!data?.rows.length?<p className="text-xs text-muted-foreground">Aguardando primeira ordem Demo confirmada.</p>:<div className="space-y-1">{data.rows.map(row=><HoverCard key={row.id} openDelay={150}><HoverCardTrigger asChild><div tabIndex={0} className="flex cursor-default flex-wrap items-center gap-2 rounded-md bg-secondary/30 p-2 text-xs hover:bg-secondary/60">
- <span className="font-medium">{row.asset}</span>{(()=>{const s=data.scores.get(row.signal_id);const v=s==null||Number.isNaN(s)?null:s;const cls=v==null?'border-border bg-secondary text-muted-foreground':v>=4?'border-call/40 bg-call/10 text-call':v>=2.5?'border-accent/40 bg-accent/10 text-accent':'border-border bg-secondary/60 text-foreground';return <span className={`rounded border px-1.5 py-0.5 font-mono text-sm font-bold leading-none ${cls}`} title="Nota do aprendizado da IA">nota {v==null?'—':v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>;})()}
+ <span className="font-medium">{row.asset}</span>
  <span className={row.direction==='CALL'?'text-call':'text-put'}>{row.direction}</span>
  {data.patterns.has(row.signal_id)?<Badge variant="outline" className="text-call" title="Correspondência registrada com o gráfico anterior de uma operação WIN confirmada">{demoStrategyNames[row.entry_strategy]??row.entry_strategy}</Badge>:<span className="text-muted-foreground">{demoStrategyNames[row.entry_strategy]??row.entry_strategy}</span>}
  <span className="text-muted-foreground font-mono text-[10px]">{Number(row.amount).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</span>

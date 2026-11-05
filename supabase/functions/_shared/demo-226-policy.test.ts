@@ -30,6 +30,6 @@ test('Demo always prefers Takashi', () => {
 test('Combined Ichimoku + Recuo 21 and the separate strategies all enter the Demo', () => {
   for (const strategy of ['ICHIMOKU_RECUO21','ICHIMOKU','RECUO_EMA21']) {
     expect(demoCohort(0.4,strategy)).toBe('indicator');
-    expect(demoAlternationAuthorized(Number.NaN,strategy)).toBe(false);
+    expect(demoAlternationAuthorized(Number.NaN,strategy)).toBe(true);
   }
 });

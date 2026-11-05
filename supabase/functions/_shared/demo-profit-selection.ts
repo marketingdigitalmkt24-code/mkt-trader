@@ -4,7 +4,7 @@ import type { DemoCandidate } from './demo-continuation.ts';
 // Nov 3 2026 00:48 BRT (user): no expected-profit / note ranking between strategies.
 // Ichimoku + Recuo 21 keeps priority whenever it has a candidate; otherwise the strategies take
 // turns in a fixed cycle, starting after the strategy that took the previous minute's slot.
-// Inside the chosen strategy, the highest note breaks ties between assets (then signal id).
+// Nov 5 2026: inside the chosen strategy, stable signal ID breaks ties; notes are ignored.
 export type StrategyOutcome = { entry_strategy: string; result: string };
 export type ProfitCandidate = DemoCandidate & { _payout?: number | null };
 
@@ -19,8 +19,7 @@ export function nextRotationOrder(previousStrategy: unknown): string[] {
 export function selectDemoByRotation<T extends ProfitCandidate>(candidates: T[], previousStrategy: unknown): T | null {
   const eligible = candidates.filter(c => demoCohort(c._score, c.entry_strategy) !== null);
   const best = (list: T[]) => [...list].sort((a, b) =>
-    (Number.isFinite(b._score) ? b._score : -Infinity) - (Number.isFinite(a._score) ? a._score : -Infinity)
-    || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
+    a.signal_id.localeCompare(b.signal_id))[0] ?? null;
   const priority = eligible.filter(c => c.entry_strategy === DEMO_PRIORITY_STRATEGY);
   if (priority.length) return best(priority);
   for (const strategy of nextRotationOrder(previousStrategy)) {

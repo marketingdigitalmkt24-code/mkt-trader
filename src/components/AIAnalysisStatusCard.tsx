@@ -12,7 +12,6 @@ interface SignalEntry {
   id: string;
   asset: string;
   type: string;
-  confluence_score: number;
   created_at: string;
   selected: boolean;
 }
@@ -104,11 +103,11 @@ export function AIAnalysisStatusCard() {
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       const [candidates, rejections, scan] = await Promise.all([
         supabase.from('iq_demo_test_candidates')
-          .select('signal_id,asset,direction,score,entry_minute')
+          .select('signal_id,asset,direction,entry_minute')
           .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO', 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.from('demo_selection_rejections')
-          .select('signal_id,asset,direction,score,entry_minute')
+          .select('signal_id,asset,direction,entry_minute')
           .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO', 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.functions.invoke('demo-analysis-status',{body:{}}),
@@ -117,11 +116,11 @@ export function AIAnalysisStatusCard() {
       const entries = new Map<string, SignalEntry>();
       for (const row of rejections.data ?? []) entries.set(row.signal_id, {
         id: row.signal_id, asset: row.asset, type: row.direction,
-        confluence_score: row.score ?? 0, created_at: row.entry_minute, selected: false,
+        created_at: row.entry_minute, selected: false,
       });
       for (const row of candidates.data ?? []) entries.set(row.signal_id, {
         id: row.signal_id, asset: row.asset, type: row.direction,
-        confluence_score: row.score, created_at: row.entry_minute, selected: true,
+        created_at: row.entry_minute, selected: true,
       });
       const data = [...entries.values()].sort((a,b) => Date.parse(b.created_at) - Date.parse(a.created_at));
       if (!mounted.current) return;
@@ -268,8 +267,6 @@ export function AIAnalysisStatusCard() {
                   <span className="font-medium">{analysis.asset}</span>
                   <span className="text-[10px] text-muted-foreground">
                     {analysis.direction && <span className={analysis.direction==='CALL'?'text-call':'text-put'}>{analysis.direction} · </span>}
-                    {typeof analysis.score==='number' && Number.isFinite(analysis.score)
-                      ? `nota ${analysis.score.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} · ` : ''}
                     {analysis.state==='incomplete_candles'?'Velas incompletas':analysis.state==='market_unavailable'?'Compra indisponível':analysis.state==='eligible'?'Sinal Takashi':'Sem sinal Takashi'}
                   </span>
                 </div>
@@ -294,12 +291,6 @@ export function AIAnalysisStatusCard() {
                   <span className="font-medium">{signal.asset}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className={cn(
-                    "font-mono text-[10px]",
-                    signal.selected ? "text-call" : "text-muted-foreground"
-                  )}>
-                    nota {Number.isFinite(signal.confluence_score) ? signal.confluence_score.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                  </span>
                   <span className="text-muted-foreground text-[10px]">
                     {new Date(signal.created_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
                   </span>

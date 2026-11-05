@@ -111,7 +111,6 @@ export function DemoWinningPatterns() {
    <span className="font-medium">{row.asset}</span>
    <span className={row.direction === 'CALL' ? 'text-call' : 'text-put'}>{row.direction}</span>
    <span className="text-muted-foreground">{demoStrategyNames[row.entry_strategy] ?? row.entry_strategy}</span>
-   {row.rejected && <span className="font-mono text-muted-foreground">{row.score != null && Number.isFinite(row.score) ? `Nota ${row.score.toFixed(2).replace('.', ',')}` : 'Sem nota registrada'}</span>}
    {row.amount != null && <span className="font-mono text-[10px] text-muted-foreground">{money(Number(row.amount))}</span>}
    <span className={`ml-auto font-mono ${(row.rejected ? row.testResult : row.result) === 'win' ? 'text-call' : (row.rejected ? row.testResult : row.result) === 'loss' ? 'text-put' : 'text-muted-foreground'}`}>{row.rejected ? (row.testResult === 'win' || row.testResult === 'loss' || row.testResult === 'tie' ? `REJEITADA · ${row.testResult === 'tie' ? 'EMPATE' : row.testResult.toUpperCase()} (teste)` : 'REJEITADA · sem resultado') : row.result === 'pending' ? 'ABERTA' : `${row.result.toUpperCase()} · ${money(Number(row.profit))}`}</span>
   </div></HoverCardTrigger><HoverCardContent className="w-80 max-w-[calc(100vw-2rem)]"><p className="mb-2 text-xs font-medium">{row.asset} · {demoStrategyNames[row.entry_strategy] ?? row.entry_strategy}</p>

@@ -25,3 +25,20 @@ test('others rotate after the previous slot, ignoring note and profit', () => {
 test('a strategy without a signal that minute passes its turn to the next one', () => {
   expect(selectDemoByRotation([c('t', 'TENDENCIA_FORCA_RECUO'), c('r', 'RECUO_EMA21')], 'TENDENCIA_FORCA_RECUO')?.signal_id).toBe('r');
 });
+
+test('notes never choose the asset inside any of the four strategies', () => {
+  for (const strategy of ['TENDENCIA_FORCA_RECUO', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21']) {
+    const low = c('a', strategy, 1);
+    const high = c('z', strategy, 99);
+    expect(selectDemoByRotation([high, low], null)?.signal_id).toBe('a');
+    expect(selectDemoByRotation([{...high, _score: -999}, {...low, _score: Number.NaN}], null)?.signal_id).toBe('a');
+  }
+});
+
+test('missing or non-finite notes never reject an active strategy', () => {
+  for (const strategy of ['TENDENCIA_FORCA_RECUO', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21']) {
+    for (const score of [null, undefined, Number.NaN, -100, Infinity]) {
+      expect(demoCohort(score, strategy)).toBe('indicator');
+    }
+  }
+});

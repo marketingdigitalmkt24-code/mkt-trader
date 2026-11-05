@@ -6,9 +6,7 @@ import { AutoTradingCard } from '@/components/AutoTradingCard';
 import { IQOptionSettingsCard } from '@/components/IQOptionSettingsCard';
 import { UserManagementCard } from '@/components/UserManagementCard';
 import { CopyTradingCard } from '@/components/CopyTradingCard';
-import { DemoScoreHistory } from '@/components/DemoScoreHistory';
 import { DemoWinningPatterns } from '@/components/DemoWinningPatterns';
-import { DemoStrategyScores } from '@/components/DemoStrategyScores';
 import { useAutoTrading } from '@/hooks/useAutoTrading';
 import { useIQOptionConnection } from '@/hooks/useIQOptionConnection';
 import { useMasterIQResults } from '@/hooks/useMasterIQResults';
@@ -26,9 +24,7 @@ const MENU = [
   { value: 'brokers', label: 'Corretoras', icon: Zap },
   { value: 'copy', label: 'Copy Trading', icon: Copy },
   { value: 'users', label: 'Usuários', icon: Users },
-  { value: 'score-history', label: 'Histórico por nota', icon: BarChart3 },
   { value: 'winning-patterns', label: 'Padrões vencedores', icon: TrendingUp },
-  { value: 'strategies', label: 'Notas com WIN', icon: BarChart3 },
 ];
 
 const Admin = () => {
@@ -119,9 +115,7 @@ const Admin = () => {
           </Sheet>
 
           <TabsContent value="dashboard"><TradingDashboard /></TabsContent>
-          <TabsContent value="score-history"><DemoScoreHistory /></TabsContent>
           <TabsContent value="winning-patterns"><DemoWinningPatterns /></TabsContent>
-          <TabsContent value="strategies"><DemoStrategyScores /></TabsContent>
 
           {/* Auto Trading Tab */}
           <TabsContent value="trading" className="space-y-4">

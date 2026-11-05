@@ -561,7 +561,8 @@ Deno.serve(async (req) => {
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
-      entry_strategy:demoWinner.entry_strategy,score:null,
+      // Required legacy column: neutral placeholder, never calculated or used for selection.
+      entry_strategy:demoWinner.entry_strategy,score:0,
       pattern_match:demoEligible.find(c=>c.signal_id===demoWinner.signal_id)?._patternMatch??null,
       candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
     if (error) console.error('Demo candidate write failed:',error.code);

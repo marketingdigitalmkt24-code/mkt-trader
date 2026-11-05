@@ -1,7 +1,7 @@
 # Retirar análise por nota (05/11/2026)
-- [ ] Remover notas da escolha de todos os sinais ativos sem alterar indicadores, revezamento ou controles financeiros.
-- [ ] Remover abas de notas e nota da lista Últimas operações Demo, preservando registros.
-- [ ] Rodar testes, publicar funções alteradas e conferir painel autenticado.
+- [x] Remover notas da escolha de todos os sinais ativos sem alterar indicadores, revezamento ou controles financeiros.
+- [x] Remover abas de notas e nota da lista Últimas operações Demo, preservando registros.
+- [x] 499 testes passaram; funções alteradas publicadas; menu e duas páginas Demo conferidos com administrador, sem notas. Nova entrada natural após publicação ainda não observada; nenhuma ordem forçada.
 
 # Telegram no novo workspace (03/11/2026)
 - [x] Conexão "MKT TRADER | Canal" (gateway) vinculada ao projeto; bot @BlazeBilionario_bot confirmado por leitura e canal MKT TRADER (@MktTarder) acessível; mensagem de teste publicada com sucesso.

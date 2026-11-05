@@ -35,11 +35,12 @@ export function isDemoIndicatorStrategy(strategy: unknown): boolean {
 // so retiring a strategy from new Demo entries never breaks gale/streak continuity.
 export const DEMO_ENTRY_STRATEGIES = [TAKASHI_STRATEGY, ...DEMO_INDICATOR_STRATEGIES, 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ'];
 export type DemoCohort = 'takashi' | 'indicator' | 'score226' | 'antecipada';
-export function demoCohort(score: number, strategy: unknown): DemoCohort | null {
-  if (isDemoIndicatorStrategy(strategy)) return Number.isFinite(score) ? 'indicator' : null;
+export function demoCohort(_score: unknown, strategy: unknown): DemoCohort | null {
+  // Nov 5 2026: notes no longer authorize, reject or rank any active Demo signal.
+  if (isDemoIndicatorStrategy(strategy)) return 'indicator';
   return null;
 }
-export function demoAlternationAuthorized(score: number, strategy: unknown): boolean {
+export function demoAlternationAuthorized(score: unknown, strategy: unknown): boolean {
   return demoCohort(score, strategy) !== null;
 }
 // Rotate Takashi -> 2,26 -> Força antecipada; fall back so a minute is never wasted.

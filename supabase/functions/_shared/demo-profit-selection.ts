@@ -19,8 +19,9 @@ export function nextRotationOrder(previousStrategy: unknown): string[] {
 
 export function selectDemoByRotation<T extends ProfitCandidate>(candidates: T[], previousStrategy: unknown, previousSlot?: unknown, previousChallenger?: unknown): T | null {
   const eligible = candidates.filter(c => demoCohort(c._score, c.entry_strategy) !== null);
+  // Padrão vencedor: most similar WINs first (user, Nov 10 2026); others keep stable signal ID.
   const best = (list: T[]) => [...list].sort((a, b) =>
-    a.signal_id.localeCompare(b.signal_id))[0] ?? null;
+    (b._patternSimilarWins ?? 0) - (a._patternSimilarWins ?? 0) || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
   const challengers = eligible.filter(c => (DEMO_CHALLENGERS as readonly unknown[]).includes(c.entry_strategy));
   const challengerAt = (DEMO_CHALLENGERS as readonly unknown[]).indexOf(previousChallenger);
   const pickChallenger = () => {

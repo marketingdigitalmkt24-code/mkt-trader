@@ -1,5 +1,5 @@
 export const DEMO_CONTINUATION = 'CONTINUACAO_QUEDA_V1';
-export type DemoCandidate = { signal_id: string; asset: string; direction: string; entry_strategy: string; created_at: string; _score: number; _preferredPatternDistance?: number };
+export type DemoCandidate = { signal_id: string; asset: string; direction: string; entry_strategy: string; created_at: string; _score: number; _preferredPatternDistance?: number; _patternSimilarWins?: number };
 type Candle = { t: number; o: number; c: number; h: number; l: number };
 // Provisional prospective rule, not an accuracy claim. Features stop before entry.
 export function demoContinuation(candles: Candle[], entry: number) {

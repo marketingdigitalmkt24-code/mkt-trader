@@ -538,12 +538,12 @@ Deno.serve(async (req) => {
       const matches=(['CALL','PUT'] as const).flatMap(direction=>{
         const match=matchWinningPattern(patternSamples,cs,curMin,direction,patternMinMovement);
         return match?[{direction,match}]:[];
-      }).sort((a,b)=>a.match.distance-b.match.distance||a.direction.localeCompare(b.direction));
+      }).sort((a,b)=>b.match.similar_wins-a.match.similar_wins||a.match.distance-b.match.distance||a.direction.localeCompare(b.direction));
       const closest=matches[0];
       if(closest){
         const signal_id=`demo-padrao-vencedor-v1-${asset}-${curMin}`;
         demoPatterns.push({signal_id,asset,direction:closest.direction,entry_strategy:DEMO_WIN_PATTERN,
-          created_at:new Date(curMin*1000).toISOString(),_score:Number.NaN});
+          created_at:new Date(curMin*1000).toISOString(),_score:Number.NaN,_patternSimilarWins:closest.match.similar_wins});
         patternMatches.set(signal_id,closest.match);
       }
     }

@@ -20,6 +20,30 @@ function chartCandles(value: unknown): PatternCandle[] | null {
  return valid.length ? valid : null;
 }
 
+// Charts and TEST outcomes load only when a row is opened, keeping the list fast.
+function PatternRowChart({ row }: { row: Operation }) {
+ const q = useQuery({
+  queryKey: ['demo-winning-pattern-chart', row.rejected, row.id], staleTime: 60000,
+  queryFn: async () => {
+   if (row.rejected) {
+    const [c, t] = await Promise.all([
+     supabase.from('demo_selection_rejections').select('candles').eq('id', row.id).maybeSingle(),
+     supabase.from('operation_results').select('result').eq('timeframe', 'TEST').eq('signal_id', row.signal_id).limit(1),
+    ]);
+    if (c.error) throw c.error; if (t.error) throw t.error;
+    return { candles: chartCandles(c.data?.candles), test: t.data?.[0] ? String(t.data[0].result).toLowerCase() : undefined };
+   }
+   const { data, error } = await supabase.from('iq_demo_test_candidates').select('candles').eq('signal_id', row.signal_id).limit(1);
+   if (error) throw error;
+   return { candles: chartCandles(data?.[0]?.candles), test: undefined };
+  },
+ });
+ if (q.isPending) return <p className="text-xs text-muted-foreground">Carregando gráfico…</p>;
+ if (q.isError) return <p className="text-xs text-destructive">Gráfico indisponível.</p>;
+ return <>{row.rejected ? <DemoPatternChart candles={preEntryCandles(q.data.candles, row.entry_minute)} direction={row.direction} /> : <MiniChart candles={q.data.candles} direction={row.direction} entry={Date.parse(row.entry_minute) / 1000} />}
+  {row.rejected && <p className="mt-1 text-[10px] text-muted-foreground">Teste: {q.data.test === 'win' || q.data.test === 'loss' ? q.data.test.toUpperCase() : q.data.test === 'tie' ? 'EMPATE' : 'sem resultado'}</p>}</>;
+}
+
 export function DemoWinningPatterns() {
  const { user } = useAuth();
  const queryClient = useQueryClient();
@@ -78,21 +102,7 @@ export function DemoWinningPatterns() {
     })(),
    ]);
    const rows = [...orders.rows, ...rejections.rows].sort((a, b) => Date.parse(b.entry_minute) - Date.parse(a.entry_minute) || b.id.localeCompare(a.id)).slice(page * PAGE, limit);
-   const executed = rows.filter(row => !row.rejected).map(row => row.signal_id);
-   const rejected = rows.filter(row => row.rejected).map(row => row.id);
-   const rejectedSignals = rows.filter(row => row.rejected).map(row => row.signal_id);
-   const [charts, rejectedCharts, testResults] = await Promise.all([
-    executed.length ? supabase.from('iq_demo_test_candidates').select('signal_id,candles').in('signal_id', executed) : Promise.resolve({ data: [], error: null }),
-    rejected.length ? supabase.from('demo_selection_rejections').select('id,candles').in('id', rejected) : Promise.resolve({ data: [], error: null }),
-    rejectedSignals.length ? supabase.from('operation_results').select('signal_id,result').eq('timeframe', 'TEST').in('signal_id', rejectedSignals) : Promise.resolve({ data: [], error: null }),
-   ]);
-   if (charts.error) throw charts.error;
-   if (rejectedCharts.error) throw rejectedCharts.error;
-   if (testResults.error) throw testResults.error;
-   const snapshots = new Map((charts.data ?? []).map(row => [row.signal_id, chartCandles(row.candles)]));
-   const rejectionSnapshots = new Map((rejectedCharts.data ?? []).map(row => [row.id, chartCandles(row.candles)]));
-   const testOutcome = new Map((testResults.data ?? []).map(row => [row.signal_id, String(row.result).toLowerCase()]));
-   return { count: orders.count + rejections.count, rows: rows.map(row => ({ ...row, testResult: row.rejected ? testOutcome.get(row.signal_id) : undefined, candles: row.rejected ? rejectionSnapshots.get(row.id) : snapshots.get(row.signal_id) })) };
+   return { count: orders.count + rejections.count, rows };
   },
  });
  const pages = Math.max(1, Math.ceil((query.data?.count ?? 0) / PAGE));
@@ -112,9 +122,9 @@ export function DemoWinningPatterns() {
    <span className={row.direction === 'CALL' ? 'text-call' : 'text-put'}>{row.direction}</span>
    <span className="text-muted-foreground">{demoStrategyNames[row.entry_strategy] ?? row.entry_strategy}</span>
    {row.amount != null && <span className="font-mono text-[10px] text-muted-foreground">{money(Number(row.amount))}</span>}
-   <span className={`ml-auto font-mono ${(row.rejected ? row.testResult : row.result) === 'win' ? 'text-call' : (row.rejected ? row.testResult : row.result) === 'loss' ? 'text-put' : 'text-muted-foreground'}`}>{row.rejected ? (row.testResult === 'win' || row.testResult === 'loss' || row.testResult === 'tie' ? `REJEITADA · ${row.testResult === 'tie' ? 'EMPATE' : row.testResult.toUpperCase()} (teste)` : 'REJEITADA · sem resultado') : row.result === 'pending' ? 'ABERTA' : `${row.result.toUpperCase()} · ${money(Number(row.profit))}`}</span>
+   <span className={`ml-auto font-mono ${(row.rejected ? row.testResult : row.result) === 'win' ? 'text-call' : (row.rejected ? row.testResult : row.result) === 'loss' ? 'text-put' : 'text-muted-foreground'}`}>{row.rejected ? 'REJEITADA' : row.result === 'pending' ? 'ABERTA' : `${row.result.toUpperCase()} · ${money(Number(row.profit))}`}</span>
   </div></HoverCardTrigger><HoverCardContent className="w-80 max-w-[calc(100vw-2rem)]"><p className="mb-2 text-xs font-medium">{row.asset} · {demoStrategyNames[row.entry_strategy] ?? row.entry_strategy}</p>
-   {row.rejected ? <DemoPatternChart candles={preEntryCandles(row.candles, row.entry_minute)} direction={row.direction} /> : <MiniChart candles={row.candles} direction={row.direction} entry={Date.parse(row.entry_minute) / 1000} />}
+   <PatternRowChart row={row} />
    <p className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">{time(row.entry_minute)} · {row.rejected ? 'REJEITADA · Não enviada à IQ Option' : row.result === 'pending' ? 'ABERTA' : row.result.toUpperCase()}</p>
   </HoverCardContent></HoverCard>)}</div>)}
   {query.data && pages > 1 && <div className="flex items-center justify-between gap-2"><Button variant="outline" size="sm" disabled={page === 0 || query.isFetching} onClick={() => setPage(value => value - 1)}>Anterior</Button><span className="text-xs text-muted-foreground">{page + 1} / {pages}</span><Button variant="outline" size="sm" disabled={page + 1 >= pages || query.isFetching} onClick={() => setPage(value => value + 1)}>Próxima</Button></div>}

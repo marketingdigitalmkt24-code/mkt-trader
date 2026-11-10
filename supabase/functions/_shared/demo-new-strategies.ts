@@ -1,3 +1,4 @@
+import { DEMO_CANDLE_SEC as STEP } from './demo-timing.ts';
 import { chartFeatures, demoWinningPatternMatch } from './demo-continuation.ts';
 
 export const DEMO_CONFLUENCE = 'CONFLUENCIA_4_ESTRATEGIAS';
@@ -16,9 +17,9 @@ export function combinedDemoDirection(signals: readonly (readonly [string,string
 }
 
 export function preEntryPattern(value:unknown,entry:number,direction:string):number[]|null {
-  if(!Array.isArray(value)||!['CALL','PUT'].includes(direction)||!Number.isFinite(entry)||entry%60!==0)return null;
+  if(!Array.isArray(value)||!['CALL','PUT'].includes(direction)||!Number.isFinite(entry)||entry%STEP!==0)return null;
   const candles=value.filter((k):k is Candle=>k!=null&&typeof k==='object'&&typeof k.t==='number'&&k.t<entry).sort((a,b)=>a.t-b.t).slice(-20);
-  if(candles.length!==20||candles.some((k,i)=>k.t!==entry-(20-i)*60
+  if(candles.length!==20||candles.some((k,i)=>k.t!==entry-(20-i)*STEP
     ||![k.t,k.o,k.c,k.h,k.l].every(Number.isFinite)||k.o<=0||k.c<=0
     ||k.h<Math.max(k.o,k.c)||k.l>Math.min(k.o,k.c)))return null;
   return chartFeatures(candles,entry,direction);
@@ -28,7 +29,7 @@ export function preEntryPattern(value:unknown,entry:number,direction:string):num
 export function preEntryMovementPct(value:unknown,entry:number):number|null {
   if(!Array.isArray(value)||!Number.isFinite(entry))return null;
   const candles=value.filter((k):k is Candle=>k!=null&&typeof k==='object'&&typeof k.t==='number'&&k.t<entry).sort((a,b)=>a.t-b.t).slice(-20);
-  if(candles.length!==20||candles.some((k,i)=>k.t!==entry-(20-i)*60||!(k.c>0)||!Number.isFinite(k.h-k.l)))return null;
+  if(candles.length!==20||candles.some((k,i)=>k.t!==entry-(20-i)*STEP||!(k.c>0)||!Number.isFinite(k.h-k.l)))return null;
   return candles.reduce((a,k)=>a+(k.h-k.l)/k.c,0)/20*100;
 }
 
@@ -38,7 +39,7 @@ export function winningReferenceSamples(rows:WinningReference[],entry:number) {
     const at=Date.parse(row.entry_minute)/1000,settled=Date.parse(row.settled_at)/1000;
     if(row.status!=='confirmed'||row.result!=='win'||row.account_type!=='PRACTICE'
       ||!row.iq_option_id||!/^\d+$/.test(row.iq_option_id)||!row.signal_id||seen.has(row.signal_id)
-      ||!Number.isFinite(at)||!Number.isFinite(settled)||at+60>settled||settled>=entry)return [];
+      ||!Number.isFinite(at)||!Number.isFinite(settled)||at+STEP>settled||settled>=entry)return [];
     const f=preEntryPattern(row.candles,at,row.direction);
     if(!f)return [];
     seen.add(row.signal_id);

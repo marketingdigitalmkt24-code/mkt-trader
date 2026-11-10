@@ -5,8 +5,8 @@ import {freshDemoCandidate} from './demo-test-policy.ts';
 import {demoCohort} from './demo-226-policy.ts';
 const strategies=['TENDENCIA_FORCA_RECUO','ICHIMOKU_RECUO21','ICHIMOKU','RECUO_EMA21'];
 const at=Date.parse('2026-11-10T06:00:00Z')/1000;
-const candles=(entry:number)=>Array.from({length:20},(_,i)=>({t:entry-(20-i)*60,o:100+i,c:100.5+i,h:101+i,l:99.5+i}));
-const ref:WinningReference={signal_id:'ref',asset:'EUR/USD-OTC',direction:'CALL',entry_minute:new Date((at-120)*1000).toISOString(),settled_at:new Date((at-59)*1000).toISOString(),result:'win',status:'confirmed',account_type:'PRACTICE',iq_option_id:'123',candles:candles(at-120)};
+const candles=(entry:number)=>Array.from({length:20},(_,i)=>({t:entry-(20-i)*300,o:100+i,c:100.5+i,h:101+i,l:99.5+i}));
+const ref:WinningReference={signal_id:'ref',asset:'EUR/USD-OTC',direction:'CALL',entry_minute:new Date((at-600)*1000).toISOString(),settled_at:new Date((at-299)*1000).toISOString(),result:'win',status:'confirmed',account_type:'PRACTICE',iq_option_id:'123',candles:candles(at-600)};
 const c=(strategy:string,id=strategy)=>({signal_id:id,asset:'X',entry_strategy:strategy,direction:'CALL',created_at:new Date(at*1000).toISOString(),_score:Number.NaN});
 
 test('combination requires all four on the same direction, not only three or duplicates',()=>{
@@ -33,7 +33,7 @@ test('original priority cannot starve challengers and original turns remain inta
   expect(selectDemoByRotation([c('PADRAO_VENCEDOR')],null,'PADRAO_VENCEDOR','PADRAO_VENCEDOR')?.entry_strategy).toBe('PADRAO_VENCEDOR');
 });
 test('WIN references exclude unconfirmed, future, same-minute, REAL and LOSS outcomes',()=>{
-  const invalid=[{result:'loss'},{status:'unknown'},{account_type:'REAL'},{iq_option_id:'bad'},{settled_at:new Date(at*1000).toISOString()},{settled_at:new Date((at-121)*1000).toISOString()}];
+  const invalid=[{result:'loss'},{status:'unknown'},{account_type:'REAL'},{iq_option_id:'bad'},{settled_at:new Date(at*1000).toISOString()},{settled_at:new Date((at-601)*1000).toISOString()}];
   for(const change of invalid)expect(winningReferenceSamples([{...ref,...change}],at)).toEqual([]);
   expect(winningReferenceSamples([ref,ref],at)).toHaveLength(1);
 });
@@ -47,10 +47,10 @@ test('matching uses only contiguous valid pre-entry candles, never entry result'
   expect(match).not.toHaveProperty('score');
   expect(matchWinningPattern(samples,[...candles(at),{t:at,o:1,c:999,h:999,l:1}],at,'CALL')).toEqual(match);
   expect(preEntryPattern(candles(at).slice(1),at,'CALL')).toBeNull();
-  expect(preEntryPattern(candles(at).map((k,i)=>i===1?{...k,t:k.t-60}:k),at,'CALL')).toBeNull();
+  expect(preEntryPattern(candles(at).map((k,i)=>i===1?{...k,t:k.t-300}:k),at,'CALL')).toBeNull();
   expect(matchWinningPattern([],candles(at),at,'CALL')).toBeNull();
 });test('Padrão vencedor rejects flat assets below the configured minimum movement',()=>{
-  const flat=Array.from({length:20},(_,i)=>({t:at-(20-i)*60,o:100,c:100,h:100.01,l:99.99}));
+  const flat=Array.from({length:20},(_,i)=>({t:at-(20-i)*300,o:100,c:100,h:100.01,l:99.99}));
   expect(preEntryMovementPct(flat,at)).toBeCloseTo(0.02,5);
   expect(matchWinningPattern([{f:[0],result:'win',signal_id:'x',asset:'A',entry_minute:''}] as never,flat,at,'CALL',0.05)).toBeNull();
 });

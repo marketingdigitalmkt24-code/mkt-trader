@@ -20,7 +20,7 @@ import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { forcaAntecipada, FORCA_ANTECIPADA } from '../_shared/forca-antecipada.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
-import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay } from '../_shared/demo-timing.ts';
+import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay, DEMO_CANDLE_SEC, isDemoEntryBoundary } from '../_shared/demo-timing.ts';
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
@@ -428,7 +428,7 @@ Deno.serve(async (req) => {
         await sendCandleRequestBatches(prioritizeResultAssets(cand, (open || []).map(o => o.asset)), ([s, id]) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const rid = `m${id}`; byReq.set(rid, s);
-          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: 60, to: nowSec, count: 101 } } }));
+          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: DEMO_CANDLE_SEC, to: nowSec, count: 101 } } }));
         });
         };
         const delay = demoBoundaryDelay(Date.now(), targetMs);
@@ -489,15 +489,17 @@ Deno.serve(async (req) => {
   const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
     const prior=cs.filter(k=>k.t<curMin).slice(-60);
-    const complete=prior.length===60 && prior.every((k,i)=>k.t===curMin-(60-i)*60
+    const complete=prior.length===60 && prior.every((k,i)=>k.t===curMin-(60-i)*DEMO_CANDLE_SEC
       && [k.t,k.o,k.c,k.h,k.l].every(Number.isFinite) && k.o>0 && k.c>0
       && k.h>=Math.max(k.o,k.c) && k.l<=Math.min(k.o,k.c));
     assetAnalyses.set(asset,{asset,direction:null,score:null,state:complete?'no_signal':'incomplete_candles'});
-    const closed = cs.filter(k => k.t + 60 <= curMin);
-    if (!closed.length || closed[closed.length - 1].t !== curMin - 60) continue;
+    // Only 5-minute boundaries open entries; other minutes only settle pending orders.
+    if (!isDemoEntryBoundary(targetMs)) continue;
+    const closed = cs.filter(k => k.t + DEMO_CANDLE_SEC <= curMin);
+    if (!closed.length || closed[closed.length - 1].t !== curMin - DEMO_CANDLE_SEC) continue;
     // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
     // Keep legacy indicator warmup unchanged despite the larger Demo candle window.
-    const fired = detect(cs.slice(-90).filter(k => k.t + 60 <= curMin));
+    const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_CANDLE_SEC <= curMin));
     // Setup de 5 confirmações: Takashi + VWAP + EMA 9/21 + price action + volume.
     const check = takashiConfluenceCheck(cs, curMin);
     const gate = 'failed' in check ? check.failed : 'passed';
@@ -534,7 +536,7 @@ Deno.serve(async (req) => {
     if(allDirection)demoPatterns.push({signal_id:`demo-confluencia4-v1-${asset}-${curMin}`,asset,direction:allDirection,
       entry_strategy:DEMO_CONFLUENCE,created_at:new Date(curMin*1000).toISOString(),_score:Number.NaN});
     // Extra confirmations (user, Nov 10 2026) gate every original strategy and the confluence, not PADRAO_VENCEDOR.
-    { const closedCs=cs.filter(k=>k.t+60<=curMin); for(let q=demoPatterns.length-1;q>=0;q--){const p=demoPatterns[q];
+    { const closedCs=cs.filter(k=>k.t+DEMO_CANDLE_SEC<=curMin); for(let q=demoPatterns.length-1;q>=0;q--){const p=demoPatterns[q];
       if(p.asset!==asset||p.entry_strategy===DEMO_WIN_PATTERN)continue; const why=demoExtraConfirmations(closedCs,p.direction);
       if(why){confluenceGates[`extra_${why}`]=(confluenceGates[`extra_${why}`]||0)+1;demoPatterns.splice(q,1);}}}
     // Independent chart strategy: try both directions using only pre-entry candles and prior settled WINs.
@@ -575,7 +577,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-six-strategies-no-notes-v22',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-m5-v23',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = demoPatterns;
@@ -713,7 +715,8 @@ Deno.serve(async (req) => {
   await settlementWatch;
   await new Promise(resolve=>setTimeout(resolve,500));
   const ownSocket = preparedSocket as WebSocket | null;
-  if(ownExpiryMs>Date.now() && ownSocket?.readyState===WebSocket.OPEN) {
+  // 5-minute orders settle in the later minute runs; keep the socket only for short remaining expiries.
+  if(ownExpiryMs>Date.now() && ownExpiryMs-Date.now()<=70000 && ownSocket?.readyState===WebSocket.OPEN) {
     // Settle this run's own order on the same session right after it closes.
     pendingCutoffMs=ownExpiryMs;
     extendPrepared(ownExpiryMs+DEMO_OWN_WATCH_GRACE_MS);

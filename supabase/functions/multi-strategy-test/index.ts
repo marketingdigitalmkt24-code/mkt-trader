@@ -34,6 +34,7 @@ import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticat
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByRotation, DEMO_ROTATION } from '../_shared/demo-profit-selection.ts';
 import { ichimokuRecuo21Direction } from '../_shared/ichimoku-recuo21.ts';
+import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import { tendenciaForcaRecuoDirection, TENDENCIA_FORCA_RECUO_STRATEGY } from '../_shared/tendencia-forca-recuo.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
@@ -532,6 +533,10 @@ Deno.serve(async (req) => {
     ]);
     if(allDirection)demoPatterns.push({signal_id:`demo-confluencia4-v1-${asset}-${curMin}`,asset,direction:allDirection,
       entry_strategy:DEMO_CONFLUENCE,created_at:new Date(curMin*1000).toISOString(),_score:Number.NaN});
+    // Extra confirmations (user, Nov 10 2026) gate every original strategy and the confluence, not PADRAO_VENCEDOR.
+    { const closedCs=cs.filter(k=>k.t+60<=curMin); for(let q=demoPatterns.length-1;q>=0;q--){const p=demoPatterns[q];
+      if(p.asset!==asset||p.entry_strategy===DEMO_WIN_PATTERN)continue; const why=demoExtraConfirmations(closedCs,p.direction);
+      if(why){confluenceGates[`extra_${why}`]=(confluenceGates[`extra_${why}`]||0)+1;demoPatterns.splice(q,1);}}}
     // Independent chart strategy: try both directions using only pre-entry candles and prior settled WINs.
     if(patternHistoryReady&&!(await recentPatternAssets).has(asset)){
       patternMinMovement??=Math.max(0,Number((await amountRead).data?.pattern_min_movement_pct??0.02)||0);

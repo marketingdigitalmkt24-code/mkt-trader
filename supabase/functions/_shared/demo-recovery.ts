@@ -19,7 +19,8 @@ export function demoRecovery(previous: RecoveryOrder | null, base: number, payou
   if (!Number.isFinite(loss) || loss < 0) return null;
   const previousAmount = Number(previous.amount);
   if (!Number.isFinite(previousAmount) || previousAmount <= 0) return null;
-  const amount = Math.round(previousAmount * (previous.result === 'loss' ? 2 : 1) * 100) / 100;
+  // Gales removed (user, Nov 10 2026): stake stays at the configured base; levels only count the loss streak.
+  const amount = Math.round(base * 100) / 100;
   if (!Number.isFinite(amount) || amount <= 0) return null;
   return { amount, recovery_level: level, recovery_loss: loss, recovery_base: cycleBase, recovery_payout: payout };
 }

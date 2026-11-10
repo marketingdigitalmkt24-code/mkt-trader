@@ -1,3 +1,7 @@
+# Novas estratégias Demo (10/11/2026)
+- [ ] Combinar concordância das quatro estratégias no mesmo ativo/direção/vela e adicionar Padrão vencedor por semelhança com WIN confirmado anterior, sem notas.
+- [ ] Manter as quatro atuais, vaga única por minuto, histórico e gales; testar, publicar e conferir painel.
+
 # Retirar análise por nota (05/11/2026)
 - [x] Remover notas da escolha de todos os sinais ativos sem alterar indicadores, revezamento ou controles financeiros.
 - [x] Remover abas de notas e nota da lista Últimas operações Demo, preservando registros.

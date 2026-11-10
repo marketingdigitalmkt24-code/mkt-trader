@@ -209,8 +209,9 @@ Deno.serve(async (req) => {
   // Padrão vencedor must not repeat the asset of its own previous entries; spread across assets.
   const recentPatternAssets = supabase.from('iq_demo_test_orders').select('asset').eq('entry_strategy',DEMO_WIN_PATTERN)
     .order('entry_minute',{ascending:false}).limit(3).then(r=>new Set((r.data??[]).map(x=>x.asset)),()=>new Set<string>());
+  // Load the maximum WIN reference charts: paginated with no row cap, bounded only by this deadline.
   const historyAbort=new AbortController();
-  const historyTimer=setTimeout(()=>historyAbort.abort(),8000);
+  const historyTimer=setTimeout(()=>historyAbort.abort(),20000);
   const patternHistoryTask=(async()=>{
     const orders:Omit<WinningReference,'candles'>[]=[];
     for(let from=0;;from+=1000){

@@ -1,4 +1,5 @@
 import { demoDisplayedTargetScore } from './demo-continuation.ts';
+import { DEMO_CHALLENGERS } from './demo-new-strategies.ts';
 
 // Oct 25 2026 17:51 UTC: Takashi no longer uses the 2.26 authorization (stays out of real/Telegram/copy).
 export function demo226StrategyAllowed(strategy: unknown): boolean {
@@ -27,7 +28,7 @@ export const ICHIMOKU_RECUO21_STRATEGY = 'ICHIMOKU_RECUO21';
 // Nov 3 2026 00:48 BRT (user): ONLY these four strategies enter the Demo (Takashi and the other
 // standalone indicators no longer enter); Ichimoku + Recuo 21 keeps priority, the rest rotate.
 export const DEMO_STANDALONE_INDICATORS = ['ICHIMOKU', 'RECUO_EMA21'] as const;
-export const DEMO_INDICATOR_STRATEGIES = [ICHIMOKU_RECUO21_STRATEGY, 'TENDENCIA_FORCA_RECUO', ...DEMO_STANDALONE_INDICATORS] as const;
+export const DEMO_INDICATOR_STRATEGIES = [ICHIMOKU_RECUO21_STRATEGY, 'TENDENCIA_FORCA_RECUO', ...DEMO_STANDALONE_INDICATORS, ...DEMO_CHALLENGERS] as const;
 export function isDemoIndicatorStrategy(strategy: unknown): boolean {
   return (DEMO_INDICATOR_STRATEGIES as readonly unknown[]).includes(strategy);
 }

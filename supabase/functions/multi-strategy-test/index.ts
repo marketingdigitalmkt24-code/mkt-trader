@@ -206,6 +206,9 @@ Deno.serve(async (req) => {
   // Prepare paginated WIN references concurrently with login, never wait on history at :00.
   let patternSamples:ReturnType<typeof winningReferenceSamples> = [];
   let patternHistoryReady=false;
+  // Padrão vencedor must not repeat the asset of its own previous entries; spread across assets.
+  const recentPatternAssets = supabase.from('iq_demo_test_orders').select('asset').eq('entry_strategy',DEMO_WIN_PATTERN)
+    .order('entry_minute',{ascending:false}).limit(3).then(r=>new Set((r.data??[]).map(x=>x.asset)),()=>new Set<string>());
   const historyAbort=new AbortController();
   const historyTimer=setTimeout(()=>historyAbort.abort(),8000);
   const patternHistoryTask=(async()=>{
@@ -529,7 +532,7 @@ Deno.serve(async (req) => {
     if(allDirection)demoPatterns.push({signal_id:`demo-confluencia4-v1-${asset}-${curMin}`,asset,direction:allDirection,
       entry_strategy:DEMO_CONFLUENCE,created_at:new Date(curMin*1000).toISOString(),_score:Number.NaN});
     // Independent chart strategy: try both directions using only pre-entry candles and prior settled WINs.
-    if(patternHistoryReady){
+    if(patternHistoryReady&&!(await recentPatternAssets).has(asset)){
       patternMinMovement??=Math.max(0,Number((await amountRead).data?.pattern_min_movement_pct??0.02)||0);
       const matches=(['CALL','PUT'] as const).flatMap(direction=>{
         const match=matchWinningPattern(patternSamples,cs,curMin,direction,patternMinMovement);

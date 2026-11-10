@@ -46,8 +46,8 @@ export function winningReferenceSamples(rows:WinningReference[],entry:number) {
   });
 }
 
-/** More than 10 similar WINs, spread over at least 3 different assets. */
-export const PATTERN_MIN_SIMILAR_WINS=11;
+/** More than 30 similar WINs, spread over at least 3 different assets. */
+export const PATTERN_MIN_SIMILAR_WINS=31;
 export const PATTERN_MIN_DISTINCT_ASSETS=3;
 
 export function matchWinningPattern(samples:ReturnType<typeof winningReferenceSamples>,candles:unknown,entry:number,direction:string,minMovementPct=0) {

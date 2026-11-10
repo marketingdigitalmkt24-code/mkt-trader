@@ -38,11 +38,11 @@ test('WIN references exclude unconfirmed, future, same-minute, REAL and LOSS out
   expect(winningReferenceSamples([ref,ref],at)).toHaveLength(1);
 });
 test('matching uses only contiguous valid pre-entry candles, never entry result',()=>{
-  const many=Array.from({length:11},(_,i)=>({...ref,signal_id:i?`ref${i}`:'ref',asset:['A','B','C'][i%3]}));
+  const many=Array.from({length:31},(_,i)=>({...ref,signal_id:i?`ref${i}`:'ref',asset:['A','B','C'][i%3]}));
   const samples=winningReferenceSamples(many,at);
   const match=matchWinningPattern(samples,candles(at),at,'CALL');
   expect(match?.signal_id).toBe('ref');
-  expect(match?.similar_wins).toBe(11);
+  expect(match?.similar_wins).toBe(31);
   expect(match?.distance).toBe(0);
   expect(match).not.toHaveProperty('score');
   expect(matchWinningPattern(samples,[...candles(at),{t:at,o:1,c:999,h:999,l:1}],at,'CALL')).toEqual(match);
@@ -55,9 +55,9 @@ test('matching uses only contiguous valid pre-entry candles, never entry result'
   expect(matchWinningPattern([{f:[0],result:'win',signal_id:'x',asset:'A',entry_minute:''}] as never,flat,at,'CALL',0.05)).toBeNull();
 });
 
-test('Padrão vencedor needs more than 10 similar WINs from at least 3 assets',()=>{
+test('Padrão vencedor needs more than 30 similar WINs from at least 3 assets',()=>{
   const mk=(n:number,assets:string[])=>winningReferenceSamples(Array.from({length:n},(_,i)=>({...ref,signal_id:`r${i}`,asset:assets[i%assets.length]})),at);
-  expect(matchWinningPattern(mk(10,['A','B','C']),candles(at),at,'CALL')).toBeNull();
-  expect(matchWinningPattern(mk(11,['A','B']),candles(at),at,'CALL')).toBeNull();
-  expect(matchWinningPattern(mk(11,['A','B','C']),candles(at),at,'CALL')?.distinct_assets).toBe(3);
+  expect(matchWinningPattern(mk(30,['A','B','C']),candles(at),at,'CALL')).toBeNull();
+  expect(matchWinningPattern(mk(31,['A','B']),candles(at),at,'CALL')).toBeNull();
+  expect(matchWinningPattern(mk(31,['A','B','C']),candles(at),at,'CALL')?.distinct_assets).toBe(3);
 });

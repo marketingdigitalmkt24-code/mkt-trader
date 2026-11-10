@@ -57,6 +57,7 @@ export function DemoTestOperations() {
   <span className="col-span-2 text-muted-foreground sm:col-span-4">Acumulado · {stats.data.pending} abertas · {stats.data.ties} empates</span>
  </div>}
  {isLoading?<p className="text-xs text-muted-foreground">Carregando ordens Demo…</p>:isError?<p role="alert" className="text-xs text-destructive">Não foi possível carregar as ordens Demo.</p>:!data?.rows.length?<p className="text-xs text-muted-foreground">Aguardando primeira ordem Demo confirmada.</p>:<div className="space-y-1">{data.rows.map(row=><HoverCard key={row.id} openDelay={150}><HoverCardTrigger asChild><div tabIndex={0} className="flex cursor-default flex-wrap items-center gap-2 rounded-md bg-secondary/30 p-2 text-xs hover:bg-secondary/60">
+ <span className="font-mono text-muted-foreground">{new Date(row.entry_minute).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
  <span className="font-medium">{row.asset}</span>
  <span className={row.direction==='CALL'?'text-call':'text-put'}>{row.direction}</span>
  {data.patterns.has(row.signal_id)?<Badge variant="outline" className="text-call" title="Correspondência registrada com o gráfico anterior de uma operação WIN confirmada">{demoStrategyNames[row.entry_strategy]??row.entry_strategy}</Badge>:<span className="text-muted-foreground">{demoStrategyNames[row.entry_strategy]??row.entry_strategy}</span>}

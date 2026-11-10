@@ -1,3 +1,7 @@
+# Segundo quadro de operações (10/11/2026)
+- [ ] Definir isolamento das entradas, disputa por minuto e regra da combinação do novo grupo.
+- [ ] Adicionar segundo quadro com funcionalidades completas, estratégias solicitadas e combinação; preservar primeiro quadro e histórico.
+
 # Novas estratégias Demo (10/11/2026)
 - [x] Combinar concordância das quatro estratégias no mesmo ativo/direção/vela e adicionar Padrão vencedor por semelhança com WIN confirmado anterior, sem notas.
 - [x] Manter as quatro atuais, vaga única por minuto, histórico e gales; 507 testes passaram, duas funções publicadas, painel admin conferido em desktop/celular sem corte.

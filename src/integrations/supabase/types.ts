@@ -352,18 +352,21 @@ export type Database = {
           account_type: string
           amount: number
           id: number
+          pattern_min_movement_pct: number
           updated_at: string
         }
         Insert: {
           account_type?: string
           amount?: number
           id?: number
+          pattern_min_movement_pct?: number
           updated_at?: string
         }
         Update: {
           account_type?: string
           amount?: number
           id?: number
+          pattern_min_movement_pct?: number
           updated_at?: string
         }
         Relationships: []

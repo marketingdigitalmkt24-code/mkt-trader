@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
     .lte('expiration_time',new Date(pendingCutoffMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
-  const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
+  const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type,pattern_min_movement_pct').eq('id',1).maybeSingle().then(r=>r);
   // Prepare paginated WIN references concurrently with login, never wait on history at :00.
   let patternSamples:ReturnType<typeof winningReferenceSamples> = [];
   let patternHistoryReady=false;
@@ -478,6 +478,7 @@ Deno.serve(async (req) => {
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
   const demoPatterns: DemoCandidate[] = [];
+  let patternMinMovement:number|undefined;
   const patternMatches=new Map<string,NonNullable<ReturnType<typeof matchWinningPattern>>>();
   const assetAnalyses = new Map<string, DemoAssetAnalysis>();
   const confluenceGates: Record<string, number> = {};
@@ -529,8 +530,9 @@ Deno.serve(async (req) => {
       entry_strategy:DEMO_CONFLUENCE,created_at:new Date(curMin*1000).toISOString(),_score:Number.NaN});
     // Independent chart strategy: try both directions using only pre-entry candles and prior settled WINs.
     if(patternHistoryReady){
+      patternMinMovement??=Math.max(0,Number((await amountRead).data?.pattern_min_movement_pct??0.02)||0);
       const matches=(['CALL','PUT'] as const).flatMap(direction=>{
-        const match=matchWinningPattern(patternSamples,cs,curMin,direction);
+        const match=matchWinningPattern(patternSamples,cs,curMin,direction,patternMinMovement);
         return match?[{direction,match}]:[];
       }).sort((a,b)=>a.match.distance-b.match.distance||a.direction.localeCompare(b.direction));
       const closest=matches[0];
@@ -602,7 +604,7 @@ Deno.serve(async (req) => {
   // Combined Ichimoku + Recuo 21 first; otherwise rotate Tendência+Força+Recuo -> Ichimoku -> Recuo 21.
   const demoWinner = selectDemoByRotation(demoEligible, lastCandidate.data?.entry_strategy,lastSlot.data?.entry_strategy,lastChallenger.data?.entry_strategy);
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  console.log('Demo rotation selection:',JSON.stringify({strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,scoreAnalysis:false,patternHistoryReady,winReferences:patternSamples.length}));
+  console.log('Demo rotation selection:',JSON.stringify({strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,scoreAnalysis:false,patternHistoryReady,winReferences:patternSamples.length,patternMinMovement}));
   console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
   for(const c of demoEligible){
     const reason:RejectionReason|null=demoWinner&&demoWinner.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:demoWinner.signal_id}}:null;

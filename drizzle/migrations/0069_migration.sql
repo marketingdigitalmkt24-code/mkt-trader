@@ -1,0 +1,1 @@
+ALTER TABLE public.iq_demo_test_settings ADD COLUMN IF NOT EXISTS pattern_min_movement_pct numeric NOT NULL DEFAULT 0.02 CHECK (pattern_min_movement_pct >= 0 AND pattern_min_movement_pct <= 5);

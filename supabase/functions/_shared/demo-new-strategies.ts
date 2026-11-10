@@ -24,6 +24,14 @@ export function preEntryPattern(value:unknown,entry:number,direction:string):num
   return chartFeatures(candles,entry,direction);
 }
 
+/** Average (high-low)/close in percent over the 20 contiguous pre-entry candles; null when incomplete. */
+export function preEntryMovementPct(value:unknown,entry:number):number|null {
+  if(!Array.isArray(value)||!Number.isFinite(entry))return null;
+  const candles=value.filter((k):k is Candle=>k!=null&&typeof k==='object'&&typeof k.t==='number'&&k.t<entry).sort((a,b)=>a.t-b.t).slice(-20);
+  if(candles.length!==20||candles.some((k,i)=>k.t!==entry-(20-i)*60||!(k.c>0)||!Number.isFinite(k.h-k.l)))return null;
+  return candles.reduce((a,k)=>a+(k.h-k.l)/k.c,0)/20*100;
+}
+
 export function winningReferenceSamples(rows:WinningReference[],entry:number) {
   const seen=new Set<string>();
   return rows.flatMap(row=>{
@@ -38,7 +46,9 @@ export function winningReferenceSamples(rows:WinningReference[],entry:number) {
   });
 }
 
-export function matchWinningPattern(samples:ReturnType<typeof winningReferenceSamples>,candles:unknown,entry:number,direction:string) {
+export function matchWinningPattern(samples:ReturnType<typeof winningReferenceSamples>,candles:unknown,entry:number,direction:string,minMovementPct=0) {
+  const movement=preEntryMovementPct(candles,entry);
+  if(movement==null||movement<Math.max(0,minMovementPct))return null;
   const match=demoWinningPatternMatch(samples,preEntryPattern(candles,entry,direction));
   if(!match)return null;
   return {signal_id:match.signal_id,asset:match.asset,entry_minute:match.entry_minute,distance:match.distance,rule_version:'demo-pattern-no-notes-v1'};

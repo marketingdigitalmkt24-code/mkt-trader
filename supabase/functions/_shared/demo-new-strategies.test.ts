@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {combinedDemoDirection,winningReferenceSamples,matchWinningPattern,preEntryPattern,type WinningReference} from './demo-new-strategies.ts';
+import {combinedDemoDirection,winningReferenceSamples, preEntryMovementPct,matchWinningPattern,preEntryPattern,type WinningReference} from './demo-new-strategies.ts';
 import {selectDemoByRotation} from './demo-profit-selection.ts';
 import {freshDemoCandidate} from './demo-test-policy.ts';
 import {demoCohort} from './demo-226-policy.ts';
@@ -47,4 +47,8 @@ test('matching uses only contiguous valid pre-entry candles, never entry result'
   expect(preEntryPattern(candles(at).slice(1),at,'CALL')).toBeNull();
   expect(preEntryPattern(candles(at).map((k,i)=>i===1?{...k,t:k.t-60}:k),at,'CALL')).toBeNull();
   expect(matchWinningPattern([],candles(at),at,'CALL')).toBeNull();
+});test('Padrão vencedor rejects flat assets below the configured minimum movement',()=>{
+  const flat=Array.from({length:20},(_,i)=>({t:at-(20-i)*60,o:100,c:100,h:100.01,l:99.99}));
+  expect(preEntryMovementPct(flat,at)).toBeCloseTo(0.02,5);
+  expect(matchWinningPattern([{f:[0],result:'win',signal_id:'x',asset:'A',entry_minute:''}] as never,flat,at,'CALL',0.05)).toBeNull();
 });

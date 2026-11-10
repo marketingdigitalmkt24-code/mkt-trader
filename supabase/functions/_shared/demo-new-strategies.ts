@@ -46,10 +46,21 @@ export function winningReferenceSamples(rows:WinningReference[],entry:number) {
   });
 }
 
+/** More than 10 similar WINs, spread over at least 3 different assets. */
+export const PATTERN_MIN_SIMILAR_WINS=11;
+export const PATTERN_MIN_DISTINCT_ASSETS=3;
+
 export function matchWinningPattern(samples:ReturnType<typeof winningReferenceSamples>,candles:unknown,entry:number,direction:string,minMovementPct=0) {
   const movement=preEntryMovementPct(candles,entry);
   if(movement==null||movement<Math.max(0,minMovementPct))return null;
-  const match=demoWinningPatternMatch(samples,preEntryPattern(candles,entry,direction));
-  if(!match)return null;
-  return {signal_id:match.signal_id,asset:match.asset,entry_minute:match.entry_minute,distance:match.distance,rule_version:'demo-pattern-no-notes-v1'};
+  const f=preEntryPattern(candles,entry,direction);
+  if(!f)return null;
+  // Every similar prior WIN counts; require a broad cohort across different assets, not one lucky chart.
+  const similar=samples.flatMap(s=>{const m=demoWinningPatternMatch([s],f);return m?[m]:[];})
+    .sort((a,b)=>a.distance-b.distance||String(a.signal_id).localeCompare(String(b.signal_id)));
+  const assets=new Set(similar.map(m=>m.asset).filter(Boolean));
+  if(similar.length<PATTERN_MIN_SIMILAR_WINS||assets.size<PATTERN_MIN_DISTINCT_ASSETS)return null;
+  const match=similar[0];
+  return {signal_id:match.signal_id,asset:match.asset,entry_minute:match.entry_minute,distance:match.distance,
+    similar_wins:similar.length,distinct_assets:assets.size,rule_version:'demo-pattern-multi-asset-v2'};
 }

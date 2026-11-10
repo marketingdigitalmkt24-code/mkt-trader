@@ -17,6 +17,7 @@ export const demoStrategyNames: Record<string, string> = {
  TAKASHI_BNF_V1: 'Takashi Kotegawa', ICHIMOKU: 'Ichimoku', RECUO_EMA21: 'Recuo na média 21',
  ICHIMOKU_RECUO21: 'Ichimoku + Recuo 21',
  TENDENCIA_FORCA_RECUO: 'Tendência + Força + Recuo',
+ CONFLUENCIA_4_ESTRATEGIAS: 'Confluência das 4 estratégias', PADRAO_VENCEDOR: 'Padrão vencedor',
  ROMPIMENTO: 'Rompimento', KDJ: 'KDJ',
 };
 

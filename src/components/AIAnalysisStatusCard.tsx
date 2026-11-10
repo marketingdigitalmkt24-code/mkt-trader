@@ -18,6 +18,8 @@ interface SignalEntry {
 
 const strategyLabels: Record<string, string> = {
   PADRAO_VENCEDOR: 'Padrão vencedor',
+  PADRAO_VENCEDOR_HISTORICO: 'Padrão vencedor · histórico marcado',
+  CONFLUENCIA_4_ESTRATEGIAS: 'Confluência das 4 estratégias',
   TENDENCIA: 'Tendência',
   CONTINUACAO_QUEDA_V1: 'Queda',
   TETO_V1: 'Teto',
@@ -83,7 +85,12 @@ export function AIAnalysisStatusCard() {
         return orders.map(row=>({...row,pattern_match:patterns.get(row.signal_id)}));
       });
       if (mounted.current) {
-        setStrategyStats([demoWinningPatternStats(rows),...demoStrategyStats(rows)]);
+        const historical=demoWinningPatternStats(rows.filter(row=>row.entry_strategy!=='PADRAO_VENCEDOR'));
+        const current=demoStrategyStats(rows);
+        for(const strategy of ['CONFLUENCIA_4_ESTRATEGIAS','PADRAO_VENCEDOR']) {
+          if(!current.some(stat=>stat.strategy===strategy))current.push({strategy,wins:0,losses:0});
+        }
+        setStrategyStats([...(historical.wins+historical.losses>0?[{...historical,strategy:'PADRAO_VENCEDOR_HISTORICO'}]:[]),...current]);
       }
     } catch {
       // silent
@@ -104,11 +111,11 @@ export function AIAnalysisStatusCard() {
       const [candidates, rejections, scan] = await Promise.all([
         supabase.from('iq_demo_test_candidates')
           .select('signal_id,asset,direction,entry_minute')
-          .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO', 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ']).gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['CONFLUENCIA_4_ESTRATEGIAS','PADRAO_VENCEDOR','ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.from('demo_selection_rejections')
           .select('signal_id,asset,direction,entry_minute')
-          .in('entry_strategy', ['TAKASHI_BNF_V1', 'ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO', 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ']).gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['CONFLUENCIA_4_ESTRATEGIAS','PADRAO_VENCEDOR','ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.functions.invoke('demo-analysis-status',{body:{}}),
       ]);

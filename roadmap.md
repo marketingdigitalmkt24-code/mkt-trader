@@ -1,6 +1,7 @@
 # Novas estratégias Demo (10/11/2026)
-- [ ] Combinar concordância das quatro estratégias no mesmo ativo/direção/vela e adicionar Padrão vencedor por semelhança com WIN confirmado anterior, sem notas.
-- [ ] Manter as quatro atuais, vaga única por minuto, histórico e gales; testar, publicar e conferir painel.
+- [x] Combinar concordância das quatro estratégias no mesmo ativo/direção/vela e adicionar Padrão vencedor por semelhança com WIN confirmado anterior, sem notas.
+- [x] Manter as quatro atuais, vaga única por minuto, histórico e gales; 507 testes passaram, duas funções publicadas, painel admin conferido em desktop/celular sem corte.
+- [ ] Observar abertura natural confirmada das novas estratégias: às 03:36 BRT Padrão vencedor foi selecionado prospectivamente com 2.862 WIN anteriores e referência exata, mas a recuperação retornou null enquanto a ordem precedente ainda era pendente no instante da seleção; nenhuma ordem foi forçada. Confluência depende de unanimidade fresca das quatro estratégias.
 
 # Retirar análise por nota (05/11/2026)
 - [x] Remover notas da escolha de todos os sinais ativos sem alterar indicadores, revezamento ou controles financeiros.

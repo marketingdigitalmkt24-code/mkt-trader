@@ -238,7 +238,6 @@ export function LiveOperationsCard() {
           )}
         </div>
 
-        <p className="mb-2 text-xs font-medium text-primary">Estratégia: Tendência alinhada</p>
         <DemoOpenOperations strategy="TENDENCIA_ALINHADA" />
         {/* Últimas operações · Demo */}
         <DemoTestOperations strategy="TENDENCIA_ALINHADA" />

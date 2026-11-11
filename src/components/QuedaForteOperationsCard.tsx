@@ -1,5 +1,6 @@
 import { Activity } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
+import { OpenPositionsSection } from './OpenPositionsSection';
 import { DemoOpenOperations } from './DemoOpenOperations';
 import { DemoTestOperations } from './DemoTestOperations';
 import { DemoDailyHistory } from './DemoDailyHistory';
@@ -12,6 +13,7 @@ export function QuedaForteOperationsCard() {
           <Activity className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-semibold">Operações em Tempo Real · 2</h3>
         </div>
+        <OpenPositionsSection />
         <DemoOpenOperations strategy="QUEDA_FORTE" />
         <DemoTestOperations strategy="QUEDA_FORTE" />
         <DemoDailyHistory strategy="QUEDA_FORTE" />

@@ -40,6 +40,7 @@ export function useOpenPositions() {
     queryKey: ['broker-open-positions'],
     queryFn: fetchBrokerOpen,
     refetchInterval: 30000,
+    retry: 1,
   });
   const recorded = useQuery({
     queryKey: ['recorded-open-positions'],
@@ -50,6 +51,6 @@ export function useOpenPositions() {
   // Corretora (com lucro ao vivo) tem prioridade; ordens registradas cobrem o intervalo entre consultas.
   return {
     openPositions: mergeOpenPositions(broker.data ?? [], recorded.data ?? []),
-    isLoading: broker.isLoading || recorded.isLoading,
+    isLoading: recorded.isLoading && broker.isLoading,
   };
 }

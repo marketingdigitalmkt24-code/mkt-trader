@@ -95,7 +95,7 @@ export function LiveOperationsCard() {
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-4">
           <Activity className="w-5 h-5 text-primary" />
-          <h3 className="text-sm font-semibold">Operações em Tempo Real <span className="text-muted-foreground font-normal">· Tendência alinhada</span></h3>
+          <h3 className="text-sm font-semibold">Operações em Tempo Real</h3>
           <Button
             size="sm"
             variant={hornEnabled ? 'default' : 'secondary'}

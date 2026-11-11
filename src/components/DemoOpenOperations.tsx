@@ -30,7 +30,7 @@ export function DemoOpenOperations({ strategy }: { strategy?: string } = {}) {
       : <div className="space-y-1">
         <div className="hidden grid-cols-5 gap-2 px-2 text-[10px] uppercase text-muted-foreground sm:grid"><span>Ativo</span><span>Direção</span><span>Valor</span><span>Entrada</span><span className="text-right">Vencimento</span></div>
         {data.map(op => <div key={`${op.asset}-${op.entry_time}`} className="grid grid-cols-2 items-center gap-2 rounded-md bg-secondary/30 p-2 text-xs hover:bg-secondary/60 sm:grid-cols-5">
-          <span className="font-medium">{op.asset}<span className="block text-[10px] font-normal text-muted-foreground">{demoStrategyNames[op.strategy] ?? op.strategy}</span></span>
+          <span className="font-medium">{op.asset}</span>
           <span className={op.direction === 'CALL' ? 'text-call' : 'text-put'}>{op.direction}</span>
           <span className="font-mono">{op.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' })}</span>
           <span className="font-mono text-muted-foreground"><span className="sm:hidden">Entrada </span>{brt(op.entry_time)}</span>

@@ -68,7 +68,7 @@ export function DemoTestOperations({strategy}:{strategy?:string}={}) {
  <span className="ml-auto shrink-0 whitespace-nowrap font-mono">{row.status==='confirmed'?(row.result==='pending'?'ABERTA':`${row.result.toUpperCase()} · ${Number(row.profit).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}`):row.status==='failed'?'NÃO ENVIADA':row.status==='unknown'?'SEM CONFIRMAÇÃO':'AGUARDANDO'}</span>
  </div>
  <div className="flex min-w-0 flex-wrap items-center gap-2">
- {data.patterns.has(row.signal_id)?<Badge variant="outline" className="text-call" title="Correspondência registrada com o gráfico anterior de uma operação WIN confirmada">{demoStrategyNames[row.entry_strategy]??row.entry_strategy}</Badge>:<span className="text-muted-foreground">{demoStrategyNames[row.entry_strategy]??row.entry_strategy}</span>}
+
  <span className="text-muted-foreground font-mono text-[10px]">{Number(row.amount).toLocaleString('pt-BR',{style:'currency',currency:'USD'})}</span>
  </div>
   </div></HoverCardTrigger><HoverCardContent className="w-80 max-w-[calc(100vw-2rem)]"><p className="mb-1 text-xs font-medium">{row.asset} · previsão × fechamento</p><MiniChart candles={data.charts.get(row.signal_id)} direction={row.direction} entry={Date.parse(row.entry_minute)/1000}/><p className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">Entrada: {new Date(row.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</p><p className="text-xs text-muted-foreground">IQ Option: {row.result==='pending'?'aguardando resultado':row.result.toUpperCase()}</p></HoverCardContent></HoverCard>)}</div>}

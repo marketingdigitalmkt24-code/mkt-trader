@@ -11,7 +11,7 @@ export function QuedaForteOperationsCard() {
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-4">
           <Activity className="w-5 h-5 text-primary" />
-          <h3 className="text-sm font-semibold">Operações em Tempo Real · 2</h3>
+          <h3 className="text-sm font-semibold">Operações em Tempo Real · 2 <span className="text-muted-foreground font-normal">· Queda forte</span></h3>
         </div>
         <OpenPositionsSection />
         <DemoOpenOperations strategy="QUEDA_FORTE" />

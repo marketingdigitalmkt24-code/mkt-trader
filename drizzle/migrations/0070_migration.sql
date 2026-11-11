@@ -1,0 +1,4 @@
+ALTER TABLE public.iq_demo_test_candidates DROP CONSTRAINT iq_demo_test_candidates_pkey;
+ALTER TABLE public.iq_demo_test_candidates ADD CONSTRAINT iq_demo_test_candidates_pkey PRIMARY KEY (entry_minute, entry_strategy);
+ALTER TABLE public.iq_demo_test_orders DROP CONSTRAINT iq_demo_test_orders_entry_minute_key;
+ALTER TABLE public.iq_demo_test_orders ADD CONSTRAINT iq_demo_test_orders_entry_minute_strategy_key UNIQUE (entry_minute, entry_strategy);

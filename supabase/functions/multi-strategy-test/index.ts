@@ -482,14 +482,14 @@ Deno.serve(async (req) => {
   // Display-only enrichment: retain the result and following closed candle.
   // Retry recent snapshots so a missed runner minute cannot strand the chart.
   const enrichCharts = async () => {
-  const recentDemo = await supabase.from('iq_demo_test_candidates').select('entry_minute,asset,candles')
+  const recentDemo = await supabase.from('iq_demo_test_candidates').select('entry_minute,signal_id,asset,candles')
     .gte('entry_minute',new Date((curMin-90*60)*1000).toISOString())
     .lt('entry_minute',new Date(curMin*1000).toISOString());
   await Promise.all((recentDemo.data || []).map(async row => {
     if (!Array.isArray(row.candles)) return;
     const candles = extendDemoChart(row.candles as K[],series.get(row.asset) || [],Math.floor(Date.parse(row.entry_minute)/60000)*60,curMin);
     if (JSON.stringify(candles) === JSON.stringify(row.candles)) return;
-    const {error}=await supabase.from('iq_demo_test_candidates').update({candles}).eq('entry_minute',row.entry_minute);
+    const {error}=await supabase.from('iq_demo_test_candidates').update({candles}).eq('signal_id',row.signal_id);
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
@@ -522,11 +522,16 @@ Deno.serve(async (req) => {
     return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null,_payout}];
   });
   // Single active strategy; stable IDs break asset ties without notes or historical ranking.
-  const demoWinner = selectDemoByRotation(demoEligible, null);
+  // Each real-time card competes for its own M5 slot (user, Nov 11 2026): one winner per strategy.
+  const demoWinners = [TENDENCIA_ALINHADA_STRATEGY, QUEDA_STRATEGY]
+    .map(s => selectDemoByRotation(demoEligible.filter(c => c.entry_strategy === s), null))
+    .filter((c): c is NonNullable<typeof c> => !!c);
+  const demoWinner = demoWinners[0] ?? null;
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  console.log('Demo rotation selection:',JSON.stringify({strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,scoreAnalysis:false}));
+  console.log('Demo rotation selection:',JSON.stringify({eligible:demoEligible.length,selected:demoWinners.map(w=>w.signal_id),scoreAnalysis:false}));
   for(const c of demoEligible){
-    const reason:RejectionReason|null=demoWinner&&demoWinner.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:demoWinner.signal_id}}:null;
+    const own=demoWinners.find(w=>w.entry_strategy===c.entry_strategy);
+    const reason:RejectionReason|null=own&&own.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:own.signal_id}}:null;
     if(reason)reject(c,reason);
   }
   // Audit is independent of execution: never delay an eligible entry for its rejected competitors.
@@ -541,13 +546,14 @@ Deno.serve(async (req) => {
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
   if (!demoWinner) console.log('Demo: no valid aligned trend candidate at this M5 boundary');
-  if (demoWinner) {
+  let principalTriggered = false;
+  for (const demoWinner of demoWinners) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
       // Required legacy column: neutral placeholder, never calculated or used for selection.
       entry_strategy:demoWinner.entry_strategy,score:0,
       pattern_match:demoEligible.find(c=>c.signal_id===demoWinner.signal_id)?._patternMatch??null,
-      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute',ignoreDuplicates:true});
+      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute,entry_strategy',ignoreDuplicates:true});
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
@@ -560,7 +566,7 @@ Deno.serve(async (req) => {
       const payout = typeof commission === 'number' ? (100-commission)/100 : null;
       const last = await supabase.from('iq_demo_test_orders')
         .select('status,result,entry_strategy,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
-        .in('entry_strategy',DEMO_ENTRY_STRATEGIES).in('account_type',['PRACTICE','REAL'])
+        .eq('entry_strategy',demoWinner.entry_strategy).in('account_type',['PRACTICE','REAL'])
         .in('status',['confirmed','unknown','reserved'])
         .or(`status.eq.confirmed,iq_option_id.not.is.null,expiration_time.gt.${new Date().toISOString()}`)
         .order('entry_minute',{ascending:false}).limit(1);
@@ -571,7 +577,8 @@ Deno.serve(async (req) => {
       // i.e. 5 consecutive LOSS. The executor re-reads the streak and the claim revalidates it, Auto Trading and limits.
       const prevOrder=(last.data||[])[0];
       // Also "Sequência de 3 sinais": the executor re-reads the 3 latest confirmed orders and the claim revalidates the user sets.
-      if(prevOrder?.status==='confirmed'&&((prevOrder?.result==='loss'&&Number(prevOrder?.recovery_level)===4)||['RECUO_EMA21','ICHIMOKU_RECUO21'].includes(prevOrder?.entry_strategy))){
+      if(!principalTriggered&&prevOrder?.status==='confirmed'&&((prevOrder?.result==='loss'&&Number(prevOrder?.recovery_level)===4)||['RECUO_EMA21','ICHIMOKU_RECUO21'].includes(prevOrder?.entry_strategy))){
+        principalTriggered = true;
         const followTask = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/selected-demo-trend`, {
           method:'POST', headers:{Authorization:`Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,'Content-Type':'application/json'},
           body:JSON.stringify({candidate:demoWinner.signal_id}), signal:AbortSignal.timeout(100000),
@@ -599,7 +606,7 @@ Deno.serve(async (req) => {
             await new Promise<void>(resolve=>{
               const timeout=setTimeout(resolve,5000);
               handleOrder = d=>{
-                if(d.request_id!=='demo-prepared-order')return;
+                if(d.request_id!==`demo-prepared-order-${demoWinner.entry_strategy}`)return;
                 if(d.name==='option' && /^\d+$/.test(String(d.msg?.id || ''))) {
                   confirmed=true;
                   ownExpiryMs=Number(freshOrder.expired)*1000;
@@ -609,7 +616,7 @@ Deno.serve(async (req) => {
                 } else if(['error','result'].includes(d.name)) {refused=true;clearTimeout(timeout);resolve();}
               };
               console.log('Demo timing order submitted:',new Date().toISOString(),demoWinner.signal_id);
-              socket.send(JSON.stringify({name:'sendMessage',request_id:'demo-prepared-order',msg:{name:'binary-options.open-option',version:'1.0',body:freshOrder}}));
+              socket.send(JSON.stringify({name:'sendMessage',request_id:`demo-prepared-order-${demoWinner.entry_strategy}`,msg:{name:'binary-options.open-option',version:'1.0',body:freshOrder}}));
             });
             handleOrder=null;
             await Promise.all(demoSettlements);

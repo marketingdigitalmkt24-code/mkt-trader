@@ -48,7 +48,7 @@ Deno.serve(async req => {
  const pendingRead = db.from('iq_demo_test_orders').select('id,iq_option_id').eq('status','confirmed').eq('result','pending').order('created_at').limit(1000).then(r=>r);
  const settingRead = parsed.data.candidate ? db.from('iq_demo_test_settings').select('amount').eq('id',1).maybeSingle().then(r=>r) : null;
  const selectedRead = parsed.data.candidate ? db.from('iq_demo_test_candidates').select('signal_id,asset,direction,entry_minute,entry_strategy,score,candles,pattern_match')
-   .eq('entry_minute',new Date(Math.floor(Date.now()/60000)*60000).toISOString()).maybeSingle().then(r=>r) : null;
+   .eq('entry_minute',new Date(Math.floor(Date.now()/60000)*60000).toISOString()).order('entry_strategy',{ascending:false}).limit(1).maybeSingle().then(r=>r) : null;
  const { data: cfg } = await readMasterIQConfig(db);
  if (!cfg) return reply({ error: 'Principal connection unavailable' },409);
  let ssid = reusableDemoSession(serviceAuthorized,cfg.id,parsed.data.brokerSession);

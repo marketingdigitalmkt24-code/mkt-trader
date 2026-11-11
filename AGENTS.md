@@ -34,4 +34,4 @@
 - Subdirectories have their own AGENTS.md (e.g. src/components); read them before changing files there.
 - Principal IQ entries come only from the single user-chosen Demo-derived strategy (currently Após 5 LOSS); retired strategies (Takashi invertida, Nota consistente) keep history but lose their claim path; why: only the user-chosen strategy may move money.
 - Client copies prepare read-only broker handshakes concurrently and send only after exact persisted principal opening acceptance plus fresh client authorization, never final WIN/LOSS; preserve the principal expiry. Why: reduce opening latency without unconfirmed trades or fabricated results.
-- Active Demo selection ignores notes and breaks same-strategy ties by signal ID; new candidates use zero only for the required legacy score column. Why: preserve schema/history without note analysis.
+- Demo generation and placement share an aligned-trend-only allowlist; reuse closed-bar trend detection plus extra confirmations at M5 boundaries, stable signal-ID asset ties and zero legacy score. Why: retired generators cannot place new Demo orders or reintroduce notes.

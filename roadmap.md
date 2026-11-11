@@ -1,3 +1,7 @@
+# Tendência alinhada exclusiva na Demo (11/11/2026)
+- [x] Substituir todas as estratégias Demo por Tendência alinhada, preservando M5, valor fixo e confirmações extras.
+- [x] Apagar 53 registros antigos (52 confirmados), candidatos e rejeições anteriores; dois executores publicados, 63 testes passaram, painel autenticado com lista vazia e Tendência alinhada, sem erros. Nova abertura natural ainda não observada; nenhuma ordem forçada.
+
 # Segundo quadro de operações (10/11/2026)
 - [ ] Definir isolamento das entradas, disputa por minuto e regra da combinação do novo grupo.
 - [ ] Adicionar segundo quadro com funcionalidades completas, estratégias solicitadas e combinação; preservar primeiro quadro e histórico.
@@ -5,7 +9,7 @@
 # Novas estratégias Demo (10/11/2026)
 - [x] Combinar concordância das quatro estratégias no mesmo ativo/direção/vela e adicionar Padrão vencedor por semelhança com WIN confirmado anterior, sem notas.
 - [x] Manter as quatro atuais, vaga única por minuto, histórico e gales; 507 testes passaram, duas funções publicadas, painel admin conferido em desktop/celular sem corte.
-- [ ] Observar abertura natural confirmada das novas estratégias: às 03:36 BRT Padrão vencedor foi selecionado prospectivamente com 2.862 WIN anteriores e referência exata, mas a recuperação retornou null enquanto a ordem precedente ainda era pendente no instante da seleção; nenhuma ordem foi forçada. Confluência depende de unanimidade fresca das quatro estratégias.
+- [x] Acompanhamento de Confluência e Padrão vencedor encerrado: substituídas por Tendência alinhada exclusiva em 11/11/2026.
 
 # Retirar análise por nota (05/11/2026)
 - [x] Remover notas da escolha de todos os sinais ativos sem alterar indicadores, revezamento ou controles financeiros.

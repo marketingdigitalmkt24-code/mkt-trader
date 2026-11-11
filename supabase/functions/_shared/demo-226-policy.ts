@@ -27,14 +27,15 @@ export const ICHIMOKU_RECUO21_STRATEGY = 'ICHIMOKU_RECUO21';
 // Nov 3 2026 (user): Tendência + Vela de força + Recuo combined on the same candle/direction (Demo only).
 // Nov 3 2026 00:48 BRT (user): ONLY these four strategies enter the Demo (Takashi and the other
 // standalone indicators no longer enter); Ichimoku + Recuo 21 keeps priority, the rest rotate.
-export const DEMO_STANDALONE_INDICATORS = ['ICHIMOKU', 'RECUO_EMA21'] as const;
-export const DEMO_INDICATOR_STRATEGIES = [ICHIMOKU_RECUO21_STRATEGY, 'TENDENCIA_FORCA_RECUO', ...DEMO_STANDALONE_INDICATORS, ...DEMO_CHALLENGERS] as const;
+export const TENDENCIA_ALINHADA_STRATEGY = 'TENDENCIA_ALINHADA';
+export const DEMO_STANDALONE_INDICATORS = [] as const;
+export const DEMO_INDICATOR_STRATEGIES = [TENDENCIA_ALINHADA_STRATEGY] as const;
 export function isDemoIndicatorStrategy(strategy: unknown): boolean {
   return (DEMO_INDICATOR_STRATEGIES as readonly unknown[]).includes(strategy);
 }
 // Strategies that have Demo history: one shared gale progression and the Após 4 LOSS streak read all of them,
 // so retiring a strategy from new Demo entries never breaks gale/streak continuity.
-export const DEMO_ENTRY_STRATEGIES = [TAKASHI_STRATEGY, ...DEMO_INDICATOR_STRATEGIES, 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ'];
+export const DEMO_ENTRY_STRATEGIES = [TAKASHI_STRATEGY, ...DEMO_INDICATOR_STRATEGIES, ICHIMOKU_RECUO21_STRATEGY, 'TENDENCIA_FORCA_RECUO', 'ICHIMOKU', 'RECUO_EMA21', ...DEMO_CHALLENGERS, 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ'];
 export type DemoCohort = 'takashi' | 'indicator' | 'score226' | 'antecipada';
 export function demoCohort(_score: unknown, strategy: unknown): DemoCohort | null {
   // Nov 5 2026: notes no longer authorize, reject or rank any active Demo signal.

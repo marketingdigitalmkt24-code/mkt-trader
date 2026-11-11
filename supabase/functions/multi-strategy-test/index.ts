@@ -13,8 +13,7 @@ import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequ
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
 import type { DemoCandidate } from '../_shared/demo-continuation.ts';
-import { takashiConfluenceCheck } from '../_shared/takashi-confluence.ts';
-import { demoCohort, preferredDemoCohort, ICHIMOKU_RECUO21_STRATEGY, DEMO_ENTRY_STRATEGIES, DEMO_STANDALONE_INDICATORS } from '../_shared/demo-226-policy.ts';
+import { demoCohort, DEMO_ENTRY_STRATEGIES, TENDENCIA_ALINHADA_STRATEGY } from '../_shared/demo-226-policy.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { forcaAntecipada, FORCA_ANTECIPADA } from '../_shared/forca-antecipada.ts';
@@ -32,13 +31,10 @@ import { watchDemoSettlements } from '../_shared/demo-settlement-watch.ts';
 import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_shared/broker-session-cache.ts';
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
-import { selectDemoByRotation, DEMO_ROTATION } from '../_shared/demo-profit-selection.ts';
-import { ichimokuRecuo21Direction } from '../_shared/ichimoku-recuo21.ts';
+import { selectDemoByRotation } from '../_shared/demo-profit-selection.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
-import { tendenciaForcaRecuoDirection, TENDENCIA_FORCA_RECUO_STRATEGY } from '../_shared/tendencia-forca-recuo.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
-import { DEMO_CONFLUENCE, DEMO_WIN_PATTERN, DEMO_CHALLENGERS, combinedDemoDirection, winningReferenceSamples, matchWinningPattern, type WinningReference } from '../_shared/demo-new-strategies.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
@@ -204,42 +200,6 @@ Deno.serve(async (req) => {
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
   const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type,pattern_min_movement_pct').eq('id',1).maybeSingle().then(r=>r);
-  // Prepare paginated WIN references concurrently with login, never wait on history at :00.
-  let patternSamples:ReturnType<typeof winningReferenceSamples> = [];
-  let patternHistoryReady=false;
-  // Padrão vencedor must not repeat the asset of its own previous entries; spread across assets.
-  const recentPatternAssets = supabase.from('iq_demo_test_orders').select('asset').eq('entry_strategy',DEMO_WIN_PATTERN)
-    .order('entry_minute',{ascending:false}).limit(3).then(r=>new Set((r.data??[]).map(x=>x.asset)),()=>new Set<string>());
-  // Load the maximum WIN reference charts: paginated with no row cap, bounded only by this deadline.
-  const historyAbort=new AbortController();
-  const historyTimer=setTimeout(()=>historyAbort.abort(),20000);
-  const patternHistoryTask=(async()=>{
-    const orders:Omit<WinningReference,'candles'>[]=[];
-    for(let from=0;;from+=1000){
-      const {data,error}=await supabase.from('iq_demo_test_orders')
-        .select('signal_id,asset,direction,entry_minute,settled_at,result,status,account_type,iq_option_id')
-        .eq('status','confirmed').eq('account_type','PRACTICE').eq('result','win').not('iq_option_id','is',null)
-        .lt('settled_at',new Date(targetMs).toISOString()).order('entry_minute').order('id')
-        .range(from,from+999).abortSignal(historyAbort.signal);
-      if(error)throw error;
-      orders.push(...(data??[]));
-      if((data??[]).length<1000)break;
-    }
-    const rows:WinningReference[]=[];
-    for(let from=0;from<orders.length;from+=200){
-      const batch=orders.slice(from,from+200);
-      const {data,error}=await supabase.from('iq_demo_test_candidates').select('signal_id,candles')
-        .in('signal_id',batch.map(row=>row.signal_id)).abortSignal(historyAbort.signal);
-      if(error)throw error;
-      const charts=new Map((data??[]).map(row=>[row.signal_id,row.candles]));
-      rows.push(...batch.map(row=>({...row,candles:charts.get(row.signal_id)})));
-    }
-    patternSamples=winningReferenceSamples(rows,targetMs/1000);
-    patternHistoryReady=true;
-  })().catch(()=>console.warn('Demo WIN references unavailable; originals remain independent'))
-    .finally(()=>clearTimeout(historyTimer));
-  // @ts-ignore Hosted background runtime
-  if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(patternHistoryTask);
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
@@ -483,8 +443,6 @@ Deno.serve(async (req) => {
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
   const demoPatterns: DemoCandidate[] = [];
-  let patternMinMovement:number|undefined;
-  const patternMatches=new Map<string,NonNullable<ReturnType<typeof matchWinningPattern>>>();
   const assetAnalyses = new Map<string, DemoAssetAnalysis>();
   const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
@@ -497,65 +455,22 @@ Deno.serve(async (req) => {
     if (!isDemoEntryBoundary(targetMs)) continue;
     const closed = cs.filter(k => k.t + DEMO_CANDLE_SEC <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - DEMO_CANDLE_SEC) continue;
-    // Uma entrada por par por minuto: se várias estratégias dispararem, fica só uma (Tendência tem prioridade).
-    // Keep legacy indicator warmup unchanged despite the larger Demo candle window.
+    // Reuse the established aligned trend: EMA9/21 + SMA50, MACD and RSI on closed M5 bars.
     const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_CANDLE_SEC <= curMin));
-    // Setup de 5 confirmações: Takashi + VWAP + EMA 9/21 + price action + volume.
-    const check = takashiConfluenceCheck(cs, curMin);
-    const gate = 'failed' in check ? check.failed : 'passed';
-    confluenceGates[gate] = (confluenceGates[gate] || 0) + 1;
-    if (check.volumeSource) confluenceGates[`vol_${check.volumeSource}`] = (confluenceGates[`vol_${check.volumeSource}`] || 0) + 1;
-    const takashi = 'failed' in check ? null : check;
-    // Ichimoku + Recuo na média 21 combined: both must fire on the same closed candle, same direction.
-    const combined = ichimokuRecuo21Direction(fired);
-    if (combined) demoPatterns.push({
-      signal_id: `demo-ichimoku-recuo21-v1-${asset}-${curMin}`, asset, direction: combined,
-      entry_strategy: ICHIMOKU_RECUO21_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
-      _score: Number.NaN, // No note is calculated; legacy internal shape only.
-    });
-    // Tendência + Vela de força + Recuo combined: all three on the same closed candle, same direction.
-    const tfr = tendenciaForcaRecuoDirection(fired);
-    if (tfr) demoPatterns.push({
-      signal_id: `demo-tendencia-forca-recuo-v1-${asset}-${curMin}`, asset, direction: tfr,
-      entry_strategy: TENDENCIA_FORCA_RECUO_STRATEGY, created_at: new Date(curMin * 1000).toISOString(),
-      _score: Number.NaN, // No note is calculated; legacy internal shape only.
-    });
-    // Every detected indicator also runs as a separate Demo-only strategy (user, Nov 3 2026).
-    for (const [strategy, direction] of fired) {
-      if (!(DEMO_STANDALONE_INDICATORS as readonly string[]).includes(strategy)) continue;
-      demoPatterns.push({
-        signal_id: `demo-${strategy.toLowerCase()}-v1-${asset}-${curMin}`, asset, direction,
-        entry_strategy: strategy, created_at: new Date(curMin * 1000).toISOString(),
-        _score: Number.NaN, // No note is calculated; legacy internal shape only.
-      });
+    const direction = fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1];
+    if (!direction) continue;
+    const why = demoExtraConfirmations(closed, direction);
+    if (why) {
+      confluenceGates[`extra_${why}`] = (confluenceGates[`extra_${why}`] || 0) + 1;
+      continue;
     }
-    const allDirection=combinedDemoDirection([
-      ...fired,...(combined?[[ICHIMOKU_RECUO21_STRATEGY,combined] as const]:[]),
-      ...(tfr?[[TENDENCIA_FORCA_RECUO_STRATEGY,tfr] as const]:[]),
-    ]);
-    if(allDirection)demoPatterns.push({signal_id:`demo-confluencia4-v1-${asset}-${curMin}`,asset,direction:allDirection,
-      entry_strategy:DEMO_CONFLUENCE,created_at:new Date(curMin*1000).toISOString(),_score:Number.NaN});
-    // Extra confirmations (user, Nov 10 2026) gate every original strategy and the confluence, not PADRAO_VENCEDOR.
-    { const closedCs=cs.filter(k=>k.t+DEMO_CANDLE_SEC<=curMin); for(let q=demoPatterns.length-1;q>=0;q--){const p=demoPatterns[q];
-      if(p.asset!==asset||p.entry_strategy===DEMO_WIN_PATTERN)continue; const why=demoExtraConfirmations(closedCs,p.direction);
-      if(why){confluenceGates[`extra_${why}`]=(confluenceGates[`extra_${why}`]||0)+1;demoPatterns.splice(q,1);}}}
-    // Independent chart strategy: try both directions using only pre-entry candles and prior settled WINs.
-    if(patternHistoryReady&&!(await recentPatternAssets).has(asset)){
-      patternMinMovement??=Math.max(0,Number((await amountRead).data?.pattern_min_movement_pct??0.02)||0);
-      const matches=(['CALL','PUT'] as const).flatMap(direction=>{
-        const match=matchWinningPattern(patternSamples,cs,curMin,direction,patternMinMovement);
-        return match?[{direction,match}]:[];
-      }).sort((a,b)=>b.match.similar_wins-a.match.similar_wins||a.match.distance-b.match.distance||a.direction.localeCompare(b.direction));
-      const closest=matches[0];
-      if(closest){
-        const signal_id=`demo-padrao-vencedor-v1-${asset}-${curMin}`;
-        demoPatterns.push({signal_id,asset,direction:closest.direction,entry_strategy:DEMO_WIN_PATTERN,
-          created_at:new Date(curMin*1000).toISOString(),_score:Number.NaN,_patternSimilarWins:closest.match.similar_wins});
-        patternMatches.set(signal_id,closest.match);
-      }
-    }
+    demoPatterns.push({
+      signal_id: `demo-tendencia-alinhada-v1-${asset}-${curMin}`, asset, direction,
+      entry_strategy: TENDENCIA_ALINHADA_STRATEGY,
+      created_at: new Date(curMin * 1000).toISOString(), _score: Number.NaN,
+    });
   }
-  console.log('Takashi 5-confluence gates:', JSON.stringify(confluenceGates));
+  console.log('Aligned trend confirmation gates:', JSON.stringify(confluenceGates));
   let inserted = 0;
   // Separate service ledger: new Demo patterns never enter principal TEST history/claims.
   // Display-only enrichment: retain the result and following closed candle.
@@ -577,7 +492,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-m5-v23',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-m5-aligned-only-v24',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = demoPatterns;
@@ -598,25 +513,12 @@ Deno.serve(async (req) => {
     // Preserve market availability and strategy rules; no note eligibility gate.
     const commission = market[1]?.option?.profit?.commission;
     const _payout = typeof commission === 'number' ? (100-commission)/100 : null;
-    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:patternMatches.get(c.signal_id)??null,_payout}];
+    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null,_payout}];
   });
-  // User (Oct 25 2026 19:02 UTC): alternate Demo slots between Takashi and displayed-2.26 entries.
-  const [lastCandidate,lastSlot,lastChallenger]=await Promise.all([
-    supabase.from('iq_demo_test_candidates').select('entry_strategy').in('entry_strategy',[...DEMO_ROTATION])
-      .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle(),
-    supabase.from('iq_demo_test_candidates').select('entry_strategy').lt('entry_minute',new Date(curMin*1000).toISOString())
-      .order('entry_minute',{ascending:false}).limit(1).maybeSingle(),
-    supabase.from('iq_demo_test_candidates').select('entry_strategy').in('entry_strategy',[...DEMO_CHALLENGERS])
-      .lt('entry_minute',new Date(curMin*1000).toISOString()).order('entry_minute',{ascending:false}).limit(1).maybeSingle(),
-  ]);
-  // Missing rotation state must never favor/repeat a challenger based on a failed read.
-  if(lastSlot.error||lastChallenger.error)demoEligible.splice(0,demoEligible.length,...demoEligible.filter(c=>!(DEMO_CHALLENGERS as readonly string[]).includes(c.entry_strategy)));
-  const preferred=preferredDemoCohort(lastCandidate.data?.entry_strategy);
-  // Combined Ichimoku + Recuo 21 first; otherwise rotate Tendência+Força+Recuo -> Ichimoku -> Recuo 21.
-  const demoWinner = selectDemoByRotation(demoEligible, lastCandidate.data?.entry_strategy,lastSlot.data?.entry_strategy,lastChallenger.data?.entry_strategy);
+  // Single active strategy; stable IDs break asset ties without notes or historical ranking.
+  const demoWinner = selectDemoByRotation(demoEligible, null);
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  console.log('Demo rotation selection:',JSON.stringify({strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,scoreAnalysis:false,patternHistoryReady,winReferences:patternSamples.length,patternMinMovement}));
-  console.log('Demo alternation:',JSON.stringify({preferred,previous:lastCandidate.data?.entry_strategy??null}));
+  console.log('Demo rotation selection:',JSON.stringify({strategy:demoWinner?.entry_strategy??null,eligible:demoEligible.length,selected:demoWinner?.signal_id??null,scoreAnalysis:false}));
   for(const c of demoEligible){
     const reason:RejectionReason|null=demoWinner&&demoWinner.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:demoWinner.signal_id}}:null;
     if(reason)reject(c,reason);
@@ -632,7 +534,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo: no valid Takashi/Ichimoku/Recuo 21/combined candidate this minute');
+  if (!demoWinner) console.log('Demo: no valid aligned trend candidate at this M5 boundary');
   if (demoWinner) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
@@ -730,5 +632,5 @@ Deno.serve(async (req) => {
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));
   // @ts-ignore Hosted background runtime: chart writes must not delay a fresh entry.
   if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(chartTask);else await chartTask;
-  return Response.json({ success: true, assets: series.size, resolved, strategy: TAKASHI_BNF, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
+  return Response.json({ success: true, assets: series.size, resolved, strategy: TENDENCIA_ALINHADA_STRATEGY, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
 });

@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import type { StrategyStat } from '@/lib/strategy-stats';
-import { allDemoStrategyRows, demoStrategyStats, demoWinningPatternStats, DEMO_STRATEGY_CUTOFF } from '@/lib/demo-strategy-stats';
+import { allDemoStrategyRows, demoStrategyStats, DEMO_STRATEGY_CUTOFF } from '@/lib/demo-strategy-stats';
 import { scanIsActive, type DemoScanStatus } from '../../supabase/functions/_shared/demo-scan-status';
 
 interface SignalEntry {
@@ -20,6 +20,7 @@ const strategyLabels: Record<string, string> = {
   PADRAO_VENCEDOR: 'Padrão vencedor',
   PADRAO_VENCEDOR_HISTORICO: 'Padrão vencedor · histórico marcado',
   CONFLUENCIA_4_ESTRATEGIAS: 'Confluência das 4 estratégias',
+  TENDENCIA_ALINHADA: 'Tendência alinhada',
   TENDENCIA: 'Tendência',
   CONTINUACAO_QUEDA_V1: 'Queda',
   TETO_V1: 'Teto',
@@ -74,23 +75,12 @@ export function AIAnalysisStatusCard() {
           .range(from, to);
         if (error) throw error;
         const orders=data??[];
-        const ids=orders.map(row=>row.signal_id);
-        const patterns=new Map<string,unknown>();
-        for(let i=0;i<ids.length;i+=100){
-          const {data:candidates,error:patternError}=await supabase.from('iq_demo_test_candidates')
-            .select('signal_id,pattern_match').in('signal_id',ids.slice(i,i+100));
-          if(patternError)throw patternError;
-          for(const candidate of candidates??[])patterns.set(candidate.signal_id,candidate.pattern_match);
-        }
-        return orders.map(row=>({...row,pattern_match:patterns.get(row.signal_id)}));
+        return orders;
       });
       if (mounted.current) {
-        const historical=demoWinningPatternStats(rows.filter(row=>row.entry_strategy!=='PADRAO_VENCEDOR'));
-        const current=demoStrategyStats(rows);
-        for(const strategy of ['CONFLUENCIA_4_ESTRATEGIAS','PADRAO_VENCEDOR']) {
-          if(!current.some(stat=>stat.strategy===strategy))current.push({strategy,wins:0,losses:0});
-        }
-        setStrategyStats([...(historical.wins+historical.losses>0?[{...historical,strategy:'PADRAO_VENCEDOR_HISTORICO'}]:[]),...current]);
+        const current=demoStrategyStats(rows.filter(row=>row.entry_strategy==='TENDENCIA_ALINHADA'));
+        if(!current.length)current.push({strategy:'TENDENCIA_ALINHADA',wins:0,losses:0});
+        setStrategyStats(current);
       }
     } catch {
       // silent
@@ -111,11 +101,11 @@ export function AIAnalysisStatusCard() {
       const [candidates, rejections, scan] = await Promise.all([
         supabase.from('iq_demo_test_candidates')
           .select('signal_id,asset,direction,entry_minute')
-          .in('entry_strategy', ['CONFLUENCIA_4_ESTRATEGIAS','PADRAO_VENCEDOR','ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO']).gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['TENDENCIA_ALINHADA']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.from('demo_selection_rejections')
           .select('signal_id,asset,direction,entry_minute')
-          .in('entry_strategy', ['CONFLUENCIA_4_ESTRATEGIAS','PADRAO_VENCEDOR','ICHIMOKU_RECUO21', 'ICHIMOKU', 'RECUO_EMA21', 'TENDENCIA_FORCA_RECUO']).gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['TENDENCIA_ALINHADA']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.functions.invoke('demo-analysis-status',{body:{}}),
       ]);
@@ -342,7 +332,7 @@ export function AIAnalysisStatusCard() {
         {recentSignals.length === 0 && !lastAnalysis?.asset_analyses?.length && (
           <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-lg">
             <Brain className="w-5 h-5 mx-auto mb-1 opacity-30" />
-            {analysisError ? 'Não foi possível consultar as análises.' : 'Nenhum sinal Takashi registrado nos últimos 10 minutos.'}
+            {analysisError ? 'Não foi possível consultar as análises.' : 'Nenhum sinal Tendência alinhada registrado nos últimos 10 minutos.'}
           </div>
         )}
       </CardContent>

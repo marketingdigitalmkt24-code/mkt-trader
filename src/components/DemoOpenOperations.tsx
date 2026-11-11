@@ -10,9 +10,10 @@ type OpenOperation = {
 
 const brt = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-export function DemoOpenOperations() {
+export function DemoOpenOperations({ strategy }: { strategy?: string } = {}) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['demo-open-operations'],
+    select: (rows: OpenOperation[]) => strategy ? rows.filter(r => r.strategy === strategy) : rows,
     refetchInterval: 10000,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('demo-open-operations-admin', { body: {} });

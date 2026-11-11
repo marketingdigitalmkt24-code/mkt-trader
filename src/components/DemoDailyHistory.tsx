@@ -13,7 +13,7 @@ const signedCurrency = (amount: number) => `${amount > 0 ? '+' : amount < 0 ? '-
 const shortDate = (date: string) => new Date(`${date}T12:00:00-03:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
 const longDate = (date: string) => new Date(`${date}T12:00:00-03:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' });
 
-export function DemoDailyHistory() {
+export function DemoDailyHistory({ strategy }: { strategy?: string } = {}) {
  const [page, setPage] = useState(0);
  const [openDay, setOpenDay] = useState<string | null>(null);
  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,17 +31,17 @@ export function DemoDailyHistory() {
  };
  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
  useEffect(() => {
-  const channel = supabase.channel('demo-daily-history-live').on('postgres_changes', {event:'*',schema:'public',table:'iq_demo_test_orders'}, () => {
+  const channel = supabase.channel(`demo-daily-history-live-${strategy ?? 'all'}`).on('postgres_changes', {event:'*',schema:'public',table:'iq_demo_test_orders'}, () => {
     void queryClient.invalidateQueries({queryKey:['demo-daily-history']});
   }).subscribe();
   return () => { void supabase.removeChannel(channel); };
  }, [queryClient]);
- const history = useQuery({ queryKey:['demo-daily-history',today,page], refetchInterval:10000, queryFn:async () => {
-  const oldestQuery = supabase.from('iq_demo_test_orders').select('entry_minute').in('account_type',['PRACTICE','REAL']).eq('status','confirmed').not('iq_option_id','is',null).order('entry_minute').limit(1);
+ const history = useQuery({ queryKey:['demo-daily-history',today,page,strategy], refetchInterval:10000, queryFn:async () => {
+  const oldestQuery = supabase.from('iq_demo_test_orders').select('entry_minute').in('account_type',['PRACTICE','REAL']).or(strategy?`entry_strategy.eq.${strategy}`:'id.not.is.null').eq('status','confirmed').not('iq_option_id','is',null).order('entry_minute').limit(1);
   const rowsQuery = async () => {
    const rows: DemoDailyRow[] = [];
    for(let from=0; ; from+=1000) {
-    const {data,error} = await supabase.from('iq_demo_test_orders').select('entry_minute,account_type,status,result,profit,iq_option_id').in('account_type',['PRACTICE','REAL']).eq('status','confirmed').not('iq_option_id','is',null).gte('entry_minute',window.from).lt('entry_minute',window.to).order('entry_minute',{ascending:false}).order('id').range(from,from+999);
+    const {data,error} = await supabase.from('iq_demo_test_orders').select('entry_minute,account_type,status,result,profit,iq_option_id').in('account_type',['PRACTICE','REAL']).or(strategy?`entry_strategy.eq.${strategy}`:'id.not.is.null').eq('status','confirmed').not('iq_option_id','is',null).gte('entry_minute',window.from).lt('entry_minute',window.to).order('entry_minute',{ascending:false}).order('id').range(from,from+999);
      if(error) throw error;
      rows.push(...(data || []));
      if((data?.length || 0)<1000) return rows;

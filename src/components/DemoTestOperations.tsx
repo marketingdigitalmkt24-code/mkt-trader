@@ -21,11 +21,11 @@ export const demoStrategyNames: Record<string, string> = {
  ROMPIMENTO: 'Rompimento', KDJ: 'KDJ',
 };
 
-export function DemoTestOperations() {
+export function DemoTestOperations({strategy}:{strategy?:string}={}) {
  const [page,setPage]=useState(0);
  const queryClient=useQueryClient();
  useEffect(()=>{
-  const channel=supabase.channel('demo-operations-live-totals').on('postgres_changes',{
+  const channel=supabase.channel(`demo-operations-live-totals-${strategy??'all'}`).on('postgres_changes',{
    event:'*',schema:'public',table:'iq_demo_test_orders',
   },()=>{
    void queryClient.invalidateQueries({queryKey:['demo-test-orders']});
@@ -34,12 +34,16 @@ export function DemoTestOperations() {
   return ()=>{void supabase.removeChannel(channel);};
  },[queryClient]);
  // Version the cached shape: mounted sessions may still hold totals without gross fields.
- const stats = useQuery({queryKey:['demo-test-totals','gross-v2'],refetchInterval:10000,queryFn:async()=>demoTestStats(await allDemoOutcomes(async(from,to)=>{
-  const {data,error}=await supabase.from('iq_demo_test_orders').select('status,result,profit,iq_option_id').eq('status','confirmed').order('created_at',{ascending:false}).order('id').range(from,to);
+ const stats = useQuery({queryKey:['demo-test-totals','gross-v2',strategy],refetchInterval:10000,queryFn:async()=>demoTestStats(await allDemoOutcomes(async(from,to)=>{
+  let q=supabase.from('iq_demo_test_orders').select('status,result,profit,iq_option_id').eq('status','confirmed');
+  if(strategy)q=q.eq('entry_strategy',strategy);
+  const {data,error}=await q.order('created_at',{ascending:false}).order('id').range(from,to);
   if(error)throw error;return data || [];
  }))});
- const {data,isLoading,isError}=useQuery({queryKey:['demo-test-orders',page],refetchInterval:10000,queryFn:async()=>{
- const {data,count,error}=await supabase.from('iq_demo_test_orders').select('*',{count:'exact'}).eq('status','confirmed').not('iq_option_id','is',null).order('created_at',{ascending:false}).range(page*10,page*10+9);
+ const {data,isLoading,isError}=useQuery({queryKey:['demo-test-orders',page,strategy],refetchInterval:10000,queryFn:async()=>{
+ let oq=supabase.from('iq_demo_test_orders').select('*',{count:'exact'}).eq('status','confirmed').not('iq_option_id','is',null);
+ if(strategy)oq=oq.eq('entry_strategy',strategy);
+ const {data,count,error}=await oq.order('created_at',{ascending:false}).range(page*10,page*10+9);
  if(error)throw error;
  const ids=(data||[]).map(r=>r.signal_id);
  const {data:cand}=ids.length?await supabase.from('iq_demo_test_candidates').select('signal_id,candles,pattern_match').in('signal_id',ids):{data:[]};

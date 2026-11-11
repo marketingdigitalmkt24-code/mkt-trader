@@ -28,8 +28,10 @@ export const ICHIMOKU_RECUO21_STRATEGY = 'ICHIMOKU_RECUO21';
 // Nov 3 2026 00:48 BRT (user): ONLY these four strategies enter the Demo (Takashi and the other
 // standalone indicators no longer enter); Ichimoku + Recuo 21 keeps priority, the rest rotate.
 export const TENDENCIA_ALINHADA_STRATEGY = 'TENDENCIA_ALINHADA';
+// Nov 11 2026 (user): Queda forte joins Tendência alinhada in the Demo, following strong moves both ways.
+export const QUEDA_STRATEGY = 'QUEDA_FORTE';
 export const DEMO_STANDALONE_INDICATORS = [] as const;
-export const DEMO_INDICATOR_STRATEGIES = [TENDENCIA_ALINHADA_STRATEGY] as const;
+export const DEMO_INDICATOR_STRATEGIES = [TENDENCIA_ALINHADA_STRATEGY, QUEDA_STRATEGY] as const;
 export function isDemoIndicatorStrategy(strategy: unknown): boolean {
   return (DEMO_INDICATOR_STRATEGIES as readonly unknown[]).includes(strategy);
 }

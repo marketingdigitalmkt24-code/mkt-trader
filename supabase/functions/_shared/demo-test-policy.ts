@@ -14,6 +14,7 @@ export function freshDemoCandidate(row: { signal_id: string; timeframe: string; 
  if (row.signal_id.startsWith('t7-')) return freshDemoTest(row,now);
  const at = Date.parse(row.created_at);
  const known = (row.signal_id.startsWith('demo-tendencia-alinhada-v1-') && row.entry_strategy === 'TENDENCIA_ALINHADA' && ['CALL','PUT'].includes(row.direction) && at % 300000 === 0)
+  || (row.signal_id.startsWith('demo-queda-forte-v1-') && row.entry_strategy === 'QUEDA_FORTE' && ['CALL','PUT'].includes(row.direction) && at % 300000 === 0)
   || (row.signal_id.startsWith('demo-continuation-v1-') && row.entry_strategy === 'CONTINUACAO_QUEDA_V1' && row.direction === 'PUT')
   || (row.signal_id.startsWith('demo-teto-v1-') && row.entry_strategy === 'TETO_V1' && row.direction === 'PUT')
    || (row.signal_id.startsWith('queda-win-call-v1-') && row.entry_strategy === 'QUEDA_WIN_CALL_V1' && row.direction === 'CALL')

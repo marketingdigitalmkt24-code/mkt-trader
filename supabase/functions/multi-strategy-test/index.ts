@@ -13,7 +13,8 @@ import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequ
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
 import type { DemoCandidate } from '../_shared/demo-continuation.ts';
-import { demoCohort, DEMO_ENTRY_STRATEGIES, TENDENCIA_ALINHADA_STRATEGY } from '../_shared/demo-226-policy.ts';
+import { demoCohort, DEMO_ENTRY_STRATEGIES, TENDENCIA_ALINHADA_STRATEGY, QUEDA_STRATEGY } from '../_shared/demo-226-policy.ts';
+import { detectQuedaForte } from '../_shared/demo-queda.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { forcaAntecipada, FORCA_ANTECIPADA } from '../_shared/forca-antecipada.ts';
@@ -457,18 +458,23 @@ Deno.serve(async (req) => {
     if (!closed.length || closed[closed.length - 1].t !== curMin - DEMO_CANDLE_SEC) continue;
     // Reuse the established aligned trend: EMA9/21 + SMA50, MACD and RSI on closed M5 bars.
     const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_CANDLE_SEC <= curMin));
-    const direction = fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1];
-    if (!direction) continue;
-    const why = demoExtraConfirmations(closed, direction);
-    if (why) {
-      confluenceGates[`extra_${why}`] = (confluenceGates[`extra_${why}`] || 0) + 1;
-      continue;
+    const options: [string, string, 'CALL' | 'PUT' | null][] = [
+      [TENDENCIA_ALINHADA_STRATEGY, 'demo-tendencia-alinhada-v1', (fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1] as any) ?? null],
+      [QUEDA_STRATEGY, 'demo-queda-forte-v1', detectQuedaForte(closed)],
+    ];
+    for (const [strategy, prefix, direction] of options) {
+      if (!direction) continue;
+      const why = demoExtraConfirmations(closed, direction);
+      if (why) {
+        confluenceGates[`${strategy}_extra_${why}`] = (confluenceGates[`${strategy}_extra_${why}`] || 0) + 1;
+        continue;
+      }
+      demoPatterns.push({
+        signal_id: `${prefix}-${asset}-${curMin}`, asset, direction,
+        entry_strategy: strategy,
+        created_at: new Date(curMin * 1000).toISOString(), _score: Number.NaN,
+      });
     }
-    demoPatterns.push({
-      signal_id: `demo-tendencia-alinhada-v1-${asset}-${curMin}`, asset, direction,
-      entry_strategy: TENDENCIA_ALINHADA_STRATEGY,
-      created_at: new Date(curMin * 1000).toISOString(), _score: Number.NaN,
-    });
   }
   console.log('Aligned trend confirmation gates:', JSON.stringify(confluenceGates));
   let inserted = 0;
@@ -492,7 +498,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-m5-aligned-only-v24',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-m5-aligned-queda-v25',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = demoPatterns;

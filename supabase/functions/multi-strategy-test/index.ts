@@ -20,7 +20,7 @@ import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { forcaAntecipada, FORCA_ANTECIPADA } from '../_shared/forca-antecipada.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
-import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay, DEMO_CANDLE_SEC, isDemoEntryBoundary } from '../_shared/demo-timing.ts';
+import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay, DEMO_CANDLE_SEC, DEMO_ANALYSIS_SEC, isDemoEntryBoundary } from '../_shared/demo-timing.ts';
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
@@ -389,7 +389,7 @@ Deno.serve(async (req) => {
         await sendCandleRequestBatches(prioritizeResultAssets(cand, (open || []).map(o => o.asset)), ([s, id]) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const rid = `m${id}`; byReq.set(rid, s);
-          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: DEMO_CANDLE_SEC, to: nowSec, count: 101 } } }));
+          ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: DEMO_ANALYSIS_SEC, to: nowSec, count: 101 } } }));
         });
         };
         const delay = demoBoundaryDelay(Date.now(), targetMs);
@@ -448,16 +448,16 @@ Deno.serve(async (req) => {
   const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
     const prior=cs.filter(k=>k.t<curMin).slice(-60);
-    const complete=prior.length===60 && prior.every((k,i)=>k.t===curMin-(60-i)*DEMO_CANDLE_SEC
+    const complete=prior.length===60 && prior.every((k,i)=>k.t===curMin-(60-i)*DEMO_ANALYSIS_SEC
       && [k.t,k.o,k.c,k.h,k.l].every(Number.isFinite) && k.o>0 && k.c>0
       && k.h>=Math.max(k.o,k.c) && k.l<=Math.min(k.o,k.c));
     assetAnalyses.set(asset,{asset,direction:null,score:null,state:complete?'no_signal':'incomplete_candles'});
     // Only 5-minute boundaries open entries; other minutes only settle pending orders.
     if (!isDemoEntryBoundary(targetMs)) continue;
-    const closed = cs.filter(k => k.t + DEMO_CANDLE_SEC <= curMin);
-    if (!closed.length || closed[closed.length - 1].t !== curMin - DEMO_CANDLE_SEC) continue;
+    const closed = cs.filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin);
+    if (!closed.length || closed[closed.length - 1].t !== curMin - DEMO_ANALYSIS_SEC) continue;
     // Reuse the established aligned trend: EMA9/21 + SMA50, MACD and RSI on closed M5 bars.
-    const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_CANDLE_SEC <= curMin));
+    const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin));
     const options: [string, string, 'CALL' | 'PUT' | null][] = [
       [TENDENCIA_ALINHADA_STRATEGY, 'demo-tendencia-alinhada-v1', (fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1] as any) ?? null],
       [QUEDA_STRATEGY, 'demo-queda-forte-v1', detectQuedaForte(closed)],

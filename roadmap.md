@@ -1,3 +1,7 @@
+# Velas de 5 segundos com vencimento de 1 minuto (12/11/2026)
+- [x] Separar análise de 5 segundos da expiração de 60 segundos, preservando concorrência independente por minuto.
+- [x] Dois executores publicados; 24 testes passaram; rodada natural 03:36 UTC confirmou velas de 5 segundos nas duas estratégias, com seleção independente. Painel autenticado conferido sem erros. Envio dessa rodada foi barrado na revalidação; não forçar ordens.
+
 # Tendência alinhada exclusiva na Demo (11/11/2026)
 - [x] Substituir todas as estratégias Demo por Tendência alinhada, preservando M5, valor fixo e confirmações extras.
 - [x] Apagar 53 registros antigos (52 confirmados), candidatos e rejeições anteriores; dois executores publicados, 63 testes passaram, painel autenticado com lista vazia e Tendência alinhada, sem erros. Nova abertura natural ainda não observada; nenhuma ordem forçada.

@@ -1,5 +1,16 @@
 import { test, expect } from 'bun:test';
-import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay } from './demo-timing';
+import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay, DEMO_ANALYSIS_SEC, DEMO_CANDLE_SEC, isDemoEntryBoundary } from './demo-timing';
+test('both Demo strategies analyze 5-second candles',()=>{
+ expect(DEMO_ANALYSIS_SEC).toBe(5);
+});
+test('Demo expiry remains one minute',()=>{
+ expect(DEMO_CANDLE_SEC).toBe(60);
+});
+test('every minute remains eligible with 5-second analysis, not only M5 slots',()=>{
+ const at=Date.parse('2026-11-12T03:35:00Z');
+ for(let minute=0;minute<5;minute++) expect(isDemoEntryBoundary(demoTargetMinute(at+minute*60000,false))).toBe(true);
+ expect(isDemoEntryBoundary(at+1000)).toBe(false);
+});
 test('scheduled Demo prepares before next :00, immediate checks never move old signals forward',()=>{
  const at=Date.parse('2026-10-24T01:16:00Z');
  expect(demoTargetMinute(at+1000,true)).toBe(at+60000);

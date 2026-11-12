@@ -1,4 +1,4 @@
-// Queda forte (Nov 11 2026): three closed M5 candles in the same direction, the last body at least
+// Queda forte: three closed analysis candles in the same direction, the last body at least
 // 1.5x the average body of the 20 earlier candles. Follows the move: drop -> PUT, rise -> CALL.
 export type QK = { o: number; c: number };
 export function detectQuedaForte(closed: QK[]): 'CALL' | 'PUT' | null {

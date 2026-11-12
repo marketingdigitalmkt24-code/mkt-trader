@@ -452,11 +452,11 @@ Deno.serve(async (req) => {
       && [k.t,k.o,k.c,k.h,k.l].every(Number.isFinite) && k.o>0 && k.c>0
       && k.h>=Math.max(k.o,k.c) && k.l<=Math.min(k.o,k.c));
     assetAnalyses.set(asset,{asset,direction:null,score:null,state:complete?'no_signal':'incomplete_candles'});
-    // Only 5-minute boundaries open entries; other minutes only settle pending orders.
+    // Each minute slot analyzes the latest closed 5-second bars; settlement stays independent.
     if (!isDemoEntryBoundary(targetMs)) continue;
     const closed = cs.filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin);
     if (!closed.length || closed[closed.length - 1].t !== curMin - DEMO_ANALYSIS_SEC) continue;
-    // Reuse the established aligned trend: EMA9/21 + SMA50, MACD and RSI on closed M5 bars.
+    // Reuse the established aligned trend: EMA9/21 + SMA50, MACD and RSI on closed analysis bars.
     const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin));
     const options: [string, string, 'CALL' | 'PUT' | null][] = [
       [TENDENCIA_ALINHADA_STRATEGY, 'demo-tendencia-alinhada-v1', (fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1] as any) ?? null],
@@ -498,7 +498,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-m1-aligned-queda-v26',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-s5-aligned-queda-v27',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = demoPatterns;
@@ -522,7 +522,7 @@ Deno.serve(async (req) => {
     return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null,_payout}];
   });
   // Single active strategy; stable IDs break asset ties without notes or historical ranking.
-  // Each real-time card competes for its own M5 slot (user, Nov 11 2026): one winner per strategy.
+  // Each real-time card competes for its own minute slot: one winner per strategy.
   const demoWinners = [TENDENCIA_ALINHADA_STRATEGY, QUEDA_STRATEGY]
     .map(s => selectDemoByRotation(demoEligible.filter(c => c.entry_strategy === s), null))
     .filter((c): c is NonNullable<typeof c> => !!c);
@@ -545,7 +545,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo: no valid aligned trend candidate at this M5 boundary');
+  if (!demoWinner) console.log('Demo: no valid candidate in this minute with 5-second analysis');
   let principalTriggered = false;
   for (const demoWinner of demoWinners) {
     const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,

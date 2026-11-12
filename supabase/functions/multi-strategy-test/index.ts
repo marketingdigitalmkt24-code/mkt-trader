@@ -523,7 +523,7 @@ Deno.serve(async (req) => {
   });
   // Single active strategy; stable IDs break asset ties without notes or historical ranking.
   // Each real-time card competes for its own minute slot: one winner per strategy.
-  const demoWinners = [TENDENCIA_ALINHADA_STRATEGY, QUEDA_STRATEGY]
+  const demoWinners = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY]
     .map(s => selectDemoByRotation(demoEligible.filter(c => c.entry_strategy === s), null))
     .filter((c): c is NonNullable<typeof c> => !!c);
   const demoWinner = demoWinners[0] ?? null;

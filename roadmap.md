@@ -1,3 +1,7 @@
+# Substituir estratégia do quadro 2 (12/11/2026)
+- [x] Trocar Queda forte por Tendência + Força + Recuo na geração, autorização, lista e resumo; preservar quadro 1, análise de 5 segundos, expiração de 1 minuto e histórico.
+- [x] 40 testes passaram; dois executores publicados; painel autenticado conferido sem Queda forte, com resumo da substituta e sem erros. Rodada natural 03:50 UTC consultou 120 ativos usando a nova seleção; nenhuma entrada da substituta confirmada nessa conferência, sem forçar ordens.
+
 # Velas de 5 segundos com vencimento de 1 minuto (12/11/2026)
 - [x] Separar análise de 5 segundos da expiração de 60 segundos, preservando concorrência independente por minuto.
 - [x] Dois executores publicados; 24 testes passaram; rodada natural 03:36 UTC confirmou velas de 5 segundos nas duas estratégias, com seleção independente. Painel autenticado conferido sem erros. Envio dessa rodada foi barrado na revalidação; não forçar ordens.

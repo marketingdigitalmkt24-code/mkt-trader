@@ -13,8 +13,8 @@ import { matchesTrendSequence, TREND_SEQUENCE_TEST } from '../_shared/trend-sequ
 import { forceFirstObservation, FORCE_FIRST_TEST } from '../_shared/force-first-test.ts';
 import { TAKASHI_BNF } from '../_shared/takashi-kotegawa.ts';
 import type { DemoCandidate } from '../_shared/demo-continuation.ts';
-import { demoCohort, DEMO_ENTRY_STRATEGIES, TENDENCIA_ALINHADA_STRATEGY, QUEDA_STRATEGY } from '../_shared/demo-226-policy.ts';
-import { detectQuedaForte } from '../_shared/demo-queda.ts';
+import { demoCohort, DEMO_ENTRY_STRATEGIES, TENDENCIA_ALINHADA_STRATEGY } from '../_shared/demo-226-policy.ts';
+import { tendenciaForcaRecuoDirection, TENDENCIA_FORCA_RECUO_STRATEGY } from '../_shared/tendencia-forca-recuo.ts';
 import { DEMO_PRINCIPAL_ENABLED, isSuperSelected } from '../_shared/demo-validated.ts';
 import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { forcaAntecipada, FORCA_ANTECIPADA } from '../_shared/forca-antecipada.ts';
@@ -460,7 +460,7 @@ Deno.serve(async (req) => {
     const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin));
     const options: [string, string, 'CALL' | 'PUT' | null][] = [
       [TENDENCIA_ALINHADA_STRATEGY, 'demo-tendencia-alinhada-v1', (fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1] as any) ?? null],
-      [QUEDA_STRATEGY, 'demo-queda-forte-v1', detectQuedaForte(closed)],
+      [TENDENCIA_FORCA_RECUO_STRATEGY, 'demo-tendencia-forca-recuo-v1', tendenciaForcaRecuoDirection(fired)],
     ];
     for (const [strategy, prefix, direction] of options) {
       if (!direction) continue;
@@ -498,7 +498,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-s5-aligned-queda-v27',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-s5-aligned-tfr-v28',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = demoPatterns;

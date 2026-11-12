@@ -14,7 +14,14 @@ test('missing or disagreeing part never fires', () => {
 });
 
 test('combined strategy is a Demo entry strategy with a fresh-candidate prefix', () => {
-  expect(demoCohort(1.2, 'TENDENCIA_FORCA_RECUO')).toBeNull();
+  expect(demoCohort(1.2, 'TENDENCIA_FORCA_RECUO')).toBe('indicator');
   const at = Date.UTC(2026, 10, 3, 3, 30);
   expect(freshDemoCandidate({ signal_id: `demo-tendencia-forca-recuo-v1-EUR/USD-${at / 1000}`, timeframe: 'TEST', created_at: new Date(at).toISOString(), direction: 'CALL', entry_strategy: 'TENDENCIA_FORCA_RECUO' }, at + 1000)).toBe(true);
+});
+
+test('card 2 competes every minute with 5-second analysis and one-minute expiry', () => {
+  const at = Date.parse('2026-11-12T03:51:00Z');
+  const row = { signal_id: `demo-tendencia-forca-recuo-v1-EUR/USD-${at / 1000}`, timeframe: 'TEST', created_at: new Date(at).toISOString(), direction: 'PUT', entry_strategy: 'TENDENCIA_FORCA_RECUO' };
+  expect(freshDemoCandidate(row, at + 1000)).toBe(true);
+  expect(freshDemoCandidate(row, at + 26000)).toBe(false);
 });

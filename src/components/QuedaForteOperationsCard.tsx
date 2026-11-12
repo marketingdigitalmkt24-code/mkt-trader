@@ -14,9 +14,9 @@ export function QuedaForteOperationsCard() {
           <h3 className="text-sm font-semibold">Operações em Tempo Real · 2</h3>
         </div>
         <OpenPositionsSection />
-        <DemoOpenOperations strategy="QUEDA_FORTE" />
-        <DemoTestOperations strategy="QUEDA_FORTE" />
-        <DemoDailyHistory strategy="QUEDA_FORTE" />
+        <DemoOpenOperations strategy="TENDENCIA_FORCA_RECUO" />
+        <DemoTestOperations strategy="TENDENCIA_FORCA_RECUO" />
+        <DemoDailyHistory strategy="TENDENCIA_FORCA_RECUO" />
       </CardContent>
     </Card>
   );

@@ -1,5 +1,6 @@
 import { demoDisplayedTargetScore } from './demo-continuation.ts';
 import { DEMO_CHALLENGERS } from './demo-new-strategies.ts';
+import { TENDENCIA_FORCA_RECUO_STRATEGY } from './tendencia-forca-recuo.ts';
 
 // Oct 25 2026 17:51 UTC: Takashi no longer uses the 2.26 authorization (stays out of real/Telegram/copy).
 export function demo226StrategyAllowed(strategy: unknown): boolean {
@@ -28,16 +29,16 @@ export const ICHIMOKU_RECUO21_STRATEGY = 'ICHIMOKU_RECUO21';
 // Nov 3 2026 00:48 BRT (user): ONLY these four strategies enter the Demo (Takashi and the other
 // standalone indicators no longer enter); Ichimoku + Recuo 21 keeps priority, the rest rotate.
 export const TENDENCIA_ALINHADA_STRATEGY = 'TENDENCIA_ALINHADA';
-// Nov 11 2026 (user): Queda forte joins Tendência alinhada in the Demo, following strong moves both ways.
+// Nov 12 2026: card 2 uses Tendência + Força + Recuo; Queda forte is history-only.
 export const QUEDA_STRATEGY = 'QUEDA_FORTE';
 export const DEMO_STANDALONE_INDICATORS = [] as const;
-export const DEMO_INDICATOR_STRATEGIES = [TENDENCIA_ALINHADA_STRATEGY, QUEDA_STRATEGY] as const;
+export const DEMO_INDICATOR_STRATEGIES = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY] as const;
 export function isDemoIndicatorStrategy(strategy: unknown): boolean {
   return (DEMO_INDICATOR_STRATEGIES as readonly unknown[]).includes(strategy);
 }
 // Strategies that have Demo history: one shared gale progression and the Após 4 LOSS streak read all of them,
 // so retiring a strategy from new Demo entries never breaks gale/streak continuity.
-export const DEMO_ENTRY_STRATEGIES = [TAKASHI_STRATEGY, ...DEMO_INDICATOR_STRATEGIES, ICHIMOKU_RECUO21_STRATEGY, 'TENDENCIA_FORCA_RECUO', 'ICHIMOKU', 'RECUO_EMA21', ...DEMO_CHALLENGERS, 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ'];
+export const DEMO_ENTRY_STRATEGIES = [TAKASHI_STRATEGY, ...DEMO_INDICATOR_STRATEGIES, QUEDA_STRATEGY, ICHIMOKU_RECUO21_STRATEGY, 'ICHIMOKU', 'RECUO_EMA21', ...DEMO_CHALLENGERS, 'TENDENCIA', 'VELA_FORCA', 'ROMPIMENTO', 'REVERSAO_RSI', 'KDJ'];
 export type DemoCohort = 'takashi' | 'indicator' | 'score226' | 'antecipada';
 export function demoCohort(_score: unknown, strategy: unknown): DemoCohort | null {
   // Nov 5 2026: notes no longer authorize, reject or rank any active Demo signal.

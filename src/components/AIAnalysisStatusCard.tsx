@@ -78,8 +78,8 @@ export function AIAnalysisStatusCard() {
         return orders;
       });
       if (mounted.current) {
-        const current=demoStrategyStats(rows.filter(row=>['TENDENCIA_ALINHADA','QUEDA_FORTE'].includes(row.entry_strategy)));
-        for(const strategy of ['TENDENCIA_ALINHADA','QUEDA_FORTE'])if(!current.some(c=>c.strategy===strategy))current.push({strategy,wins:0,losses:0});
+        const current=demoStrategyStats(rows.filter(row=>['TENDENCIA_ALINHADA','TENDENCIA_FORCA_RECUO'].includes(row.entry_strategy)));
+        for(const strategy of ['TENDENCIA_ALINHADA','TENDENCIA_FORCA_RECUO'])if(!current.some(c=>c.strategy===strategy))current.push({strategy,wins:0,losses:0});
         setStrategyStats(current);
       }
     } catch {
@@ -101,11 +101,11 @@ export function AIAnalysisStatusCard() {
       const [candidates, rejections, scan] = await Promise.all([
         supabase.from('iq_demo_test_candidates')
           .select('signal_id,asset,direction,entry_minute')
-          .in('entry_strategy', ['TENDENCIA_ALINHADA','QUEDA_FORTE']).gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['TENDENCIA_ALINHADA','TENDENCIA_FORCA_RECUO']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.from('demo_selection_rejections')
           .select('signal_id,asset,direction,entry_minute')
-          .in('entry_strategy', ['TENDENCIA_ALINHADA','QUEDA_FORTE']).gte('entry_minute', tenMinAgo)
+          .in('entry_strategy', ['TENDENCIA_ALINHADA','TENDENCIA_FORCA_RECUO']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.functions.invoke('demo-analysis-status',{body:{}}),
       ]);

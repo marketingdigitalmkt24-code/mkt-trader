@@ -1,5 +1,5 @@
-// Demo entries use M5 candles and 5-minute expiry (user, Nov 10 2026); scans only open on 5-minute boundaries.
-export const DEMO_CANDLE_SEC = 300;
+// Demo entries use M1 candles and 1-minute expiry (user, Nov 11 2026); every minute is an entry boundary.
+export const DEMO_CANDLE_SEC = 60;
 export const isDemoEntryBoundary = (targetMs: number) => Math.floor(targetMs / 1000) % DEMO_CANDLE_SEC === 0;
 // A scheduled runner prepares the next minute; immediate diagnostics stay in this minute.
 export function demoTargetMinute(now: number, scheduled: boolean): number {

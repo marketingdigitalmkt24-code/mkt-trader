@@ -16,9 +16,9 @@ test('mismatched prefix/strategy or stale candidates are refused', () => {
   expect(freshDemoCandidate(row('demo-ichimoku-recuo21-v1-EURUSD-OTC-1', 'ICHIMOKU_RECUO21'), at + 26000)).toBe(false);
 });
 
-test('aligned trend candidate requires its own prefix and a five-minute boundary',()=>{
+test('aligned trend candidate requires its own prefix and a whole-minute boundary',()=>{
   const valid=row('demo-tendencia-alinhada-v1-EURUSD-1','TENDENCIA_ALINHADA');
   expect(freshDemoCandidate(valid,at+1000)).toBe(true);
   expect(freshDemoCandidate({...valid,entry_strategy:'ICHIMOKU'},at+1000)).toBe(false);
-  expect(freshDemoCandidate({...valid,created_at:'2026-11-02T00:21:00Z'},at+61000)).toBe(false);
+  expect(freshDemoCandidate({...valid,created_at:'2026-11-02T00:21:30Z'},at+61000)).toBe(false);
 });

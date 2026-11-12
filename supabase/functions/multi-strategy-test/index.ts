@@ -498,7 +498,7 @@ Deno.serve(async (req) => {
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-m5-aligned-queda-v25',
+    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-m1-aligned-queda-v26',
     candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
   });
   const demoPool = demoPatterns;

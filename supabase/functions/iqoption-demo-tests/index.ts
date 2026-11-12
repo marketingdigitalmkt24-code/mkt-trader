@@ -88,7 +88,7 @@ Deno.serve(async req => {
  if(setting.error)return reply({error:'Demo test amount unavailable'},503);
  testAmount = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
  if(!validDemoTestAmount(testAmount))return reply({error:'Invalid demo test amount'},409);
- const { data, error } = await db.from('iq_demo_test_orders').insert({ signal_id:candidate.signal_id,entry_minute:candidate.created_at,asset:candidate.asset,direction:candidate.direction,amount:testAmount,entry_strategy:candidate.entry_strategy || 'UNKNOWN',expiration_time:new Date(mid?midCandleExpiry(candidate.created_at)*1000:Date.parse(candidate.created_at)+300000).toISOString() }).select('id').single();
+ const { data, error } = await db.from('iq_demo_test_orders').insert({ signal_id:candidate.signal_id,entry_minute:candidate.created_at,asset:candidate.asset,direction:candidate.direction,amount:testAmount,entry_strategy:candidate.entry_strategy || 'UNKNOWN',expiration_time:new Date(mid?midCandleExpiry(candidate.created_at)*1000:Date.parse(candidate.created_at)+60000).toISOString() }).select('id').single();
  if (!error && data) reserved=data.id;
  else console.log('Demo reservation rejected:',error?.code);
  }
@@ -137,7 +137,7 @@ Deno.serve(async req => {
  initialized=true;
  if(mid)await new Promise(resolve=>setTimeout(resolve,Math.max(0,Date.parse(candidate.created_at)-Date.now())));
  if(finished)return;
- const expiry=mid?midCandleExpiry(candidate.created_at):Date.parse(candidate.created_at)/1000+300;
+ const expiry=mid?midCandleExpiry(candidate.created_at):Date.parse(candidate.created_at)/1000+60;
  const found=Object.entries<any>(d.msg?.turbo?.actives || {}).find(([,a])=>symbol(a.name || '')===candidate.asset && iqMarketOpen(a,Math.floor(Date.now()/1000),expiry));
  // Strategy eligibility checked before reservation; recheck freshness.
  if(!found || !isFresh(candidate)) {

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, rankDemoPractice, selectDemoByQuality } from './demo-signal-quality.ts';
+import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, rankDemoPractice, selectDemoByQuality, selectDemoPracticeByReturn } from './demo-signal-quality.ts';
 import { DEMO_ANALYSIS_SEC } from './demo-timing.ts';
 
 const entry = 600;
@@ -69,20 +69,32 @@ test('prefers a steadier directional minute and better payout among comparable s
   const choppy = demoCandleContext(candles([100, 100.5, 99.8, 100.5, 100.4]), 'CALL');
   const a = { signal_id: 'a', quality: 68, candleContext: choppy, payout: 0.65 };
   const b = { signal_id: 'b', quality: 66, candleContext: steady, payout: 0.85 };
-  const ranks = rankDemoPractice([a, b], () => ({ netReturn: null, weight: 0 }));
+  const ranks = rankDemoPractice([a, b], () => ({ netReturn: null, weight: 0, wins: 0, losses: 0 }));
   expect(ranks[0].candidate).toBe(b);
   expect(ranks[0].momentum).toBeGreaterThan(ranks[1].momentum);
-  expect(ranks[0].payout).toBeGreaterThan(ranks[1].payout);
+  expect(ranks[0].economics).toBeGreaterThan(ranks[1].economics);
+  expect(ranks[0].breakEvenWinRate!).toBeCloseTo(1 / 1.85, 8);
 });
 
 test('continues selecting a qualified setup with missing or negative history, while rewarding supported positive returns', () => {
   const base = { quality: 65, candleContext: demoCandleContext(history, 'CALL'), payout: 0.83 };
   const a = { ...base, signal_id: 'a' };
   const b = { ...base, signal_id: 'b' };
-  expect(rankDemoPractice([a], () => ({ netReturn: null, weight: 0 }))[0].candidate).toBe(a);
-  expect(rankDemoPractice([a], () => ({ netReturn: -0.4, weight: 0.8 }))[0].candidate).toBe(a);
-  const ranks = rankDemoPractice([a, b], c => ({ netReturn: c === a ? -0.1 : 0.15, weight: 0.8 }));
+  expect(rankDemoPractice([a], () => ({ netReturn: null, weight: 0, wins: 0, losses: 0 }))[0].candidate).toBe(a);
+  expect(rankDemoPractice([a], () => ({ netReturn: -0.4, weight: 0.8, wins: 16, losses: 24 }))[0].candidate).toBe(a);
+  const ranks = rankDemoPractice([a, b], c => ({ netReturn: c === a ? -0.1 : 0.15, weight: 0.8, wins: c === a ? 19 : 25, losses: c === a ? 21 : 15 }));
   expect(ranks[0].candidate).toBe(b);
   expect(ranks[0].historical).toBeGreaterThan(0);
   expect(ranks[1].historical).toBeLessThan(0);
+});
+
+test('prefers nearby positive returns and allows a bounded pause when none qualify', () => {
+  const best = { score: 76, expectedReturn: -0.04 };
+  const close = { score: 70, expectedReturn: 0.05 };
+  const distant = { score: 53, expectedReturn: 0.10 };
+  expect(selectDemoPracticeByReturn([best, close, distant], false)).toBe(close);
+  expect(selectDemoPracticeByReturn([best, distant], false)).toBe(best);
+  expect(selectDemoPracticeByReturn([best, distant], true)).toBe(distant);
+  expect(selectDemoPracticeByReturn([best], true)).toBe(undefined);
+  expect(selectDemoPracticeByReturn([best], false)).toBe(best);
 });

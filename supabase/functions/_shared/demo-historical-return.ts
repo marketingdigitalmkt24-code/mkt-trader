@@ -1,11 +1,15 @@
 import { DEMO_CANDLE_SEC } from './demo-timing.ts';
 
-export const DEMO_HISTORY_POLICY = 'demo-adaptive-selection-v2';
+export const DEMO_HISTORY_POLICY = 'demo-return-priority-v3';
 export const DEMO_HISTORY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const PRIOR_SAMPLE_SIZE = 30;
 const FULL_DIVERSITY_BLOCKS = 6;
+const LOSS_COOLDOWN_MS = 5 * 60_000;
 const brtHour = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23',
+});
+const brtDay = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
 });
 
 type Signal = { entry_strategy: string; direction: string; asset: string };
@@ -21,6 +25,7 @@ export type DemoHistoricalOrder = Signal & {
   result: string;
 };
 type Cohort = { wins: number; losses: number; ties: number; stake: number; net: number; blocks: Set<number> };
+type StrategyDay = { decisive: number; stake: number; net: number; lastEntry: number };
 const cohortKey = (signal: Signal, hour: number) =>
   JSON.stringify([signal.entry_strategy, signal.direction, signal.asset.endsWith('-OTC'), Math.floor(hour / 4)]);
 
@@ -30,6 +35,8 @@ function finiteNumber(value: number | string | null): number {
 
 export function buildDemoHistory(rows: readonly DemoHistoricalOrder[], targetMs: number) {
   const cohorts = new Map<string, Cohort>();
+  const today = new Map<string, StrategyDay>();
+  const targetDay = brtDay.format(targetMs);
   const seen = new Set<string>();
   for (const row of rows) {
     if (row.account_type !== 'PRACTICE' || row.status !== 'confirmed' || !row.iq_option_id
@@ -56,8 +63,16 @@ export function buildDemoHistory(rows: readonly DemoHistoricalOrder[], targetMs:
     cohort.stake += stake;
     cohort.net += net;
     cohorts.set(key, cohort);
+    if (brtDay.format(entry) === targetDay) {
+      const day = today.get(row.entry_strategy) ?? { decisive: 0, stake: 0, net: 0, lastEntry: 0 };
+      day.decisive += row.result === 'tie' ? 0 : 1;
+      day.stake += stake;
+      day.net += net;
+      day.lastEntry = Math.max(day.lastEntry, entry);
+      today.set(row.entry_strategy, day);
+    }
   }
-  return { cohorts, count: seen.size };
+  return { cohorts, today, count: seen.size };
 }
 
 export function demoHistoricalEvidence(
@@ -78,4 +93,19 @@ export function demoHistoricalEvidence(
     // Shrink thin or concentrated samples toward a neutral adjustment.
     weight: decisive / (decisive + PRIOR_SAMPLE_SIZE) * Math.min(1, halfHourBlocks / FULL_DIVERSITY_BLOCKS),
   };
+}
+
+export function demoPracticeLossPace(
+  history: ReturnType<typeof buildDemoHistory> | null,
+  strategy: string,
+  targetMs: number,
+  expectedReturn: number | null,
+) {
+  const day = history?.today.get(strategy);
+  const netReturn = day ? day.net / day.stake : null;
+  const remaining = day ? Math.max(0, LOSS_COOLDOWN_MS - (targetMs - day.lastEntry)) : 0;
+  // Slow down this strategy only when the current setup and a meaningful daily sample are both negative.
+  const waitMs = day && day.decisive >= 12 && netReturn !== null && netReturn <= -0.1
+    && expectedReturn !== null && expectedReturn < 0 ? remaining : 0;
+  return { waitMs, dayDecisive: day?.decisive ?? 0, dayNet: day?.net ?? null, dayNetReturn: netReturn };
 }

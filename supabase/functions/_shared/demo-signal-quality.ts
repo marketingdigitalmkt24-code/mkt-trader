@@ -83,7 +83,9 @@ type StudyCandidate = {
   payout: number | null;
 };
 
-export function rankDemoPractice<T extends StudyCandidate, H extends { netReturn: number | null; weight: number }>(
+export function rankDemoPractice<T extends StudyCandidate, H extends {
+  netReturn: number | null; weight: number; wins: number; losses: number;
+}>(
   candidates: T[],
   readHistory: (candidate: T) => H,
 ) {
@@ -91,14 +93,33 @@ export function rankDemoPractice<T extends StudyCandidate, H extends { netReturn
     const history = readHistory(candidate);
     // At equal quality, favor orderly movement and better terms. All adjustments are bounded.
     const momentum = 8 * Math.max(-1, Math.min(1, candidate.candleContext.minuteEfficiency));
-    const payout = candidate.payout === null ? -6 : Math.max(-12, Math.min(6, 30 * (candidate.payout - 0.8)));
-    const historical = 12 * history.weight * Math.max(-1, Math.min(1, (history.netReturn ?? 0) / 0.25));
+    const payout = candidate.payout;
+    const decisive = history.wins + history.losses;
+    // With little evidence, shrink toward break-even at an 80% payout. This is a ranking prior, not a predicted win.
+    const prior = 1 / 1.8;
+    const historicalWinRate = decisive > 0 ? history.wins / decisive : prior;
+    const estimatedWinRate = prior + history.weight * (historicalWinRate - prior);
+    const breakEvenWinRate = payout === null ? null : 1 / (1 + payout);
+    const expectedReturn = payout === null ? null : Math.round(((1 + payout) * estimatedWinRate - 1) * 1e6) / 1e6;
+    const economics = expectedReturn === null ? -5 : Math.max(-12, Math.min(12, 40 * expectedReturn));
+    const historical = 8 * history.weight * Math.max(-1, Math.min(1, (history.netReturn ?? 0) / 0.25));
     return {
-      candidate, history, momentum, payout, historical,
-      score: candidate.quality + momentum + payout + historical,
+      candidate, history, momentum, economics, historical, breakEvenWinRate, estimatedWinRate, expectedReturn,
+      score: candidate.quality + momentum + economics + historical,
     };
   }).sort((a, b) => b.score - a.score || b.candidate.quality - a.candidate.quality
     || a.candidate.signal_id.localeCompare(b.candidate.signal_id));
+}
+
+export function selectDemoPracticeByReturn<T extends { score: number; expectedReturn: number | null }>(
+  rank: readonly T[], inCooldown: boolean,
+): T | undefined {
+  const best = rank[0];
+  const positive = rank.find(entry => entry.expectedReturn !== null && entry.expectedReturn > 0);
+  if (inCooldown) return positive;
+  // Prefer positive projected return among close technical choices. The estimate is noisy.
+  if (best && positive && best.score - positive.score <= 8) return positive;
+  return best;
 }
 
 export function compareDemoFilters(candidates: StudyCandidate[]) {

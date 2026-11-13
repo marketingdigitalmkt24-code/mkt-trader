@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { buildDemoHistory, demoHistoricalEvidence, type DemoHistoricalOrder } from './demo-historical-return.ts';
+import { buildDemoHistory, demoHistoricalEvidence, demoPracticeLossPace, type DemoHistoricalOrder } from './demo-historical-return.ts';
 
 const target = Date.parse('2026-11-13T03:05:00Z'); // 00:05 in Brasília, a different UTC date from most sample entries.
 const candidate = { entry_strategy: 'TREND', asset: 'EUR/USD-OTC', direction: 'CALL', payout: 0.85 };
@@ -58,4 +58,22 @@ test('excludes future, stale, unsettled, duplicate, real-account and invalid led
     { ...order(12), settled_at: '2026-11-12T03:00:00Z' },
   ];
   expect(buildDemoHistory(rows, target).count).toBe(1);
+});
+
+test('paces losses only for the affected strategy and releases it after five minutes', () => {
+  const noon = Date.parse('2026-11-13T15:00:00Z');
+  const rows = Array.from({ length: 12 }, (_, i) => {
+    const entry = noon - (i + 2) * 60_000;
+    return {
+      ...order(i, 'loss'), entry_minute: new Date(entry).toISOString(),
+      expiration_time: new Date(entry + 60_000).toISOString(), settled_at: new Date(entry + 62_000).toISOString(),
+    };
+  });
+  const history = buildDemoHistory(rows, noon);
+  expect(demoPracticeLossPace(history, 'TREND', noon, -0.05).waitMs).toBe(180_000);
+  expect(demoPracticeLossPace(history, 'TREND', noon, 0.01).waitMs).toBe(0);
+  expect(demoPracticeLossPace(history, 'TREND', noon, null).waitMs).toBe(0);
+  expect(demoPracticeLossPace(history, 'OTHER', noon, -0.05).waitMs).toBe(0);
+  expect(demoPracticeLossPace(buildDemoHistory(rows.slice(1), noon), 'TREND', noon, -0.05).waitMs).toBe(0);
+  expect(demoPracticeLossPace(buildDemoHistory(rows, noon + 180_000), 'TREND', noon + 180_000, -0.05).waitMs).toBe(0);
 });

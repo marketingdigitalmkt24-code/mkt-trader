@@ -35,11 +35,11 @@ import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByRotation } from '../_shared/demo-profit-selection.ts';
 import {
   closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoEma as ema,
-  demoSignalQuality, rankDemoPractice, selectDemoByQuality,
+  demoSignalQuality, rankDemoPractice, selectDemoByQuality, selectDemoPracticeByReturn,
 } from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import {
-  buildDemoHistory, demoHistoricalEvidence, DEMO_HISTORY_POLICY, DEMO_HISTORY_WINDOW_MS,
+  buildDemoHistory, demoHistoricalEvidence, demoPracticeLossPace, DEMO_HISTORY_POLICY, DEMO_HISTORY_WINDOW_MS,
 } from '../_shared/demo-historical-return.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
@@ -550,7 +550,7 @@ Deno.serve(async (req) => {
   // Keep the technical baseline for comparison and apply adaptive ranking to PRACTICE only.
   const practice = selectedDemoAccount === 'PRACTICE';
   const history = practiceHistory.snapshot;
-  if (practice) console.log('Demo adaptive selection snapshot:', JSON.stringify({
+  if (practice) console.log('Demo return priority snapshot:', JSON.stringify({
     version: DEMO_HISTORY_POLICY, accountType: selectedDemoAccount,
     entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
     technicalCandidates: demoEligible.length,
@@ -559,21 +559,37 @@ Deno.serve(async (req) => {
     const candidates = demoEligible.filter(candidate => candidate.entry_strategy === strategy);
     const baseline = selectDemoByQuality(candidates);
     const rank = practice ? rankDemoPractice(candidates, candidate => demoHistoricalEvidence(history, candidate, targetMs)) : [];
-    const winner = practice ? rank[0]?.candidate ?? null : baseline;
+    const best = rank[0];
+    const pace = best ? demoPracticeLossPace(history, strategy, targetMs, best.expectedReturn) : null;
+    // During a loss pause a setup with estimated positive return may still compete.
+    const selected = selectDemoPracticeByReturn(rank, !!pace?.waitMs);
+    const winner = practice ? selected?.candidate ?? null : baseline;
     const rankedById = new Map(rank.map(entry => [entry.candidate.signal_id, entry] as const));
-    if (practice && baseline && rank[0]) console.log('Demo adaptive selection decision:', JSON.stringify({
+    const coolingDown = new Set<string>();
+    if (pace?.waitMs) {
+      for (const entry of rank) {
+        if (entry.expectedReturn !== null && entry.expectedReturn > 0) continue;
+        coolingDown.add(entry.candidate.signal_id);
+        reject(entry.candidate, {
+          code: 'demo_loss_cooldown',
+          details: { expected_return: entry.expectedReturn, wait_seconds: pace.waitMs / 1000, day_net_return: pace.dayNetReturn },
+        }, DEMO_HISTORY_POLICY);
+      }
+    }
+    if (practice && baseline && best) console.log('Demo return priority decision:', JSON.stringify({
       version: DEMO_HISTORY_POLICY, entryMinute: baseline.created_at, strategy,
-      baseline: baseline.signal_id, selected: rank[0].candidate.signal_id, candidates: candidates.length,
-      quality: rank[0].candidate.quality, payout: rank[0].candidate.payout,
-      score: rank[0].score, momentumAdjustment: rank[0].momentum, payoutAdjustment: rank[0].payout,
-      historicalAdjustment: rank[0].historical, history: rank[0].history,
+      baseline: baseline.signal_id, selected: selected?.candidate.signal_id ?? null, candidates: candidates.length,
+      quality: (selected ?? best).candidate.quality, payout: (selected ?? best).candidate.payout,
+      score: (selected ?? best).score, estimatedWinRate: (selected ?? best).estimatedWinRate,
+      breakEvenWinRate: (selected ?? best).breakEvenWinRate, expectedReturn: (selected ?? best).expectedReturn,
+      history: (selected ?? best).history, pace,
     }));
-    return { candidates, baseline, winner, rankedById, previousChoice: selectDemoByRotation(candidates, null) };
+    return { candidates, baseline, winner, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
   });
   const demoWinners = selections.flatMap(({ winner }) => winner ? [winner] : []);
   const demoWinner = demoWinners[0] ?? null;
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  for (const { candidates, baseline, winner, rankedById, previousChoice } of selections) {
+  for (const { candidates, baseline, winner, rankedById, coolingDown, previousChoice } of selections) {
     if (practice && baseline) {
       console.log('Demo filter study:', JSON.stringify({
         version: 'demo-filter-study-v1',
@@ -585,12 +601,12 @@ Deno.serve(async (req) => {
     }
     if (!winner) continue;
     console.log('Demo signal selection:', JSON.stringify({
-      ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: candidates.length,
+      ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: candidates.length - coolingDown.size,
       historyPolicy: practice ? DEMO_HISTORY_POLICY : null,
       selected: winner.signal_id, quality: winner.quality, previousChoice: previousChoice?.signal_id,
     }));
     for (const candidate of candidates) {
-      if (candidate.signal_id === winner.signal_id) continue;
+      if (candidate.signal_id === winner.signal_id || coolingDown.has(candidate.signal_id)) continue;
       const ranked = rankedById.get(candidate.signal_id);
       reject(candidate, {
         code: 'minute_priority',

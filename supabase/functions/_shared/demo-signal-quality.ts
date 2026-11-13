@@ -122,6 +122,11 @@ export function selectDemoPracticeByReturn<T extends { score: number; expectedRe
   return best;
 }
 
+export function selectDemoMostProfitable<T extends { score: number; expectedReturn: number | null }>(eligible: readonly T[]): T | undefined {
+  return [...eligible].filter(entry => entry.expectedReturn !== null && Number.isFinite(entry.expectedReturn) && entry.expectedReturn > 0)
+    .sort((a, b) => b.expectedReturn! - a.expectedReturn! || b.score - a.score)[0];
+}
+
 export function compareDemoFilters(candidates: StudyCandidate[]) {
   const tests: Record<string, (candidate: StudyCandidate) => boolean> = {
     quality_65: c => c.quality >= 65,

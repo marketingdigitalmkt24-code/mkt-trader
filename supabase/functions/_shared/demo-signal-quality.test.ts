@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, rankDemoPractice, selectDemoByQuality, selectDemoPracticeByReturn } from './demo-signal-quality.ts';
+import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, rankDemoPractice, selectDemoByQuality, selectDemoPracticeByReturn, selectDemoMostProfitable } from './demo-signal-quality.ts';
 import { DEMO_ANALYSIS_SEC } from './demo-timing.ts';
 
 const entry = 600;
@@ -97,4 +97,12 @@ test('prefers nearby positive returns and allows a bounded pause when none quali
   expect(selectDemoPracticeByReturn([best, distant], true)).toBe(distant);
   expect(selectDemoPracticeByReturn([best], true)).toBe(undefined);
   expect(selectDemoPracticeByReturn([best], false)).toBe(best);
+});
+
+test('prioritizes the highest estimated net return only after candidates passed technical gates', () => {
+  const strong = { score: 86, expectedReturn: 0.04 };
+  const profitable = { score: 78, expectedReturn: 0.10 };
+  expect(selectDemoMostProfitable([strong, profitable])).toBe(profitable);
+  expect(selectDemoMostProfitable([{ score: 100, expectedReturn: -0.01 }])).toBe(undefined);
+  expect(selectDemoMostProfitable([{ score: 100, expectedReturn: Number.NaN }, strong])).toBe(strong);
 });

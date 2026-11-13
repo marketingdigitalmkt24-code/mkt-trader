@@ -35,7 +35,7 @@ import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByRotation } from '../_shared/demo-profit-selection.ts';
 import {
   closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoEma as ema,
-  demoSignalQuality, rankDemoPractice, selectDemoByQuality, selectDemoPracticeByReturn,
+  demoSignalQuality, rankDemoPractice, selectDemoByQuality, selectDemoPracticeByReturn, selectDemoMostProfitable,
 } from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import {
@@ -608,7 +608,7 @@ Deno.serve(async (req) => {
         reject(entry.candidate, reason, DEMO_CONSISTENCY_VERSION);
         return false;
       });
-      selected = selectDemoPracticeByReturn(eligible, false);
+      selected = selectDemoMostProfitable(eligible);
       const reasons: Record<string, number> = {};
       for (const entry of rank) {
         const reason = budget.reason ?? demoConsistencySignal(entry.candidate, entry.history, entry.expectedReturn, budget.entries).reason;

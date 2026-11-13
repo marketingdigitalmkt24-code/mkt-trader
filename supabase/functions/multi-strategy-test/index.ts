@@ -43,6 +43,10 @@ import {
 } from '../_shared/demo-historical-return.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
+import {
+  DEMO_AI_MODEL, DEMO_AI_VERSION, demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot,
+  requestDemoAiStudy, settleDemoAiStudy,
+} from '../_shared/demo-ai-study.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
@@ -584,8 +588,50 @@ Deno.serve(async (req) => {
       breakEvenWinRate: (selected ?? best).breakEvenWinRate, expectedReturn: (selected ?? best).expectedReturn,
       history: (selected ?? best).history, pace,
     }));
-    return { candidates, baseline, winner, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
+    return { strategy, candidates, baseline, winner, rank, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
   });
+  // The experiment uses its own private storage and never feeds either order path.
+  const studyKey = practice && input.scheduled === true ? Deno.env.get('LOVABLE_API_KEY') : null;
+  if (studyKey) {
+    const studyTask = (async () => {
+      const bucket = supabase.storage.from(DEMO_SCAN_BUCKET);
+      const options = { contentType: 'application/json', upsert: false };
+      const keyFor = (slot: number, name: string) => `${DEMO_AI_VERSION}/${slot}-${name}.json`;
+      const previous = demoAiStudyPreviousSlot(targetMs);
+      if (previous !== null) {
+        const { data } = await bucket.download(keyFor(previous, 'decision'));
+        if (!data) return;
+        const picks = await data.json();
+        const result = settleDemoAiStudy(picks, series, previous / 1000);
+        if (!result.complete && targetMs - previous < 5 * 60_000) return;
+        const event = { entryMinute: new Date(previous).toISOString(), ...result };
+        const saved = await bucket.upload(keyFor(previous, 'result'), JSON.stringify(event), options);
+        if (!saved.error) console.log('Demo AI study outcome:', JSON.stringify(event));
+        return;
+      }
+      if (!demoAiStudySlot(targetMs) || Date.now() >= targetMs + 10_000) return;
+      const cards = demoAiStudyCards(selections.map(({ strategy, winner, rank }) => ({
+        strategy, reference: winner, ranked: rank,
+      })), series, curMin);
+      if (!cards.length) return;
+      // Claim this slot once, even if the scheduler overlaps or the provider fails.
+      const lease = await bucket.upload(keyFor(targetMs, 'lease'), '{}', options);
+      if (lease.error) return;
+      const { status, picks } = await requestDemoAiStudy(cards, studyKey);
+      const timely = Date.now() < targetMs + DEMO_CANDLE_SEC * 1000;
+      console.log('Demo AI study decision:', JSON.stringify({
+        model: DEMO_AI_MODEL, entryMinute: new Date(targetMs).toISOString(),
+        status: timely ? status : 'late', cards: cards.length, picks: timely ? picks : null,
+      }));
+      if (!timely || !picks) return;
+      const saved = await bucket.upload(keyFor(targetMs, 'decision'), JSON.stringify(picks), options);
+      if (saved.error) console.warn('Demo AI study decision write unavailable:', saved.error.name);
+    })().catch(() => console.warn('Demo AI study unavailable'));
+    // @ts-ignore Hosted background runtime. Do not await before placing Demo orders.
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(studyTask);
+  } else if (practice && input.scheduled === true && demoAiStudySlot(targetMs)) {
+    console.warn('Demo AI study unavailable: gateway key missing');
+  }
   const demoWinners = selections.flatMap(({ winner }) => winner ? [winner] : []);
   const demoWinner = demoWinners[0] ?? null;
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);

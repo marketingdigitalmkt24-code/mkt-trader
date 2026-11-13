@@ -1,4 +1,4 @@
-export const DEMO_CONSISTENCY_VERSION = 'demo-selective-full-history-v5';
+export const DEMO_CONSISTENCY_VERSION = 'demo-selective-full-history-v6';
 // Apply the new daily budget prospectively. Earlier experiments retain their original accounting.
 export const DEMO_CONSISTENCY_START = Date.parse('2026-11-13T21:45:00Z');
 const brtDay = new Intl.DateTimeFormat('en-CA', {
@@ -47,13 +47,12 @@ export function demoConsistencyBudget(rows: readonly ConsistencyOrder[] | null, 
   const losses = closed.filter(row => row.result === 'loss' && row.profit !== null && Number(row.profit) < 0).length;
   const latest = orders.reduce((last, row) => Math.max(last, Date.parse(row.entry_minute)), 0);
   const waitSeconds = Math.max(0, (60_000 - (target - latest)) / 1000);
-  const details = { entries_today: orders.length, losses_today: losses, wait_seconds: waitSeconds, maximum_entries: 100, maximum_losses: 2 };
+  const details = { entries_today: orders.length, losses_today: losses, wait_seconds: waitSeconds, maximum_entries: 100 };
   let reason: Reason | null = null;
   if (!rows) reason = { code: 'selective_ledger_unavailable', details };
-  else if (losses >= 2) reason = { code: 'selective_daily_loss_limit', details };
   else if (orders.length >= 100) reason = { code: 'selective_daily_entry_limit', details };
   else if (waitSeconds > 0) reason = { code: 'selective_spacing', details };
-  return { reason, entries: orders.length, losses, waitSeconds };
+  return { reason, entries: orders.length, losses, waitSeconds, lossPauseEnabled: false };
 }
 
 export function demoConsistencySignal(

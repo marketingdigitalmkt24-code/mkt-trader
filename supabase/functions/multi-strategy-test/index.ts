@@ -39,7 +39,7 @@ import {
 } from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import {
-  buildDemoHistory, demoHistoricalEvidence, demoPracticeLossPace, readAllDemoHistoricalOrders, DEMO_HISTORY_POLICY,
+  buildDemoHistory, demoHistoricalEvidence, readAllDemoHistoricalOrders, DEMO_HISTORY_POLICY,
   type DemoHistoricalOrder,
 } from '../_shared/demo-historical-return.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
@@ -593,9 +593,7 @@ Deno.serve(async (req) => {
     const baseline = selectDemoByQuality(candidates);
     const rank = practice ? rankDemoPractice(candidates, candidate => demoHistoricalEvidence(history, candidate, targetMs)) : [];
     const best = rank[0];
-    const pace = best ? demoPracticeLossPace(history, strategy, targetMs, best.expectedReturn) : null;
-    // During a loss pause a setup with estimated positive return may still compete.
-    let selected = selectDemoPracticeByReturn(rank, !!pace?.waitMs);
+    let selected = selectDemoPracticeByReturn(rank, false);
     const rankedById = new Map(rank.map(entry => [entry.candidate.signal_id, entry] as const));
     const coolingDown = new Set<string>();
     if (selective) {
@@ -620,15 +618,6 @@ Deno.serve(async (req) => {
         budget, reasons, evidence: selected?.history ?? null,
         mode: selected ? demoConsistencySignal(selected.candidate, selected.history, selected.expectedReturn, budget.entries).mode : null,
       }));
-    } else if (pace?.waitMs) {
-      for (const entry of rank) {
-        if (entry.expectedReturn !== null && entry.expectedReturn > 0) continue;
-        coolingDown.add(entry.candidate.signal_id);
-        reject(entry.candidate, {
-          code: 'demo_loss_cooldown',
-          details: { expected_return: entry.expectedReturn, wait_seconds: pace.waitMs / 1000, day_net_return: pace.dayNetReturn },
-        }, DEMO_HISTORY_POLICY);
-      }
     }
     const winner = practice ? selected?.candidate ?? null : baseline;
     if (practice && baseline && best) console.log('Demo return priority decision:', JSON.stringify({
@@ -637,7 +626,7 @@ Deno.serve(async (req) => {
       quality: (selected ?? best).candidate.quality, payout: (selected ?? best).candidate.payout,
       score: (selected ?? best).score, estimatedWinRate: (selected ?? best).estimatedWinRate,
       breakEvenWinRate: (selected ?? best).breakEvenWinRate, expectedReturn: (selected ?? best).expectedReturn,
-      history: (selected ?? best).history, pace,
+      history: (selected ?? best).history, lossPauseEnabled: false,
     }));
     return { strategy, candidates, baseline, winner, rank, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
   });

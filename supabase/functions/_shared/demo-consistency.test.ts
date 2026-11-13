@@ -39,15 +39,20 @@ test('requires positive measured net return and projected headroom once history 
   expect(demoConsistencySignal(signal, { ...supported, recentDecisive: 25, recentNetReturn: -0.1 }, 0.05, 3).reason?.code).toBe('selective_recent_return');
 });
 
-test('enforces one hundred daily slots, one-minute spacing and two confirmed losses per strategy', () => {
+test('enforces one hundred daily slots and one-minute spacing while permitting entries after losses', () => {
   expect(demoConsistencyBudget([order(0, 0.5)], 'TREND', target).reason?.code).toBe('selective_spacing');
   expect(demoConsistencyBudget([order(0, 1)], 'TREND', target).reason).toBeNull();
   const rows = Array.from({ length: 100 }, (_, i) => ({ ...order(i), entry_minute: new Date(target - (i + 1) * 60_000).toISOString() }));
   expect(demoConsistencyBudget(rows.slice(0, 99), 'TREND', target).reason).toBeNull();
   expect(demoConsistencyBudget(rows, 'TREND', target).reason?.code).toBe('selective_daily_entry_limit');
   const losses = [0, 1].map(i => ({ ...order(i), result: 'loss', profit: -2 }));
-  expect(demoConsistencyBudget(losses, 'TREND', target).reason?.code).toBe('selective_daily_loss_limit');
+  const afterLosses = demoConsistencyBudget(losses, 'TREND', target);
+  expect(afterLosses.reason).toBeNull();
+  expect(afterLosses.losses).toBe(2);
+  expect(afterLosses.lossPauseEnabled).toBe(false);
   expect(demoConsistencyBudget(losses, 'SECOND_CARD', target).reason).toBeNull();
+  const streak = Array.from({ length: 8 }, (_, i) => ({ ...order(i, 1), result: 'loss', profit: -2 }));
+  expect(demoConsistencyBudget(streak, 'TREND', target).reason).toBeNull();
 });
 
 test('counts ambiguous reservations, ignores failed attempts and resets at Brasília midnight', () => {

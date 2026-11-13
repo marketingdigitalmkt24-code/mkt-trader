@@ -36,12 +36,16 @@ export function demoCandleContext(candles: AnalysisCandle[], direction: 'CALL' |
   const typicalRange = prior.reduce((sum, candle) => sum + (candle.h - candle.l), 0) / RANGE_LOOKBACK;
   const range = last.h - last.l;
   const side = direction === 'CALL' ? 1 : -1;
+  const minute = [...prior.slice(-BARS_PER_MINUTE), last];
+  const minuteMove = side * (last.c - minute[0].c);
+  const minuteTravel = minute.slice(1).reduce((sum, candle, i) => sum + Math.abs(candle.c - minute[i].c), 0);
   return {
     typicalRange,
     range,
     bodyShare: range > 0 ? side * (last.c - last.o) / range : 0,
     rangeMultiple: typicalRange > 0 ? range / typicalRange : null,
-    minuteMove: side * (last.c - prior[prior.length - BARS_PER_MINUTE].c),
+    minuteMove,
+    minuteEfficiency: minuteTravel > 0 ? minuteMove / minuteTravel : 0,
   };
 }
 
@@ -78,6 +82,24 @@ type StudyCandidate = {
   candleContext: ReturnType<typeof demoCandleContext>;
   payout: number | null;
 };
+
+export function rankDemoPractice<T extends StudyCandidate, H extends { netReturn: number | null; weight: number }>(
+  candidates: T[],
+  readHistory: (candidate: T) => H,
+) {
+  return candidates.map(candidate => {
+    const history = readHistory(candidate);
+    // At equal quality, favor orderly movement and better terms. All adjustments are bounded.
+    const momentum = 8 * Math.max(-1, Math.min(1, candidate.candleContext.minuteEfficiency));
+    const payout = candidate.payout === null ? -6 : Math.max(-12, Math.min(6, 30 * (candidate.payout - 0.8)));
+    const historical = 12 * history.weight * Math.max(-1, Math.min(1, (history.netReturn ?? 0) / 0.25));
+    return {
+      candidate, history, momentum, payout, historical,
+      score: candidate.quality + momentum + payout + historical,
+    };
+  }).sort((a, b) => b.score - a.score || b.candidate.quality - a.candidate.quality
+    || a.candidate.signal_id.localeCompare(b.candidate.signal_id));
+}
 
 export function compareDemoFilters(candidates: StudyCandidate[]) {
   const tests: Record<string, (candidate: StudyCandidate) => boolean> = {

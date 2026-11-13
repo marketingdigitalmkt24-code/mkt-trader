@@ -35,11 +35,11 @@ import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByRotation } from '../_shared/demo-profit-selection.ts';
 import {
   closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoEma as ema,
-  demoSignalQuality, selectDemoByQuality,
+  demoSignalQuality, rankDemoPractice, selectDemoByQuality,
 } from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import {
-  assessDemoHistoricalReturn, buildDemoHistory, DEMO_HISTORY_POLICY, DEMO_HISTORY_WINDOW_MS,
+  buildDemoHistory, demoHistoricalEvidence, DEMO_HISTORY_POLICY, DEMO_HISTORY_WINDOW_MS,
 } from '../_shared/demo-historical-return.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
@@ -207,9 +207,10 @@ Deno.serve(async (req) => {
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
   const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
-  // Freeze eligibility at the target boundary, and overlap the bounded read with broker preparation.
-  const practiceHistoryRead = amountRead.then(async setting => {
-    if (setting.error || setting.data?.account_type === 'REAL') return null;
+  // Read only results known before this minute. Optional history never holds up an entry.
+  const practiceHistory: { snapshot: ReturnType<typeof buildDemoHistory> | null } = { snapshot: null };
+  void amountRead.then(async setting => {
+    if (setting.error || setting.data?.account_type === 'REAL') return;
     const signal = AbortSignal.timeout(4000);
     const before = new Date(targetMs).toISOString();
     const since = new Date(targetMs - DEMO_HISTORY_WINDOW_MS).toISOString();
@@ -219,9 +220,9 @@ Deno.serve(async (req) => {
       .not('iq_option_id','is',null).in('result',['win','loss','tie'])
       .gte('entry_minute',since).lt('entry_minute',before).lt('settled_at',before)
       .order('entry_minute',{ascending:false}).order('id').limit(1000).abortSignal(signal)));
-    if (snapshots.some(snapshot => snapshot.error)) return null;
-    return buildDemoHistory(snapshots.flatMap(snapshot => snapshot.data ?? []), targetMs);
-  }).catch(() => null);
+    if (snapshots.some(snapshot => snapshot.error)) return;
+    practiceHistory.snapshot = buildDemoHistory(snapshots.flatMap(snapshot => snapshot.data ?? []), targetMs);
+  }).catch(() => { /* The ranking uses neutral historical weight when the read fails. */ });
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
@@ -546,10 +547,10 @@ Deno.serve(async (req) => {
       ? (100 - commission) / 100 : null;
     return [{ ...c, market, payout }];
   });
-  // Keep the technical baseline for comparison; only PRACTICE requires historical eligibility.
+  // Keep the technical baseline for comparison and apply adaptive ranking to PRACTICE only.
   const practice = selectedDemoAccount === 'PRACTICE';
-  const history = practice ? await practiceHistoryRead : null;
-  if (practice) console.log('Demo historical return snapshot:', JSON.stringify({
+  const history = practiceHistory.snapshot;
+  if (practice) console.log('Demo adaptive selection snapshot:', JSON.stringify({
     version: DEMO_HISTORY_POLICY, accountType: selectedDemoAccount,
     entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
     technicalCandidates: demoEligible.length,
@@ -557,30 +558,22 @@ Deno.serve(async (req) => {
   const selections = DEMO_STRATEGIES.map(strategy => {
     const candidates = demoEligible.filter(candidate => candidate.entry_strategy === strategy);
     const baseline = selectDemoByQuality(candidates);
-    const decisions = new Map((practice ? candidates : []).map(candidate => [
-      candidate.signal_id, assessDemoHistoricalReturn(history, candidate, targetMs),
-    ] as const));
-    const approved = candidates.filter(candidate => {
-      const decision = decisions.get(candidate.signal_id);
-      if (!decision?.code) return true;
-      reject(candidate, { code: decision.code, details: decision.details }, DEMO_HISTORY_POLICY);
-      return false;
-    });
-    const margin = (id: string) => decisions.get(id)?.details.conservative_return ?? -Infinity;
-    const bestMargin = approved.reduce((best, c) => Math.max(best, margin(c.signal_id)), -Infinity);
-    const winner = selectDemoByQuality(approved.filter(c => margin(c.signal_id) === bestMargin));
-    if (practice && baseline) console.log('Demo historical return decision:', JSON.stringify({
+    const rank = practice ? rankDemoPractice(candidates, candidate => demoHistoricalEvidence(history, candidate, targetMs)) : [];
+    const winner = practice ? rank[0]?.candidate ?? null : baseline;
+    const rankedById = new Map(rank.map(entry => [entry.candidate.signal_id, entry] as const));
+    if (practice && baseline && rank[0]) console.log('Demo adaptive selection decision:', JSON.stringify({
       version: DEMO_HISTORY_POLICY, entryMinute: baseline.created_at, strategy,
-      baseline: baseline.signal_id, baselineDecision: decisions.get(baseline.signal_id),
-      selected: winner?.signal_id ?? null, selectedEvidence: winner ? decisions.get(winner.signal_id)?.details : null,
-      approved: approved.length, candidates: candidates.length,
+      baseline: baseline.signal_id, selected: rank[0].candidate.signal_id, candidates: candidates.length,
+      quality: rank[0].candidate.quality, payout: rank[0].candidate.payout,
+      score: rank[0].score, momentumAdjustment: rank[0].momentum, payoutAdjustment: rank[0].payout,
+      historicalAdjustment: rank[0].historical, history: rank[0].history,
     }));
-    return { candidates, approved, baseline, winner, previousChoice: selectDemoByRotation(candidates, null) };
+    return { candidates, baseline, winner, rankedById, previousChoice: selectDemoByRotation(candidates, null) };
   });
   const demoWinners = selections.flatMap(({ winner }) => winner ? [winner] : []);
   const demoWinner = demoWinners[0] ?? null;
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  for (const { candidates, approved, baseline, winner, previousChoice } of selections) {
+  for (const { candidates, baseline, winner, rankedById, previousChoice } of selections) {
     if (practice && baseline) {
       console.log('Demo filter study:', JSON.stringify({
         version: 'demo-filter-study-v1',
@@ -592,18 +585,22 @@ Deno.serve(async (req) => {
     }
     if (!winner) continue;
     console.log('Demo signal selection:', JSON.stringify({
-      ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: approved.length,
+      ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: candidates.length,
       historyPolicy: practice ? DEMO_HISTORY_POLICY : null,
       selected: winner.signal_id, quality: winner.quality, previousChoice: previousChoice?.signal_id,
     }));
-    for (const candidate of approved) {
+    for (const candidate of candidates) {
       if (candidate.signal_id === winner.signal_id) continue;
+      const ranked = rankedById.get(candidate.signal_id);
       reject(candidate, {
         code: 'minute_priority',
         details: {
           selected_signal: winner.signal_id,
           quality: candidate.quality,
           selected_quality: winner.quality,
+          ranking_score: ranked?.score ?? null,
+          selected_ranking_score: rankedById.get(winner.signal_id)?.score ?? null,
+          historical_adjustment: ranked?.historical ?? null,
           previous_choice: previousChoice?.signal_id ?? null,
         },
       }, practice ? DEMO_HISTORY_POLICY : ruleVersion);

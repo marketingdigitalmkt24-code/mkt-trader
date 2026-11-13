@@ -1,11 +1,9 @@
 import { DEMO_CANDLE_SEC } from './demo-timing.ts';
 
-export const DEMO_HISTORY_POLICY = 'demo-historical-return-v1';
+export const DEMO_HISTORY_POLICY = 'demo-adaptive-selection-v2';
 export const DEMO_HISTORY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-const MIN_DECISIVE = 30;
-const MIN_HALF_HOURS = 6;
-const MIN_MARGIN = 0.02;
-const Z = 1.6448536269514722; // One-sided nominal 95% Wilson bound.
+const PRIOR_SAMPLE_SIZE = 30;
+const FULL_DIVERSITY_BLOCKS = 6;
 const brtHour = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23',
 });
@@ -62,35 +60,22 @@ export function buildDemoHistory(rows: readonly DemoHistoricalOrder[], targetMs:
   return { cohorts, count: seen.size };
 }
 
-export function assessDemoHistoricalReturn(
+export function demoHistoricalEvidence(
   history: ReturnType<typeof buildDemoHistory> | null,
-  candidate: Signal & { payout: number | null },
+  candidate: Signal,
   targetMs: number,
 ) {
   const cohort = history?.cohorts.get(cohortKey(candidate, Number(brtHour.format(targetMs))));
   const decisive = (cohort?.wins ?? 0) + (cohort?.losses ?? 0);
-  const payout = candidate.payout;
-  const validPayout = payout !== null && Number.isFinite(payout) && payout > 0 && payout <= 1;
-  let lowerWinRate: number | null = null;
-  if (cohort && decisive > 0) {
-    const p = cohort.wins / decisive;
-    const z2 = Z * Z;
-    lowerWinRate = Math.max(0, (p + z2 / (2 * decisive) - Z * Math.sqrt((p * (1 - p) + z2 / (4 * decisive)) / decisive))
-      / (1 + z2 / decisive));
-  }
-  // Price a decisive result at today's payout; ties return the stake. Historical net uses actual stakes and P&L.
-  const expectedLower = validPayout && lowerWinRate !== null ? (1 + payout) * lowerWinRate - 1 : null;
-  const netReturn = cohort ? cohort.net / cohort.stake : null;
-  const details = {
-    wins: cohort?.wins ?? 0, losses: cohort?.losses ?? 0, ties: cohort?.ties ?? 0,
-    half_hour_blocks: cohort?.blocks.size ?? 0, net_profit: cohort?.net ?? null, net_return: netReturn,
-    payout: validPayout ? payout : null, lower_win_rate: lowerWinRate, conservative_return: expectedLower,
-    minimum_decisive: MIN_DECISIVE, minimum_half_hour_blocks: MIN_HALF_HOURS, minimum_conservative_return: MIN_MARGIN,
+  const halfHourBlocks = cohort?.blocks.size ?? 0;
+  return {
+    wins: cohort?.wins ?? 0,
+    losses: cohort?.losses ?? 0,
+    ties: cohort?.ties ?? 0,
+    halfHourBlocks,
+    netProfit: cohort?.net ?? null,
+    netReturn: cohort ? cohort.net / cohort.stake : null,
+    // Shrink thin or concentrated samples toward a neutral adjustment.
+    weight: decisive / (decisive + PRIOR_SAMPLE_SIZE) * Math.min(1, halfHourBlocks / FULL_DIVERSITY_BLOCKS),
   };
-  const code = !history ? 'history_unavailable'
-    : !cohort || decisive < MIN_DECISIVE || cohort.blocks.size < MIN_HALF_HOURS ? 'history_insufficient'
-    : netReturn === null || netReturn <= 0 ? 'history_nonpositive'
-    : expectedLower === null ? 'history_payout_unavailable'
-    : expectedLower < MIN_MARGIN ? 'history_margin_insufficient' : null;
-  return { code, details };
 }

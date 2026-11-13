@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, selectDemoByQuality } from './demo-signal-quality.ts';
+import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, rankDemoPractice, selectDemoByQuality } from './demo-signal-quality.ts';
 import { DEMO_ANALYSIS_SEC } from './demo-timing.ts';
 
 const entry = 600;
@@ -59,4 +59,30 @@ test('compares filters on eligible alternatives and records when a filter would 
   expect(comparison.payout_80).toEqual({ eligible: 1, selected: 'alternative' });
   expect(comparison.quality_and_candle).toEqual({ eligible: 0, selected: null });
   expect(selectDemoByQuality(candidates)?.signal_id).toBe('current');
+});
+
+test('prefers a steadier directional minute and better payout among comparable setups', () => {
+  const candles = (steps: number[]) => [...history.slice(0, -steps.length), ...steps.map((c, i) => ({
+    ...history[history.length - steps.length + i], c,
+  }))];
+  const steady = demoCandleContext(candles([100, 100.1, 100.2, 100.3, 100.4]), 'CALL');
+  const choppy = demoCandleContext(candles([100, 100.5, 99.8, 100.5, 100.4]), 'CALL');
+  const a = { signal_id: 'a', quality: 68, candleContext: choppy, payout: 0.65 };
+  const b = { signal_id: 'b', quality: 66, candleContext: steady, payout: 0.85 };
+  const ranks = rankDemoPractice([a, b], () => ({ netReturn: null, weight: 0 }));
+  expect(ranks[0].candidate).toBe(b);
+  expect(ranks[0].momentum).toBeGreaterThan(ranks[1].momentum);
+  expect(ranks[0].payout).toBeGreaterThan(ranks[1].payout);
+});
+
+test('continues selecting a qualified setup with missing or negative history, while rewarding supported positive returns', () => {
+  const base = { quality: 65, candleContext: demoCandleContext(history, 'CALL'), payout: 0.83 };
+  const a = { ...base, signal_id: 'a' };
+  const b = { ...base, signal_id: 'b' };
+  expect(rankDemoPractice([a], () => ({ netReturn: null, weight: 0 }))[0].candidate).toBe(a);
+  expect(rankDemoPractice([a], () => ({ netReturn: -0.4, weight: 0.8 }))[0].candidate).toBe(a);
+  const ranks = rankDemoPractice([a, b], c => ({ netReturn: c === a ? -0.1 : 0.15, weight: 0.8 }));
+  expect(ranks[0].candidate).toBe(b);
+  expect(ranks[0].historical).toBeGreaterThan(0);
+  expect(ranks[1].historical).toBeLessThan(0);
 });

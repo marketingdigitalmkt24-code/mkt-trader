@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { assessDemoHistoricalReturn, buildDemoHistory, type DemoHistoricalOrder } from './demo-historical-return.ts';
+import { buildDemoHistory, demoHistoricalEvidence, type DemoHistoricalOrder } from './demo-historical-return.ts';
 
 const target = Date.parse('2026-11-13T03:05:00Z'); // 00:05 in Brasília, a different UTC date from most sample entries.
 const candidate = { entry_strategy: 'TREND', asset: 'EUR/USD-OTC', direction: 'CALL', payout: 0.85 };
@@ -14,39 +14,30 @@ function order(index: number, result: 'win' | 'loss' | 'tie' = 'win'): DemoHisto
 }
 const sample = (wins: number) => Array.from({ length: 36 }, (_, i) => order(i, i < wins ? 'win' : 'loss'));
 const assess = (rows: DemoHistoricalOrder[], signal = candidate) =>
-  assessDemoHistoricalReturn(buildDemoHistory(rows, target), signal, target);
+  demoHistoricalEvidence(buildDemoHistory(rows, target), signal, target);
 
 test('matches strategy, direction, OTC class and four-hour Brasília window, not the exact asset', () => {
   const history = buildDemoHistory(sample(29), target);
-  expect(assessDemoHistoricalReturn(history, { ...candidate, asset: 'GBP/USD-OTC' }, target).code).toBe(null);
-  expect(assessDemoHistoricalReturn(history, { ...candidate, entry_strategy: 'OTHER' }, target).code).toBe('history_insufficient');
-  expect(assessDemoHistoricalReturn(history, { ...candidate, direction: 'PUT' }, target).code).toBe('history_insufficient');
-  expect(assessDemoHistoricalReturn(history, { ...candidate, asset: 'EUR/USD' }, target).code).toBe('history_insufficient');
-  expect(assessDemoHistoricalReturn(history, candidate, target + 4 * 3_600_000).code).toBe('history_insufficient');
+  expect(demoHistoricalEvidence(history, { ...candidate, asset: 'GBP/USD-OTC' }, target).wins).toBe(29);
+  expect(demoHistoricalEvidence(history, { ...candidate, entry_strategy: 'OTHER' }, target).weight).toBe(0);
+  expect(demoHistoricalEvidence(history, { ...candidate, direction: 'PUT' }, target).weight).toBe(0);
+  expect(demoHistoricalEvidence(history, { ...candidate, asset: 'EUR/USD' }, target).weight).toBe(0);
+  expect(demoHistoricalEvidence(history, candidate, target + 4 * 3_600_000).weight).toBe(0);
 });
 
-test('admits positive history with headroom and vetoes the same sample at a lower payout', () => {
-  const rows = sample(29);
-  const decision = assess(rows);
-  expect(decision.code).toBe(null);
-  expect(decision.details.conservative_return! > 0.02).toBe(true);
-  expect(assess(rows, { ...candidate, payout: 0.40 }).code).toBe('history_margin_insufficient');
-  expect(assess(rows, { ...candidate, payout: Number.NaN }).code).toBe('history_payout_unavailable');
-});
-
-test('blocks negative stake-weighted net return despite a high win rate, including ties in stake', () => {
+test('measures negative stake-weighted net return despite a high win rate, including ties in stake', () => {
   const rows = sample(32).map(o => o.result === 'loss' ? { ...o, amount: '40', profit: '-40' } : o);
   const result = assess([...rows, order(36, 'tie')]);
-  expect(result.code).toBe('history_nonpositive');
-  expect(result.details.ties).toBe(1);
-  expect(result.details.net_return).toBeCloseTo((32 * 1.7 - 4 * 40) / (32 * 2 + 4 * 40 + 2), 8);
+  expect(result.ties).toBe(1);
+  expect(result.netReturn).toBeCloseTo((32 * 1.7 - 4 * 40) / (32 * 2 + 4 * 40 + 2), 8);
 });
 
-test('rejects small or concentrated samples even with only wins, and fails closed on read failure', () => {
-  expect(assess(sample(36).slice(0, 29)).code).toBe('history_insufficient');
+test('reduces the weight of thin and concentrated samples and uses zero weight without history', () => {
   const oneBlock = sample(36).map((o, i) => ({ ...order(0), iq_option_id: o.iq_option_id, asset: 'ASSET' + i + '-OTC' }));
-  expect(assess(oneBlock).code).toBe('history_insufficient');
-  expect(assessDemoHistoricalReturn(null, candidate, target).code).toBe('history_unavailable');
+  expect(assess(sample(36).slice(0, 5)).weight).toBeLessThan(0.03);
+  expect(assess(oneBlock).weight).toBeLessThan(0.1);
+  expect(assess(sample(36)).weight).toBeGreaterThan(0.5);
+  expect(demoHistoricalEvidence(null, candidate, target).weight).toBe(0);
 });
 
 test('excludes future, stale, unsettled, duplicate, real-account and invalid ledger rows', () => {

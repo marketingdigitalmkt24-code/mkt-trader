@@ -44,7 +44,7 @@ import {
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 import {
-  DEMO_AI_MODEL, DEMO_AI_VERSION, demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot,
+  DEMO_AI_MODEL, DEMO_AI_VERSION, demoAiStudyActive, demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot,
   requestDemoAiStudy, settleDemoAiStudy,
 } from '../_shared/demo-ai-study.ts';
 
@@ -556,6 +556,7 @@ Deno.serve(async (req) => {
   const history = practiceHistory.snapshot;
   if (practice) console.log('Demo return priority snapshot:', JSON.stringify({
     version: DEMO_HISTORY_POLICY, accountType: selectedDemoAccount,
+    aiStudy: DEMO_AI_VERSION, aiStudyActive: demoAiStudyActive(targetMs),
     entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
     technicalCandidates: demoEligible.length,
   }));
@@ -616,7 +617,10 @@ Deno.serve(async (req) => {
       if (!cards.length) return;
       // Claim this slot once, even if the scheduler overlaps or the provider fails.
       const lease = await bucket.upload(keyFor(targetMs, 'lease'), '{}', options);
-      if (lease.error) return;
+      if (lease.error) {
+        console.warn('Demo AI study claim unavailable:', lease.error.name);
+        return;
+      }
       const { status, picks } = await requestDemoAiStudy(cards, studyKey);
       const timely = Date.now() < targetMs + DEMO_CANDLE_SEC * 1000;
       console.log('Demo AI study decision:', JSON.stringify({

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot, requestDemoAiStudy, settleDemoAiStudy } from './demo-ai-study.ts';
 
-const target = Date.parse('2026-11-13T16:40:00Z');
+const target = Date.parse('2026-11-13T16:48:00Z');
 const second = target / 1000;
 const signal = { signal_id: 'local-only', asset: 'EUR/USD', direction: 'CALL', payout: 0.85 };
 const candles = Array.from({ length: 24 }, (_, i) => ({ t: second - 60 + i * 5, o: 100, h: 103, l: 99, c: 102 }));

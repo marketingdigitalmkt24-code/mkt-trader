@@ -3,7 +3,7 @@ import { DEMO_ANALYSIS_SEC, DEMO_CANDLE_SEC } from './demo-timing.ts';
 export const DEMO_AI_VERSION = 'demo-ai-study-v1';
 export const DEMO_AI_MODEL = 'openai/gpt-6.1-sol';
 const PERIOD = 15 * 60_000;
-const STUDY_START = Date.parse('2026-11-13T16:40:00Z');
+const STUDY_START = Date.parse('2026-11-13T16:48:00Z');
 const STUDY_END = STUDY_START + 3 * 24 * 60 * 60_000;
 const CANDIDATES_PER_CARD = 3;
 const BARS = DEMO_CANDLE_SEC / DEMO_ANALYSIS_SEC;
@@ -17,7 +17,11 @@ type StudyPick = { strategy: string; reference: StudySignal | null; model: Study
 type Outcome = { status: 'no_entry' | 'missing_candles' } | { status: 'win' | 'loss' | 'tie'; netPerUnit: number };
 
 export function demoAiStudySlot(target: number) {
-  return target >= STUDY_START && target < STUDY_END && (target - STUDY_START) % PERIOD === 0;
+  return demoAiStudyActive(target) && (target - STUDY_START) % PERIOD === 0;
+}
+
+export function demoAiStudyActive(target: number) {
+  return target >= STUDY_START && target < STUDY_END;
 }
 
 export function demoAiStudyPreviousSlot(target: number) {

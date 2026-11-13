@@ -52,6 +52,7 @@ import {
   DEMO_AI_MODEL, DEMO_AI_VERSION, demoAiStudyActive, demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot,
   requestDemoAiStudy, settleDemoAiStudy,
 } from '../_shared/demo-ai-study.ts';
+import { DEMO_AI_GATE_MODEL, DEMO_AI_GATE_VERSION, demoAiGateActive, demoAiGateDecide } from '../_shared/demo-ai-gate.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
@@ -588,7 +589,7 @@ Deno.serve(async (req) => {
     entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
     technicalCandidates: demoEligible.length,
   }));
-  const selections = DEMO_STRATEGIES.map(strategy => {
+  const selections = await Promise.all(DEMO_STRATEGIES.map(async strategy => {
     const candidates = demoEligible.filter(candidate => candidate.entry_strategy === strategy);
     const baseline = selectDemoByQuality(candidates);
     const rank = practice ? rankDemoPractice(candidates, candidate => demoHistoricalEvidence(history, candidate, targetMs)) : [];
@@ -619,7 +620,19 @@ Deno.serve(async (req) => {
         mode: selected ? demoConsistencySignal(selected.candidate, selected.history, selected.expectedReturn, budget.entries).mode : null,
       }));
     }
-    const winner = practice ? selected?.candidate ?? null : baseline;
+    let winner = practice ? selected?.candidate ?? null : baseline;
+    // One-hour PRACTICE pilot: GPT-6 Astra (high) decides card 2 entries among filter-approved candidates.
+    const gateKey = Deno.env.get('LOVABLE_API_KEY');
+    if (practice && strategy === TENDENCIA_FORCA_RECUO_STRATEGY && demoAiGateActive(targetMs) && gateKey) {
+      const pool = rank.filter(e => !coolingDown.has(e.candidate.signal_id));
+      const decision = pool.length ? await demoAiGateDecide(pool, series, curMin, gateKey) : { status: 'no_candidates', signalId: null };
+      winner = decision.signalId ? pool.find(e => e.candidate.signal_id === decision.signalId)?.candidate ?? null : null;
+      console.log('Demo AI gate decision:', JSON.stringify({
+        version: DEMO_AI_GATE_VERSION, model: DEMO_AI_GATE_MODEL, entryMinute: new Date(targetMs).toISOString(),
+        strategy, candidates: pool.length, technicalPick: selected?.candidate.signal_id ?? null,
+        status: decision.status, aiPick: winner?.signal_id ?? null, elapsedMs: Date.now() - targetMs,
+      }));
+    }
     if (practice && baseline && best) console.log('Demo return priority decision:', JSON.stringify({
       version: DEMO_HISTORY_POLICY, entryMinute: baseline.created_at, strategy,
       baseline: baseline.signal_id, selected: selected?.candidate.signal_id ?? null, candidates: candidates.length,
@@ -629,7 +642,7 @@ Deno.serve(async (req) => {
       history: (selected ?? best).history, lossPauseEnabled: false,
     }));
     return { strategy, candidates, baseline, winner, rank, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
-  });
+ }));
   // The experiment uses its own private storage and never feeds either order path.
   const studyKey = practice && input.scheduled === true ? Deno.env.get('LOVABLE_API_KEY') : null;
   if (studyKey) {

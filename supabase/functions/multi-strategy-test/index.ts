@@ -33,7 +33,10 @@ import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_sh
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByRotation } from '../_shared/demo-profit-selection.ts';
-import { closedDemoAnalysisWindow, demoEma as ema, demoSignalQuality, selectDemoByQuality } from '../_shared/demo-signal-quality.ts';
+import {
+  closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoEma as ema,
+  demoSignalQuality, selectDemoByQuality,
+} from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
@@ -443,7 +446,10 @@ Deno.serve(async (req) => {
   }
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
-  const demoPatterns: (DemoCandidate & { quality: number })[] = [];
+  const demoPatterns: (DemoCandidate & {
+    quality: number;
+    candleContext: ReturnType<typeof demoCandleContext>;
+  })[] = [];
   const assetAnalyses = new Map<string, DemoAssetAnalysis>();
   const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
@@ -467,11 +473,13 @@ Deno.serve(async (req) => {
         confluenceGates[`${strategy}_extra_${why}`] = (confluenceGates[`${strategy}_extra_${why}`] || 0) + 1;
         continue;
       }
+      const candleContext = demoCandleContext(closed, direction);
       demoPatterns.push({
         signal_id: `${prefix}-${asset}-${curMin}`, asset, direction,
         entry_strategy: strategy,
         created_at: new Date(curMin * 1000).toISOString(), _score: Number.NaN,
-        quality: demoSignalQuality(closed, direction, fastEma, slowEma, strategy === TENDENCIA_FORCA_RECUO_STRATEGY),
+        candleContext,
+        quality: demoSignalQuality(closed, direction, fastEma, slowEma, strategy === TENDENCIA_FORCA_RECUO_STRATEGY, candleContext),
       });
     }
   }
@@ -514,7 +522,10 @@ Deno.serve(async (req) => {
       reject(c,{code:'market_unavailable',details:{asset:c.asset}});
       return [];
     }
-    return [{ ...c, market }];
+    const commission = market[1]?.option?.profit?.commission;
+    const payout = typeof commission === 'number' && Number.isFinite(commission) && commission >= 0 && commission <= 100
+      ? (100 - commission) / 100 : null;
+    return [{ ...c, market, payout }];
   });
   // Each card ranks only its own eligible assets. Keep the previous selector for comparison.
   const selections = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY].map(strategy => {
@@ -530,6 +541,15 @@ Deno.serve(async (req) => {
       ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: candidates.length,
       selected: winner.signal_id, quality: winner.quality, previousChoice: previousChoice?.signal_id,
     }));
+    if (selectedDemoAccount === 'PRACTICE') {
+      console.log('Demo filter study:', JSON.stringify({
+        version: 'demo-filter-study-v1',
+        entryMinute: winner.created_at,
+        strategy: winner.entry_strategy,
+        baseline: winner.signal_id,
+        filters: compareDemoFilters(candidates),
+      }));
+    }
     for (const candidate of candidates) {
       if (candidate.signal_id === winner.signal_id) continue;
       reject(candidate, {

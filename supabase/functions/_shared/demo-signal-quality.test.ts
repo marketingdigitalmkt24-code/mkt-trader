@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { closedDemoAnalysisWindow, demoSignalQuality, selectDemoByQuality } from './demo-signal-quality.ts';
+import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, selectDemoByQuality } from './demo-signal-quality.ts';
 import { DEMO_ANALYSIS_SEC } from './demo-timing.ts';
 
 const entry = 600;
@@ -41,4 +41,22 @@ test('uses directional confirmation and penalizes a spike or an extended pullbac
   expect(near).toBeGreaterThan(demoSignalQuality(strong, 'CALL', 102, 101.5, true));
   const mirrored = strong.map(c => ({ t: c.t, o: 200 - c.o, c: 200 - c.c, h: 200 - c.l, l: 200 - c.h }));
   expect(demoSignalQuality(mirrored, 'PUT', 99.5, 100, true)).toBe(near);
+});
+
+test('compares filters on eligible alternatives and records when a filter would skip the minute', () => {
+  const weakBody = demoCandleContext(history, 'CALL');
+  const strongBody = demoCandleContext([
+    ...history.slice(0, -1),
+    { ...history[89], o: 99.6, c: 100.4 },
+  ], 'CALL');
+  const candidates = [
+    { signal_id: 'current', quality: 70, candleContext: weakBody, payout: null },
+    { signal_id: 'alternative', quality: 60, candleContext: strongBody, payout: 0.8 },
+  ];
+  const comparison = compareDemoFilters(candidates);
+  expect(comparison.quality_65).toEqual({ eligible: 1, selected: 'current' });
+  expect(comparison.candle_body_50).toEqual({ eligible: 1, selected: 'alternative' });
+  expect(comparison.payout_80).toEqual({ eligible: 1, selected: 'alternative' });
+  expect(comparison.quality_and_candle).toEqual({ eligible: 0, selected: null });
+  expect(selectDemoByQuality(candidates)?.signal_id).toBe('current');
 });

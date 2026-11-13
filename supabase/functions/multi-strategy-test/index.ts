@@ -33,6 +33,7 @@ import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_sh
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByRotation } from '../_shared/demo-profit-selection.ts';
+import { closedDemoAnalysisWindow, demoEma as ema, demoSignalQuality, selectDemoByQuality } from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
@@ -86,8 +87,6 @@ function symbolOf(rawName: string) {
   const base = n.replace(/[-\s]*BLITZ/i, '').replace(/[-\s]*OTC$/i, '').trim();
   return otc ? `${base}-OTC` : base;
 }
-
-const ema = (p: number, src: number[]) => { const a = 2 / (p + 1); const r: number[] = []; src.forEach((x, i) => r.push(i ? x * a + r[i - 1] * (1 - a) : x)); return r; };
 
 // Retorna as estratégias que dispararam na última vela fechada (índice i).
 export function detect(cs: K[]): [string, 'CALL' | 'PUT'][] {
@@ -200,7 +199,7 @@ Deno.serve(async (req) => {
     .lte('expiration_time',new Date(pendingCutoffMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
-  const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type,pattern_min_movement_pct').eq('id',1).maybeSingle().then(r=>r);
+  const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
@@ -356,8 +355,9 @@ Deno.serve(async (req) => {
         ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
       }
       if (d.name === 'profile') {
-        {const demoAcct=(await amountRead).data?.account_type==='REAL'?'REAL':'PRACTICE';selectedDemoAccount=demoAcct;demoBalanceId = demoBalance(d.msg?.balances || [], demoAcct)?.id || 0;}
-        if(!demoBalanceId){console.warn('Demo profile has no verified PRACTICE USD balance');finish();closePrepared();return;}
+        selectedDemoAccount = (await amountRead).data?.account_type === 'REAL' ? 'REAL' : 'PRACTICE';
+        demoBalanceId = demoBalance(d.msg?.balances || [], selectedDemoAccount)?.id || 0;
+        if(!demoBalanceId){console.warn('Demo profile has no verified USD balance for', selectedDemoAccount);finish();closePrepared();return;}
         preparedBalanceId = demoBalanceId;
         preparedBalanceAmount = Number((d.msg?.balances || []).find((b: any) => b.id === demoBalanceId)?.amount) || 0;
         // Re-read at :01 so this minute's confirmation is not missed by preflight.
@@ -443,23 +443,21 @@ Deno.serve(async (req) => {
   }
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
-  const demoPatterns: DemoCandidate[] = [];
+  const demoPatterns: (DemoCandidate & { quality: number })[] = [];
   const assetAnalyses = new Map<string, DemoAssetAnalysis>();
   const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
-    const prior=cs.filter(k=>k.t<curMin).slice(-60);
-    const complete=prior.length===60 && prior.every((k,i)=>k.t===curMin-(60-i)*DEMO_ANALYSIS_SEC
-      && [k.t,k.o,k.c,k.h,k.l].every(Number.isFinite) && k.o>0 && k.c>0
-      && k.h>=Math.max(k.o,k.c) && k.l<=Math.min(k.o,k.c));
-    assetAnalyses.set(asset,{asset,direction:null,score:null,state:complete?'no_signal':'incomplete_candles'});
-    // Each minute slot analyzes the latest closed 5-second bars; settlement stays independent.
-    if (!isDemoEntryBoundary(targetMs)) continue;
-    const closed = cs.filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin);
-    if (!closed.length || closed[closed.length - 1].t !== curMin - DEMO_ANALYSIS_SEC) continue;
+    const closed = closedDemoAnalysisWindow(cs, curMin);
+    assetAnalyses.set(asset, { asset, direction: null, score: null, state: closed ? 'no_signal' : 'incomplete_candles' });
+    if (!closed || !isDemoEntryBoundary(targetMs)) continue;
     // Reuse the established aligned trend: EMA9/21 + SMA50, MACD and RSI on closed analysis bars.
-    const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin));
+    const fired = detect(closed);
+    if (!fired.length) continue;
+    const closes = closed.map(candle => candle.c);
+    const fastEma = ema(9, closes)[closed.length - 1];
+    const slowEma = ema(21, closes)[closed.length - 1];
     const options: [string, string, 'CALL' | 'PUT' | null][] = [
-      [TENDENCIA_ALINHADA_STRATEGY, 'demo-tendencia-alinhada-v1', (fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1] as any) ?? null],
+      [TENDENCIA_ALINHADA_STRATEGY, 'demo-tendencia-alinhada-v1', fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1] ?? null],
       [TENDENCIA_FORCA_RECUO_STRATEGY, 'demo-tendencia-forca-recuo-v1', tendenciaForcaRecuoDirection(fired)],
     ];
     for (const [strategy, prefix, direction] of options) {
@@ -473,6 +471,7 @@ Deno.serve(async (req) => {
         signal_id: `${prefix}-${asset}-${curMin}`, asset, direction,
         entry_strategy: strategy,
         created_at: new Date(curMin * 1000).toISOString(), _score: Number.NaN,
+        quality: demoSignalQuality(closed, direction, fastEma, slowEma, strategy === TENDENCIA_FORCA_RECUO_STRATEGY),
       });
     }
   }
@@ -493,16 +492,15 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  // No historical note analysis participates in candidate selection.
+  const ruleVersion = 'demo-s5-signal-quality-v1';
   const rejections: any[] = [];
   const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-s5-aligned-tfr-v28',
-    candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
+    reason_code:reason.code,reason_details:reason.details,rule_version:ruleVersion,
+    candles:(series.get(c.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= curMin).slice(-20),
   });
-  const demoPool = demoPatterns;
-  const demoEligible = demoPool.flatMap(c => {
+  const demoEligible = demoPatterns.flatMap(c => {
     assetAnalyses.set(c.asset,{asset:c.asset,direction:c.direction,score:null,state:'eligible'});
     const cohort=demoCohort(undefined,c.entry_strategy);
     if(!cohort){
@@ -516,23 +514,34 @@ Deno.serve(async (req) => {
       reject(c,{code:'market_unavailable',details:{asset:c.asset}});
       return [];
     }
-    // Preserve market availability and strategy rules; no note eligibility gate.
-    const commission = market[1]?.option?.profit?.commission;
-    const _payout = typeof commission === 'number' ? (100-commission)/100 : null;
-    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null,_payout}];
+    return [{ ...c, market }];
   });
-  // Single active strategy; stable IDs break asset ties without notes or historical ranking.
-  // Each real-time card competes for its own minute slot: one winner per strategy.
-  const demoWinners = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY]
-    .map(s => selectDemoByRotation(demoEligible.filter(c => c.entry_strategy === s), null))
-    .filter((c): c is NonNullable<typeof c> => !!c);
+  // Each card ranks only its own eligible assets. Keep the previous selector for comparison.
+  const selections = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY].map(strategy => {
+    const candidates = demoEligible.filter(candidate => candidate.entry_strategy === strategy);
+    return { candidates, winner: selectDemoByQuality(candidates), previousChoice: selectDemoByRotation(candidates, null) };
+  });
+  const demoWinners = selections.flatMap(({ winner }) => winner ? [winner] : []);
   const demoWinner = demoWinners[0] ?? null;
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  console.log('Demo rotation selection:',JSON.stringify({eligible:demoEligible.length,selected:demoWinners.map(w=>w.signal_id),scoreAnalysis:false}));
-  for(const c of demoEligible){
-    const own=demoWinners.find(w=>w.entry_strategy===c.entry_strategy);
-    const reason:RejectionReason|null=own&&own.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:own.signal_id}}:null;
-    if(reason)reject(c,reason);
+  for (const { candidates, winner, previousChoice } of selections) {
+    if (!winner) continue;
+    console.log('Demo signal selection:', JSON.stringify({
+      ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: candidates.length,
+      selected: winner.signal_id, quality: winner.quality, previousChoice: previousChoice?.signal_id,
+    }));
+    for (const candidate of candidates) {
+      if (candidate.signal_id === winner.signal_id) continue;
+      reject(candidate, {
+        code: 'minute_priority',
+        details: {
+          selected_signal: winner.signal_id,
+          quality: candidate.quality,
+          selected_quality: winner.quality,
+          previous_choice: previousChoice?.signal_id ?? null,
+        },
+      });
+    }
   }
   // Audit is independent of execution: never delay an eligible entry for its rejected competitors.
   if(rejections.length){
@@ -548,25 +557,31 @@ Deno.serve(async (req) => {
   if (!demoWinner) console.log('Demo: no valid candidate in this minute with 5-second analysis');
   let principalTriggered = false;
   for (const demoWinner of demoWinners) {
-    const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
+    const { data: insertedCandidate, error } = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
       // Required legacy column: neutral placeholder, never calculated or used for selection.
       entry_strategy:demoWinner.entry_strategy,score:0,
-      pattern_match:demoEligible.find(c=>c.signal_id===demoWinner.signal_id)?._patternMatch??null,
-      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute,entry_strategy',ignoreDuplicates:true});
+      pattern_match: null,
+      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= curMin).slice(-20)
+    }, { onConflict: 'entry_minute,entry_strategy', ignoreDuplicates: true }).select('signal_id').maybeSingle();
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
+      if (!insertedCandidate) {
+        const { data: selected, error: selectionError } = await supabase.from('iq_demo_test_candidates')
+          .select('signal_id').eq('entry_minute', demoWinner.created_at)
+          .eq('entry_strategy', demoWinner.entry_strategy).maybeSingle();
+        if (selectionError || selected?.signal_id !== demoWinner.signal_id) continue;
+      }
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
-      console.log('Demo current-analysis selection:', JSON.stringify({scoreAnalysis:false}));
-      // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
+      // Reserve the selected strategy slot before submitting to the verified balance.
       const setting = await amountRead;
       const base = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
-      const found = Object.entries<any>(preparedActives).find(([,a])=>symbolOf(a.name || '')===demoWinner.asset);
+      const found = demoWinner.market;
       const commission = found?.[1]?.option?.profit?.commission;
       const payout = typeof commission === 'number' ? (100-commission)/100 : null;
       const last = await supabase.from('iq_demo_test_orders')
         .select('status,result,entry_strategy,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
-        .eq('entry_strategy',demoWinner.entry_strategy).in('account_type',['PRACTICE','REAL'])
+        .eq('entry_strategy', demoWinner.entry_strategy).eq('account_type', selectedDemoAccount)
         .in('status',['confirmed','unknown','reserved'])
         .or(`status.eq.confirmed,iq_option_id.not.is.null,expiration_time.gt.${new Date().toISOString()}`)
         .order('entry_minute',{ascending:false}).limit(1);
@@ -577,7 +592,9 @@ Deno.serve(async (req) => {
       // i.e. 5 consecutive LOSS. The executor re-reads the streak and the claim revalidates it, Auto Trading and limits.
       const prevOrder=(last.data||[])[0];
       // Also "Sequência de 3 sinais": the executor re-reads the 3 latest confirmed orders and the claim revalidates the user sets.
-      if(!principalTriggered&&prevOrder?.status==='confirmed'&&((prevOrder?.result==='loss'&&Number(prevOrder?.recovery_level)===4)||['RECUO_EMA21','ICHIMOKU_RECUO21'].includes(prevOrder?.entry_strategy))){
+      if (selectedDemoAccount === 'REAL' && !principalTriggered && prevOrder?.status === 'confirmed'
+        && ((prevOrder.result === 'loss' && Number(prevOrder.recovery_level) === 4)
+          || ['RECUO_EMA21', 'ICHIMOKU_RECUO21'].includes(prevOrder.entry_strategy))) {
         principalTriggered = true;
         const followTask = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/selected-demo-trend`, {
           method:'POST', headers:{Authorization:`Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,'Content-Type':'application/json'},

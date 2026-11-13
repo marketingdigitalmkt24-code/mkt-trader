@@ -1,6 +1,6 @@
 import { DEMO_CANDLE_SEC } from './demo-timing.ts';
 
-export const DEMO_HISTORY_POLICY = 'demo-return-priority-v3';
+export const DEMO_HISTORY_POLICY = 'demo-full-history-v5';
 export const DEMO_HISTORY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const PRIOR_SAMPLE_SIZE = 30;
 const FULL_DIVERSITY_BLOCKS = 6;
@@ -28,6 +28,39 @@ type Cohort = { wins: number; losses: number; ties: number; stake: number; net: 
 type StrategyDay = { decisive: number; stake: number; net: number; lastEntry: number };
 const cohortKey = (signal: Signal, hour: number) =>
   JSON.stringify([signal.entry_strategy, signal.direction, signal.asset.endsWith('-OTC'), Math.floor(hour / 4)]);
+const assetKey = (signal: Signal, hour: number) =>
+  JSON.stringify([signal.entry_strategy, signal.direction, signal.asset, Math.floor(hour / 4)]);
+
+export async function readAllDemoHistoricalOrders<T extends { id: string; entry_minute: string }>(
+  readPage: (cursor: T | null) => Promise<T[]>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: T | null = null;
+  for (;;) {
+    const page = await readPage(cursor);
+    if (!page.length) return rows;
+    const last = page[page.length - 1];
+    if (cursor && (last.entry_minute > cursor.entry_minute
+      || (last.entry_minute === cursor.entry_minute && last.id >= cursor.id))) {
+      throw new Error('History cursor did not advance');
+    }
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+    cursor = last;
+  }
+}
+
+function recordOutcome(cohorts: Map<string, Cohort>, key: string, result: string, stake: number, net: number, entry: number) {
+  const cohort = cohorts.get(key) ?? { wins: 0, losses: 0, ties: 0, stake: 0, net: 0, blocks: new Set<number>() };
+  if (result === 'tie') cohort.ties++;
+  else {
+    if (result === 'win') cohort.wins++; else cohort.losses++;
+    cohort.blocks.add(Math.floor(entry / (30 * 60 * 1000)));
+  }
+  cohort.stake += stake;
+  cohort.net += net;
+  cohorts.set(key, cohort);
+}
 
 function finiteNumber(value: number | string | null): number {
   return value === null || (typeof value === 'string' && !value.trim()) ? NaN : Number(value);
@@ -35,6 +68,9 @@ function finiteNumber(value: number | string | null): number {
 
 export function buildDemoHistory(rows: readonly DemoHistoricalOrder[], targetMs: number) {
   const cohorts = new Map<string, Cohort>();
+  const assetCohorts = new Map<string, Cohort>();
+  const recentCohorts = new Map<string, Cohort>();
+  const recentAssetCohorts = new Map<string, Cohort>();
   const today = new Map<string, StrategyDay>();
   const targetDay = brtDay.format(targetMs);
   const seen = new Set<string>();
@@ -45,7 +81,7 @@ export function buildDemoHistory(rows: readonly DemoHistoricalOrder[], targetMs:
     const entry = Date.parse(row.entry_minute);
     const expiry = Date.parse(row.expiration_time ?? '');
     const settled = Date.parse(row.settled_at ?? '');
-    if (!(entry >= targetMs - DEMO_HISTORY_WINDOW_MS && expiry - entry === DEMO_CANDLE_SEC * 1000
+    if (!(Number.isFinite(entry) && entry >= 0 && expiry - entry === DEMO_CANDLE_SEC * 1000
       && settled >= expiry && settled < targetMs)) continue;
     const stake = finiteNumber(row.amount);
     const net = finiteNumber(row.profit);
@@ -53,16 +89,15 @@ export function buildDemoHistory(rows: readonly DemoHistoricalOrder[], targetMs:
     if (!((row.result === 'win' && net > 0) || (row.result === 'loss' && net < 0)
       || (row.result === 'tie' && net === 0))) continue;
     seen.add(row.iq_option_id);
-    const key = cohortKey(row, Number(brtHour.format(entry)));
-    const cohort = cohorts.get(key) ?? { wins: 0, losses: 0, ties: 0, stake: 0, net: 0, blocks: new Set<number>() };
-    if (row.result === 'tie') cohort.ties++;
-    else {
-      if (row.result === 'win') cohort.wins++; else cohort.losses++;
-      cohort.blocks.add(Math.floor(entry / (30 * 60 * 1000)));
+    const hour = Number(brtHour.format(entry));
+    const key = cohortKey(row, hour);
+    const asset = assetKey(row, hour);
+    recordOutcome(cohorts, key, row.result, stake, net, entry);
+    recordOutcome(assetCohorts, asset, row.result, stake, net, entry);
+    if (entry >= targetMs - DEMO_HISTORY_WINDOW_MS) {
+      recordOutcome(recentCohorts, key, row.result, stake, net, entry);
+      recordOutcome(recentAssetCohorts, asset, row.result, stake, net, entry);
     }
-    cohort.stake += stake;
-    cohort.net += net;
-    cohorts.set(key, cohort);
     if (brtDay.format(entry) === targetDay) {
       const day = today.get(row.entry_strategy) ?? { decisive: 0, stake: 0, net: 0, lastEntry: 0 };
       day.decisive += row.result === 'tie' ? 0 : 1;
@@ -72,7 +107,7 @@ export function buildDemoHistory(rows: readonly DemoHistoricalOrder[], targetMs:
       today.set(row.entry_strategy, day);
     }
   }
-  return { cohorts, today, count: seen.size };
+  return { cohorts, assetCohorts, recentCohorts, recentAssetCohorts, today, count: seen.size };
 }
 
 export function demoHistoricalEvidence(
@@ -80,7 +115,13 @@ export function demoHistoricalEvidence(
   candidate: Signal,
   targetMs: number,
 ) {
-  const cohort = history?.cohorts.get(cohortKey(candidate, Number(brtHour.format(targetMs))));
+  const hour = Number(brtHour.format(targetMs));
+  const asset = assetKey(candidate, hour);
+  const group = cohortKey(candidate, hour);
+  const exact = history?.assetCohorts.get(asset);
+  const useAsset = !!exact && exact.wins + exact.losses >= 20 && exact.blocks.size >= 4;
+  const cohort = useAsset ? exact : history?.cohorts.get(group);
+  const recent = useAsset ? history?.recentAssetCohorts.get(asset) : history?.recentCohorts.get(group);
   const decisive = (cohort?.wins ?? 0) + (cohort?.losses ?? 0);
   const halfHourBlocks = cohort?.blocks.size ?? 0;
   return {
@@ -90,6 +131,9 @@ export function demoHistoricalEvidence(
     halfHourBlocks,
     netProfit: cohort?.net ?? null,
     netReturn: cohort ? cohort.net / cohort.stake : null,
+    scope: useAsset ? 'same_asset_direction_session' : 'same_market_direction_session',
+    recentDecisive: (recent?.wins ?? 0) + (recent?.losses ?? 0),
+    recentNetReturn: recent ? recent.net / recent.stake : null,
     // Shrink thin or concentrated samples toward a neutral adjustment.
     weight: decisive / (decisive + PRIOR_SAMPLE_SIZE) * Math.min(1, halfHourBlocks / FULL_DIVERSITY_BLOCKS),
   };

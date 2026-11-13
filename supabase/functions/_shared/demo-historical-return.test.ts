@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { buildDemoHistory, demoHistoricalEvidence, demoPracticeLossPace, type DemoHistoricalOrder } from './demo-historical-return.ts';
+import { buildDemoHistory, demoHistoricalEvidence, demoPracticeLossPace, readAllDemoHistoricalOrders, type DemoHistoricalOrder } from './demo-historical-return.ts';
 
 const target = Date.parse('2026-11-13T03:05:00Z'); // 00:05 in Brasília, a different UTC date from most sample entries.
 const candidate = { entry_strategy: 'TREND', asset: 'EUR/USD-OTC', direction: 'CALL', payout: 0.85 };
@@ -40,7 +40,7 @@ test('reduces the weight of thin and concentrated samples and uses zero weight w
   expect(demoHistoricalEvidence(null, candidate, target).weight).toBe(0);
 });
 
-test('excludes future, stale, unsettled, duplicate, real-account and invalid ledger rows', () => {
+test('excludes future, unsettled, duplicate, real-account and invalid ledger rows', () => {
   const base = order(0);
   const rows: DemoHistoricalOrder[] = [
     base, base,
@@ -54,10 +54,41 @@ test('excludes future, stale, unsettled, duplicate, real-account and invalid led
     { ...order(8), amount: 0 },
     { ...order(9), profit: -1 },
     { ...order(10), expiration_time: base.expiration_time },
-    { ...order(11), entry_minute: '2026-10-28T03:00:00Z', expiration_time: '2026-10-28T03:01:00Z' },
+    { ...order(11), entry_minute: 'invalid', expiration_time: '2026-10-28T03:01:00Z' },
     { ...order(12), settled_at: '2026-11-12T03:00:00Z' },
   ];
   expect(buildDemoHistory(rows, target).count).toBe(1);
+});
+
+test('includes older history and prefers asset-specific evidence when sufficiently sampled', () => {
+  const rows = sample(29);
+  const older = rows.map((row, i) => ({
+    ...row, iq_option_id: String(1000 + i), asset: 'GBP/USD-OTC',
+    entry_minute: new Date(Date.parse(row.entry_minute) - 30 * 86400_000).toISOString(),
+    expiration_time: new Date(Date.parse(row.expiration_time!) - 30 * 86400_000).toISOString(),
+    settled_at: new Date(Date.parse(row.settled_at!) - 30 * 86400_000).toISOString(),
+  }));
+  const history = buildDemoHistory([...rows, ...older], target);
+  expect(history.count).toBe(72);
+  const exact = demoHistoricalEvidence(history, { ...candidate, asset: 'GBP/USD-OTC' }, target);
+  expect(exact.scope).toBe('same_asset_direction_session');
+  expect(exact.wins).toBe(29);
+  expect(exact.recentDecisive).toBe(0);
+  expect(demoHistoricalEvidence(history, { ...candidate, asset: 'AUD/USD-OTC' }, target).wins).toBe(58);
+});
+
+test('reads beyond the first thousand rows using a stable cursor', async () => {
+  const rows = Array.from({ length: 2050 }, (_, i) => ({
+    id: String(3000 - i).padStart(4, '0'), entry_minute: '2026-11-12T03:00:00Z',
+  }));
+  let pages = 0;
+  const all = await readAllDemoHistoricalOrders(async cursor => {
+    pages++;
+    const from = cursor ? rows.findIndex(row => row.id === cursor.id) + 1 : 0;
+    return rows.slice(from, from + 1000);
+  });
+  expect(all.length).toBe(2050);
+  expect(pages).toBe(3);
 });
 
 test('paces losses only for the affected strategy and releases it after five minutes', () => {

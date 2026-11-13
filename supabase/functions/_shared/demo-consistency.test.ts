@@ -26,13 +26,9 @@ test('requires confirmed body, orderly range, directional minute and sufficient 
   expect(demoConsistencySignal({ ...signal, candleContext: { ...signal.candleContext, minuteEfficiency: 0.2 } }, supported, 0.05, 0).reason?.code).toBe('selective_minute_confirmation');
 });
 
-test('allows a single stricter exploratory entry without requiring a large historical sample', () => {
-  const first = demoConsistencySignal(signal, thin, null, 0);
-  expect(first.reason).toBeNull();
-  expect(first.mode).toBe('exploratory');
-  expect(demoConsistencySignal(signal, thin, 0.05, 1).reason?.code).toBe('selective_exploration_limit');
-  expect(demoConsistencySignal({ ...signal, quality: 75 }, thin, null, 0).reason?.code).toBe('selective_quality');
-  expect(demoConsistencySignal({ ...signal, payout: 0.83 }, thin, null, 0).reason?.code).toBe('selective_payout');
+test('does not expand the quota by placing exploratory orders without supported history', () => {
+  expect(demoConsistencySignal(signal, thin, null, 0).reason?.code).toBe('selective_history_insufficient');
+  expect(demoConsistencySignal(signal, thin, 0.05, 1).reason?.code).toBe('selective_history_insufficient');
 });
 
 test('requires positive measured net return and projected headroom once history is supported', () => {
@@ -40,12 +36,15 @@ test('requires positive measured net return and projected headroom once history 
   expect(demoConsistencySignal(signal, supported, 0.01, 0).reason?.code).toBe('selective_return');
   expect(demoConsistencySignal(signal, supported, null, 0).reason?.code).toBe('selective_return');
   expect(demoConsistencySignal(signal, supported, 0.02, 3).reason).toBeNull();
+  expect(demoConsistencySignal(signal, { ...supported, recentDecisive: 25, recentNetReturn: -0.1 }, 0.05, 3).reason?.code).toBe('selective_recent_return');
 });
 
-test('enforces four daily slots, thirty-minute spacing and two confirmed losses per strategy', () => {
-  expect(demoConsistencyBudget([order(0, 10)], 'TREND', target).reason?.code).toBe('selective_spacing');
-  expect(demoConsistencyBudget([order(0, 30)], 'TREND', target).reason).toBeNull();
-  expect(demoConsistencyBudget([0, 1, 2, 3].map(i => order(i)), 'TREND', target).reason?.code).toBe('selective_daily_entry_limit');
+test('enforces one hundred daily slots, one-minute spacing and two confirmed losses per strategy', () => {
+  expect(demoConsistencyBudget([order(0, 0.5)], 'TREND', target).reason?.code).toBe('selective_spacing');
+  expect(demoConsistencyBudget([order(0, 1)], 'TREND', target).reason).toBeNull();
+  const rows = Array.from({ length: 100 }, (_, i) => ({ ...order(i), entry_minute: new Date(target - (i + 1) * 60_000).toISOString() }));
+  expect(demoConsistencyBudget(rows.slice(0, 99), 'TREND', target).reason).toBeNull();
+  expect(demoConsistencyBudget(rows, 'TREND', target).reason?.code).toBe('selective_daily_entry_limit');
   const losses = [0, 1].map(i => ({ ...order(i), result: 'loss', profit: -2 }));
   expect(demoConsistencyBudget(losses, 'TREND', target).reason?.code).toBe('selective_daily_loss_limit');
   expect(demoConsistencyBudget(losses, 'SECOND_CARD', target).reason).toBeNull();

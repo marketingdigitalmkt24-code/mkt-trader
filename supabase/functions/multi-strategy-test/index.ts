@@ -39,7 +39,8 @@ import {
 } from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import {
-  buildDemoHistory, demoHistoricalEvidence, demoPracticeLossPace, DEMO_HISTORY_POLICY, DEMO_HISTORY_WINDOW_MS,
+  buildDemoHistory, demoHistoricalEvidence, demoPracticeLossPace, readAllDemoHistoricalOrders, DEMO_HISTORY_POLICY,
+  type DemoHistoricalOrder,
 } from '../_shared/demo-historical-return.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import {
@@ -228,22 +229,27 @@ Deno.serve(async (req) => {
   };
   const consistencyRead = amountRead.then(setting => !setting.error && setting.data?.account_type !== 'REAL'
     && targetMs >= DEMO_CONSISTENCY_START ? readConsistencyDay() : null).catch(() => null);
-  // Read only results known before this minute. Optional history never holds up an entry.
+  // Paginate the entire registered history with one shared deadline while broker preparation runs.
   const practiceHistory: { snapshot: ReturnType<typeof buildDemoHistory> | null } = { snapshot: null };
-  void amountRead.then(async setting => {
-    if (setting.error || setting.data?.account_type === 'REAL') return;
-    const signal = AbortSignal.timeout(4000);
+  const completeHistoryRead = amountRead.then(async setting => {
+    if (setting.error || setting.data?.account_type === 'REAL') return null;
+    const signal = AbortSignal.timeout(8000);
     const before = new Date(targetMs).toISOString();
-    const since = new Date(targetMs - DEMO_HISTORY_WINDOW_MS).toISOString();
-    const snapshots = await Promise.all(DEMO_STRATEGIES.map(strategy => supabase.from('iq_demo_test_orders')
-      .select('entry_strategy,direction,asset,account_type,status,iq_option_id,entry_minute,expiration_time,settled_at,amount,profit,result')
-      .eq('account_type','PRACTICE').eq('entry_strategy',strategy).eq('status','confirmed')
-      .not('iq_option_id','is',null).in('result',['win','loss','tie'])
-      .gte('entry_minute',since).lt('entry_minute',before).lt('settled_at',before)
-      .order('entry_minute',{ascending:false}).order('id').limit(1000).abortSignal(signal)));
-    if (snapshots.some(snapshot => snapshot.error)) return;
-    practiceHistory.snapshot = buildDemoHistory(snapshots.flatMap(snapshot => snapshot.data ?? []), targetMs);
-  }).catch(() => { /* The ranking uses neutral historical weight when the read fails. */ });
+    const rows = await readAllDemoHistoricalOrders<DemoHistoricalOrder & { id: string }>(async cursor => {
+      let query = supabase.from('iq_demo_test_orders')
+        .select('id,entry_strategy,direction,asset,account_type,status,iq_option_id,entry_minute,expiration_time,settled_at,amount,profit,result')
+        .eq('account_type','PRACTICE').in('entry_strategy',DEMO_STRATEGIES).eq('status','confirmed')
+        .not('iq_option_id','is',null).in('result',['win','loss','tie'])
+        .lt('entry_minute',before).lt('settled_at',before);
+      if (cursor) query = query.or(`entry_minute.lt.${cursor.entry_minute},and(entry_minute.eq.${cursor.entry_minute},id.lt.${cursor.id})`);
+      const page = await query.order('entry_minute',{ascending:false}).order('id',{ascending:false}).limit(1000).abortSignal(signal);
+      if (page.error) throw new Error('Full historical read unavailable');
+      return page.data ?? [];
+    });
+    const snapshot = buildDemoHistory(rows, targetMs);
+    practiceHistory.snapshot = snapshot;
+    return snapshot;
+  }).catch(() => null);
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
@@ -573,10 +579,11 @@ Deno.serve(async (req) => {
   const selective = practice && targetMs >= DEMO_CONSISTENCY_START;
   const selectionVersion = selective ? DEMO_CONSISTENCY_VERSION : DEMO_HISTORY_POLICY;
   const dailyLedger = selective ? await consistencyRead : null;
-  const history = practiceHistory.snapshot;
+  const history = selective ? await completeHistoryRead : practiceHistory.snapshot;
   if (practice) console.log('Demo return priority snapshot:', JSON.stringify({
     version: DEMO_HISTORY_POLICY, accountType: selectedDemoAccount,
     selectionVersion,
+    historyScope: 'all_registered_confirmed_practice_strategy_orders',
     aiStudy: DEMO_AI_VERSION, aiStudyActive: demoAiStudyActive(targetMs),
     entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
     technicalCandidates: demoEligible.length,

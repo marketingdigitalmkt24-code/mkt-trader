@@ -1,4 +1,4 @@
-export const DEMO_CONSISTENCY_VERSION = 'demo-selective-v4';
+export const DEMO_CONSISTENCY_VERSION = 'demo-selective-full-history-v5';
 // Apply the new daily budget prospectively. Earlier experiments retain their original accounting.
 export const DEMO_CONSISTENCY_START = Date.parse('2026-11-13T21:45:00Z');
 const brtDay = new Intl.DateTimeFormat('en-CA', {
@@ -21,7 +21,10 @@ type Signal = {
   payout: number | null;
   candleContext: { bodyShare: number; rangeMultiple: number | null; minuteMove: number; minuteEfficiency: number };
 };
-type Evidence = { wins: number; losses: number; halfHourBlocks: number; netReturn: number | null };
+type Evidence = {
+  wins: number; losses: number; halfHourBlocks: number; netReturn: number | null;
+  recentDecisive?: number; recentNetReturn?: number | null;
+};
 
 export function demoConsistencySince(target: number): string {
   // Read a full day, then filter by the Brasília date in demoConsistencyBudget.
@@ -43,12 +46,12 @@ export function demoConsistencyBudget(rows: readonly ConsistencyOrder[] | null, 
     && Number.isFinite(Date.parse(row.settled_at ?? '')) && Date.parse(row.settled_at!) < target);
   const losses = closed.filter(row => row.result === 'loss' && row.profit !== null && Number(row.profit) < 0).length;
   const latest = orders.reduce((last, row) => Math.max(last, Date.parse(row.entry_minute)), 0);
-  const waitSeconds = Math.max(0, (30 * 60_000 - (target - latest)) / 1000);
-  const details = { entries_today: orders.length, losses_today: losses, wait_seconds: waitSeconds, maximum_entries: 4, maximum_losses: 2 };
+  const waitSeconds = Math.max(0, (60_000 - (target - latest)) / 1000);
+  const details = { entries_today: orders.length, losses_today: losses, wait_seconds: waitSeconds, maximum_entries: 100, maximum_losses: 2 };
   let reason: Reason | null = null;
   if (!rows) reason = { code: 'selective_ledger_unavailable', details };
   else if (losses >= 2) reason = { code: 'selective_daily_loss_limit', details };
-  else if (orders.length >= 4) reason = { code: 'selective_daily_entry_limit', details };
+  else if (orders.length >= 100) reason = { code: 'selective_daily_entry_limit', details };
   else if (waitSeconds > 0) reason = { code: 'selective_spacing', details };
   return { reason, entries: orders.length, losses, waitSeconds };
 }
@@ -66,20 +69,22 @@ export function demoConsistencySignal(
     quality: signal.quality, payout: signal.payout, candle_body: bodyShare,
     range_multiple: rangeMultiple, minute_efficiency: minuteEfficiency, mode,
     historical_net_return: evidence.netReturn, expected_return: expectedReturn,
+    entries_today: entriesToday,
   };
   const reject = (code: string) => ({ reason: { code, details }, mode });
-  if (signal.payout === null || !Number.isFinite(signal.payout) || signal.payout < (supported ? 0.8 : 0.85) || signal.payout > 1) {
+  if (!supported) return reject('selective_history_insufficient');
+  if (signal.payout === null || !Number.isFinite(signal.payout) || signal.payout < 0.8 || signal.payout > 1) {
     return reject('selective_payout');
   }
-  if (!Number.isFinite(signal.quality) || signal.quality < (supported ? 70 : 80)) return reject('selective_quality');
-  if (!Number.isFinite(bodyShare) || bodyShare < (supported ? 0.5 : 0.6)) return reject('selective_candle_body');
+  if (!Number.isFinite(signal.quality) || signal.quality < 70) return reject('selective_quality');
+  if (!Number.isFinite(bodyShare) || bodyShare < 0.5) return reject('selective_candle_body');
   if (rangeMultiple === null || !Number.isFinite(rangeMultiple) || rangeMultiple < 0.8 || rangeMultiple > 1.8) {
     return reject('selective_candle_range');
   }
-  if (!Number.isFinite(minuteEfficiency) || minuteEfficiency < (supported ? 0.35 : 0.5)
+  if (!Number.isFinite(minuteEfficiency) || minuteEfficiency < 0.35
     || !Number.isFinite(minuteMove) || minuteMove <= 0) return reject('selective_minute_confirmation');
-  if (supported && (evidence.netReturn === null || !Number.isFinite(evidence.netReturn) || evidence.netReturn <= 0
-    || expectedReturn === null || !Number.isFinite(expectedReturn) || expectedReturn < 0.02)) return reject('selective_return');
-  if (!supported && entriesToday >= 1) return reject('selective_exploration_limit');
+  if (evidence.netReturn === null || !Number.isFinite(evidence.netReturn) || evidence.netReturn <= 0
+    || expectedReturn === null || !Number.isFinite(expectedReturn) || expectedReturn < 0.02) return reject('selective_return');
+  if ((evidence.recentDecisive ?? 0) >= 20 && (evidence.recentNetReturn ?? 0) <= 0) return reject('selective_recent_return');
   return { reason: null, mode };
 }

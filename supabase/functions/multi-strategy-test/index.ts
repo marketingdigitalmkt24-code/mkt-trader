@@ -42,6 +42,10 @@ import {
   buildDemoHistory, demoHistoricalEvidence, demoPracticeLossPace, DEMO_HISTORY_POLICY, DEMO_HISTORY_WINDOW_MS,
 } from '../_shared/demo-historical-return.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
+import {
+  DEMO_CONSISTENCY_START, DEMO_CONSISTENCY_VERSION, demoConsistencyBudget,
+  demoConsistencySignal, demoConsistencySince, type ConsistencyOrder,
+} from '../_shared/demo-consistency.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 import {
   DEMO_AI_MODEL, DEMO_AI_VERSION, demoAiStudyActive, demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot,
@@ -211,6 +215,19 @@ Deno.serve(async (req) => {
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
   const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
+  const readConsistencyDay = async (): Promise<ConsistencyOrder[] | null> => {
+    try {
+      const result = await supabase.from('iq_demo_test_orders')
+        .select('id,entry_strategy,entry_minute,account_type,status,result,iq_option_id,profit,settled_at')
+        .eq('account_type','PRACTICE').in('entry_strategy',DEMO_STRATEGIES)
+        .in('status',['confirmed','reserved','unknown'])
+        .gte('entry_minute',demoConsistencySince(targetMs)).lte('entry_minute',new Date(targetMs).toISOString())
+        .order('entry_minute',{ascending:false}).limit(1000).abortSignal(AbortSignal.timeout(4000));
+      return !result.error && result.data && result.data.length < 1000 ? result.data : null;
+    } catch { return null; }
+  };
+  const consistencyRead = amountRead.then(setting => !setting.error && setting.data?.account_type !== 'REAL'
+    && targetMs >= DEMO_CONSISTENCY_START ? readConsistencyDay() : null).catch(() => null);
   // Read only results known before this minute. Optional history never holds up an entry.
   const practiceHistory: { snapshot: ReturnType<typeof buildDemoHistory> | null } = { snapshot: null };
   void amountRead.then(async setting => {
@@ -553,9 +570,13 @@ Deno.serve(async (req) => {
   });
   // Keep the technical baseline for comparison and apply adaptive ranking to PRACTICE only.
   const practice = selectedDemoAccount === 'PRACTICE';
+  const selective = practice && targetMs >= DEMO_CONSISTENCY_START;
+  const selectionVersion = selective ? DEMO_CONSISTENCY_VERSION : DEMO_HISTORY_POLICY;
+  const dailyLedger = selective ? await consistencyRead : null;
   const history = practiceHistory.snapshot;
   if (practice) console.log('Demo return priority snapshot:', JSON.stringify({
     version: DEMO_HISTORY_POLICY, accountType: selectedDemoAccount,
+    selectionVersion,
     aiStudy: DEMO_AI_VERSION, aiStudyActive: demoAiStudyActive(targetMs),
     entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
     technicalCandidates: demoEligible.length,
@@ -567,11 +588,32 @@ Deno.serve(async (req) => {
     const best = rank[0];
     const pace = best ? demoPracticeLossPace(history, strategy, targetMs, best.expectedReturn) : null;
     // During a loss pause a setup with estimated positive return may still compete.
-    const selected = selectDemoPracticeByReturn(rank, !!pace?.waitMs);
-    const winner = practice ? selected?.candidate ?? null : baseline;
+    let selected = selectDemoPracticeByReturn(rank, !!pace?.waitMs);
     const rankedById = new Map(rank.map(entry => [entry.candidate.signal_id, entry] as const));
     const coolingDown = new Set<string>();
-    if (pace?.waitMs) {
+    if (selective) {
+      const budget = demoConsistencyBudget(dailyLedger, strategy, targetMs);
+      const eligible = rank.filter(entry => {
+        const decision = demoConsistencySignal(entry.candidate, entry.history, entry.expectedReturn, budget.entries);
+        const reason = budget.reason ?? decision.reason;
+        if (!reason) return true;
+        coolingDown.add(entry.candidate.signal_id);
+        reject(entry.candidate, reason, DEMO_CONSISTENCY_VERSION);
+        return false;
+      });
+      selected = selectDemoPracticeByReturn(eligible, false);
+      const reasons: Record<string, number> = {};
+      for (const entry of rank) {
+        const reason = budget.reason ?? demoConsistencySignal(entry.candidate, entry.history, entry.expectedReturn, budget.entries).reason;
+        if (reason) reasons[reason.code] = (reasons[reason.code] ?? 0) + 1;
+      }
+      console.log('Demo selective decision:', JSON.stringify({
+        version: selectionVersion, accountType: selectedDemoAccount, entryMinute: new Date(targetMs).toISOString(),
+        strategy, candidates: rank.length, eligible: eligible.length, selected: selected?.candidate.signal_id ?? null,
+        budget, reasons, evidence: selected?.history ?? null,
+        mode: selected ? demoConsistencySignal(selected.candidate, selected.history, selected.expectedReturn, budget.entries).mode : null,
+      }));
+    } else if (pace?.waitMs) {
       for (const entry of rank) {
         if (entry.expectedReturn !== null && entry.expectedReturn > 0) continue;
         coolingDown.add(entry.candidate.signal_id);
@@ -581,6 +623,7 @@ Deno.serve(async (req) => {
         }, DEMO_HISTORY_POLICY);
       }
     }
+    const winner = practice ? selected?.candidate ?? null : baseline;
     if (practice && baseline && best) console.log('Demo return priority decision:', JSON.stringify({
       version: DEMO_HISTORY_POLICY, entryMinute: baseline.created_at, strategy,
       baseline: baseline.signal_id, selected: selected?.candidate.signal_id ?? null, candidates: candidates.length,
@@ -652,7 +695,7 @@ Deno.serve(async (req) => {
     if (!winner) continue;
     console.log('Demo signal selection:', JSON.stringify({
       ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: candidates.length - coolingDown.size,
-      historyPolicy: practice ? DEMO_HISTORY_POLICY : null,
+      historyPolicy: practice ? selectionVersion : null,
       selected: winner.signal_id, quality: winner.quality, previousChoice: previousChoice?.signal_id,
     }));
     for (const candidate of candidates) {
@@ -669,7 +712,7 @@ Deno.serve(async (req) => {
           historical_adjustment: ranked?.historical ?? null,
           previous_choice: previousChoice?.signal_id ?? null,
         },
-      }, practice ? DEMO_HISTORY_POLICY : ruleVersion);
+      }, practice ? selectionVersion : ruleVersion);
     }
   }
   // Audit is independent of execution: never delay an eligible entry for its rejected competitors.
@@ -736,6 +779,16 @@ Deno.serve(async (req) => {
       const order = !setting.error && recovery && amount <= preparedBalanceAmount && found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;
       const socket = preparedSocket as WebSocket | null;
       if(order && socket?.readyState===WebSocket.OPEN) {
+        if (selective) {
+          const budget = demoConsistencyBudget(await readConsistencyDay(), demoWinner.entry_strategy, targetMs);
+          const evidence = demoHistoricalEvidence(history, demoWinner, targetMs);
+          const selectedRank = selections.find(s => s.strategy === demoWinner.entry_strategy)?.rankedById.get(demoWinner.signal_id);
+          const reason = budget.reason ?? demoConsistencySignal(demoWinner, evidence, selectedRank?.expectedReturn ?? null, budget.entries).reason;
+          if (reason) {
+            console.log('Demo selective final check:', JSON.stringify({ signal: demoWinner.signal_id, ...reason }));
+            continue;
+          }
+        }
         const reservation = await supabase.from('iq_demo_test_orders').insert({
           signal_id:demoWinner.signal_id,entry_minute:demoWinner.created_at,asset:demoWinner.asset,
           direction:demoWinner.direction,amount,entry_strategy:demoWinner.entry_strategy,

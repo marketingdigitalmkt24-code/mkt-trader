@@ -333,7 +333,7 @@ export function useAutoTrading() {
         console.log('🔍 Checking pending results...');
         const { data, error } = await supabase.functions.invoke('iqoption-check-results', {
           signal: AbortSignal.timeout(95000),
-        } as unknown as Parameters<typeof supabase.functions.invoke>[1]);
+        });
         
         if (error) {
           // Silently fail - timeout errors are common

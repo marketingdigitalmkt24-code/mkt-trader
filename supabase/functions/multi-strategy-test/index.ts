@@ -602,7 +602,7 @@ Deno.serve(async (req) => {
       if (previous !== null) {
         const { data } = await bucket.download(keyFor(previous, 'decision'));
         if (!data) return;
-        const picks = await data.json();
+        const picks = JSON.parse(await data.text());
         const result = settleDemoAiStudy(picks, series, previous / 1000);
         if (!result.complete && targetMs - previous < 5 * 60_000) return;
         const event = { entryMinute: new Date(previous).toISOString(), ...result };

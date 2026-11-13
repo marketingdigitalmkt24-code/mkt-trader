@@ -38,6 +38,9 @@ import {
   demoSignalQuality, selectDemoByQuality,
 } from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
+import {
+  assessDemoHistoricalReturn, buildDemoHistory, DEMO_HISTORY_POLICY, DEMO_HISTORY_WINDOW_MS,
+} from '../_shared/demo-historical-return.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 
@@ -47,6 +50,7 @@ const LOGIN_HOST_MS = 8000;
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const OPEN = 'test7_open';
 const DEMO_OWN_WATCH_GRACE_MS = 22000;
+const DEMO_STRATEGIES = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY];
 type K = { t: number; o: number; c: number; h: number; l: number; v?: number };
 
 export const LABELS: Record<string, string> = {
@@ -203,6 +207,21 @@ Deno.serve(async (req) => {
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
   const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
+  // Freeze eligibility at the target boundary, and overlap the bounded read with broker preparation.
+  const practiceHistoryRead = amountRead.then(async setting => {
+    if (setting.error || setting.data?.account_type === 'REAL') return null;
+    const signal = AbortSignal.timeout(4000);
+    const before = new Date(targetMs).toISOString();
+    const since = new Date(targetMs - DEMO_HISTORY_WINDOW_MS).toISOString();
+    const snapshots = await Promise.all(DEMO_STRATEGIES.map(strategy => supabase.from('iq_demo_test_orders')
+      .select('entry_strategy,direction,asset,account_type,status,iq_option_id,entry_minute,expiration_time,settled_at,amount,profit,result')
+      .eq('account_type','PRACTICE').eq('entry_strategy',strategy).eq('status','confirmed')
+      .not('iq_option_id','is',null).in('result',['win','loss','tie'])
+      .gte('entry_minute',since).lt('entry_minute',before).lt('settled_at',before)
+      .order('entry_minute',{ascending:false}).order('id').limit(1000).abortSignal(signal)));
+    if (snapshots.some(snapshot => snapshot.error)) return null;
+    return buildDemoHistory(snapshots.flatMap(snapshot => snapshot.data ?? []), targetMs);
+  }).catch(() => null);
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
@@ -502,10 +521,10 @@ Deno.serve(async (req) => {
   };
   const ruleVersion = 'demo-s5-signal-quality-v1';
   const rejections: any[] = [];
-  const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
+  const reject = (c: DemoCandidate, reason: RejectionReason, version = ruleVersion) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:ruleVersion,
+    reason_code:reason.code,reason_details:reason.details,rule_version:version,
     candles:(series.get(c.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= curMin).slice(-20),
   });
   const demoEligible = demoPatterns.flatMap(c => {
@@ -527,30 +546,57 @@ Deno.serve(async (req) => {
       ? (100 - commission) / 100 : null;
     return [{ ...c, market, payout }];
   });
-  // Each card ranks only its own eligible assets. Keep the previous selector for comparison.
-  const selections = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY].map(strategy => {
+  // Keep the technical baseline for comparison; only PRACTICE requires historical eligibility.
+  const practice = selectedDemoAccount === 'PRACTICE';
+  const history = practice ? await practiceHistoryRead : null;
+  if (practice) console.log('Demo historical return snapshot:', JSON.stringify({
+    version: DEMO_HISTORY_POLICY, accountType: selectedDemoAccount,
+    entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
+    technicalCandidates: demoEligible.length,
+  }));
+  const selections = DEMO_STRATEGIES.map(strategy => {
     const candidates = demoEligible.filter(candidate => candidate.entry_strategy === strategy);
-    return { candidates, winner: selectDemoByQuality(candidates), previousChoice: selectDemoByRotation(candidates, null) };
+    const baseline = selectDemoByQuality(candidates);
+    const decisions = new Map((practice ? candidates : []).map(candidate => [
+      candidate.signal_id, assessDemoHistoricalReturn(history, candidate, targetMs),
+    ] as const));
+    const approved = candidates.filter(candidate => {
+      const decision = decisions.get(candidate.signal_id);
+      if (!decision?.code) return true;
+      reject(candidate, { code: decision.code, details: decision.details }, DEMO_HISTORY_POLICY);
+      return false;
+    });
+    const margin = (id: string) => decisions.get(id)?.details.conservative_return ?? -Infinity;
+    const bestMargin = approved.reduce((best, c) => Math.max(best, margin(c.signal_id)), -Infinity);
+    const winner = selectDemoByQuality(approved.filter(c => margin(c.signal_id) === bestMargin));
+    if (practice && baseline) console.log('Demo historical return decision:', JSON.stringify({
+      version: DEMO_HISTORY_POLICY, entryMinute: baseline.created_at, strategy,
+      baseline: baseline.signal_id, baselineDecision: decisions.get(baseline.signal_id),
+      selected: winner?.signal_id ?? null, selectedEvidence: winner ? decisions.get(winner.signal_id)?.details : null,
+      approved: approved.length, candidates: candidates.length,
+    }));
+    return { candidates, approved, baseline, winner, previousChoice: selectDemoByRotation(candidates, null) };
   });
   const demoWinners = selections.flatMap(({ winner }) => winner ? [winner] : []);
   const demoWinner = demoWinners[0] ?? null;
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  for (const { candidates, winner, previousChoice } of selections) {
-    if (!winner) continue;
-    console.log('Demo signal selection:', JSON.stringify({
-      ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: candidates.length,
-      selected: winner.signal_id, quality: winner.quality, previousChoice: previousChoice?.signal_id,
-    }));
-    if (selectedDemoAccount === 'PRACTICE') {
+  for (const { candidates, approved, baseline, winner, previousChoice } of selections) {
+    if (practice && baseline) {
       console.log('Demo filter study:', JSON.stringify({
         version: 'demo-filter-study-v1',
-        entryMinute: winner.created_at,
-        strategy: winner.entry_strategy,
-        baseline: winner.signal_id,
+        entryMinute: baseline.created_at,
+        strategy: baseline.entry_strategy,
+        baseline: baseline.signal_id,
         filters: compareDemoFilters(candidates),
       }));
     }
-    for (const candidate of candidates) {
+    if (!winner) continue;
+    console.log('Demo signal selection:', JSON.stringify({
+      ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: approved.length,
+      historyPolicy: practice ? DEMO_HISTORY_POLICY : null,
+      selected: winner.signal_id, quality: winner.quality, previousChoice: previousChoice?.signal_id,
+    }));
+    for (const candidate of approved) {
       if (candidate.signal_id === winner.signal_id) continue;
       reject(candidate, {
         code: 'minute_priority',
@@ -560,7 +606,7 @@ Deno.serve(async (req) => {
           selected_quality: winner.quality,
           previous_choice: previousChoice?.signal_id ?? null,
         },
-      });
+      }, practice ? DEMO_HISTORY_POLICY : ruleVersion);
     }
   }
   // Audit is independent of execution: never delay an eligible entry for its rejected competitors.

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, rankDemoPractice, selectDemoByQuality, selectDemoPracticeByReturn, selectDemoMostProfitable } from './demo-signal-quality.ts';
+import { closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoSignalQuality, rankDemoPractice, rankDemoPracticeBaseline, selectDemoByQuality, selectDemoPracticeByReturn, selectDemoMostProfitable } from './demo-signal-quality.ts';
 import { DEMO_ANALYSIS_SEC } from './demo-timing.ts';
 
 const entry = 600;
@@ -105,4 +105,42 @@ test('prioritizes the highest estimated net return only after candidates passed 
   expect(selectDemoMostProfitable([strong, profitable])).toBe(profitable);
   expect(selectDemoMostProfitable([{ score: 100, expectedReturn: -0.01 }])).toBe(undefined);
   expect(selectDemoMostProfitable([{ score: 100, expectedReturn: Number.NaN }, strong])).toBe(strong);
+});
+
+test('reduces the priority of stretched entries and opposing wicks without blocking the candidate', () => {
+  const base = { quality: 68, payout: 0.83, candleContext: demoCandleContext(history, 'CALL') };
+  const stretched = { ...base, signal_id: 'a', candleContext: {
+    ...base.candleContext, extensionRanges: 5, opposingWickShare: 0.6, minuteAgreement: -1,
+  } };
+  const orderly = { ...base, signal_id: 'z', candleContext: {
+    ...base.candleContext, extensionRanges: 0.5, opposingWickShare: 0.05, minuteAgreement: 1,
+  } };
+  const read = () => ({ netReturn: -0.1, weight: 0.5, wins: 19, losses: 21 });
+  expect(rankDemoPracticeBaseline([stretched, orderly], read)[0].candidate).toBe(stretched);
+  const ranks = rankDemoPractice([stretched, orderly], read);
+  expect(ranks[0].candidate).toBe(orderly);
+  expect(ranks.length).toBe(2);
+  expect(rankDemoPractice([stretched], read)[0].candidate).toBe(stretched);
+});
+
+test('shrinks small asset samples and favors a supported asset among otherwise comparable choices', () => {
+  const base = { quality: 65, payout: 0.85, candleContext: demoCandleContext(history, 'CALL') };
+  const a = { ...base, signal_id: 'a' }, b = { ...base, signal_id: 'b' };
+  const read = (c: typeof a) => ({
+    wins: 50, losses: 50, weight: 0.7, netReturn: -0.05,
+    assetWins: c === a ? 2 : 14, assetLosses: c === a ? 8 : 6, assetWeight: c === a ? 0.05 : 0.5,
+  });
+  const ranks = rankDemoPractice([a, b], read);
+  expect(ranks[0].candidate).toBe(b);
+  expect(ranks[0].estimatedWinRate).toBeGreaterThan(ranks[1].estimatedWinRate);
+  expect(ranks[1].estimatedWinRate).toBeGreaterThan(0.45);
+});
+
+test('new candle context is symmetric for mirrored CALL and PUT patterns', () => {
+  const mirror = history.map(c => ({ t: c.t, o: 200 - c.o, c: 200 - c.c, h: 200 - c.l, l: 200 - c.h }));
+  const call = demoCandleContext(history, 'CALL');
+  const put = demoCandleContext(mirror, 'PUT');
+  expect(call.opposingWickShare).toBeCloseTo(put.opposingWickShare, 8);
+  expect(call.extensionRanges).toBeCloseTo(put.extensionRanges, 8);
+  expect(call.minuteAgreement).toBe(put.minuteAgreement);
 });

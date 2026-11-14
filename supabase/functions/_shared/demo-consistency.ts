@@ -1,4 +1,4 @@
-export const DEMO_CONSISTENCY_VERSION = 'demo-measured-selection-v7';
+export const DEMO_CONSISTENCY_VERSION = 'demo-entry-quality-v8';
 // Apply the new daily budget prospectively. Earlier experiments retain their original accounting.
 export const DEMO_CONSISTENCY_START = Date.parse('2026-11-13T21:45:00Z');
 const brtDay = new Intl.DateTimeFormat('en-CA', {

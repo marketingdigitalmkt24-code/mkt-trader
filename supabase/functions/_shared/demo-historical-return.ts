@@ -119,6 +119,7 @@ export function demoHistoricalEvidence(
   const asset = assetKey(candidate, hour);
   const group = cohortKey(candidate, hour);
   const exact = history?.assetCohorts.get(asset);
+  const market = history?.cohorts.get(group);
   const useAsset = !!exact && exact.wins + exact.losses >= 20 && exact.blocks.size >= 4;
   const cohort = useAsset ? exact : history?.cohorts.get(group);
   const recent = useAsset ? history?.recentAssetCohorts.get(asset) : history?.recentCohorts.get(group);
@@ -134,6 +135,15 @@ export function demoHistoricalEvidence(
     scope: useAsset ? 'same_asset_direction_session' : 'same_market_direction_session',
     recentDecisive: (recent?.wins ?? 0) + (recent?.losses ?? 0),
     recentNetReturn: recent ? recent.net / recent.stake : null,
+    assetWins: exact?.wins ?? 0,
+    assetLosses: exact?.losses ?? 0,
+    assetWeight: exact
+      ? (exact.wins + exact.losses) / (exact.wins + exact.losses + 20) * Math.min(1, exact.blocks.size / 4) : 0,
+    marketWins: market?.wins ?? 0,
+    marketLosses: market?.losses ?? 0,
+    marketWeight: market
+      ? (market.wins + market.losses) / (market.wins + market.losses + PRIOR_SAMPLE_SIZE)
+        * Math.min(1, market.blocks.size / FULL_DIVERSITY_BLOCKS) : 0,
     // Shrink thin or concentrated samples toward a neutral adjustment.
     weight: decisive / (decisive + PRIOR_SAMPLE_SIZE) * Math.min(1, halfHourBlocks / FULL_DIVERSITY_BLOCKS),
   };

@@ -39,6 +39,13 @@ export function demoCandleContext(candles: AnalysisCandle[], direction: 'CALL' |
   const minute = [...prior.slice(-BARS_PER_MINUTE), last];
   const minuteMove = side * (last.c - minute[0].c);
   const minuteTravel = minute.slice(1).reduce((sum, candle, i) => sum + Math.abs(candle.c - minute[i].c), 0);
+  const slowEma = demoEma(21, candles.map(c => c.c)).at(-1) ?? last.c;
+  const opposingWick = direction === 'CALL' ? last.h - last.c : last.c - last.l;
+  const minuteDirections = [0, 1, 2].map(offset => {
+    const lastIndex = candles.length - 1 - offset * BARS_PER_MINUTE;
+    const firstIndex = lastIndex - BARS_PER_MINUTE + 1;
+    return firstIndex >= 0 ? Math.sign(side * (candles[lastIndex].c - candles[firstIndex].o)) : 0;
+  });
   return {
     typicalRange,
     range,
@@ -46,6 +53,9 @@ export function demoCandleContext(candles: AnalysisCandle[], direction: 'CALL' |
     rangeMultiple: typicalRange > 0 ? range / typicalRange : null,
     minuteMove,
     minuteEfficiency: minuteTravel > 0 ? minuteMove / minuteTravel : 0,
+    opposingWickShare: range > 0 ? opposingWick / range : 0,
+    extensionRanges: typicalRange > 0 ? Math.max(0, side * (last.c - slowEma) / typicalRange) : 0,
+    minuteAgreement: minuteDirections.reduce((sum, value) => sum + value, 0) / 3,
   };
 }
 
@@ -83,9 +93,13 @@ type StudyCandidate = {
   payout: number | null;
 };
 
-export function rankDemoPractice<T extends StudyCandidate, H extends {
+type RankHistory = {
   netReturn: number | null; weight: number; wins: number; losses: number;
-}>(
+  assetWins?: number; assetLosses?: number; assetWeight?: number;
+  marketWins?: number; marketLosses?: number; marketWeight?: number;
+};
+
+export function rankDemoPracticeBaseline<T extends StudyCandidate, H extends RankHistory>(
   candidates: T[],
   readHistory: (candidate: T) => H,
 ) {
@@ -106,6 +120,32 @@ export function rankDemoPractice<T extends StudyCandidate, H extends {
     return {
       candidate, history, momentum, economics, historical, breakEvenWinRate, estimatedWinRate, expectedReturn,
       score: candidate.quality + momentum + economics + historical,
+    };
+  }).sort((a, b) => b.score - a.score || b.candidate.quality - a.candidate.quality
+    || a.candidate.signal_id.localeCompare(b.candidate.signal_id));
+}
+
+export function rankDemoPractice<T extends StudyCandidate, H extends RankHistory>(
+  candidates: T[], readHistory: (candidate: T) => H,
+) {
+  return rankDemoPracticeBaseline(candidates, readHistory).map(entry => {
+    const { candidate, history } = entry;
+    const context = candidate.candleContext;
+    const wickAdjustment = -8 * unit(context.opposingWickShare);
+    const extensionAdjustment = -12 * unit((context.extensionRanges - 2) / 3);
+    const agreementAdjustment = 6 * Math.max(-1, Math.min(1, context.minuteAgreement));
+    const marketTotal = (history.marketWins ?? 0) + (history.marketLosses ?? 0);
+    const marketPrior = history.marketWeight === undefined ? entry.estimatedWinRate
+      : 1 / 1.8 + unit(history.marketWeight) * ((marketTotal > 0 ? (history.marketWins ?? 0) / marketTotal : 1 / 1.8) - 1 / 1.8);
+    const assetTotal = (history.assetWins ?? 0) + (history.assetLosses ?? 0);
+    const assetWinRate = assetTotal > 0 ? (history.assetWins ?? 0) / assetTotal : marketPrior;
+    const estimatedWinRate = marketPrior + unit(history.assetWeight ?? 0) * (assetWinRate - marketPrior);
+    const expectedReturn = candidate.payout === null ? null
+      : Math.round(((1 + candidate.payout) * estimatedWinRate - 1) * 1e6) / 1e6;
+    const economics = expectedReturn === null ? -5 : Math.max(-12, Math.min(12, 40 * expectedReturn));
+    return {
+      ...entry, estimatedWinRate, expectedReturn, economics, wickAdjustment, extensionAdjustment, agreementAdjustment,
+      score: entry.score - entry.economics + economics + wickAdjustment + extensionAdjustment + agreementAdjustment,
     };
   }).sort((a, b) => b.score - a.score || b.candidate.quality - a.candidate.quality
     || a.candidate.signal_id.localeCompare(b.candidate.signal_id));

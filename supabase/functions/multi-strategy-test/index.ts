@@ -35,7 +35,7 @@ import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByRotation } from '../_shared/demo-profit-selection.ts';
 import {
   closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoEma as ema,
-  demoSignalQuality, rankDemoPractice, selectDemoByQuality, selectDemoPracticeByReturn, selectDemoMostProfitable,
+  demoSignalQuality, rankDemoPractice, rankDemoPracticeBaseline, selectDemoByQuality, selectDemoPracticeByReturn, selectDemoMostProfitable,
 } from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
 import {
@@ -618,6 +618,10 @@ Deno.serve(async (req) => {
         version: selectionVersion, accountType: selectedDemoAccount, entryMinute: new Date(targetMs).toISOString(),
         strategy, candidates: rank.length, eligible: eligible.length, selected: selected?.candidate.signal_id ?? null,
         budget, reasons, evidence: selected?.history ?? null,
+        rankingAdjustments: selected ? {
+          opposingWick: selected.wickAdjustment, extension: selected.extensionAdjustment,
+          minuteAgreement: selected.agreementAdjustment,
+        } : null,
         mode: selected ? demoConsistencySignal(selected.candidate, selected.history, selected.expectedReturn, budget.entries).mode : null,
       }));
     }
@@ -644,16 +648,30 @@ Deno.serve(async (req) => {
     }));
     const strictWinner = selectDemoMostProfitable(rank.filter(entry =>
       !demoStrictStudySignal(entry.candidate, entry.history, entry.expectedReturn, 0).reason))?.candidate ?? null;
-    return { strategy, candidates, baseline, winner, strictWinner, rank, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
+    const previousRank = practice ? rankDemoPracticeBaseline(candidates, candidate => demoHistoricalEvidence(history, candidate, targetMs)) : [];
+    const previousWinner = selectDemoPracticeByReturn(previousRank.filter(entry =>
+      !coolingDown.has(entry.candidate.signal_id)), false)?.candidate ?? null;
+    return { strategy, candidates, baseline, winner, strictWinner, previousWinner, rank, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
  }));
   if (practice) {
     const measurement: FilterMeasurement = {
       entryMinute: new Date(targetMs).toISOString(),
+      referencePolicy: selectionVersion,
       picks: selections.filter(s => s.candidates.length).map(s => ({
         strategy: s.strategy, reference: s.winner, model: s.strictWinner,
       })),
     };
-    const measurementTask = measureDemoFilters(supabase.storage.from(DEMO_SCAN_BUCKET), measurement, series, targetMs)
+    const bucket = supabase.storage.from(DEMO_SCAN_BUCKET);
+    const rankingMeasurement: FilterMeasurement = {
+      entryMinute: measurement.entryMinute, referencePolicy: selectionVersion, comparisonPolicy: 'previous-ranking-v7',
+      picks: selections.filter(s => s.candidates.length).map(s => ({
+        strategy: s.strategy, reference: s.winner, model: s.previousWinner,
+      })),
+    };
+    const measurementTask = Promise.all([
+      measureDemoFilters(bucket, measurement, series, targetMs),
+      measureDemoFilters(bucket, rankingMeasurement, series, targetMs),
+    ])
       .catch(() => console.warn('Demo filter measurement unavailable'));
     // @ts-ignore Hosted background runtime. Measurement never delays broker placement.
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(measurementTask);

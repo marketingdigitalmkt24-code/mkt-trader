@@ -43,3 +43,18 @@ test('retries absent candles and records an incomplete result without inventing 
   expect(events[0].complete).toBe(false);
   expect(events[0].results[0].reference.status).toBe('missing_candles');
 });
+
+test('keeps paired ranking results separate from strict-filter measurements', async () => {
+  const bucket = storage();
+  const events: any[] = [];
+  const ranking = { ...measurement, comparisonPolicy: 'previous-ranking-v7' as const, referencePolicy: 'demo-entry-quality-v8' };
+  await measureDemoFilters(bucket, measurement, new Map(), target, () => target + 1000);
+  await measureDemoFilters(bucket, ranking, new Map(), target, () => target + 1000);
+  expect(bucket.files.size).toBe(2);
+  await measureDemoFilters(bucket, { ...ranking, picks: [] }, new Map([[signal.asset, bars]]),
+    target + 60_000, () => target + 61_000, e => events.push(e));
+  expect(events.length).toBe(1);
+  expect(events[0].comparisonPolicy).toBe('previous-ranking-v7');
+  expect(events[0].referencePolicy).toBe('demo-entry-quality-v8');
+  expect(bucket.files.size).toBe(3);
+});

@@ -91,6 +91,13 @@ test('reads beyond the first thousand rows using a stable cursor', async () => {
   expect(pages).toBe(3);
 });
 
+test('provides a small bounded asset weight before twenty results are available', () => {
+  const result = assess(sample(29).slice(0, 5));
+  expect(result.assetWins).toBe(5);
+  expect(result.assetWeight).toBeGreaterThan(0);
+  expect(result.assetWeight).toBeLessThan(0.1);
+});
+
 test('paces losses only for the affected strategy and releases it after five minutes', () => {
   const noon = Date.parse('2026-11-13T15:00:00Z');
   const rows = Array.from({ length: 12 }, (_, i) => {

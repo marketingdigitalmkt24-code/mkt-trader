@@ -14,3 +14,10 @@ export function demoCandleRequestTime(now: number, target: number): number | nul
 export function demoBoundaryDelay(now: number, target: number): number {
   return Math.max(0, target - now);
 }
+// Pre-boundary AI uses the candle that was already closed at the start of preparation.
+export function demoAiAnalysisCutoff(target: number): number {
+  return target - DEMO_ANALYSIS_SEC * 1000;
+}
+export function demoAiPreparationTimely(target: number, now: number): boolean {
+  return now >= demoAiAnalysisCutoff(target) && now < target;
+}

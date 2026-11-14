@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay, DEMO_ANALYSIS_SEC, DEMO_CANDLE_SEC, isDemoEntryBoundary } from './demo-timing';
+import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay, demoAiAnalysisCutoff, demoAiPreparationTimely, DEMO_ANALYSIS_SEC, DEMO_CANDLE_SEC, isDemoEntryBoundary } from './demo-timing';
 test('both Demo strategies analyze 1-minute candles',()=>{
  expect(DEMO_ANALYSIS_SEC).toBe(60);
 });
@@ -31,4 +31,16 @@ test('prepared availability waits only until :00; current-minute candles request
  expect(demoBoundaryDelay(at,at)).toBe(0);
  expect(demoBoundaryDelay(at+2500,at)).toBe(0);
  expect(demoCandleRequestTime(at,at)).toBe(at/1000);
+});
+test('AI before :00 excludes the candle closing at the entry boundary',()=>{
+ const at=Date.parse('2026-11-14T04:20:00Z');
+ expect(demoAiAnalysisCutoff(at)).toBe(Date.parse('2026-11-14T04:19:00Z'));
+});
+test('AI preparation is accepted only before its original :00',()=>{
+ const at=Date.parse('2026-11-14T04:20:00Z');
+ expect(demoAiPreparationTimely(at,at-60001)).toBe(false);
+ expect(demoAiPreparationTimely(at,at-60000)).toBe(true);
+ expect(demoAiPreparationTimely(at,at-1)).toBe(true);
+ expect(demoAiPreparationTimely(at,at)).toBe(false);
+ expect(demoAiPreparationTimely(at,at+60000)).toBe(false);
 });

@@ -1,5 +1,6 @@
 import { DEMO_ANALYSIS_SEC, DEMO_CANDLE_SEC } from './demo-timing.ts';
-import { AI_CHART_STRATEGIES, aiChartTimely } from './demo-ai-strategies.ts';
+import { AI_CHART_STRATEGIES } from './demo-ai-strategies.ts';
+import { demoAiAnalysisCutoff, demoAiPreparationTimely } from './demo-timing.ts';
 
 // One-hour PRACTICE-only pilot: GPT-6 Astra (high) decides card 2 entries.
 export const DEMO_AI_GATE_VERSION = 'demo-ai-gate-astra-v1';
@@ -71,7 +72,7 @@ export async function demoAiGateDecide<T extends { candidate: Cand; score?: numb
   }
 }
 
-export const AI_CHART_VERSION = 'demo-ai-two-charts-v1';
+export const AI_CHART_VERSION = 'demo-ai-two-charts-preboundary-v2';
 type ChartCandidate = Cand & { entry_strategy: string; quality: number };
 export function chartChoices(candidates: ChartCandidate[], series: Map<string, Candle[]>, entrySec: number) {
   return AI_CHART_STRATEGIES.flatMap(strategy => candidates.filter(c => c.entry_strategy === strategy)
@@ -98,18 +99,19 @@ export function validateChartPicks(value: unknown, choices: ReturnType<typeof ch
 
 // Maintains the existing raw-HTTP Responses client, batching both cards into one bounded call.
 export async function requestChartDecisions(candidates: ChartCandidate[], series: Map<string, Candle[]>, entryMs: number,
-  key: string, fetcher = fetch): Promise<{ status: string; picks: Record<string, string | null> | null; error?: string; pause?: boolean }> {
-  const choices = chartChoices(candidates, series, entryMs / 1000);
+  key: string, fetcher = fetch, clock = Date.now): Promise<{ status: string; picks: Record<string, string | null> | null; error?: string; pause?: boolean }> {
+  if (!demoAiPreparationTimely(entryMs, clock())) return { status: 'late', picks: null };
+  const choices = chartChoices(candidates, series, demoAiAnalysisCutoff(entryMs) / 1000);
   if (!choices.length) return { status: 'no_candidates', picks: null };
   const properties = Object.fromEntries(AI_CHART_STRATEGIES.map(strategy => [strategy,
     { type: 'string', enum: ['skip', ...choices.filter(c => c.strategy === strategy).map(c => c.id)] }]));
   try {
     const res = await fetcher('https://ai.gateway.lovable.dev/v1/responses', {
-      method: 'POST', headers: { 'Lovable-API-Key': key, Authorization: `Bearer ${key}`,
+      method: 'POST', signal: AbortSignal.timeout(Math.max(1, entryMs - clock())), headers: { 'Lovable-API-Key': key, Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json', 'X-Lovable-AIG-SDK': 'fetch' },
       body: JSON.stringify({ model: DEMO_AI_GATE_MODEL, stream: true, store: false,
         reasoning: { effort: 'high', summary: 'auto' }, include: ['reasoning.encrypted_content'],
-        instructions: 'Decide two independent PRACTICE-only one-minute binary option entries using real closed IQ Option M1 OHLC candles (time,open,high,low,close). IA_ROMPIMENTO_M1 is confirmed breakout continuation; IA_RECUO_M1 is trend resumption after a pullback. Assess structure, support/resistance, exhaustion and opposing wicks, select at most one supplied candidate PER strategy or skip. Never reverse the supplied direction, invent data, assume guaranteed profit or use future candles. Win gains payout times stake; loss loses stake. Skip when evidence is weak or payout is missing. No news feed is provided: do not invent news safety. Return the required JSON choices.',
+        instructions: 'Decide two independent PRACTICE-only one-minute binary option entries using real closed IQ Option M1 OHLC candles (time,open,high,low,close). This is preparation BEFORE entry: the supplied history ends one minute before the planned entry boundary, and the currently open candle is intentionally excluded. Assess the upcoming entry with this gap; skip if a last-second confirmation would be needed. IA_ROMPIMENTO_M1 is confirmed breakout continuation; IA_RECUO_M1 is trend resumption after a pullback. Assess structure, support/resistance, exhaustion and opposing wicks, select at most one supplied candidate PER strategy or skip. Never reverse the supplied direction, invent data, assume guaranteed profit or use future candles. Win gains payout times stake; loss loses stake. Skip when evidence is weak or payout is missing. No news feed is provided: do not invent news safety. Return the required JSON choices.',
         input: [{ role: 'user', content: JSON.stringify(choices.map(({ signalId: _s, ...c }) => c)) }],
         text: { format: { type: 'json_schema', name: 'two_chart_choices', strict: true,
           schema: { type: 'object', additionalProperties: false, required: [...AI_CHART_STRATEGIES], properties } } },
@@ -143,7 +145,7 @@ export async function requestChartDecisions(candidates: ChartCandidate[], series
     }
     if (refusal || failed) return { status: refusal ? 'refused' : 'stream_error', picks: null, pause: true,
       error: refusal ? 'A IA recusou a análise; análises automáticas pausadas.' : 'A IA interrompeu a análise; análises automáticas pausadas.' };
-    if (!aiChartTimely(entryMs, Date.now())) return { status: 'late', picks: null };
+    if (!demoAiPreparationTimely(entryMs, clock())) return { status: 'late', picks: null };
     const picks = validateChartPicks(JSON.parse(text), choices);
     return { status: picks ? 'ok' : 'invalid_response', picks };
   } catch { return { status: 'error', picks: null }; }

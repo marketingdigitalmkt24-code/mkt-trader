@@ -20,7 +20,7 @@ import { demoForcaPadrao, FORCA_PADRAO } from '../_shared/forca-padrao.ts';
 import { forcaAntecipada, FORCA_ANTECIPADA } from '../_shared/forca-antecipada.ts';
 import { extendDemoChart } from '../_shared/demo-chart-snapshot.ts';
 import { selectedDemoPrincipal } from '../_shared/selected-demo-principal.ts';
-import { demoTargetMinute, demoCandleRequestTime, demoBoundaryDelay, DEMO_CANDLE_SEC, DEMO_ANALYSIS_SEC, isDemoEntryBoundary } from '../_shared/demo-timing.ts';
+import { demoTargetMinute, demoBoundaryDelay, demoAiAnalysisCutoff, demoAiPreparationTimely, DEMO_CANDLE_SEC, DEMO_ANALYSIS_SEC, isDemoEntryBoundary } from '../_shared/demo-timing.ts';
 import { quedaWinCall, quedaWinRetry, QUEDA_WIN_CALL, QUEDA_WIN_RETRY } from '../_shared/queda-win-call.ts';
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { demoBalance } from '../_shared/demo-balance.ts';
@@ -283,6 +283,7 @@ Deno.serve(async (req) => {
   }
   let nowSec = Math.floor(Date.now() / 1000);
   const curMin = targetMs / 1000;
+  const analysisSec = demoAiAnalysisCutoff(targetMs) / 1000;
   console.log('Demo timing authentication prepared:',new Date().toISOString(),'method:',auth.mode,authFromCache?'cached':'fresh');
 
   // Confirm each expired TEST as soon as its broker candle arrives, not after all assets.
@@ -322,7 +323,7 @@ Deno.serve(async (req) => {
   let preparedBalanceAmount = 0;
   let preparedActives: Record<string, any> = {};
   let closePrepared = () => {};
-  let handleOrder: ((message: any) => void) | null = null;
+  const orderHandlers = new Map<string, (message: any) => void>();
   let settlementWatch: Promise<number> = Promise.resolve(0);
   let requestPending: () => Promise<boolean> = async () => false;
   let extendPrepared: (untilMs: number) => void = () => {};
@@ -404,7 +405,7 @@ Deno.serve(async (req) => {
         if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({name:'sendMessage',msg:{name:'get-profile',version:'1.0',body:{}}}));
         return;
       }
-      handleOrder?.(d);
+      orderHandlers.get(d.request_id)?.(d);
       if (d.name === 'heartbeat' && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
       }
@@ -426,9 +427,8 @@ Deno.serve(async (req) => {
           .catch(error=>{console.error('Demo settlement watch failed:',String(error));return 0;});
         preparedActives = d.msg?.turbo?.actives || {};
         const requestCandles = async () => {
-        const requestTime = demoCandleRequestTime(Date.now(), targetMs);
-        if (requestTime === null) { clearTimeout(timer); finish(); return; }
-        nowSec = requestTime;
+        if (!demoAiPreparationTimely(targetMs, Date.now())) { clearTimeout(timer); finish(); return; }
+        nowSec = analysisSec;
         console.log('Demo timing candles requested:', new Date().toISOString());
         reportScan('scanning');
         const all = { ...(d.msg?.binary?.actives || {}), ...(d.msg?.turbo?.actives || {}) };
@@ -446,9 +446,7 @@ Deno.serve(async (req) => {
           ws.send(JSON.stringify({ name: 'sendMessage', request_id: rid, msg: { name: 'get-candles', version: '2.0', body: { active_id: id, size: DEMO_ANALYSIS_SEC, to: nowSec, count: 101 } } }));
         });
         };
-        const delay = demoBoundaryDelay(Date.now(), targetMs);
-        if (delay > 0) boundaryTimer = setTimeout(() => { void requestCandles(); }, delay);
-        else await requestCandles();
+        await requestCandles();
       }
       if (d.name === 'candles' && byReq.has(d.request_id)) {
         const s = byReq.get(d.request_id); byReq.delete(d.request_id);
@@ -504,14 +502,14 @@ Deno.serve(async (req) => {
   const assetAnalyses = new Map<string, DemoAssetAnalysis>();
   const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
-    const closed = closedDemoAnalysisWindow(cs, curMin);
+    const closed = closedDemoAnalysisWindow(cs, analysisSec);
     assetAnalyses.set(asset, { asset, direction: null, score: null, state: closed ? 'no_signal' : 'incomplete_candles' });
     if (!closed || !isDemoEntryBoundary(targetMs)) continue;
     // New independent setups use broker candles directly; retired detectors cannot produce entries.
     const closes = closed.map(candle => candle.c);
     const fastEma = ema(9, closes)[closed.length - 1];
     const slowEma = ema(21, closes)[closed.length - 1];
-    const options: [string, string, 'CALL' | 'PUT' | null][] = aiChartSetups(cs, curMin)
+    const options: [string, string, 'CALL' | 'PUT' | null][] = aiChartSetups(cs, analysisSec)
       .map(setup => [setup.strategy, AI_CHART_PREFIXES[setup.strategy], setup.direction]);
     for (const [strategy, prefix, direction] of options) {
       if (!direction) continue;
@@ -553,7 +551,7 @@ Deno.serve(async (req) => {
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
     reason_code:reason.code,reason_details:reason.details,rule_version:version,
-    candles:(series.get(c.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= curMin).slice(-20),
+    candles:(series.get(c.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= analysisSec).slice(-20),
   });
   const demoEligible = demoPatterns.flatMap(c => {
     assetAnalyses.set(c.asset,{asset:c.asset,direction:c.direction,score:null,state:'eligible'});
@@ -563,7 +561,7 @@ Deno.serve(async (req) => {
       return [];
     }
     const market = Object.entries<any>(preparedActives).find(([, a]) => symbolOf(a.name || '') === c.asset);
-    if (!market || !preparedDemoOrder(c, DEMO_TEST_AMOUNT, preparedBalanceId, Number(market[0]), market[1], Date.now())) {
+    if (!market || !preparedDemoOrder(c, DEMO_TEST_AMOUNT, preparedBalanceId, Number(market[0]), market[1], targetMs)) {
       const analysis=assetAnalyses.get(c.asset);
       if(analysis)analysis.state='market_unavailable';
       reject(c,{code:'market_unavailable',details:{asset:c.asset}});
@@ -777,13 +775,13 @@ Deno.serve(async (req) => {
   }
   if (!demoWinner) console.log('Demo: no AI-approved candidate in this minute with 60-second analysis');
   let principalTriggered = false;
-  for (const demoWinner of demoWinners) {
+  await Promise.all(demoWinners.map(async demoWinner => {
     const { data: insertedCandidate, error } = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
       // Required legacy column: neutral placeholder, never calculated or used for selection.
       entry_strategy:demoWinner.entry_strategy,score:0,
       pattern_match: null,
-      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= curMin).slice(-20)
+      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= analysisSec).slice(-20)
     }, { onConflict: 'entry_minute,entry_strategy', ignoreDuplicates: true }).select('signal_id').maybeSingle();
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
@@ -791,7 +789,7 @@ Deno.serve(async (req) => {
         const { data: selected, error: selectionError } = await supabase.from('iq_demo_test_candidates')
           .select('signal_id').eq('entry_minute', demoWinner.created_at)
           .eq('entry_strategy', demoWinner.entry_strategy).maybeSingle();
-        if (selectionError || selected?.signal_id !== demoWinner.signal_id) continue;
+        if (selectionError || selected?.signal_id !== demoWinner.signal_id) return;
       }
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
       // Reserve the selected strategy slot before submitting to the verified balance.
@@ -825,7 +823,7 @@ Deno.serve(async (req) => {
         // @ts-ignore Hosted background runtime
         if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(followTask);
       }
-      const order = !setting.error && recovery && amount <= preparedBalanceAmount && found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;
+      const order = !setting.error && recovery && amount <= preparedBalanceAmount && found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Math.max(targetMs,Date.now())) : null;
       const socket = preparedSocket as WebSocket | null;
       if(order && socket?.readyState===WebSocket.OPEN) {
         if (selective) {
@@ -835,7 +833,7 @@ Deno.serve(async (req) => {
           const reason = budget.reason ?? demoConsistencySignal(demoWinner, evidence, selectedRank?.expectedReturn ?? null, budget.entries).reason;
           if (reason) {
             console.log('Demo selective final check:', JSON.stringify({ signal: demoWinner.signal_id, ...reason }));
-            continue;
+            return;
           }
         }
         const reservation = await supabase.from('iq_demo_test_orders').insert({
@@ -847,33 +845,44 @@ Deno.serve(async (req) => {
         }).select('id').single();
         const reserved = reservation.data?.id;
         if(reserved && !reservation.error) {
+          const state = await supabase.from('demo_ai_chart_state').select('paused').eq('id',1).maybeSingle();
+          if (state.error || state.data?.paused !== false || !demoAiPreparationTimely(targetMs,Date.now())) {
+            await supabase.from('iq_demo_test_orders').update({status:'failed',error:'Preparation late or AI paused; never roll to another minute'}).eq('id',reserved).eq('status','reserved');
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, demoBoundaryDelay(Date.now(),targetMs)));
+          const liveState = await supabase.from('demo_ai_chart_state').select('paused').eq('id',1).maybeSingle();
+          if (liveState.error || liveState.data?.paused !== false) {
+            await supabase.from('iq_demo_test_orders').update({status:'failed',error:'AI paused before submission'}).eq('id',reserved).eq('status','reserved');
+            return;
+          }
           const freshOrder = found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;
           if(freshOrder && socket.readyState===WebSocket.OPEN) {
             let confirmed = false;
             let refused = false;
             await new Promise<void>(resolve=>{
               const timeout=setTimeout(resolve,5000);
-              handleOrder = d=>{
+              orderHandlers.set(`demo-prepared-order-${demoWinner.entry_strategy}`, d=>{
                 if(d.request_id!==`demo-prepared-order-${demoWinner.entry_strategy}`)return;
                 if(d.name==='option' && /^\d+$/.test(String(d.msg?.id || ''))) {
                   confirmed=true;
-                  ownExpiryMs=Number(freshOrder.expired)*1000;
+                  ownExpiryMs=Math.max(ownExpiryMs,Number(freshOrder.expired)*1000);
                   console.log('Demo timing order confirmed:',new Date().toISOString(),demoWinner.signal_id);
                   demoSettlements.push(supabase.from('iq_demo_test_orders').update({status:'confirmed',iq_option_id:String(d.msg.id),created_at:new Date().toISOString()}).eq('id',reserved).then(({error})=>{if(error)console.error('Demo confirmation write failed:',error.code);}));
                   clearTimeout(timeout);resolve();
                 } else if(['error','result'].includes(d.name)) {refused=true;clearTimeout(timeout);resolve();}
-              };
+              });
               console.log('Demo timing order submitted:',new Date().toISOString(),demoWinner.signal_id);
               socket.send(JSON.stringify({name:'sendMessage',request_id:`demo-prepared-order-${demoWinner.entry_strategy}`,msg:{name:'binary-options.open-option',version:'1.0',body:freshOrder}}));
             });
-            handleOrder=null;
+            orderHandlers.delete(`demo-prepared-order-${demoWinner.entry_strategy}`);
             await Promise.all(demoSettlements);
             if(!confirmed)await supabase.from('iq_demo_test_orders').update({status:refused?'failed':'unknown',error:refused?'Broker refused demo order':'No broker confirmation; never retry ambiguous order'}).eq('id',reserved).eq('status','reserved');
           } else await supabase.from('iq_demo_test_orders').update({status:'failed',error:'Asset closed or candidate expired'}).eq('id',reserved).eq('status','reserved');
         }
       } else console.log('Demo prepared order skipped:',JSON.stringify({asset:demoWinner.asset,market:!!order,socketOpen:socket?.readyState===WebSocket.OPEN,settingError:!!setting.error}));
     }
-  }
+  }));
   // Keep checking expired outcomes after selection; never delay the next fresh order for history.
   await settlementWatch;
   await new Promise(resolve=>setTimeout(resolve,500));

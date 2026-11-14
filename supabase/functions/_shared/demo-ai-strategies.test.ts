@@ -39,16 +39,28 @@ test('configured fixed stake remains unchanged after LOSS',()=>{
   expect(demoRecovery({status:'confirmed',result:'loss',account_type:'PRACTICE',iq_option_id:'123',amount:2,profit:-2,recovery_level:2,recovery_loss:4,recovery_base:2},2,0.85)?.amount).toBe(2);
 });
 test('provider credit denial pauses and never creates picks',async()=>{
-  const response=await requestChartDecisions(candidates,series,sec*1000,'test',async()=>new Response(JSON.stringify({message:'Créditos insuficientes'}),{status:402}));
+  const response=await requestChartDecisions(candidates,series,(sec+60)*1000,'test',async()=>new Response(JSON.stringify({message:'Créditos insuficientes'}),{status:402}),()=>sec*1000+1000);
   expect(response.pause).toBe(true);expect(response.picks).toBeNull();expect(response.error).toBe('Créditos insuficientes');
 });
 test('streamed valid choices are accepted with required high reasoning schema',async()=>{
   const now=Math.floor(Date.now()/60000)*60000;
   const fresh=bars.map((b,i)=>({...b,t:now/1000-(90-i)*60}));
-  const response=await requestChartDecisions(candidates,new Map([['EUR/USD',fresh]]),now,'test',async(_url,init)=>{
+  const response=await requestChartDecisions(candidates,new Map([['EUR/USD',fresh]]),now+60000,'test',async(_url,init)=>{
     const request=JSON.parse(String(init?.body));expect(request.reasoning.effort).toBe('high');expect(request.stream).toBe(true);
+    const sent=JSON.parse(request.input[0].content);
+    expect(sent[0].candles.at(-1)[0]).toBe(now/1000-60);
     const text=JSON.stringify({[AI_BREAKOUT]:`${AI_BREAKOUT}:0`,[AI_PULLBACK]:'skip'});
     return new Response(`data: ${JSON.stringify({type:'response.output_text.delta',delta:text})}\n\n`);
-  });
-  if(Date.now()-now<=25000)expect(response.picks).toEqual({[AI_BREAKOUT]:AI_BREAKOUT,[AI_PULLBACK]:null});else expect(response.status).toBe('late');
+  },()=>now+1000);
+  expect(response.picks).toEqual({[AI_BREAKOUT]:AI_BREAKOUT,[AI_PULLBACK]:null});
+});
+test('provider decision arriving at :00 is discarded without rolling the entry',async()=>{
+  const entry=(sec+60)*1000;
+  let clock=entry-1000;
+  const response=await requestChartDecisions(candidates,series,entry,'test',async()=>{
+    clock=entry;
+    const text=JSON.stringify({[AI_BREAKOUT]:`${AI_BREAKOUT}:0`,[AI_PULLBACK]:'skip'});
+    return new Response(`data: ${JSON.stringify({type:'response.output_text.delta',delta:text})}\n\n`);
+  },()=>clock);
+  expect(response.status).toBe('late');expect(response.picks).toBeNull();
 });

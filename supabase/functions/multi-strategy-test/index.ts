@@ -45,7 +45,7 @@ import {
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
 import {
   DEMO_CONSISTENCY_START, DEMO_CONSISTENCY_VERSION, demoConsistencyBudget,
-  demoConsistencySignal, demoConsistencySince, type ConsistencyOrder,
+  demoConsistencySignal, demoConsistencySince, demoStrictStudySignal, type ConsistencyOrder,
 } from '../_shared/demo-consistency.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
 import {
@@ -53,6 +53,7 @@ import {
   requestDemoAiStudy, settleDemoAiStudy,
 } from '../_shared/demo-ai-study.ts';
 import { DEMO_AI_GATE_MODEL, DEMO_AI_GATE_VERSION, demoAiGateActive, demoAiGateDecide } from '../_shared/demo-ai-gate.ts';
+import { measureDemoFilters, type FilterMeasurement } from '../_shared/demo-filter-measurement.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
@@ -607,7 +608,7 @@ Deno.serve(async (req) => {
         reject(entry.candidate, reason, DEMO_CONSISTENCY_VERSION);
         return false;
       });
-      selected = selectDemoMostProfitable(eligible);
+      selected = selectDemoPracticeByReturn(eligible, false);
       const reasons: Record<string, number> = {};
       for (const entry of rank) {
         const reason = budget.reason ?? demoConsistencySignal(entry.candidate, entry.history, entry.expectedReturn, budget.entries).reason;
@@ -641,8 +642,22 @@ Deno.serve(async (req) => {
       breakEvenWinRate: (selected ?? best).breakEvenWinRate, expectedReturn: (selected ?? best).expectedReturn,
       history: (selected ?? best).history, lossPauseEnabled: false,
     }));
-    return { strategy, candidates, baseline, winner, rank, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
+    const strictWinner = selectDemoMostProfitable(rank.filter(entry =>
+      !demoStrictStudySignal(entry.candidate, entry.history, entry.expectedReturn, 0).reason))?.candidate ?? null;
+    return { strategy, candidates, baseline, winner, strictWinner, rank, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
  }));
+  if (practice) {
+    const measurement: FilterMeasurement = {
+      entryMinute: new Date(targetMs).toISOString(),
+      picks: selections.filter(s => s.candidates.length).map(s => ({
+        strategy: s.strategy, reference: s.winner, model: s.strictWinner,
+      })),
+    };
+    const measurementTask = measureDemoFilters(supabase.storage.from(DEMO_SCAN_BUCKET), measurement, series, targetMs)
+      .catch(() => console.warn('Demo filter measurement unavailable'));
+    // @ts-ignore Hosted background runtime. Measurement never delays broker placement.
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(measurementTask);
+  }
   // The experiment uses its own private storage and never feeds either order path.
   const studyKey = practice && input.scheduled === true ? Deno.env.get('LOVABLE_API_KEY') : null;
   if (studyKey) {

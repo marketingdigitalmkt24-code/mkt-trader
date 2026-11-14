@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { DEMO_CONSISTENCY_START, demoConsistencyBudget, demoConsistencySignal, type ConsistencyOrder } from './demo-consistency.ts';
+import { DEMO_CONSISTENCY_START, demoConsistencyBudget, demoStrictStudySignal as demoConsistencySignal, demoConsistencySignal as measurementSignal, type ConsistencyOrder } from './demo-consistency.ts';
 
 const target = Date.parse('2026-11-14T02:50:00Z'); // Still Nov 13 in Brasília.
 const signal = {
@@ -17,7 +17,7 @@ function order(i: number, minutesAgo = 35): ConsistencyOrder {
   };
 }
 
-test('requires confirmed body, orderly range, directional minute and sufficient payout', () => {
+test('strict comparison requires confirmed body, orderly range and directional minute', () => {
   expect(demoConsistencySignal(signal, supported, 0.05, 0).reason).toBeNull();
   expect(demoConsistencySignal({ ...signal, payout: 0.79 }, supported, 0.05, 0).reason?.code).toBe('selective_payout');
   expect(demoConsistencySignal({ ...signal, quality: 69 }, supported, 0.05, 0).reason?.code).toBe('selective_quality');
@@ -26,17 +26,26 @@ test('requires confirmed body, orderly range, directional minute and sufficient 
   expect(demoConsistencySignal({ ...signal, candleContext: { ...signal.candleContext, minuteEfficiency: 0.2 } }, supported, 0.05, 0).reason?.code).toBe('selective_minute_confirmation');
 });
 
-test('does not expand the quota by placing exploratory orders without supported history', () => {
+test('strict comparison records unsupported historical cohorts', () => {
   expect(demoConsistencySignal(signal, thin, null, 0).reason?.code).toBe('selective_history_insufficient');
   expect(demoConsistencySignal(signal, thin, 0.05, 1).reason?.code).toBe('selective_history_insufficient');
 });
 
-test('requires positive measured net return and projected headroom once history is supported', () => {
+test('strict comparison requires positive measured net return and projected headroom', () => {
   expect(demoConsistencySignal(signal, { ...supported, netReturn: -0.02 }, 0.1, 0).reason?.code).toBe('selective_return');
   expect(demoConsistencySignal(signal, supported, 0.01, 0).reason?.code).toBe('selective_return');
   expect(demoConsistencySignal(signal, supported, null, 0).reason?.code).toBe('selective_return');
   expect(demoConsistencySignal(signal, supported, 0.02, 3).reason).toBeNull();
   expect(demoConsistencySignal(signal, { ...supported, recentDecisive: 25, recentNetReturn: -0.1 }, 0.05, 3).reason?.code).toBe('selective_recent_return');
+});
+
+test('measurement selection admits scored technical setups despite a small sample or negative historical return', () => {
+  const candidate = { ...signal, quality: 58, payout: 0.83 };
+  expect(measurementSignal(candidate, thin, null, 0).reason).toBeNull();
+  expect(measurementSignal(candidate, { ...supported, netReturn: -0.1 }, -0.05, 0).reason).toBeNull();
+  expect(measurementSignal(candidate, supported, 0.1, 0).mode).toBe('measurement');
+  expect(measurementSignal({ ...candidate, quality: 0 }, supported, 0.1, 0).reason?.code).toBe('measurement_invalid_quality');
+  expect(measurementSignal({ ...candidate, payout: 0.7 }, supported, 0.1, 0).reason?.code).toBe('measurement_payout');
 });
 
 test('enforces one hundred daily slots and one-minute spacing while permitting entries after losses', () => {

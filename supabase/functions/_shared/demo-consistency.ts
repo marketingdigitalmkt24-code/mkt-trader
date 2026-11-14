@@ -1,4 +1,4 @@
-export const DEMO_CONSISTENCY_VERSION = 'demo-selective-full-history-v6';
+export const DEMO_CONSISTENCY_VERSION = 'demo-measured-selection-v7';
 // Apply the new daily budget prospectively. Earlier experiments retain their original accounting.
 export const DEMO_CONSISTENCY_START = Date.parse('2026-11-13T21:45:00Z');
 const brtDay = new Intl.DateTimeFormat('en-CA', {
@@ -56,6 +56,24 @@ export function demoConsistencyBudget(rows: readonly ConsistencyOrder[] | null, 
 }
 
 export function demoConsistencySignal(
+  signal: Signal,
+  _evidence: Evidence,
+  _expectedReturn: number | null,
+  _entriesToday: number,
+): { reason: Reason | null; mode: 'measurement' } {
+  // Strategy detection and demo-extra-confirmations have already validated the closed candles.
+  // Historical estimates rank these Demo candidates; they do not veto all data collection.
+  const details = { quality: signal.quality, payout: signal.payout };
+  const reject = (code: string) => ({ reason: { code, details }, mode: 'measurement' as const });
+  if (signal.payout === null || !Number.isFinite(signal.payout) || signal.payout < 0.8 || signal.payout > 1) {
+    return reject('measurement_payout');
+  }
+  if (!Number.isFinite(signal.quality) || signal.quality <= 0) return reject('measurement_invalid_quality');
+  return { reason: null, mode: 'measurement' };
+}
+
+// Retain the former strict gates as a prospective comparison, with no influence on order execution.
+export function demoStrictStudySignal(
   signal: Signal,
   evidence: Evidence,
   expectedReturn: number | null,

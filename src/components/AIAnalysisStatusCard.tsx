@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Brain, Zap, CheckCircle, AlertTriangle, Loader2, Target } from 'lucide-react';
+import { ChartCandlestick, Zap, CheckCircle, AlertTriangle, Loader2, Target } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { cn } from '@/lib/utils';
@@ -17,7 +17,7 @@ interface SignalEntry {
 }
 
 const strategyLabels: Record<string, string> = {
-  IA_ROMPIMENTO_M1: 'IA · Rompimento confirmado', IA_RECUO_M1: 'IA · Retomada após recuo',
+  IA_ROMPIMENTO_M1: 'Rompimento confirmado', IA_RECUO_M1: 'Retomada após recuo',
   PADRAO_VENCEDOR: 'Padrão vencedor',
   PADRAO_VENCEDOR_HISTORICO: 'Padrão vencedor · histórico marcado',
   CONFLUENCIA_4_ESTRATEGIAS: 'Confluência das 4 estratégias',
@@ -59,8 +59,6 @@ export function AIAnalysisStatusCard() {
   const [analysisError, setAnalysisError] = useState(false);
   const [scanStatus, setScanStatus] = useState<DemoScanStatus | null>(null);
   const [lastAnalysis, setLastAnalysis] = useState<DemoScanStatus | null>(null);
-  const [aiState, setAiState] = useState<{ paused: boolean; reason: string | null } | null>(null);
-  const [aiDecision, setAiDecision] = useState<{ status: string; entry_minute: string } | null>(null);
   const signalsBusy = useRef(false);
   const statsBusy = useRef(false);
   const statsQueued = useRef(false);
@@ -101,7 +99,7 @@ export function AIAnalysisStatusCard() {
     signalsBusy.current=true;
     try {
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const [candidates, rejections, scan, state, decision] = await Promise.all([
+      const [candidates, rejections, scan] = await Promise.all([
         supabase.from('iq_demo_test_candidates')
           .select('signal_id,asset,direction,entry_minute')
           .in('entry_strategy', ['IA_ROMPIMENTO_M1','IA_RECUO_M1']).gte('entry_minute', tenMinAgo)
@@ -111,8 +109,6 @@ export function AIAnalysisStatusCard() {
           .in('entry_strategy', ['IA_ROMPIMENTO_M1','IA_RECUO_M1']).gte('entry_minute', tenMinAgo)
           .order('entry_minute', { ascending: false }).limit(50),
         supabase.functions.invoke('demo-analysis-status',{body:{}}),
-        supabase.from('demo_ai_chart_state').select('paused,reason').eq('id',1).maybeSingle(),
-        supabase.from('demo_ai_chart_decisions').select('status,entry_minute').order('entry_minute',{ascending:false}).limit(1).maybeSingle(),
       ]);
       if (candidates.error || rejections.error) throw candidates.error ?? rejections.error;
       const entries = new Map<string, SignalEntry>();
@@ -126,8 +122,6 @@ export function AIAnalysisStatusCard() {
       });
       const data = [...entries.values()].sort((a,b) => Date.parse(b.created_at) - Date.parse(a.created_at));
       if (!mounted.current) return;
-      if (!state.error) setAiState(state.data);
-      if (!decision.error) setAiDecision(decision.data);
       const currentScan: DemoScanStatus | null = scan.error ? null : scan.data?.scan ?? null;
       setScanStatus(currentScan);
       if(!scan.error && scan.data?.analysis) setLastAnalysis(scan.data.analysis);
@@ -208,14 +202,14 @@ export function AIAnalysisStatusCard() {
               "w-8 h-8 rounded-lg flex items-center justify-center",
               isActive ? "bg-primary/20" : "bg-muted"
             )}>
-              <Brain className={cn('w-4 h-4', isActive ? 'text-primary animate-pulse motion-reduce:animate-none' : 'text-muted-foreground')} />
+              <ChartCandlestick className={cn('w-4 h-4', isActive ? 'text-primary animate-pulse motion-reduce:animate-none' : 'text-muted-foreground')} />
             </div>
             <div>
               <h3 className="text-sm font-semibold">
-                IA Analisando
+                Análise do gráfico
               </h3>
               <p className="text-[10px] text-muted-foreground">
-                GPT-6 Astra · high · Última varredura: {getTimeSinceText()}
+                IQ Option · M1 · Última varredura: {getTimeSinceText()}
               </p>
             </div>
           </div>
@@ -225,18 +219,16 @@ export function AIAnalysisStatusCard() {
               variant={isActive ? "default" : "secondary"}
               className={cn("text-[10px]", isActive && "bg-primary text-primary-foreground")}
             >
-              {aiState?.paused ? 'IA PAUSADA' : analysisError ? 'INDISPONÍVEL' : scanStatus?.phase === 'unavailable' ? 'RECONECTANDO' : isActive ? 'BUSCANDO' : 'SEM VARREDURA RECENTE'}
+              {analysisError ? 'INDISPONÍVEL' : scanStatus?.phase === 'unavailable' ? 'RECONECTANDO' : isActive ? 'BUSCANDO' : 'SEM VARREDURA RECENTE'}
             </Badge>
           </div>
         </div>
 
-        {aiState?.paused && <p role="alert" className="mb-3 text-xs text-destructive">{aiState.reason ?? 'Análises automáticas pausadas.'}</p>}
-        {aiDecision && <p className="mb-2 text-xs text-muted-foreground">Última decisão IA: {new Date(aiDecision.entry_minute).toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'})} · {aiDecision.status === 'ok' ? 'Análise concluída' : aiDecision.status === 'late' ? 'Resposta fora do prazo; sem entrada' : aiDecision.status === 'reserved' ? 'Analisando' : aiDecision.status}</p>}
         {scanStatus && <p className="mb-3 text-xs text-muted-foreground">
           {scanStatus.phase === 'unavailable' ? 'IQ Option indisponível nesta rodada; nova tentativa no próximo minuto.'
             : scanStatus.phase === 'preparing' ? 'Preparando conexão para a próxima análise.'
             : scanStatus.phase === 'scanning' ? 'Consultando os ativos na IQ Option.'
-            : `${scanStatus.assets} ativos consultados · ${scanStatus.selected_signal ? 'Oportunidade IA aprovada' : 'Sem oportunidade aprovada nesta rodada'}`}
+            : `${scanStatus.assets} ativos consultados · ${scanStatus.selected_signal ? 'Oportunidade pelo gráfico' : 'Sem oportunidade aprovada nesta rodada'}`}
         </p>}
 
         {/* Pipeline status */}
@@ -273,7 +265,7 @@ export function AIAnalysisStatusCard() {
                   <span className="font-medium">{analysis.asset}</span>
                   <span className="text-[10px] text-muted-foreground">
                     {analysis.direction && <span className={analysis.direction==='CALL'?'text-call':'text-put'}>{analysis.direction} · </span>}
-                    {analysis.state==='incomplete_candles'?'Velas incompletas':analysis.state==='market_unavailable'?'Compra indisponível':analysis.state==='eligible'?'Candidato à análise IA':'Sem setup válido'}
+                    {analysis.state==='incomplete_candles'?'Velas incompletas':analysis.state==='market_unavailable'?'Compra indisponível':analysis.state==='eligible'?'Setup válido':'Sem setup válido'}
                   </span>
                 </div>
               ))}
@@ -340,8 +332,8 @@ export function AIAnalysisStatusCard() {
 
         {recentSignals.length === 0 && !lastAnalysis?.asset_analyses?.length && (
           <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-lg">
-            <Brain className="w-5 h-5 mx-auto mb-1 opacity-30" />
-            {analysisError ? 'Não foi possível consultar as análises.' : 'Nenhuma entrada aprovada pela IA nos últimos 10 minutos.'}
+            <ChartCandlestick className="w-5 h-5 mx-auto mb-1 opacity-30" />
+            {analysisError ? 'Não foi possível consultar as análises.' : 'Nenhuma entrada pelo gráfico nos últimos 10 minutos.'}
           </div>
         )}
       </CardContent>

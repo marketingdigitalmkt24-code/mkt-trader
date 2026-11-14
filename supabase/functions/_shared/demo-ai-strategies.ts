@@ -2,6 +2,13 @@ import { closedDemoAnalysisWindow, demoEma } from './demo-signal-quality.ts';
 export const AI_BREAKOUT = 'IA_ROMPIMENTO_M1';
 export const AI_PULLBACK = 'IA_RECUO_M1';
 export const AI_CHART_STRATEGIES = [AI_BREAKOUT, AI_PULLBACK] as const;
+export const CHART_ONLY_VERSION = 'demo-chart-only-preboundary-v3';
+// Legacy strategy IDs retain exact historical joins; selection now uses only chart evidence.
+export function selectChartCandidate<T extends { entry_strategy: string; quality: number; asset: string; signal_id: string }>(candidates: T[], strategy: string, account: unknown): T | null {
+  if (account !== 'PRACTICE' || !AI_CHART_STRATEGIES.some(s => s === strategy)) return null;
+  return candidates.filter(c => c.entry_strategy === strategy && Number.isFinite(c.quality))
+    .sort((a,b) => b.quality - a.quality || a.asset.localeCompare(b.asset) || a.signal_id.localeCompare(b.signal_id))[0] ?? null;
+}
 export const AI_CHART_PREFIXES: Record<string, string> = {
   [AI_BREAKOUT]: 'demo-ia-rompimento-v1', [AI_PULLBACK]: 'demo-ia-recuo-v1',
 };

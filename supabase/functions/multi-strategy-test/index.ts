@@ -48,14 +48,8 @@ import {
   demoConsistencySignal, demoConsistencySince, demoStrictStudySignal, type ConsistencyOrder,
 } from '../_shared/demo-consistency.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
-import {
-  DEMO_AI_MODEL, DEMO_AI_VERSION, demoAiStudyActive, demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot,
-  requestDemoAiStudy, settleDemoAiStudy,
-} from '../_shared/demo-ai-study.ts';
-import { DEMO_AI_GATE_MODEL, DEMO_AI_GATE_VERSION, demoAiGateActive, demoAiGateDecide } from '../_shared/demo-ai-gate.ts';
 import { measureDemoFilters, type FilterMeasurement } from '../_shared/demo-filter-measurement.ts';
-import { AI_CHART_STRATEGIES, AI_CHART_PREFIXES, AI_PULLBACK, aiChartSetups, aiChartPracticeOnly } from '../_shared/demo-ai-strategies.ts';
-import { AI_CHART_VERSION, requestChartDecisions } from '../_shared/demo-ai-gate.ts';
+import { AI_CHART_STRATEGIES, AI_CHART_PREFIXES, AI_PULLBACK, aiChartSetups, aiChartPracticeOnly, CHART_ONLY_VERSION, selectChartCandidate } from '../_shared/demo-ai-strategies.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
@@ -545,7 +539,7 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  const ruleVersion = AI_CHART_VERSION;
+  const ruleVersion = CHART_ONLY_VERSION;
   const rejections: any[] = [];
   const reject = (c: DemoCandidate, reason: RejectionReason, version = ruleVersion) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
@@ -575,38 +569,16 @@ Deno.serve(async (req) => {
   // Keep the technical baseline for comparison and apply adaptive ranking to PRACTICE only.
   const practice = selectedDemoAccount === 'PRACTICE';
   const selective = false;
-  const selectionVersion = AI_CHART_VERSION;
+  const selectionVersion = CHART_ONLY_VERSION;
   const dailyLedger = selective ? await consistencyRead : null;
   const history = selective ? await completeHistoryRead : practiceHistory.snapshot;
   if (practice) console.log('Demo return priority snapshot:', JSON.stringify({
     version: DEMO_HISTORY_POLICY, accountType: selectedDemoAccount,
     selectionVersion,
     historyScope: 'all_registered_confirmed_practice_strategy_orders',
-    aiStudy: DEMO_AI_VERSION, aiStudyActive: demoAiStudyActive(targetMs),
     entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
     technicalCandidates: demoEligible.length,
   }));
-  // Database minute lease: one provider call across overlapping runners, no retries of completed slots.
-  let aiPicks: Record<string, string | null> | null = null;
-  const gateKey = Deno.env.get('LOVABLE_API_KEY');
-  if (aiChartPracticeOnly(selectedDemoAccount) && demoEligible.length && gateKey) {
-    const state = await supabase.from('demo_ai_chart_state').select('paused').eq('id', 1).maybeSingle();
-    if (!state.error && state.data?.paused === false) {
-      const minute = new Date(targetMs).toISOString();
-      const lease = await supabase.from('demo_ai_chart_decisions').insert({ entry_minute: minute,
-        reserved_until: new Date(targetMs + 60_000).toISOString() }).select('entry_minute').maybeSingle();
-      if (!lease.error && lease.data) {
-        const decision = await requestChartDecisions(demoEligible, series, targetMs, gateKey);
-        const saved = await supabase.from('demo_ai_chart_decisions').update({ status: decision.status,
-          decisions: decision.picks, error: decision.error ?? null }).eq('entry_minute', minute).eq('status','reserved').select('entry_minute');
-        if (decision.pause) await supabase.from('demo_ai_chart_state').update({ paused: true,
-          reason: decision.error ?? decision.status, updated_at: new Date().toISOString() }).eq('id',1);
-        if (!saved.error && saved.data?.length && !decision.pause) aiPicks = decision.picks;
-        console.log('Demo chart AI decision:', JSON.stringify({ version: AI_CHART_VERSION,
-          model: DEMO_AI_GATE_MODEL, entryMinute: minute, status: decision.status, picks: aiPicks, elapsedMs: Date.now()-targetMs }));
-      }
-    }
-  }
   const selections = await Promise.all(DEMO_STRATEGIES.map(async strategy => {
     const candidates = demoEligible.filter(candidate => candidate.entry_strategy === strategy);
     const baseline = selectDemoByQuality(candidates);
@@ -642,7 +614,7 @@ Deno.serve(async (req) => {
         mode: selected ? demoConsistencySignal(selected.candidate, selected.history, selected.expectedReturn, budget.entries).mode : null,
       }));
     }
-    const winner = aiChartPracticeOnly(selectedDemoAccount) ? candidates.find(c => c.signal_id === aiPicks?.[strategy]) ?? null : null;
+    const winner = selectChartCandidate(candidates, strategy, selectedDemoAccount);
     if (practice && baseline && best) console.log('Demo return priority decision:', JSON.stringify({
       version: DEMO_HISTORY_POLICY, entryMinute: baseline.created_at, strategy,
       baseline: baseline.signal_id, selected: selected?.candidate.signal_id ?? null, candidates: candidates.length,
@@ -680,51 +652,6 @@ Deno.serve(async (req) => {
       .catch(() => console.warn('Demo filter measurement unavailable'));
     // @ts-ignore Hosted background runtime. Measurement never delays broker placement.
     if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(measurementTask);
-  }
-  // The experiment uses its own private storage and never feeds either order path.
-  const studyKey = practice && input.scheduled === true ? Deno.env.get('LOVABLE_API_KEY') : null;
-  if (studyKey) {
-    const studyTask = (async () => {
-      const bucket = supabase.storage.from(DEMO_SCAN_BUCKET);
-      const options = { contentType: 'application/json', upsert: false };
-      const keyFor = (slot: number, name: string) => `${DEMO_AI_VERSION}/${slot}-${name}.json`;
-      const previous = demoAiStudyPreviousSlot(targetMs);
-      if (previous !== null) {
-        const { data } = await bucket.download(keyFor(previous, 'decision'));
-        if (!data) return;
-        const picks = JSON.parse(await data.text());
-        const result = settleDemoAiStudy(picks, series, previous / 1000);
-        if (!result.complete && targetMs - previous < 5 * 60_000) return;
-        const event = { entryMinute: new Date(previous).toISOString(), ...result };
-        const saved = await bucket.upload(keyFor(previous, 'result'), JSON.stringify(event), options);
-        if (!saved.error) console.log('Demo AI study outcome:', JSON.stringify(event));
-        return;
-      }
-      if (!demoAiStudySlot(targetMs) || Date.now() >= targetMs + 10_000) return;
-      const cards = demoAiStudyCards(selections.map(({ strategy, winner, rank }) => ({
-        strategy, reference: winner, ranked: rank,
-      })), series, curMin);
-      if (!cards.length) return;
-      // Claim this slot once, even if the scheduler overlaps or the provider fails.
-      const lease = await bucket.upload(keyFor(targetMs, 'lease'), '{}', options);
-      if (lease.error) {
-        console.warn('Demo AI study claim unavailable:', lease.error.name);
-        return;
-      }
-      const { status, picks } = await requestDemoAiStudy(cards, studyKey);
-      const timely = Date.now() < targetMs + DEMO_CANDLE_SEC * 1000;
-      console.log('Demo AI study decision:', JSON.stringify({
-        model: DEMO_AI_MODEL, entryMinute: new Date(targetMs).toISOString(),
-        status: timely ? status : 'late', cards: cards.length, picks: timely ? picks : null,
-      }));
-      if (!timely || !picks) return;
-      const saved = await bucket.upload(keyFor(targetMs, 'decision'), JSON.stringify(picks), options);
-      if (saved.error) console.warn('Demo AI study decision write unavailable:', saved.error.name);
-    })().catch(() => console.warn('Demo AI study unavailable'));
-    // @ts-ignore Hosted background runtime. Do not await before placing Demo orders.
-    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(studyTask);
-  } else if (practice && input.scheduled === true && demoAiStudySlot(targetMs)) {
-    console.warn('Demo AI study unavailable: gateway key missing');
   }
   const demoWinners = selections.flatMap(({ winner }) => winner ? [winner] : []);
   const demoWinner = demoWinners[0] ?? null;
@@ -773,7 +700,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo: no AI-approved candidate in this minute with 60-second analysis');
+  if (!demoWinner) console.log('Demo: no chart-qualified candidate in this minute with 60-second analysis');
   let principalTriggered = false;
   await Promise.all(demoWinners.map(async demoWinner => {
     const { data: insertedCandidate, error } = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
@@ -902,5 +829,5 @@ Deno.serve(async (req) => {
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));
   // @ts-ignore Hosted background runtime: chart writes must not delay a fresh entry.
   if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(chartTask);else await chartTask;
-  return Response.json({ success: true, assets: series.size, resolved, strategy: AI_CHART_VERSION, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
+  return Response.json({ success: true, assets: series.size, resolved, strategy: CHART_ONLY_VERSION, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
 });

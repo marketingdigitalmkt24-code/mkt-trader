@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { AI_BREAKOUT, AI_PULLBACK, AI_CHART_STRATEGIES, aiChartSetups, aiChartPracticeOnly, aiChartTimely } from './demo-ai-strategies.ts';
+import { AI_BREAKOUT, AI_PULLBACK, AI_CHART_STRATEGIES, aiChartSetups, aiChartPracticeOnly, aiChartTimely, selectChartCandidate } from './demo-ai-strategies.ts';
 import { chartChoices, validateChartPicks, requestChartDecisions } from './demo-ai-gate.ts';
 import { freshDemoCandidate } from './demo-test-policy.ts';
 import { demoRecovery } from './demo-recovery.ts';
@@ -8,6 +8,16 @@ const sec = Math.floor(Date.now()/60000)*60;
 const bars = Array.from({length:90},(_,i)=>({t:sec-(90-i)*60,o:100+i*0.1,c:100+i*0.1+0.08,h:100+i*0.1+0.09,l:100+i*0.1-0.01}));
 const series = new Map([['EUR/USD', bars]]);
 const candidates = AI_CHART_STRATEGIES.map(entry_strategy=>({signal_id:entry_strategy,asset:'EUR/USD',direction:'CALL',entry_strategy,quality:0,payout:0.85}));
+test('card 1 selects breakout directly from chart evidence without AI approval',()=>{
+ expect(selectChartCandidate(candidates,AI_BREAKOUT,'PRACTICE')?.signal_id).toBe('IA_ROMPIMENTO_M1');
+});
+test('card 2 independently selects pullback directly from chart evidence',()=>{
+ expect(selectChartCandidate(candidates,AI_PULLBACK,'PRACTICE')?.signal_id).toBe('IA_RECUO_M1');
+});
+test('chart-only entries cannot enable REAL or retired strategies',()=>{
+ expect(selectChartCandidate(candidates,AI_BREAKOUT,'REAL')).toBeNull();
+ expect(selectChartCandidate(candidates,'QUEDA_FORTE','PRACTICE')).toBeNull();
+});
 test('both cards retain M1 analysis and M1 expiry',()=>{expect(DEMO_ANALYSIS_SEC).toBe(60);expect(DEMO_CANDLE_SEC).toBe(60);});
 test('two strategies remain different and breakout follows trend',()=>{
   expect(AI_BREAKOUT).not.toBe(AI_PULLBACK);

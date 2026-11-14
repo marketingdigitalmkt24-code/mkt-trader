@@ -1,3 +1,7 @@
+# Dois quadros pelo gráfico, sem IA (14/11/2026)
+- [x] Decisão/estudo por IA removidos; estratégias atuais pelo gráfico, preparação :00, limites, Demo e histórico preservados; nomes no painel ajustados.
+- [x] 27 testes passaram, executor publicado e seleção natural dos dois quadros confirmada na versão chart-only às 04:26 UTC. AUD/JPY-OTC do quadro 2 confirmada às 04:27:00,255; painel autenticado sem erros e com análise do gráfico. Nenhuma ordem forçada.
+
 # Entrada dos dois quadros em :00 (14/11/2026)
 - [x] IA e reservas preparadas antes da virada com velas M1 já fechadas; quadros independentes, sem reaproveitar decisões atrasadas.
 - [x] 27 testes passaram, executor publicado e rodada natural 04:18 UTC: EUR/CAD-OTC enviada :00,073 e confirmada :00,245; ALIBABA-OTC enviada :00,083 e confirmada :00,388. Painel autenticado sem erros; segundo exato não garantido, sem ordens forçadas.

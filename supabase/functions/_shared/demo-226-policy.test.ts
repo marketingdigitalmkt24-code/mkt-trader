@@ -27,9 +27,9 @@ test('Demo always prefers Takashi', () => {
   expect(preferredDemoCohort('VELA_FORCA')).toBe('takashi');
   expect(preferredDemoCohort('FORCA_ANTECIPADA_V1')).toBe('takashi');
 });
-test('only aligned trend and Tendência + Força + Recuo authorize new Demo entries, without notes', () => {
-  for (const strategy of ['TENDENCIA_ALINHADA','TENDENCIA_FORCA_RECUO'])
+test('only the two AI strategies authorize new Demo entries, without notes', () => {
+  for (const strategy of ['IA_ROMPIMENTO_M1','IA_RECUO_M1'])
     for (const score of [undefined, Number.NaN, 0, 99]) expect(demoCohort(score,strategy)).toBe('indicator');
-  for (const strategy of ['QUEDA_FORTE','ICHIMOKU_RECUO21','ICHIMOKU','RECUO_EMA21','CONFLUENCIA_4_ESTRATEGIAS','PADRAO_VENCEDOR','TENDENCIA'])
+  for (const strategy of ['TENDENCIA_ALINHADA','TENDENCIA_FORCA_RECUO','QUEDA_FORTE','ICHIMOKU_RECUO21','ICHIMOKU','RECUO_EMA21','CONFLUENCIA_4_ESTRATEGIAS','PADRAO_VENCEDOR','TENDENCIA'])
     expect(demoAlternationAuthorized(99,strategy)).toBe(false);
 });

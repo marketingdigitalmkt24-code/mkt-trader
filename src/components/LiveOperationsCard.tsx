@@ -110,10 +110,10 @@ export function LiveOperationsCard() {
 
         <OpenPositionsSection />
 
-        <DemoOpenOperations strategy="TENDENCIA_ALINHADA" />
+        <DemoOpenOperations strategy="IA_ROMPIMENTO_M1" />
         {/* Últimas operações · Demo */}
-        <DemoTestOperations strategy="TENDENCIA_ALINHADA" />
-        <DemoDailyHistory strategy="TENDENCIA_ALINHADA" />
+        <DemoTestOperations strategy="IA_ROMPIMENTO_M1" />
+        <DemoDailyHistory strategy="IA_ROMPIMENTO_M1" />
 
       </CardContent>
     </Card>

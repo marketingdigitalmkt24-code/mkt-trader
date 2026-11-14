@@ -1,0 +1,10 @@
+CREATE TABLE public.demo_ai_chart_state (id integer PRIMARY KEY DEFAULT 1 CHECK (id = 1), paused boolean NOT NULL DEFAULT false, reason text, updated_at timestamptz NOT NULL DEFAULT now());
+GRANT ALL ON public.demo_ai_chart_state TO service_role;
+GRANT SELECT ON public.demo_ai_chart_state TO authenticated;
+ALTER TABLE public.demo_ai_chart_state ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin reads AI chart state" ON public.demo_ai_chart_state FOR SELECT TO authenticated USING (public.has_role(auth.uid(), 'admin'));
+CREATE TABLE public.demo_ai_chart_decisions (entry_minute timestamptz PRIMARY KEY, reserved_until timestamptz NOT NULL, status text NOT NULL DEFAULT 'reserved', decisions jsonb, error text, created_at timestamptz NOT NULL DEFAULT now());
+GRANT ALL ON public.demo_ai_chart_decisions TO service_role;
+GRANT SELECT ON public.demo_ai_chart_decisions TO authenticated;
+ALTER TABLE public.demo_ai_chart_decisions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin reads AI chart decisions" ON public.demo_ai_chart_decisions FOR SELECT TO authenticated USING (public.has_role(auth.uid(), 'admin'));

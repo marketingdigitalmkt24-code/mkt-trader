@@ -9,6 +9,7 @@ import { allDemoOutcomes, demoTestStats } from '@/lib/demo-test-stats';
 import { demoChartComparison } from '@/lib/demo-chart-comparison';
 
 export const demoStrategyNames: Record<string, string> = {
+ IA_ROMPIMENTO_M1: 'IA · Rompimento confirmado', IA_RECUO_M1: 'IA · Retomada após recuo',
  TENDENCIA_ALINHADA: 'Tendência alinhada', QUEDA_FORTE: 'Queda forte', TENDENCIA: 'Tendência', VELA_FORCA: 'Vela de força', REVERSAO_RSI: 'Reversão RSI',
  CONTINUACAO_QUEDA_V1: 'Queda', TETO_V1: 'Teto', QUEDA_WIN_CALL_V1: 'Queda win',
  QUEDA_WIN_RETRY_V1: 'Queda win +1', FORCA_PADRAO_V1: 'Força padrão', FORCA_ANTECIPADA_V1: 'Força antecipada',

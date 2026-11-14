@@ -54,6 +54,8 @@ import {
 } from '../_shared/demo-ai-study.ts';
 import { DEMO_AI_GATE_MODEL, DEMO_AI_GATE_VERSION, demoAiGateActive, demoAiGateDecide } from '../_shared/demo-ai-gate.ts';
 import { measureDemoFilters, type FilterMeasurement } from '../_shared/demo-filter-measurement.ts';
+import { AI_CHART_STRATEGIES, AI_CHART_PREFIXES, AI_PULLBACK, aiChartSetups, aiChartPracticeOnly } from '../_shared/demo-ai-strategies.ts';
+import { AI_CHART_VERSION, requestChartDecisions } from '../_shared/demo-ai-gate.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
@@ -61,7 +63,7 @@ const LOGIN_HOST_MS = 8000;
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const OPEN = 'test7_open';
 const DEMO_OWN_WATCH_GRACE_MS = 22000;
-const DEMO_STRATEGIES = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY];
+const DEMO_STRATEGIES = AI_CHART_STRATEGIES;
 type K = { t: number; o: number; c: number; h: number; l: number; v?: number };
 
 export const LABELS: Record<string, string> = {
@@ -505,16 +507,12 @@ Deno.serve(async (req) => {
     const closed = closedDemoAnalysisWindow(cs, curMin);
     assetAnalyses.set(asset, { asset, direction: null, score: null, state: closed ? 'no_signal' : 'incomplete_candles' });
     if (!closed || !isDemoEntryBoundary(targetMs)) continue;
-    // Reuse the established aligned trend: EMA9/21 + SMA50, MACD and RSI on closed analysis bars.
-    const fired = detect(closed);
-    if (!fired.length) continue;
+    // New independent setups use broker candles directly; retired detectors cannot produce entries.
     const closes = closed.map(candle => candle.c);
     const fastEma = ema(9, closes)[closed.length - 1];
     const slowEma = ema(21, closes)[closed.length - 1];
-    const options: [string, string, 'CALL' | 'PUT' | null][] = [
-      [TENDENCIA_ALINHADA_STRATEGY, 'demo-tendencia-alinhada-v1', fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1] ?? null],
-      [TENDENCIA_FORCA_RECUO_STRATEGY, 'demo-tendencia-forca-recuo-v1', tendenciaForcaRecuoDirection(fired)],
-    ];
+    const options: [string, string, 'CALL' | 'PUT' | null][] = aiChartSetups(cs, curMin)
+      .map(setup => [setup.strategy, AI_CHART_PREFIXES[setup.strategy], setup.direction]);
     for (const [strategy, prefix, direction] of options) {
       if (!direction) continue;
       const why = demoExtraConfirmations(closed, direction);
@@ -528,7 +526,7 @@ Deno.serve(async (req) => {
         entry_strategy: strategy,
         created_at: new Date(curMin * 1000).toISOString(), _score: Number.NaN,
         candleContext,
-        quality: demoSignalQuality(closed, direction, fastEma, slowEma, strategy === TENDENCIA_FORCA_RECUO_STRATEGY, candleContext),
+        quality: demoSignalQuality(closed, direction, fastEma, slowEma, strategy === AI_PULLBACK, candleContext),
       });
     }
   }
@@ -549,7 +547,7 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  const ruleVersion = 'demo-s5-signal-quality-v1';
+  const ruleVersion = AI_CHART_VERSION;
   const rejections: any[] = [];
   const reject = (c: DemoCandidate, reason: RejectionReason, version = ruleVersion) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
@@ -578,8 +576,8 @@ Deno.serve(async (req) => {
   });
   // Keep the technical baseline for comparison and apply adaptive ranking to PRACTICE only.
   const practice = selectedDemoAccount === 'PRACTICE';
-  const selective = practice && targetMs >= DEMO_CONSISTENCY_START;
-  const selectionVersion = selective ? DEMO_CONSISTENCY_VERSION : DEMO_HISTORY_POLICY;
+  const selective = false;
+  const selectionVersion = AI_CHART_VERSION;
   const dailyLedger = selective ? await consistencyRead : null;
   const history = selective ? await completeHistoryRead : practiceHistory.snapshot;
   if (practice) console.log('Demo return priority snapshot:', JSON.stringify({
@@ -590,6 +588,27 @@ Deno.serve(async (req) => {
     entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
     technicalCandidates: demoEligible.length,
   }));
+  // Database minute lease: one provider call across overlapping runners, no retries of completed slots.
+  let aiPicks: Record<string, string | null> | null = null;
+  const gateKey = Deno.env.get('LOVABLE_API_KEY');
+  if (aiChartPracticeOnly(selectedDemoAccount) && demoEligible.length && gateKey) {
+    const state = await supabase.from('demo_ai_chart_state').select('paused').eq('id', 1).maybeSingle();
+    if (!state.error && state.data?.paused === false) {
+      const minute = new Date(targetMs).toISOString();
+      const lease = await supabase.from('demo_ai_chart_decisions').insert({ entry_minute: minute,
+        reserved_until: new Date(targetMs + 60_000).toISOString() }).select('entry_minute').maybeSingle();
+      if (!lease.error && lease.data) {
+        const decision = await requestChartDecisions(demoEligible, series, targetMs, gateKey);
+        const saved = await supabase.from('demo_ai_chart_decisions').update({ status: decision.status,
+          decisions: decision.picks, error: decision.error ?? null }).eq('entry_minute', minute).eq('status','reserved').select('entry_minute');
+        if (decision.pause) await supabase.from('demo_ai_chart_state').update({ paused: true,
+          reason: decision.error ?? decision.status, updated_at: new Date().toISOString() }).eq('id',1);
+        if (!saved.error && saved.data?.length && !decision.pause) aiPicks = decision.picks;
+        console.log('Demo chart AI decision:', JSON.stringify({ version: AI_CHART_VERSION,
+          model: DEMO_AI_GATE_MODEL, entryMinute: minute, status: decision.status, picks: aiPicks, elapsedMs: Date.now()-targetMs }));
+      }
+    }
+  }
   const selections = await Promise.all(DEMO_STRATEGIES.map(async strategy => {
     const candidates = demoEligible.filter(candidate => candidate.entry_strategy === strategy);
     const baseline = selectDemoByQuality(candidates);
@@ -625,19 +644,7 @@ Deno.serve(async (req) => {
         mode: selected ? demoConsistencySignal(selected.candidate, selected.history, selected.expectedReturn, budget.entries).mode : null,
       }));
     }
-    let winner = practice ? selected?.candidate ?? null : baseline;
-    // One-hour PRACTICE pilot: GPT-6 Astra (high) decides card 2 entries among filter-approved candidates.
-    const gateKey = Deno.env.get('LOVABLE_API_KEY');
-    if (practice && strategy === TENDENCIA_FORCA_RECUO_STRATEGY && demoAiGateActive(targetMs) && gateKey) {
-      const pool = rank.filter(e => !coolingDown.has(e.candidate.signal_id));
-      const decision = pool.length ? await demoAiGateDecide(pool, series, curMin, gateKey) : { status: 'no_candidates', signalId: null };
-      winner = decision.signalId ? pool.find(e => e.candidate.signal_id === decision.signalId)?.candidate ?? null : null;
-      console.log('Demo AI gate decision:', JSON.stringify({
-        version: DEMO_AI_GATE_VERSION, model: DEMO_AI_GATE_MODEL, entryMinute: new Date(targetMs).toISOString(),
-        strategy, candidates: pool.length, technicalPick: selected?.candidate.signal_id ?? null,
-        status: decision.status, aiPick: winner?.signal_id ?? null, elapsedMs: Date.now() - targetMs,
-      }));
-    }
+    const winner = aiChartPracticeOnly(selectedDemoAccount) ? candidates.find(c => c.signal_id === aiPicks?.[strategy]) ?? null : null;
     if (practice && baseline && best) console.log('Demo return priority decision:', JSON.stringify({
       version: DEMO_HISTORY_POLICY, entryMinute: baseline.created_at, strategy,
       baseline: baseline.signal_id, selected: selected?.candidate.signal_id ?? null, candidates: candidates.length,
@@ -768,7 +775,7 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo: no valid candidate in this minute with 5-second analysis');
+  if (!demoWinner) console.log('Demo: no AI-approved candidate in this minute with 60-second analysis');
   let principalTriggered = false;
   for (const demoWinner of demoWinners) {
     const { data: insertedCandidate, error } = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
@@ -886,5 +893,5 @@ Deno.serve(async (req) => {
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));
   // @ts-ignore Hosted background runtime: chart writes must not delay a fresh entry.
   if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(chartTask);else await chartTask;
-  return Response.json({ success: true, assets: series.size, resolved, strategy: TENDENCIA_ALINHADA_STRATEGY, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
+  return Response.json({ success: true, assets: series.size, resolved, strategy: AI_CHART_VERSION, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
 });

@@ -1,3 +1,8 @@
+# Substituir os dois quadros por estratégias IA (14/11/2026)
+- [x] Criar duas estratégias diferentes decididas pela GPT-6 Astra high sobre velas IQ Option M1: rompimento confirmado e retomada após recuo, contínuas, PRACTICE-only, expiração M1 e valor fixo.
+- [x] Remover as estratégias anteriores da geração/exibição e apagar suas operações Demo; consulta confirmou zero registros antigos, sem tocar principal/clientes/saldo da corretora.
+- [x] 44 testes passaram, executores publicados e painel autenticado conferido. Rodada natural 04:11 UTC: IA respondeu, escolheu AIG-OTC CALL no quadro 1 e CAD/JPY-OTC PUT no quadro 2, ambas confirmadas pela IQ Option com US$2 e vencimento 04:12; sem ordem forçada. Lucro não garantido.
+
 # Velas de 1 minuto nos dois quadros (14/11/2026)
 - [x] Alterar análise para velas fechadas de 60 segundos, mantendo vencimento de 60 segundos, estratégias, filtros e piloto Astra.
 - [x] 49 testes passaram; multi-strategy-test publicada. Rodada natural 03:39 UTC registrou velas espaçadas em 60s no quadro 1 e avaliou o quadro 2 sem candidato; painel autenticado com os dois quadros, sem erros. Nenhuma ordem forçada ou histórico apagado.

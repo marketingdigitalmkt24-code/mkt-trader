@@ -498,6 +498,13 @@
       "when": 1794436121627,
       "tag": "0070_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1794629189921,
+      "tag": "0071_demo_ai_chart_decisions",
+      "breakpoints": true
     }
   ]
 }

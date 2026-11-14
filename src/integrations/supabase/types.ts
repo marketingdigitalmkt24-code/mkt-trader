@@ -110,6 +110,54 @@ export type Database = {
         }
         Relationships: []
       }
+      demo_ai_chart_decisions: {
+        Row: {
+          created_at: string
+          decisions: Json | null
+          entry_minute: string
+          error: string | null
+          reserved_until: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          decisions?: Json | null
+          entry_minute: string
+          error?: string | null
+          reserved_until: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          decisions?: Json | null
+          entry_minute?: string
+          error?: string | null
+          reserved_until?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      demo_ai_chart_state: {
+        Row: {
+          id: number
+          paused: boolean
+          reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          paused?: boolean
+          reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          paused?: boolean
+          reason?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       demo_selection_rejections: {
         Row: {
           asset: string

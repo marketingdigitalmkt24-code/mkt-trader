@@ -1,3 +1,7 @@
+# Velas de 1 minuto nos dois quadros (14/11/2026)
+- [x] Alterar análise para velas fechadas de 60 segundos, mantendo vencimento de 60 segundos, estratégias, filtros e piloto Astra.
+- [x] 49 testes passaram; multi-strategy-test publicada. Rodada natural 03:39 UTC registrou velas espaçadas em 60s no quadro 1 e avaliou o quadro 2 sem candidato; painel autenticado com os dois quadros, sem erros. Nenhuma ordem forçada ou histórico apagado.
+
 # Substituir estratégia do quadro 2 (12/11/2026)
 - [x] Trocar Queda forte por Tendência + Força + Recuo na geração, autorização, lista e resumo; preservar quadro 1, análise de 5 segundos, expiração de 1 minuto e histórico.
 - [x] 40 testes passaram; dois executores publicados; painel autenticado conferido sem Queda forte, com resumo da substituta e sem erros. Rodada natural 03:50 UTC consultou 120 ativos usando a nova seleção; nenhuma entrada da substituta confirmada nessa conferência, sem forçar ordens.

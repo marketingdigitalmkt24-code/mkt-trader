@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
 import { demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot, requestDemoAiStudy, settleDemoAiStudy } from './demo-ai-study.ts';
+import { DEMO_ANALYSIS_SEC, DEMO_CANDLE_SEC } from './demo-timing.ts';
 
 const target = Date.parse('2026-11-13T16:48:00Z');
 const second = target / 1000;
 const signal = { signal_id: 'local-only', asset: 'EUR/USD', direction: 'CALL', payout: 0.85 };
-const candles = Array.from({ length: 24 }, (_, i) => ({ t: second - 60 + i * 5, o: 100, h: 103, l: 99, c: 102 }));
+const barsPerMinute = DEMO_CANDLE_SEC / DEMO_ANALYSIS_SEC;
+const candles = Array.from({ length: barsPerMinute * 2 }, (_, i) => ({ t: second - 60 + i * DEMO_ANALYSIS_SEC, o: 100, h: 103, l: 99, c: 102 }));
 const series = new Map([[signal.asset, candles]]);
 const cards = demoAiStudyCards([{ strategy: 'TREND', reference: signal, ranked: [{ candidate: signal, score: 70 }] }], series, second);
 
@@ -21,7 +23,7 @@ test('sends only pre-entry anonymous features and rejects an unknown candidate I
   const response = (choice: string) => (async (_url, options) => {
     const payload = JSON.parse(String(options?.body));
     const inputs = JSON.parse(payload.messages[1].content);
-    expect(inputs[0].candidates[0].ohlcPpm.length).toBe(12);
+    expect(inputs[0].candidates[0].ohlcPpm.length).toBe(1);
     expect(String(options?.body).includes(signal.signal_id)).toBe(false);
     expect(String(options?.body).includes(signal.asset)).toBe(false);
     return Response.json({ choices: [{ message: { content: choice } }] });

@@ -13,6 +13,13 @@ test('uses the last 90 complete pre-entry candles and ignores the open candle', 
   expect(closedDemoAnalysisWindow([...history, open], entry)).toEqual(history);
 });
 
+test('both cards require closed one-minute bars and reject the former five-second analysis', () => {
+  const minuteBars = history.map((candle, index) => ({ ...candle, t: entry - (90 - index) * 60 }));
+  const oldBars = history.map((candle, index) => ({ ...candle, t: entry - (90 - index) * 5 }));
+  expect(closedDemoAnalysisWindow(minuteBars, entry)?.at(-1)?.t).toBe(entry - 60);
+  expect(closedDemoAnalysisWindow(oldBars, entry)).toBeNull();
+});
+
 test('rejects gaps, stale candles, duplicates and invalid prices', () => {
   const gap = history.map((candle, index) => index < 5 ? { ...candle, t: candle.t - DEMO_ANALYSIS_SEC } : candle);
   const stale = history.map(candle => ({ ...candle, t: candle.t - DEMO_ANALYSIS_SEC }));

@@ -34,7 +34,7 @@ export async function demoAiGateDecide<T extends { candidate: Cand; score?: numb
       headers: { 'Lovable-API-Key': key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Lovable-AIG-SDK': 'fetch' },
       body: JSON.stringify({
         model: DEMO_AI_GATE_MODEL, stream: true, store: false, reasoning: { effort: 'high' },
-        instructions: 'You decide test-only one-minute CALL/PUT binary entries for a trend+force+pullback strategy. Each candidate has 12 closed 5-second candles, oldest first, OHLC normalized in parts per million. A win pays payout x stake, a loss loses the stake. Choose the single candidate most likely to win with positive expected value, or "skip" if none is convincing. Use only the supplied data.',
+        instructions: `You decide test-only one-minute CALL/PUT binary entries for a trend+force+pullback strategy. Each candidate has ${BARS} closed ${DEMO_ANALYSIS_SEC}-second candles, oldest first, OHLC normalized in parts per million. A win pays payout x stake, a loss loses the stake. Choose the single candidate most likely to win with positive expected value, or "skip" if none is convincing. Use only the supplied data.`,
         input: [{ role: 'user', content: JSON.stringify(choices.map(({ signalId: _s, ...c }) => c)) }],
         text: { format: { type: 'json_schema', name: 'entry_choice', strict: true, schema: {
           type: 'object', additionalProperties: false, required: ['choice'],

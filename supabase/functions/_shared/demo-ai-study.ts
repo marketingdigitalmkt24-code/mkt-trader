@@ -74,7 +74,7 @@ export async function requestDemoAiStudy(cards: Card[], key: string, fetcher = f
     body: JSON.stringify({
       model: DEMO_AI_MODEL, reasoning_effort: 'high', max_completion_tokens: 1536,
       messages: [
-        { role: 'system', content: 'You rank test-only one-minute CALL/PUT signals. Each candidate contains 12 closed 5-second candles, oldest first, normalized OHLC in parts per million. Favor coherent movement and better net payout, discount noisy or exhausted moves. A win pays payout times stake, a loss loses the stake. Pick one candidate ID or skip for each card. Use only the supplied data. Return the JSON choices only.' },
+        { role: 'system', content: `You rank test-only one-minute CALL/PUT signals. Each candidate contains ${BARS} closed ${DEMO_ANALYSIS_SEC}-second candles, oldest first, normalized OHLC in parts per million. Favor coherent movement and better net payout, discount noisy or exhausted moves. A win pays payout times stake, a loss loses the stake. Pick one candidate ID or skip for each card. Use only the supplied data. Return the JSON choices only.` },
         { role: 'user', content: JSON.stringify(input) },
       ],
       response_format: { type: 'json_schema', json_schema: {

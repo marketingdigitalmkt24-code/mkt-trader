@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { measureDemoFilters } from './demo-filter-measurement.ts';
+import { DEMO_ANALYSIS_SEC, DEMO_CANDLE_SEC } from './demo-timing.ts';
 
 const target = Date.parse('2026-11-13T23:00:00Z');
 const signal = { asset: 'EUR/USD', direction: 'CALL', payout: 0.83, signal_id: 'signal-1' };
@@ -7,7 +8,7 @@ const measurement = {
   entryMinute: new Date(target).toISOString(),
   picks: [{ strategy: 'TREND', reference: signal, model: null }],
 };
-const bars = Array.from({ length: 12 }, (_, i) => ({ t: target / 1000 + i * 5, o: 100, h: 102, l: 99, c: 101 }));
+const bars = Array.from({ length: DEMO_CANDLE_SEC / DEMO_ANALYSIS_SEC }, (_, i) => ({ t: target / 1000 + i * DEMO_ANALYSIS_SEC, o: 100, h: 102, l: 99, c: 101 }));
 function storage() {
   const files = new Map<string, string>();
   return {

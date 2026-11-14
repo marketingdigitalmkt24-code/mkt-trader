@@ -1,3 +1,4 @@
+import { AI_CHART_PREFIXES } from './demo-ai-strategies.ts';
 export const DEMO_TEST_AMOUNT = 1;
 export function validDemoTestAmount(value: unknown): value is number {
  return typeof value === 'number' && Number.isFinite(value) && value >= 1
@@ -13,7 +14,9 @@ export { demoBalance } from './demo-balance.ts';
 export function freshDemoCandidate(row: { signal_id: string; timeframe: string; created_at: string; direction: string; entry_strategy?: string }, now: number) {
  if (row.signal_id.startsWith('t7-')) return freshDemoTest(row,now);
  const at = Date.parse(row.created_at);
- const known = (row.signal_id.startsWith('demo-tendencia-alinhada-v1-') && row.entry_strategy === 'TENDENCIA_ALINHADA' && ['CALL','PUT'].includes(row.direction) && at % 60000 === 0)
+ const aiPrefix = AI_CHART_PREFIXES[row.entry_strategy ?? ''];
+ const known = (typeof aiPrefix === 'string' && row.signal_id.startsWith(`${aiPrefix}-`) && ['CALL','PUT'].includes(row.direction))
+  || (row.signal_id.startsWith('demo-tendencia-alinhada-v1-') && row.entry_strategy === 'TENDENCIA_ALINHADA' && ['CALL','PUT'].includes(row.direction) && at % 60000 === 0)
   || (row.signal_id.startsWith('demo-continuation-v1-') && row.entry_strategy === 'CONTINUACAO_QUEDA_V1' && row.direction === 'PUT')
   || (row.signal_id.startsWith('demo-teto-v1-') && row.entry_strategy === 'TETO_V1' && row.direction === 'PUT')
    || (row.signal_id.startsWith('queda-win-call-v1-') && row.entry_strategy === 'QUEDA_WIN_CALL_V1' && row.direction === 'CALL')

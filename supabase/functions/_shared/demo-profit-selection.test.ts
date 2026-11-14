@@ -6,9 +6,9 @@ const c = (id: string, strategy: string, score = 2) => ({ signal_id: id, asset: 
 test('retired strategies cannot win either Demo slot', () => {
   const retired=['QUEDA_FORTE','ICHIMOKU_RECUO21','ICHIMOKU','RECUO_EMA21','PADRAO_VENCEDOR','CONFLUENCIA_4_ESTRATEGIAS'];
   expect(selectDemoByRotation(retired.map(s=>c(s,s)),null)).toBeNull();
-  expect(selectDemoByRotation([...retired.map(s=>c(s,s)),c('new','TENDENCIA_ALINHADA')],null)?.signal_id).toBe('new');
-  expect(selectDemoByRotation([...retired.map(s=>c(s,s)),c('new','TENDENCIA_FORCA_RECUO')],null)?.signal_id).toBe('new');
+  expect(selectDemoByRotation([...retired.map(s=>c(s,s)),c('new','IA_ROMPIMENTO_M1')],null)?.signal_id).toBe('new');
+  expect(selectDemoByRotation([...retired.map(s=>c(s,s)),c('new','IA_RECUO_M1')],null)?.signal_id).toBe('new');
 });
 test('aligned trend asset choice ignores notes and history',()=>{
-  expect(selectDemoByRotation([c('z','TENDENCIA_ALINHADA',99),c('a','TENDENCIA_ALINHADA',Number.NaN)],'ICHIMOKU')?.signal_id).toBe('a');
+  expect(selectDemoByRotation([c('z','IA_ROMPIMENTO_M1',99),c('a','IA_ROMPIMENTO_M1',Number.NaN)],'ICHIMOKU')?.signal_id).toBe('a');
 });

@@ -34,4 +34,4 @@
 - Subdirectories have their own AGENTS.md (e.g. src/components); read them before changing files there.
 - Principal IQ entries come only from the single user-chosen Demo-derived strategy (currently Após 5 LOSS); retired strategies (Takashi invertida, Nota consistente) keep history but lose their claim path; why: only the user-chosen strategy may move money.
 - Client copies prepare read-only broker handshakes concurrently and send only after exact persisted principal opening acceptance plus fresh client authorization, never final WIN/LOSS; preserve the principal expiry. Why: reduce opening latency without unconfirmed trades or fabricated results.
-- Demo generation/placement share an allowlist and separate minute slots; card 2 reuses the same-bar trend/force/EMA21 conjunction. demo-timing separates analysis and expiry. Preserve closed bars, stable IDs and zero scores. Why: prevent merged cards or retired entries.
+- Demo AI uses separate strategy minute slots, database decision leases and shared persisted pause state; execute PRACTICE-only fresh approved picks, never fallback. Why: prevent duplicate spend, retired entries and unapproved trades.

@@ -33,9 +33,29 @@ import { readBrokerSession, saveBrokerSession, clearBrokerSession } from '../_sh
 import { prepareDemoAuthentication, demoSocketAuthMessage, demoSocketAuthenticationRejected, demoHttpRefreshBudget } from '../_shared/demo-broker-auth.ts';
 import { prepareDemoConnection } from '../_shared/demo-connection-retry.ts';
 import { selectDemoByRotation } from '../_shared/demo-profit-selection.ts';
+import {
+  closedDemoAnalysisWindow, compareDemoFilters, demoCandleContext, demoEma as ema,
+  demoSignalQuality, rankDemoPractice, rankDemoPracticeBaseline, selectDemoByQuality, selectDemoPracticeByReturn, selectDemoMostProfitable,
+} from '../_shared/demo-signal-quality.ts';
 import { demoExtraConfirmations } from '../_shared/demo-extra-confirmations.ts';
+import {
+  buildDemoHistory, demoHistoricalEvidence, readAllDemoHistoricalOrders, DEMO_HISTORY_POLICY,
+  type DemoHistoricalOrder,
+} from '../_shared/demo-historical-return.ts';
 import { demoRecovery, demoRecoveryPredecessor } from '../_shared/demo-recovery.ts';
+import {
+  DEMO_CONSISTENCY_START, DEMO_CONSISTENCY_VERSION, demoConsistencyBudget,
+  demoConsistencySignal, demoConsistencySince, demoStrictStudySignal, type ConsistencyOrder,
+} from '../_shared/demo-consistency.ts';
 import { DEMO_SCAN_BUCKET, DEMO_LAST_ANALYSIS, demoScanSlot, type DemoScanStatus, type DemoAssetAnalysis } from '../_shared/demo-scan-status.ts';
+import {
+  DEMO_AI_MODEL, DEMO_AI_VERSION, demoAiStudyActive, demoAiStudyCards, demoAiStudyPreviousSlot, demoAiStudySlot,
+  requestDemoAiStudy, settleDemoAiStudy,
+} from '../_shared/demo-ai-study.ts';
+import { DEMO_AI_GATE_MODEL, DEMO_AI_GATE_VERSION, demoAiGateActive, demoAiGateDecide } from '../_shared/demo-ai-gate.ts';
+import { measureDemoFilters, type FilterMeasurement } from '../_shared/demo-filter-measurement.ts';
+import { AI_CHART_STRATEGIES, AI_CHART_PREFIXES, AI_PULLBACK, aiChartSetups, aiChartPracticeOnly } from '../_shared/demo-ai-strategies.ts';
+import { AI_CHART_VERSION, requestChartDecisions } from '../_shared/demo-ai-gate.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const AUTH_URLS = ['https://auth.iqoption.com/api/v2/login', 'https://api.iqoption.com/api/v2/login', 'https://iqoption.com/api/v2/login'];
@@ -43,6 +63,7 @@ const LOGIN_HOST_MS = 8000;
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const OPEN = 'test7_open';
 const DEMO_OWN_WATCH_GRACE_MS = 22000;
+const DEMO_STRATEGIES = AI_CHART_STRATEGIES;
 type K = { t: number; o: number; c: number; h: number; l: number; v?: number };
 
 export const LABELS: Record<string, string> = {
@@ -86,8 +107,6 @@ function symbolOf(rawName: string) {
   const base = n.replace(/[-\s]*BLITZ/i, '').replace(/[-\s]*OTC$/i, '').trim();
   return otc ? `${base}-OTC` : base;
 }
-
-const ema = (p: number, src: number[]) => { const a = 2 / (p + 1); const r: number[] = []; src.forEach((x, i) => r.push(i ? x * a + r[i - 1] * (1 - a) : x)); return r; };
 
 // Retorna as estratégias que dispararam na última vela fechada (índice i).
 export function detect(cs: K[]): [string, 'CALL' | 'PUT'][] {
@@ -200,7 +219,41 @@ Deno.serve(async (req) => {
     .lte('expiration_time',new Date(pendingCutoffMs).toISOString())
     .order('entry_minute').limit(1000).then(r=>r);
   const previousDemoRead = readPendingDemo();
-  const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type,pattern_min_movement_pct').eq('id',1).maybeSingle().then(r=>r);
+  const amountRead = supabase.from('iq_demo_test_settings').select('amount,account_type').eq('id',1).maybeSingle().then(r=>r);
+  const readConsistencyDay = async (): Promise<ConsistencyOrder[] | null> => {
+    try {
+      const result = await supabase.from('iq_demo_test_orders')
+        .select('id,entry_strategy,entry_minute,account_type,status,result,iq_option_id,profit,settled_at')
+        .eq('account_type','PRACTICE').in('entry_strategy',DEMO_STRATEGIES)
+        .in('status',['confirmed','reserved','unknown'])
+        .gte('entry_minute',demoConsistencySince(targetMs)).lte('entry_minute',new Date(targetMs).toISOString())
+        .order('entry_minute',{ascending:false}).limit(1000).abortSignal(AbortSignal.timeout(4000));
+      return !result.error && result.data && result.data.length < 1000 ? result.data : null;
+    } catch { return null; }
+  };
+  const consistencyRead = amountRead.then(setting => !setting.error && setting.data?.account_type !== 'REAL'
+    && targetMs >= DEMO_CONSISTENCY_START ? readConsistencyDay() : null).catch(() => null);
+  // Paginate the entire registered history with one shared deadline while broker preparation runs.
+  const practiceHistory: { snapshot: ReturnType<typeof buildDemoHistory> | null } = { snapshot: null };
+  const completeHistoryRead = amountRead.then(async setting => {
+    if (setting.error || setting.data?.account_type === 'REAL') return null;
+    const signal = AbortSignal.timeout(8000);
+    const before = new Date(targetMs).toISOString();
+    const rows = await readAllDemoHistoricalOrders<DemoHistoricalOrder & { id: string }>(async cursor => {
+      let query = supabase.from('iq_demo_test_orders')
+        .select('id,entry_strategy,direction,asset,account_type,status,iq_option_id,entry_minute,expiration_time,settled_at,amount,profit,result')
+        .eq('account_type','PRACTICE').in('entry_strategy',DEMO_STRATEGIES).eq('status','confirmed')
+        .not('iq_option_id','is',null).in('result',['win','loss','tie'])
+        .lt('entry_minute',before).lt('settled_at',before);
+      if (cursor) query = query.or(`entry_minute.lt.${cursor.entry_minute},and(entry_minute.eq.${cursor.entry_minute},id.lt.${cursor.id})`);
+      const page = await query.order('entry_minute',{ascending:false}).order('id',{ascending:false}).limit(1000).abortSignal(signal);
+      if (page.error) throw new Error('Full historical read unavailable');
+      return page.data ?? [];
+    });
+    const snapshot = buildDemoHistory(rows, targetMs);
+    practiceHistory.snapshot = snapshot;
+    return snapshot;
+  }).catch(() => null);
   console.log('Demo timing prepare:', new Date().toISOString(), 'target:', new Date(targetMs).toISOString());
   // Start login as soon as the master read finishes, while expired rows are still loading.
   const masterLogin = readMasterIQConfig(supabase).then(async ({ data: cfg }) => {
@@ -356,8 +409,9 @@ Deno.serve(async (req) => {
         ws.send(JSON.stringify({ name: 'heartbeat', msg: { userTime: Date.now(), heartbeatTime: d.msg } }));
       }
       if (d.name === 'profile') {
-        {const demoAcct=(await amountRead).data?.account_type==='REAL'?'REAL':'PRACTICE';selectedDemoAccount=demoAcct;demoBalanceId = demoBalance(d.msg?.balances || [], demoAcct)?.id || 0;}
-        if(!demoBalanceId){console.warn('Demo profile has no verified PRACTICE USD balance');finish();closePrepared();return;}
+        selectedDemoAccount = (await amountRead).data?.account_type === 'REAL' ? 'REAL' : 'PRACTICE';
+        demoBalanceId = demoBalance(d.msg?.balances || [], selectedDemoAccount)?.id || 0;
+        if(!demoBalanceId){console.warn('Demo profile has no verified USD balance for', selectedDemoAccount);finish();closePrepared();return;}
         preparedBalanceId = demoBalanceId;
         preparedBalanceAmount = Number((d.msg?.balances || []).find((b: any) => b.id === demoBalanceId)?.amount) || 0;
         // Re-read at :01 so this minute's confirmation is not missed by preflight.
@@ -443,25 +497,22 @@ Deno.serve(async (req) => {
   }
 
   // 2) Novas entradas TESTE na vela atual (:00) para cada estratégia que disparou na última vela fechada.
-  const demoPatterns: DemoCandidate[] = [];
+  const demoPatterns: (DemoCandidate & {
+    quality: number;
+    candleContext: ReturnType<typeof demoCandleContext>;
+  })[] = [];
   const assetAnalyses = new Map<string, DemoAssetAnalysis>();
   const confluenceGates: Record<string, number> = {};
   for (const [asset, cs] of series) {
-    const prior=cs.filter(k=>k.t<curMin).slice(-60);
-    const complete=prior.length===60 && prior.every((k,i)=>k.t===curMin-(60-i)*DEMO_ANALYSIS_SEC
-      && [k.t,k.o,k.c,k.h,k.l].every(Number.isFinite) && k.o>0 && k.c>0
-      && k.h>=Math.max(k.o,k.c) && k.l<=Math.min(k.o,k.c));
-    assetAnalyses.set(asset,{asset,direction:null,score:null,state:complete?'no_signal':'incomplete_candles'});
-    // Each minute slot analyzes the latest closed 5-second bars; settlement stays independent.
-    if (!isDemoEntryBoundary(targetMs)) continue;
-    const closed = cs.filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin);
-    if (!closed.length || closed[closed.length - 1].t !== curMin - DEMO_ANALYSIS_SEC) continue;
-    // Reuse the established aligned trend: EMA9/21 + SMA50, MACD and RSI on closed analysis bars.
-    const fired = detect(cs.slice(-90).filter(k => k.t + DEMO_ANALYSIS_SEC <= curMin));
-    const options: [string, string, 'CALL' | 'PUT' | null][] = [
-      [TENDENCIA_ALINHADA_STRATEGY, 'demo-tendencia-alinhada-v1', (fired.find(([strategy]) => strategy === 'TENDENCIA')?.[1] as any) ?? null],
-      [TENDENCIA_FORCA_RECUO_STRATEGY, 'demo-tendencia-forca-recuo-v1', tendenciaForcaRecuoDirection(fired)],
-    ];
+    const closed = closedDemoAnalysisWindow(cs, curMin);
+    assetAnalyses.set(asset, { asset, direction: null, score: null, state: closed ? 'no_signal' : 'incomplete_candles' });
+    if (!closed || !isDemoEntryBoundary(targetMs)) continue;
+    // New independent setups use broker candles directly; retired detectors cannot produce entries.
+    const closes = closed.map(candle => candle.c);
+    const fastEma = ema(9, closes)[closed.length - 1];
+    const slowEma = ema(21, closes)[closed.length - 1];
+    const options: [string, string, 'CALL' | 'PUT' | null][] = aiChartSetups(cs, curMin)
+      .map(setup => [setup.strategy, AI_CHART_PREFIXES[setup.strategy], setup.direction]);
     for (const [strategy, prefix, direction] of options) {
       if (!direction) continue;
       const why = demoExtraConfirmations(closed, direction);
@@ -469,10 +520,13 @@ Deno.serve(async (req) => {
         confluenceGates[`${strategy}_extra_${why}`] = (confluenceGates[`${strategy}_extra_${why}`] || 0) + 1;
         continue;
       }
+      const candleContext = demoCandleContext(closed, direction);
       demoPatterns.push({
         signal_id: `${prefix}-${asset}-${curMin}`, asset, direction,
         entry_strategy: strategy,
         created_at: new Date(curMin * 1000).toISOString(), _score: Number.NaN,
+        candleContext,
+        quality: demoSignalQuality(closed, direction, fastEma, slowEma, strategy === AI_PULLBACK, candleContext),
       });
     }
   }
@@ -493,16 +547,15 @@ Deno.serve(async (req) => {
     if (error) console.error('Demo result candle write failed:',error.code);
   }));
   };
-  // No historical note analysis participates in candidate selection.
+  const ruleVersion = AI_CHART_VERSION;
   const rejections: any[] = [];
-  const reject = (c: DemoCandidate, reason: RejectionReason) => rejections.push({
+  const reject = (c: DemoCandidate, reason: RejectionReason, version = ruleVersion) => rejections.push({
     signal_id:c.signal_id,entry_minute:c.created_at,asset:c.asset,direction:c.direction,
     entry_strategy:c.entry_strategy,score:null,
-    reason_code:reason.code,reason_details:reason.details,rule_version:'demo-s5-aligned-tfr-v28',
-    candles:(series.get(c.asset)||[]).filter(k=>k.t<curMin).slice(-20),
+    reason_code:reason.code,reason_details:reason.details,rule_version:version,
+    candles:(series.get(c.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= curMin).slice(-20),
   });
-  const demoPool = demoPatterns;
-  const demoEligible = demoPool.flatMap(c => {
+  const demoEligible = demoPatterns.flatMap(c => {
     assetAnalyses.set(c.asset,{asset:c.asset,direction:c.direction,score:null,state:'eligible'});
     const cohort=demoCohort(undefined,c.entry_strategy);
     if(!cohort){
@@ -516,23 +569,200 @@ Deno.serve(async (req) => {
       reject(c,{code:'market_unavailable',details:{asset:c.asset}});
       return [];
     }
-    // Preserve market availability and strategy rules; no note eligibility gate.
     const commission = market[1]?.option?.profit?.commission;
-    const _payout = typeof commission === 'number' ? (100-commission)/100 : null;
-    return [{...c,_cohort:cohort,_preferredPatternDistance:Infinity,_patternMatch:null,_payout}];
+    const payout = typeof commission === 'number' && Number.isFinite(commission) && commission >= 0 && commission <= 100
+      ? (100 - commission) / 100 : null;
+    return [{ ...c, market, payout }];
   });
-  // Single active strategy; stable IDs break asset ties without notes or historical ranking.
-  // Each real-time card competes for its own minute slot: one winner per strategy.
-  const demoWinners = [TENDENCIA_ALINHADA_STRATEGY, TENDENCIA_FORCA_RECUO_STRATEGY]
-    .map(s => selectDemoByRotation(demoEligible.filter(c => c.entry_strategy === s), null))
-    .filter((c): c is NonNullable<typeof c> => !!c);
+  // Keep the technical baseline for comparison and apply adaptive ranking to PRACTICE only.
+  const practice = selectedDemoAccount === 'PRACTICE';
+  const selective = false;
+  const selectionVersion = AI_CHART_VERSION;
+  const dailyLedger = selective ? await consistencyRead : null;
+  const history = selective ? await completeHistoryRead : practiceHistory.snapshot;
+  if (practice) console.log('Demo return priority snapshot:', JSON.stringify({
+    version: DEMO_HISTORY_POLICY, accountType: selectedDemoAccount,
+    selectionVersion,
+    historyScope: 'all_registered_confirmed_practice_strategy_orders',
+    aiStudy: DEMO_AI_VERSION, aiStudyActive: demoAiStudyActive(targetMs),
+    entryMinute: new Date(targetMs).toISOString(), confirmedOrders: history?.count ?? null,
+    technicalCandidates: demoEligible.length,
+  }));
+  // Database minute lease: one provider call across overlapping runners, no retries of completed slots.
+  let aiPicks: Record<string, string | null> | null = null;
+  const gateKey = Deno.env.get('LOVABLE_API_KEY');
+  if (aiChartPracticeOnly(selectedDemoAccount) && demoEligible.length && gateKey) {
+    const state = await supabase.from('demo_ai_chart_state').select('paused').eq('id', 1).maybeSingle();
+    if (!state.error && state.data?.paused === false) {
+      const minute = new Date(targetMs).toISOString();
+      const lease = await supabase.from('demo_ai_chart_decisions').insert({ entry_minute: minute,
+        reserved_until: new Date(targetMs + 60_000).toISOString() }).select('entry_minute').maybeSingle();
+      if (!lease.error && lease.data) {
+        const decision = await requestChartDecisions(demoEligible, series, targetMs, gateKey);
+        const saved = await supabase.from('demo_ai_chart_decisions').update({ status: decision.status,
+          decisions: decision.picks, error: decision.error ?? null }).eq('entry_minute', minute).eq('status','reserved').select('entry_minute');
+        if (decision.pause) await supabase.from('demo_ai_chart_state').update({ paused: true,
+          reason: decision.error ?? decision.status, updated_at: new Date().toISOString() }).eq('id',1);
+        if (!saved.error && saved.data?.length && !decision.pause) aiPicks = decision.picks;
+        console.log('Demo chart AI decision:', JSON.stringify({ version: AI_CHART_VERSION,
+          model: DEMO_AI_GATE_MODEL, entryMinute: minute, status: decision.status, picks: aiPicks, elapsedMs: Date.now()-targetMs }));
+      }
+    }
+  }
+  const selections = await Promise.all(DEMO_STRATEGIES.map(async strategy => {
+    const candidates = demoEligible.filter(candidate => candidate.entry_strategy === strategy);
+    const baseline = selectDemoByQuality(candidates);
+    const rank = practice ? rankDemoPractice(candidates, candidate => demoHistoricalEvidence(history, candidate, targetMs)) : [];
+    const best = rank[0];
+    let selected = selectDemoPracticeByReturn(rank, false);
+    const rankedById = new Map(rank.map(entry => [entry.candidate.signal_id, entry] as const));
+    const coolingDown = new Set<string>();
+    if (selective) {
+      const budget = demoConsistencyBudget(dailyLedger, strategy, targetMs);
+      const eligible = rank.filter(entry => {
+        const decision = demoConsistencySignal(entry.candidate, entry.history, entry.expectedReturn, budget.entries);
+        const reason = budget.reason ?? decision.reason;
+        if (!reason) return true;
+        coolingDown.add(entry.candidate.signal_id);
+        reject(entry.candidate, reason, DEMO_CONSISTENCY_VERSION);
+        return false;
+      });
+      selected = selectDemoPracticeByReturn(eligible, false);
+      const reasons: Record<string, number> = {};
+      for (const entry of rank) {
+        const reason = budget.reason ?? demoConsistencySignal(entry.candidate, entry.history, entry.expectedReturn, budget.entries).reason;
+        if (reason) reasons[reason.code] = (reasons[reason.code] ?? 0) + 1;
+      }
+      console.log('Demo selective decision:', JSON.stringify({
+        version: selectionVersion, accountType: selectedDemoAccount, entryMinute: new Date(targetMs).toISOString(),
+        strategy, candidates: rank.length, eligible: eligible.length, selected: selected?.candidate.signal_id ?? null,
+        budget, reasons, evidence: selected?.history ?? null,
+        rankingAdjustments: selected ? {
+          opposingWick: selected.wickAdjustment, extension: selected.extensionAdjustment,
+          minuteAgreement: selected.agreementAdjustment,
+        } : null,
+        mode: selected ? demoConsistencySignal(selected.candidate, selected.history, selected.expectedReturn, budget.entries).mode : null,
+      }));
+    }
+    const winner = aiChartPracticeOnly(selectedDemoAccount) ? candidates.find(c => c.signal_id === aiPicks?.[strategy]) ?? null : null;
+    if (practice && baseline && best) console.log('Demo return priority decision:', JSON.stringify({
+      version: DEMO_HISTORY_POLICY, entryMinute: baseline.created_at, strategy,
+      baseline: baseline.signal_id, selected: selected?.candidate.signal_id ?? null, candidates: candidates.length,
+      quality: (selected ?? best).candidate.quality, payout: (selected ?? best).candidate.payout,
+      score: (selected ?? best).score, estimatedWinRate: (selected ?? best).estimatedWinRate,
+      breakEvenWinRate: (selected ?? best).breakEvenWinRate, expectedReturn: (selected ?? best).expectedReturn,
+      history: (selected ?? best).history, lossPauseEnabled: false,
+    }));
+    const strictWinner = selectDemoMostProfitable(rank.filter(entry =>
+      !demoStrictStudySignal(entry.candidate, entry.history, entry.expectedReturn, 0).reason))?.candidate ?? null;
+    const previousRank = practice ? rankDemoPracticeBaseline(candidates, candidate => demoHistoricalEvidence(history, candidate, targetMs)) : [];
+    const previousWinner = selectDemoPracticeByReturn(previousRank.filter(entry =>
+      !coolingDown.has(entry.candidate.signal_id)), false)?.candidate ?? null;
+    return { strategy, candidates, baseline, winner, strictWinner, previousWinner, rank, rankedById, coolingDown, previousChoice: selectDemoByRotation(candidates, null) };
+ }));
+  if (practice) {
+    const measurement: FilterMeasurement = {
+      entryMinute: new Date(targetMs).toISOString(),
+      referencePolicy: selectionVersion,
+      picks: selections.filter(s => s.candidates.length).map(s => ({
+        strategy: s.strategy, reference: s.winner, model: s.strictWinner,
+      })),
+    };
+    const bucket = supabase.storage.from(DEMO_SCAN_BUCKET);
+    const rankingMeasurement: FilterMeasurement = {
+      entryMinute: measurement.entryMinute, referencePolicy: selectionVersion, comparisonPolicy: 'previous-ranking-v7',
+      picks: selections.filter(s => s.candidates.length).map(s => ({
+        strategy: s.strategy, reference: s.winner, model: s.previousWinner,
+      })),
+    };
+    const measurementTask = Promise.all([
+      measureDemoFilters(bucket, measurement, series, targetMs),
+      measureDemoFilters(bucket, rankingMeasurement, series, targetMs),
+    ])
+      .catch(() => console.warn('Demo filter measurement unavailable'));
+    // @ts-ignore Hosted background runtime. Measurement never delays broker placement.
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(measurementTask);
+  }
+  // The experiment uses its own private storage and never feeds either order path.
+  const studyKey = practice && input.scheduled === true ? Deno.env.get('LOVABLE_API_KEY') : null;
+  if (studyKey) {
+    const studyTask = (async () => {
+      const bucket = supabase.storage.from(DEMO_SCAN_BUCKET);
+      const options = { contentType: 'application/json', upsert: false };
+      const keyFor = (slot: number, name: string) => `${DEMO_AI_VERSION}/${slot}-${name}.json`;
+      const previous = demoAiStudyPreviousSlot(targetMs);
+      if (previous !== null) {
+        const { data } = await bucket.download(keyFor(previous, 'decision'));
+        if (!data) return;
+        const picks = JSON.parse(await data.text());
+        const result = settleDemoAiStudy(picks, series, previous / 1000);
+        if (!result.complete && targetMs - previous < 5 * 60_000) return;
+        const event = { entryMinute: new Date(previous).toISOString(), ...result };
+        const saved = await bucket.upload(keyFor(previous, 'result'), JSON.stringify(event), options);
+        if (!saved.error) console.log('Demo AI study outcome:', JSON.stringify(event));
+        return;
+      }
+      if (!demoAiStudySlot(targetMs) || Date.now() >= targetMs + 10_000) return;
+      const cards = demoAiStudyCards(selections.map(({ strategy, winner, rank }) => ({
+        strategy, reference: winner, ranked: rank,
+      })), series, curMin);
+      if (!cards.length) return;
+      // Claim this slot once, even if the scheduler overlaps or the provider fails.
+      const lease = await bucket.upload(keyFor(targetMs, 'lease'), '{}', options);
+      if (lease.error) {
+        console.warn('Demo AI study claim unavailable:', lease.error.name);
+        return;
+      }
+      const { status, picks } = await requestDemoAiStudy(cards, studyKey);
+      const timely = Date.now() < targetMs + DEMO_CANDLE_SEC * 1000;
+      console.log('Demo AI study decision:', JSON.stringify({
+        model: DEMO_AI_MODEL, entryMinute: new Date(targetMs).toISOString(),
+        status: timely ? status : 'late', cards: cards.length, picks: timely ? picks : null,
+      }));
+      if (!timely || !picks) return;
+      const saved = await bucket.upload(keyFor(targetMs, 'decision'), JSON.stringify(picks), options);
+      if (saved.error) console.warn('Demo AI study decision write unavailable:', saved.error.name);
+    })().catch(() => console.warn('Demo AI study unavailable'));
+    // @ts-ignore Hosted background runtime. Do not await before placing Demo orders.
+    if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(studyTask);
+  } else if (practice && input.scheduled === true && demoAiStudySlot(targetMs)) {
+    console.warn('Demo AI study unavailable: gateway key missing');
+  }
+  const demoWinners = selections.flatMap(({ winner }) => winner ? [winner] : []);
   const demoWinner = demoWinners[0] ?? null;
   reportScan(series.size ? 'completed' : 'unavailable',series.size,demoWinner?.signal_id??null,series.size ? null : 'no_candles',[...assetAnalyses.values()]);
-  console.log('Demo rotation selection:',JSON.stringify({eligible:demoEligible.length,selected:demoWinners.map(w=>w.signal_id),scoreAnalysis:false}));
-  for(const c of demoEligible){
-    const own=demoWinners.find(w=>w.entry_strategy===c.entry_strategy);
-    const reason:RejectionReason|null=own&&own.signal_id!==c.signal_id?{code:'minute_priority',details:{selected_signal:own.signal_id}}:null;
-    if(reason)reject(c,reason);
+  for (const { candidates, baseline, winner, rankedById, coolingDown, previousChoice } of selections) {
+    if (practice && baseline) {
+      console.log('Demo filter study:', JSON.stringify({
+        version: 'demo-filter-study-v1',
+        entryMinute: baseline.created_at,
+        strategy: baseline.entry_strategy,
+        baseline: baseline.signal_id,
+        filters: compareDemoFilters(candidates),
+      }));
+    }
+    if (!winner) continue;
+    console.log('Demo signal selection:', JSON.stringify({
+      ruleVersion, accountType: selectedDemoAccount, strategy: winner.entry_strategy, eligible: candidates.length - coolingDown.size,
+      historyPolicy: practice ? selectionVersion : null,
+      selected: winner.signal_id, quality: winner.quality, previousChoice: previousChoice?.signal_id,
+    }));
+    for (const candidate of candidates) {
+      if (candidate.signal_id === winner.signal_id || coolingDown.has(candidate.signal_id)) continue;
+      const ranked = rankedById.get(candidate.signal_id);
+      reject(candidate, {
+        code: 'minute_priority',
+        details: {
+          selected_signal: winner.signal_id,
+          quality: candidate.quality,
+          selected_quality: winner.quality,
+          ranking_score: ranked?.score ?? null,
+          selected_ranking_score: rankedById.get(winner.signal_id)?.score ?? null,
+          historical_adjustment: ranked?.historical ?? null,
+          previous_choice: previousChoice?.signal_id ?? null,
+        },
+      }, practice ? selectionVersion : ruleVersion);
+    }
   }
   // Audit is independent of execution: never delay an eligible entry for its rejected competitors.
   if(rejections.length){
@@ -545,28 +775,34 @@ Deno.serve(async (req) => {
     // @ts-ignore Hosted background runtime
     if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(auditTask);else await auditTask;
   }
-  if (!demoWinner) console.log('Demo: no valid candidate in this minute with 5-second analysis');
+  if (!demoWinner) console.log('Demo: no AI-approved candidate in this minute with 60-second analysis');
   let principalTriggered = false;
   for (const demoWinner of demoWinners) {
-    const {error} = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
+    const { data: insertedCandidate, error } = await supabase.from('iq_demo_test_candidates').upsert({entry_minute:demoWinner.created_at,
       signal_id:demoWinner.signal_id,asset:demoWinner.asset,direction:demoWinner.direction,
       // Required legacy column: neutral placeholder, never calculated or used for selection.
       entry_strategy:demoWinner.entry_strategy,score:0,
-      pattern_match:demoEligible.find(c=>c.signal_id===demoWinner.signal_id)?._patternMatch??null,
-      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t<curMin).slice(-20)},{onConflict:'entry_minute,entry_strategy',ignoreDuplicates:true});
+      pattern_match: null,
+      candles:(series.get(demoWinner.asset)||[]).filter(k=>k.t + DEMO_ANALYSIS_SEC <= curMin).slice(-20)
+    }, { onConflict: 'entry_minute,entry_strategy', ignoreDuplicates: true }).select('signal_id').maybeSingle();
     if (error) console.error('Demo candidate write failed:',error.code);
     else {
+      if (!insertedCandidate) {
+        const { data: selected, error: selectionError } = await supabase.from('iq_demo_test_candidates')
+          .select('signal_id').eq('entry_minute', demoWinner.created_at)
+          .eq('entry_strategy', demoWinner.entry_strategy).maybeSingle();
+        if (selectionError || selected?.signal_id !== demoWinner.signal_id) continue;
+      }
       console.log('Demo timing candidate persisted:', new Date().toISOString(), demoWinner.signal_id);
-      console.log('Demo current-analysis selection:', JSON.stringify({scoreAnalysis:false}));
-      // Reserve exactly one minute before sending on the already authenticated PRACTICE socket.
+      // Reserve the selected strategy slot before submitting to the verified balance.
       const setting = await amountRead;
       const base = Number(setting.data?.amount ?? DEMO_TEST_AMOUNT);
-      const found = Object.entries<any>(preparedActives).find(([,a])=>symbolOf(a.name || '')===demoWinner.asset);
+      const found = demoWinner.market;
       const commission = found?.[1]?.option?.profit?.commission;
       const payout = typeof commission === 'number' ? (100-commission)/100 : null;
       const last = await supabase.from('iq_demo_test_orders')
         .select('status,result,entry_strategy,account_type,iq_option_id,amount,profit,recovery_level,recovery_loss,recovery_base,expiration_time,entry_minute')
-        .eq('entry_strategy',demoWinner.entry_strategy).in('account_type',['PRACTICE','REAL'])
+        .eq('entry_strategy', demoWinner.entry_strategy).eq('account_type', selectedDemoAccount)
         .in('status',['confirmed','unknown','reserved'])
         .or(`status.eq.confirmed,iq_option_id.not.is.null,expiration_time.gt.${new Date().toISOString()}`)
         .order('entry_minute',{ascending:false}).limit(1);
@@ -577,7 +813,9 @@ Deno.serve(async (req) => {
       // i.e. 5 consecutive LOSS. The executor re-reads the streak and the claim revalidates it, Auto Trading and limits.
       const prevOrder=(last.data||[])[0];
       // Also "Sequência de 3 sinais": the executor re-reads the 3 latest confirmed orders and the claim revalidates the user sets.
-      if(!principalTriggered&&prevOrder?.status==='confirmed'&&((prevOrder?.result==='loss'&&Number(prevOrder?.recovery_level)===4)||['RECUO_EMA21','ICHIMOKU_RECUO21'].includes(prevOrder?.entry_strategy))){
+      if (selectedDemoAccount === 'REAL' && !principalTriggered && prevOrder?.status === 'confirmed'
+        && ((prevOrder.result === 'loss' && Number(prevOrder.recovery_level) === 4)
+          || ['RECUO_EMA21', 'ICHIMOKU_RECUO21'].includes(prevOrder.entry_strategy))) {
         principalTriggered = true;
         const followTask = fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/selected-demo-trend`, {
           method:'POST', headers:{Authorization:`Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,'Content-Type':'application/json'},
@@ -590,6 +828,16 @@ Deno.serve(async (req) => {
       const order = !setting.error && recovery && amount <= preparedBalanceAmount && found ? preparedDemoOrder(demoWinner,amount,preparedBalanceId,Number(found[0]),found[1],Date.now()) : null;
       const socket = preparedSocket as WebSocket | null;
       if(order && socket?.readyState===WebSocket.OPEN) {
+        if (selective) {
+          const budget = demoConsistencyBudget(await readConsistencyDay(), demoWinner.entry_strategy, targetMs);
+          const evidence = demoHistoricalEvidence(history, demoWinner, targetMs);
+          const selectedRank = selections.find(s => s.strategy === demoWinner.entry_strategy)?.rankedById.get(demoWinner.signal_id);
+          const reason = budget.reason ?? demoConsistencySignal(demoWinner, evidence, selectedRank?.expectedReturn ?? null, budget.entries).reason;
+          if (reason) {
+            console.log('Demo selective final check:', JSON.stringify({ signal: demoWinner.signal_id, ...reason }));
+            continue;
+          }
+        }
         const reservation = await supabase.from('iq_demo_test_orders').insert({
           signal_id:demoWinner.signal_id,entry_minute:demoWinner.created_at,asset:demoWinner.asset,
           direction:demoWinner.direction,amount,entry_strategy:demoWinner.entry_strategy,
@@ -645,5 +893,5 @@ Deno.serve(async (req) => {
   const chartTask=enrichCharts().catch(error=>console.error('Demo chart enrichment failed:',String(error)));
   // @ts-ignore Hosted background runtime: chart writes must not delay a fresh entry.
   if(typeof EdgeRuntime!=='undefined')EdgeRuntime.waitUntil(chartTask);else await chartTask;
-  return Response.json({ success: true, assets: series.size, resolved, strategy: TENDENCIA_ALINHADA_STRATEGY, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
+  return Response.json({ success: true, assets: series.size, resolved, strategy: AI_CHART_VERSION, selected: demoWinner?.signal_id ?? null, score: null }, { headers: cors });
 });

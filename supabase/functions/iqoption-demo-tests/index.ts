@@ -7,6 +7,7 @@ import { DEMO_TEST_AMOUNT, demoBalance, freshDemoCandidate, validDemoTestAmount 
 import { demoHistoryOutcome } from '../_shared/demo-history.ts';
 import { reusableDemoSession } from '../_shared/demo-session.ts';
 import { demoAlternationAuthorized } from '../_shared/demo-226-policy.ts';
+import { AI_CHART_STRATEGIES } from '../_shared/demo-ai-strategies.ts';
 import { DEMO_MID_CANDLE, midCandleSignal, midCandleTime, freshMidCandle, midCandleExpiry } from '../_shared/demo-mid-candle.ts';
 const schema = z.object({ candidate: z.string().max(200).optional(), mode:z.literal('mid').optional(), inspect: z.enum(['ALIBABA','MSFT']).optional(), brokerSession: z.object({configId:z.string().uuid(),ssid:z.string().min(1).max(4096)}).strict().optional() }).strict();
 const reply = (body: unknown, status = 200) => {
@@ -83,6 +84,8 @@ Deno.serve(async req => {
  }
 
  if (candidate) {
+ // AI orders are submitted only by the runner owning the persisted AI decision and PRACTICE socket.
+ if ((AI_CHART_STRATEGIES as readonly string[]).includes(candidate.entry_strategy)) return reply({error:'AI entries require the chart-analysis runner'},410);
  const setting = await settingRead;
  if(!setting)return reply({error:'Demo test amount unavailable'},503);
  if(setting.error)return reply({error:'Demo test amount unavailable'},503);
